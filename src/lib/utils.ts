@@ -113,3 +113,7 @@ export const getInitials = (name: string) => {
   if (!name) return '?';
   return name.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2);
 };
+
+// Budget engine adapters
+export { calcBillWeekly, calcSavingsWeekly, dueDateAwareSplit, buildWeeklySplit } from './budget';
+export type { SplitMode, WeeklySplitSummary } from './budget';

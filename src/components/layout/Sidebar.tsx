@@ -29,6 +29,7 @@ export default function Sidebar({ userName = 'User' }: SidebarProps) {
 
   const navItems: NavItem[] = [
     { name: 'Home', icon: LayoutDashboard, href: '/dashboard', emoji: '🏠' },
+    { name: 'Weekly Split', icon: BarChart3, href: '/weekly-split', emoji: '💰' },
     { name: 'Smart Stack', icon: BarChart3, href: '/smart-stack', emoji: '📊' },
     { name: 'Bill Boss', icon: Receipt, href: '/bill-boss', emoji: '📄' },
     { name: 'Stack Circle', icon: Users, href: '/stack-circle', emoji: '👥' },
