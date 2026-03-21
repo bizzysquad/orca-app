@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORCA - Financial Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',sans-serif; background:#09090b; color:#fafafa; min-height:100vh; display:flex; -webkit-font-smoothing:antialiased; }
+::selection { background:rgba(212,175,55,0.25); }
+a { text-decoration:none; color:inherit; }
+
+/* Sidebar */
+.sidebar { width:220px; height:100vh; position:fixed; left:0; top:0; background:#09090b; border-right:1px solid #1a1a1e; display:flex; flex-direction:column; padding:24px 16px; z-index:50; }
+.logo { font-size:24px; font-weight:800; letter-spacing:2px; background:linear-gradient(135deg,#D4AF37,#F5D76E,#8C6A1A); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:8px; }
+.tagline { font-size:11px; color:#71717a; letter-spacing:1px; margin-bottom:32px; }
+.nav-item { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; color:#71717a; font-size:14px; font-weight:500; cursor:pointer; transition:all 0.2s; margin-bottom:4px; position:relative; }
+.nav-item:hover { color:#a1a1aa; background:rgba(255,255,255,0.03); }
+.nav-item.active { color:#d4a843; background:rgba(212,168,67,0.08); }
+.nav-item.active::before { content:''; position:absolute; left:-16px; top:8px; bottom:8px; width:3px; background:#d4a843; border-radius:0 3px 3px 0; }
+.nav-icon { width:20px; height:20px; opacity:0.6; }
+.nav-item.active .nav-icon { opacity:1; }
+.user-section { margin-top:auto; display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px; background:rgba(255,255,255,0.02); border:1px solid #1a1a1e; }
+.avatar { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#D4AF37,#8C6A1A); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:#0a0a0a; flex-shrink:0; }
+.user-name { font-size:13px; font-weight:600; }
+.user-plan { font-size:11px; color:#71717a; }
+
+/* Main */
+.main { margin-left:220px; flex:1; }
+.topbar { position:sticky; top:0; z-index:40; background:rgba(9,9,11,0.8); backdrop-filter:blur(16px); border-bottom:1px solid rgba(39,39,42,0.6); display:flex; align-items:center; justify-content:space-between; padding:16px 32px; }
+.topbar h1 { font-size:20px; font-weight:600; flex:1; }
+.content { max-width:720px; margin:0 auto; padding:24px; padding-bottom:48px; }
+
+/* Cards */
+.card { background:#181818; border:1px solid #2a2a2a; border-radius:16px; padding:20px; margin-bottom:16px; transition:all 0.2s; }
+.card:hover { background:#1e1e1e; border-color:#333; }
+.card-gold { background:#181818; border:1px solid rgba(212,175,55,0.15); border-radius:16px; padding:20px; margin-bottom:16px; box-shadow:0 0 16px rgba(212,175,55,0.06); }
+.card-label { font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:1.5px; font-weight:600; margin-bottom:8px; }
+.card-value { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
+.gold { color:#d4a843; }
+.green { color:#22c55e; }
+.red { color:#ef4444; }
+.orange { color:#f59e0b; }
+.muted { color:#71717a; }
+.text-sm { font-size:13px; }
+.text-xs { font-size:11px; }
+.mb-2 { margin-bottom:8px; }
+.mb-4 { margin-bottom:16px; }
+.mt-2 { margin-top:8px; }
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:16px; }
+.flex { display:flex; }
+.items-center { align-items:center; }
+.justify-between { justify-content:space-between; }
+.gap-2 { gap:8px; }
+.gap-3 { gap:12px; }
+.w-full { width:100%; }
+
+/* Welcome */
+.welcome { margin-bottom:24px; }
+.welcome h2 { font-size:22px; font-weight:700; margin-bottom:4px; }
+.welcome p { color:#71717a; font-size:14px; }
+
+/* Progress bar */
+.progress-bg { height:8px; background:#27272a; border-radius:999px; overflow:hidden; margin-top:8px; }
+.progress-fill { height:100%; border-radius:999px; transition:width 0.8s ease; }
+.progress-gold { background:linear-gradient(90deg,#D4AF37,#F5D76E); }
+.progress-green { background:#22c55e; }
+.progress-blue { background:#3b82f6; }
+.progress-purple { background:#8b5cf6; }
+
+/* Badge */
+.badge { display:inline-flex; align-items:center; padding:4px 12px; border-radius:999px; font-size:11px; font-weight:600; }
+.badge-gold { background:rgba(212,175,55,0.1); color:#F5D76E; border:1px solid rgba(212,175,55,0.2); }
+.badge-green { background:rgba(34,197,94,0.1); color:#22c55e; border:1px solid rgba(34,197,94,0.2); }
+.badge-blue { background:rgba(59,130,246,0.1); color:#3b82f6; border:1px solid rgba(59,130,246,0.2); }
+.badge-red { background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2); }
+.badge-purple { background:rgba(139,92,246,0.1); color:#8b5cf6; border:1px solid rgba(139,92,246,0.2); }
+
+/* Section header */
+.section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; margin-top:28px; }
+.section-header h3 { font-size:16px; font-weight:600; }
+.section-header a { font-size:13px; color:#d4a843; text-decoration:none; }
+
+/* Bill row */
+.bill-row { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid #1a1a1e; }
+.bill-row:last-child { border-bottom:none; }
+.bill-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+
+/* Credit ring */
+.credit-ring { position:relative; width:140px; height:140px; margin:0 auto; }
+.credit-ring svg { transform:rotate(-90deg); }
+.credit-score { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
+.credit-score .number { font-size:36px; font-weight:800; color:#22c55e; }
+.credit-score .label { font-size:11px; color:#71717a; }
+
+/* Plaid accounts */
+.account-card { background:#181818; border:1px solid #2a2a2a; border-radius:12px; padding:14px; }
+.account-card .name { font-size:13px; font-weight:600; margin-bottom:2px; }
+.account-card .mask { font-size:11px; color:#71717a; }
+.account-card .balance { font-size:16px; font-weight:700; color:#fafafa; margin-top:4px; }
+
+/* Tabs */
+.tab-bar { display:flex; gap:4px; background:#111; border-radius:12px; padding:4px; margin-bottom:20px; }
+.tab { flex:1; padding:10px 16px; border-radius:10px; text-align:center; font-size:13px; font-weight:500; color:#71717a; cursor:pointer; transition:all 0.2s; }
+.tab.active { background:rgba(212,168,67,0.12); color:#d4a843; }
+.tab:hover:not(.active) { color:#a1a1aa; }
+
+/* Toggle */
+.toggle { width:44px; height:24px; border-radius:999px; background:#27272a; position:relative; cursor:pointer; transition:background 0.2s; }
+.toggle.on { background:rgba(212,168,67,0.3); }
+.toggle::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#71717a; transition:all 0.2s; }
+.toggle.on::after { left:22px; background:#d4a843; }
+
+/* Input */
+.input { background:#111; border:1px solid #2a2a2a; border-radius:10px; padding:10px 14px; color:#fafafa; font-size:13px; font-family:'Inter',sans-serif; width:100%; outline:none; }
+.input:focus { border-color:#d4a843; }
+.input::placeholder { color:#52525b; }
+
+/* Button */
+.btn { padding:10px 20px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; border:none; font-family:'Inter',sans-serif; transition:all 0.2s; }
+.btn-gold { background:linear-gradient(135deg,#D4AF37,#F5D76E); color:#0a0a0a; }
+.btn-gold:hover { opacity:0.9; }
+.btn-outline { background:transparent; border:1px solid #2a2a2a; color:#fafafa; }
+.btn-outline:hover { border-color:#d4a843; color:#d4a843; }
+.btn-danger { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); color:#ef4444; }
+
+/* Notif dot */
+.notif-dot { position:relative; }
+.notif-dot::after { content:'2'; position:absolute; top:-4px; right:-4px; width:18px; height:18px; border-radius:50%; background:#d4a843; color:#0a0a0a; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+
+/* Hidden pages */
+.page { display:none; }
+.page.active { display:block; }
+
+/* Table */
+.table-row { display:flex; align-items:center; padding:14px 0; border-bottom:1px solid #1a1a1e; }
+.table-row:last-child { border-bottom:none; }
+
+/* Member card */
+.member-card { display:flex; align-items:center; gap:12px; padding:16px; background:#181818; border:1px solid #2a2a2a; border-radius:12px; }
+.member-avatar { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; color:#0a0a0a; flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="logo">ORCA</div>
+  <div class="tagline">FINANCIAL COMMAND CENTER</div>
+
+  <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Home
+  </div>
+  <div class="nav-item" data-page="smart-stack" onclick="switchPage('smart-stack')">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    Smart Stack
+  </div>
+  <div class="nav-item" data-page="bill-boss" onclick="switchPage('bill-boss')">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    Bill Boss
+  </div>
+  <div class="nav-item" data-page="stack-circle" onclick="switchPage('stack-circle')">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+    Stack Circle
+  </div>
+  <div class="nav-item" data-page="settings" onclick="switchPage('settings')">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    Settings
+  </div>
+  <div class="nav-item" data-page="admin" onclick="switchPage('admin')">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    Admin
+  </div>
+
+  <div class="user-section">
+    <div class="avatar">AJ</div>
+    <div>
+      <div class="user-name">Alex Johnson</div>
+      <div class="user-plan">Premium</div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <h1 id="page-title">Dashboard</h1>
+    <div class="flex gap-2 items-center">
+      <div class="notif-dot" style="color:#71717a;cursor:pointer;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ==================== DASHBOARD ==================== -->
+    <div class="page active" id="page-dashboard">
+      <div class="welcome">
+        <h2>Welcome back, Alex</h2>
+        <p>Here's your financial snapshot for today</p>
+      </div>
+      <div class="grid-2">
+        <div class="card-gold">
+          <div class="card-label">Safe to Spend</div>
+          <div class="card-value gold">$487.50</div>
+          <div class="text-sm muted mt-2">~$69.64/day this week</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Next Paycheck</div>
+          <div class="card-value" style="color:#fafafa">$1,140.00</div>
+          <div class="text-sm muted mt-2">in 5 days &middot; Mar 25</div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="flex items-center justify-between mb-2">
+          <div class="card-label" style="margin-bottom:0">Allocation Breakdown</div>
+          <span class="badge badge-green">Balanced</span>
+        </div>
+        <div class="flex gap-3" style="margin-top:12px;">
+          <div style="flex:1;"><div class="text-xs muted">Bill Reserve</div><div style="font-size:18px;font-weight:700;color:#fafafa;">$847.50</div></div>
+          <div style="flex:1;"><div class="text-xs muted">Savings</div><div style="font-size:18px;font-weight:700;color:#fafafa;">$175.00</div></div>
+          <div style="flex:1;"><div class="text-xs muted">Safe to Spend</div><div style="font-size:18px;font-weight:700;color:#d4a843;">$487.50</div></div>
+        </div>
+        <div class="progress-bg" style="margin-top:16px;"><div class="progress-fill progress-gold" style="width:75%;"></div></div>
+      </div>
+      <div class="section-header"><h3>Linked Accounts</h3><span class="badge badge-green">Connected</span></div>
+      <div class="grid-3">
+        <div class="account-card"><div class="name">Chase Checking</div><div class="mask">&#8226;&#8226;&#8226;&#8226;4523</div><div class="balance">$2,847.32</div></div>
+        <div class="account-card"><div class="name">Chase Savings</div><div class="mask">&#8226;&#8226;&#8226;&#8226;8891</div><div class="balance">$5,234.00</div></div>
+        <div class="account-card"><div class="name">Discover Card</div><div class="mask">&#8226;&#8226;&#8226;&#8226;3456</div><div class="balance" style="color:#ef4444;">-$1,247.89</div></div>
+      </div>
+      <div class="section-header"><h3>Credit Score</h3><a href="#">View Details &rarr;</a></div>
+      <div class="card" style="text-align:center;padding:28px;">
+        <div class="credit-ring">
+          <svg width="140" height="140" viewBox="0 0 140 140"><circle cx="70" cy="70" r="60" fill="none" stroke="#27272a" stroke-width="10"/><circle cx="70" cy="70" r="60" fill="none" stroke="#22c55e" stroke-width="10" stroke-dasharray="377" stroke-dashoffset="97" stroke-linecap="round"/></svg>
+          <div class="credit-score"><div class="number">742</div><div class="label">Good</div></div>
+        </div>
+        <div class="text-sm muted" style="margin-top:12px;">+12 pts from last month</div>
+      </div>
+      <div class="section-header"><h3>Upcoming Bills</h3><a href="#" onclick="switchPage('bill-boss');return false;">View All &rarr;</a></div>
+      <div class="card" style="padding:4px 20px;">
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(212,175,55,0.1);">&#127968;</div><div><div style="font-weight:600;font-size:14px;">Rent</div><div class="text-xs muted">Due Mar 25</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;">$1,200.00</div><div class="text-xs red">in 5 days</div></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(59,130,246,0.1);">&#9889;</div><div><div style="font-weight:600;font-size:14px;">Electric Bill</div><div class="text-xs muted">Due Mar 28</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;">$145.00</div><div class="text-xs orange">in 8 days</div></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(139,92,246,0.1);">&#128241;</div><div><div style="font-weight:600;font-size:14px;">Phone Bill</div><div class="text-xs muted">Due Apr 1</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;">$85.00</div><div class="text-xs muted">in 12 days</div></div></div>
+      </div>
+      <div class="section-header"><h3>Savings Goals</h3><a href="#" onclick="switchPage('smart-stack');return false;">View All &rarr;</a></div>
+      <div class="grid-2">
+        <div class="card"><div class="flex items-center justify-between mb-2"><span style="font-weight:600;font-size:14px;">&#128663; New Car</span><span class="text-xs gold">67%</span></div><span class="text-sm muted">$6,700 / $10,000</span><div class="progress-bg"><div class="progress-fill progress-gold" style="width:67%;"></div></div></div>
+        <div class="card"><div class="flex items-center justify-between mb-2"><span style="font-weight:600;font-size:14px;">&#127958;&#65039; Vacation Fund</span><span class="text-xs gold">40%</span></div><span class="text-sm muted">$800 / $2,000</span><div class="progress-bg"><div class="progress-fill progress-gold" style="width:40%;"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ==================== SMART STACK ==================== -->
+    <div class="page" id="page-smart-stack">
+      <div class="welcome">
+        <h2>Smart Stack</h2>
+        <p>Your intelligent financial overview with AI-powered insights</p>
+      </div>
+      <div class="tab-bar">
+        <div class="tab active" onclick="switchTab(this,'ss')">Overview</div>
+        <div class="tab" onclick="switchTab(this,'ss')">Insights</div>
+        <div class="tab" onclick="switchTab(this,'ss')">Forecast</div>
+      </div>
+      <div id="ss-tab-0" class="tab-content active">
+        <div class="grid-2">
+          <div class="card-gold">
+            <div class="card-label">Net Worth</div>
+            <div class="card-value gold">$6,833.43</div>
+            <div class="text-sm green mt-2">+$342.50 this month</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Monthly Income</div>
+            <div class="card-value" style="color:#fafafa">$4,560.00</div>
+            <div class="text-sm muted mt-2">Biweekly &middot; $2,280/check</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label">Spending by Category</div>
+          <div style="margin-top:16px;">
+            <div class="flex items-center justify-between" style="padding:8px 0;"><span class="text-sm">Housing</span><div class="flex items-center gap-2"><span class="text-sm" style="font-weight:600;">$1,200</span><span class="text-xs muted">26%</span></div></div>
+            <div class="progress-bg" style="margin-top:0;margin-bottom:12px;"><div class="progress-fill" style="width:52%;background:#d4a843;"></div></div>
+            <div class="flex items-center justify-between" style="padding:8px 0;"><span class="text-sm">Transportation</span><div class="flex items-center gap-2"><span class="text-sm" style="font-weight:600;">$450</span><span class="text-xs muted">10%</span></div></div>
+            <div class="progress-bg" style="margin-top:0;margin-bottom:12px;"><div class="progress-fill" style="width:20%;background:#3b82f6;"></div></div>
+            <div class="flex items-center justify-between" style="padding:8px 0;"><span class="text-sm">Food & Dining</span><div class="flex items-center gap-2"><span class="text-sm" style="font-weight:600;">$380</span><span class="text-xs muted">8%</span></div></div>
+            <div class="progress-bg" style="margin-top:0;margin-bottom:12px;"><div class="progress-fill" style="width:17%;background:#22c55e;"></div></div>
+            <div class="flex items-center justify-between" style="padding:8px 0;"><span class="text-sm">Subscriptions</span><div class="flex items-center gap-2"><span class="text-sm" style="font-weight:600;">$127</span><span class="text-xs muted">3%</span></div></div>
+            <div class="progress-bg" style="margin-top:0;margin-bottom:12px;"><div class="progress-fill" style="width:6%;background:#8b5cf6;"></div></div>
+          </div>
+        </div>
+        <div class="section-header"><h3>Savings Goals</h3></div>
+        <div class="card"><div class="flex items-center justify-between mb-2"><span style="font-weight:600;">&#128663; New Car</span><span class="badge badge-gold">67%</span></div><div class="text-sm muted">$6,700 of $10,000 &middot; $200/mo contribution</div><div class="progress-bg"><div class="progress-fill progress-gold" style="width:67%;"></div></div></div>
+        <div class="card"><div class="flex items-center justify-between mb-2"><span style="font-weight:600;">&#127958;&#65039; Vacation Fund</span><span class="badge badge-gold">40%</span></div><div class="text-sm muted">$800 of $2,000 &middot; $100/mo contribution</div><div class="progress-bg"><div class="progress-fill progress-gold" style="width:40%;"></div></div></div>
+        <div class="card"><div class="flex items-center justify-between mb-2"><span style="font-weight:600;">&#127891; Emergency Fund</span><span class="badge badge-green">85%</span></div><div class="text-sm muted">$8,500 of $10,000 &middot; $150/mo contribution</div><div class="progress-bg"><div class="progress-fill progress-green" style="width:85%;"></div></div></div>
+      </div>
+      <div id="ss-tab-1" class="tab-content" style="display:none;">
+        <div class="card-gold">
+          <div class="flex items-center gap-2 mb-2"><span style="font-size:18px;">&#128161;</span><span style="font-weight:600;font-size:15px;">AI Insight</span></div>
+          <div class="text-sm" style="line-height:1.6;">Your dining spending is 23% higher than last month. Consider meal prepping on Sundays to save ~$95/month on average.</div>
+        </div>
+        <div class="card">
+          <div class="flex items-center gap-2 mb-2"><span style="font-size:18px;">&#128200;</span><span style="font-weight:600;font-size:15px;">Trend Alert</span></div>
+          <div class="text-sm muted" style="line-height:1.6;">Your savings rate has improved by 4% over the last 3 months. At this pace, you'll hit your New Car goal by August 2026.</div>
+        </div>
+        <div class="card">
+          <div class="flex items-center gap-2 mb-2"><span style="font-size:18px;">&#9888;&#65039;</span><span style="font-weight:600;font-size:15px;">Subscription Check</span></div>
+          <div class="text-sm muted" style="line-height:1.6;">You have 3 subscriptions you haven't used in 30+ days: Hulu ($14.99), Adobe CC ($54.99), ClassPass ($49). Total: $118.98/mo.</div>
+        </div>
+      </div>
+      <div id="ss-tab-2" class="tab-content" style="display:none;">
+        <div class="card">
+          <div class="card-label">30-Day Cash Flow Forecast</div>
+          <div style="margin-top:16px;">
+            <div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm muted">Mar 25</span><span class="text-sm">Paycheck</span><span class="text-sm green" style="font-weight:600;">+$2,280.00</span></div>
+            <div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm muted">Mar 25</span><span class="text-sm">Rent</span><span class="text-sm red" style="font-weight:600;">-$1,200.00</span></div>
+            <div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm muted">Mar 28</span><span class="text-sm">Electric</span><span class="text-sm red" style="font-weight:600;">-$145.00</span></div>
+            <div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm muted">Apr 1</span><span class="text-sm">Phone</span><span class="text-sm red" style="font-weight:600;">-$85.00</span></div>
+            <div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm muted">Apr 5</span><span class="text-sm">Internet</span><span class="text-sm red" style="font-weight:600;">-$79.99</span></div>
+            <div class="flex items-center justify-between" style="padding:10px 0;"><span class="text-sm muted">Apr 8</span><span class="text-sm">Paycheck</span><span class="text-sm green" style="font-weight:600;">+$2,280.00</span></div>
+          </div>
+        </div>
+        <div class="card-gold">
+          <div class="card-label">Projected Balance (Apr 20)</div>
+          <div class="card-value gold">$5,897.33</div>
+          <div class="text-sm green mt-2">+$3,050.01 from today</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== BILL BOSS ==================== -->
+    <div class="page" id="page-bill-boss">
+      <div class="welcome">
+        <h2>Bill Boss</h2>
+        <p>Track, manage, and never miss a payment</p>
+      </div>
+      <div class="grid-3" style="margin-bottom:24px;">
+        <div class="card-gold" style="text-align:center;"><div class="card-label">Due This Month</div><div class="card-value gold" style="font-size:24px;">$1,939.99</div></div>
+        <div class="card" style="text-align:center;"><div class="card-label">Paid</div><div class="card-value green" style="font-size:24px;">$509.99</div></div>
+        <div class="card" style="text-align:center;"><div class="card-label">Remaining</div><div class="card-value" style="font-size:24px;color:#fafafa;">$1,430.00</div></div>
+      </div>
+      <div class="section-header"><h3>Upcoming</h3><span class="badge badge-red">3 due soon</span></div>
+      <div class="card" style="padding:4px 20px;">
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(212,175,55,0.1);">&#127968;</div><div><div style="font-weight:600;font-size:14px;">Rent</div><div class="text-xs muted">Monthly &middot; Auto-pay OFF</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;">$1,200.00</div><div class="text-xs red">in 5 days</div></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(59,130,246,0.1);">&#9889;</div><div><div style="font-weight:600;font-size:14px;">Electric Bill</div><div class="text-xs muted">Monthly &middot; Auto-pay ON</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;">$145.00</div><div class="text-xs orange">in 8 days</div></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(139,92,246,0.1);">&#128241;</div><div><div style="font-weight:600;font-size:14px;">Phone Bill</div><div class="text-xs muted">Monthly &middot; Auto-pay ON</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;">$85.00</div><div class="text-xs muted">in 12 days</div></div></div>
+      </div>
+      <div class="section-header"><h3>Paid This Month</h3><span class="badge badge-green">&#10003; All on time</span></div>
+      <div class="card" style="padding:4px 20px;">
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(34,197,94,0.1);">&#128250;</div><div><div style="font-weight:600;font-size:14px;">Netflix</div><div class="text-xs muted">Paid Mar 5</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;color:#71717a;text-decoration:line-through;">$15.99</div><div class="text-xs green">&#10003; Paid</div></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(34,197,94,0.1);">&#127925;</div><div><div style="font-weight:600;font-size:14px;">Spotify</div><div class="text-xs muted">Paid Mar 8</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;color:#71717a;text-decoration:line-through;">$10.99</div><div class="text-xs green">&#10003; Paid</div></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(34,197,94,0.1);">&#128171;</div><div><div style="font-weight:600;font-size:14px;">Internet</div><div class="text-xs muted">Paid Mar 10</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;color:#71717a;text-decoration:line-through;">$79.99</div><div class="text-xs green">&#10003; Paid</div></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div class="bill-icon" style="background:rgba(34,197,94,0.1);">&#128187;</div><div><div style="font-weight:600;font-size:14px;">iCloud+</div><div class="text-xs muted">Paid Mar 12</div></div></div><div style="text-align:right;"><div style="font-weight:700;font-size:15px;color:#71717a;text-decoration:line-through;">$2.99</div><div class="text-xs green">&#10003; Paid</div></div></div>
+      </div>
+      <div style="margin-top:20px;">
+        <button class="btn btn-gold" style="width:100%;">+ Add New Bill</button>
+      </div>
+    </div>
+
+    <!-- ==================== STACK CIRCLE ==================== -->
+    <div class="page" id="page-stack-circle">
+      <div class="welcome">
+        <h2>Stack Circle</h2>
+        <p>Shared financial goals with your trusted circle</p>
+      </div>
+      <div class="tab-bar">
+        <div class="tab active" onclick="switchTab(this,'sc')">My Circles</div>
+        <div class="tab" onclick="switchTab(this,'sc')">Invitations</div>
+      </div>
+      <div id="sc-tab-0" class="tab-content active">
+        <div class="card-gold">
+          <div class="flex items-center justify-between mb-2">
+            <div><div style="font-weight:700;font-size:16px;">&#127968; House Fund</div><div class="text-xs muted mt-2">4 members &middot; Created Jan 2026</div></div>
+            <span class="badge badge-gold">Active</span>
+          </div>
+          <div class="flex gap-3" style="margin-top:16px;">
+            <div style="flex:1;"><div class="text-xs muted">Goal</div><div style="font-size:16px;font-weight:700;">$50,000</div></div>
+            <div style="flex:1;"><div class="text-xs muted">Saved</div><div style="font-size:16px;font-weight:700;color:#22c55e;">$12,450</div></div>
+            <div style="flex:1;"><div class="text-xs muted">Monthly</div><div style="font-size:16px;font-weight:700;color:#d4a843;">$800</div></div>
+          </div>
+          <div class="progress-bg" style="margin-top:12px;"><div class="progress-fill progress-gold" style="width:25%;"></div></div>
+          <div class="text-xs muted" style="margin-top:8px;text-align:right;">25% complete &middot; ETA Dec 2029</div>
+          <div style="margin-top:16px;display:flex;gap:8px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#D4AF37,#8C6A1A);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0a0a0a;">AJ</div>
+            <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">SK</div>
+            <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#15803d);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">MR</div>
+            <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6d28d9);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">TL</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="flex items-center justify-between mb-2">
+            <div><div style="font-weight:700;font-size:16px;">&#127796; Trip to Japan</div><div class="text-xs muted mt-2">3 members &middot; Created Feb 2026</div></div>
+            <span class="badge badge-blue">New</span>
+          </div>
+          <div class="flex gap-3" style="margin-top:16px;">
+            <div style="flex:1;"><div class="text-xs muted">Goal</div><div style="font-size:16px;font-weight:700;">$9,000</div></div>
+            <div style="flex:1;"><div class="text-xs muted">Saved</div><div style="font-size:16px;font-weight:700;color:#22c55e;">$1,200</div></div>
+            <div style="flex:1;"><div class="text-xs muted">Monthly</div><div style="font-size:16px;font-weight:700;color:#d4a843;">$450</div></div>
+          </div>
+          <div class="progress-bg" style="margin-top:12px;"><div class="progress-fill progress-blue" style="width:13%;"></div></div>
+          <div class="text-xs muted" style="margin-top:8px;text-align:right;">13% complete &middot; ETA Sep 2027</div>
+        </div>
+        <div style="margin-top:12px;"><button class="btn btn-gold" style="width:100%;">+ Create New Circle</button></div>
+      </div>
+      <div id="sc-tab-1" class="tab-content" style="display:none;">
+        <div class="card">
+          <div class="flex items-center justify-between">
+            <div>
+              <div style="font-weight:600;font-size:14px;">Wedding Fund</div>
+              <div class="text-xs muted" style="margin-top:4px;">Invited by Sarah K. &middot; Goal: $25,000</div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-gold" style="padding:8px 16px;">Accept</button>
+              <button class="btn btn-outline" style="padding:8px 16px;">Decline</button>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="text-align:center;padding:40px;">
+          <div style="font-size:32px;margin-bottom:12px;">&#128236;</div>
+          <div class="muted text-sm">No other invitations at this time</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SETTINGS ==================== -->
+    <div class="page" id="page-settings">
+      <div class="welcome">
+        <h2>Settings</h2>
+        <p>Manage your account preferences and app configuration</p>
+      </div>
+      <div class="section-header" style="margin-top:0;"><h3>Profile</h3></div>
+      <div class="card">
+        <div class="flex items-center gap-3" style="margin-bottom:20px;">
+          <div class="avatar" style="width:56px;height:56px;font-size:20px;">AJ</div>
+          <div><div style="font-weight:700;font-size:16px;">Alex Johnson</div><div class="text-sm muted">alex.johnson@email.com</div><div class="text-xs muted mt-2">Premium Member since Jan 2026</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><div class="text-xs muted" style="margin-bottom:6px;">First Name</div><input class="input" value="Alex" /></div>
+          <div><div class="text-xs muted" style="margin-bottom:6px;">Last Name</div><input class="input" value="Johnson" /></div>
+          <div style="grid-column:span 2;"><div class="text-xs muted" style="margin-bottom:6px;">Email</div><input class="input" value="alex.johnson@email.com" /></div>
+        </div>
+      </div>
+      <div class="section-header"><h3>Notifications</h3></div>
+      <div class="card" style="padding:4px 20px;">
+        <div class="flex items-center justify-between" style="padding:14px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm">Bill Reminders</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        <div class="flex items-center justify-between" style="padding:14px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm">Spending Alerts</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        <div class="flex items-center justify-between" style="padding:14px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm">Circle Updates</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        <div class="flex items-center justify-between" style="padding:14px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm">Weekly Summary Email</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+        <div class="flex items-center justify-between" style="padding:14px 0;"><span class="text-sm">Marketing Emails</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+      </div>
+      <div class="section-header"><h3>Pay Schedule</h3></div>
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><div class="text-xs muted" style="margin-bottom:6px;">Frequency</div><input class="input" value="Biweekly" /></div>
+          <div><div class="text-xs muted" style="margin-bottom:6px;">Amount (net)</div><input class="input" value="$2,280.00" /></div>
+          <div><div class="text-xs muted" style="margin-bottom:6px;">Next Pay Date</div><input class="input" value="2026-03-25" type="date" /></div>
+        </div>
+      </div>
+      <div class="section-header"><h3>Linked Accounts</h3></div>
+      <div class="card" style="padding:4px 20px;">
+        <div class="flex items-center justify-between" style="padding:14px 0;border-bottom:1px solid #1a1a1e;"><div class="flex items-center gap-3"><div style="width:32px;height:32px;border-radius:8px;background:rgba(59,130,246,0.15);display:flex;align-items:center;justify-content:center;">&#127974;</div><div><div class="text-sm" style="font-weight:600;">Chase</div><div class="text-xs muted">2 accounts linked</div></div></div><span class="badge badge-green">Connected</span></div>
+        <div class="flex items-center justify-between" style="padding:14px 0;"><div class="flex items-center gap-3"><div style="width:32px;height:32px;border-radius:8px;background:rgba(212,175,55,0.15);display:flex;align-items:center;justify-content:center;">&#128179;</div><div><div class="text-sm" style="font-weight:600;">Discover</div><div class="text-xs muted">1 account linked</div></div></div><span class="badge badge-green">Connected</span></div>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:12px;">
+        <button class="btn btn-gold" style="flex:1;">Save Changes</button>
+        <button class="btn btn-outline" style="flex:1;">Cancel</button>
+      </div>
+    </div>
+
+    <!-- ==================== ADMIN ==================== -->
+    <div class="page" id="page-admin">
+      <div class="welcome">
+        <h2>Admin Panel</h2>
+        <p>System management and user administration</p>
+      </div>
+      <div class="grid-3" style="margin-bottom:24px;">
+        <div class="card" style="text-align:center;"><div class="card-label">Total Users</div><div class="card-value gold" style="font-size:24px;">1,247</div><div class="text-xs green mt-2">+38 this week</div></div>
+        <div class="card" style="text-align:center;"><div class="card-label">Active Today</div><div class="card-value" style="font-size:24px;color:#22c55e;">342</div><div class="text-xs muted mt-2">27% of total</div></div>
+        <div class="card" style="text-align:center;"><div class="card-label">Revenue (MRR)</div><div class="card-value" style="font-size:24px;color:#fafafa;">$18,705</div><div class="text-xs green mt-2">+12% MoM</div></div>
+      </div>
+      <div class="section-header"><h3>Recent Users</h3></div>
+      <div class="card" style="padding:4px 20px;">
+        <div class="bill-row"><div class="flex items-center gap-3"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#D4AF37,#8C6A1A);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0a0a0a;">AJ</div><div><div style="font-weight:600;font-size:14px;">Alex Johnson</div><div class="text-xs muted">alex.johnson@email.com</div></div></div><div style="text-align:right;"><span class="badge badge-gold">Premium</span></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;">SK</div><div><div style="font-weight:600;font-size:14px;">Sarah Kim</div><div class="text-xs muted">sarah.k@email.com</div></div></div><div style="text-align:right;"><span class="badge badge-green">Pro</span></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#15803d);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;">MR</div><div><div style="font-weight:600;font-size:14px;">Mike Reynolds</div><div class="text-xs muted">mike.r@email.com</div></div></div><div style="text-align:right;"><span class="badge badge-blue">Free</span></div></div>
+        <div class="bill-row"><div class="flex items-center gap-3"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6d28d9);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;">TL</div><div><div style="font-weight:600;font-size:14px;">Tina Liu</div><div class="text-xs muted">tina.liu@email.com</div></div></div><div style="text-align:right;"><span class="badge badge-gold">Premium</span></div></div>
+      </div>
+      <div class="section-header"><h3>System Status</h3></div>
+      <div class="card" style="padding:4px 20px;">
+        <div class="flex items-center justify-between" style="padding:14px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm">API Server</span><span class="badge badge-green">&#9679; Online</span></div>
+        <div class="flex items-center justify-between" style="padding:14px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm">Database</span><span class="badge badge-green">&#9679; Online</span></div>
+        <div class="flex items-center justify-between" style="padding:14px 0;border-bottom:1px solid #1a1a1e;"><span class="text-sm">Plaid Integration</span><span class="badge badge-green">&#9679; Connected</span></div>
+        <div class="flex items-center justify-between" style="padding:14px 0;"><span class="text-sm">Background Jobs</span><span class="badge badge-green">&#9679; Running</span></div>
+      </div>
+      <div class="section-header"><h3>Quick Actions</h3></div>
+      <div class="grid-2">
+        <button class="btn btn-outline" style="padding:16px;width:100%;">&#128100; Manage Users</button>
+        <button class="btn btn-outline" style="padding:16px;width:100%;">&#128202; View Analytics</button>
+        <button class="btn btn-outline" style="padding:16px;width:100%;">&#128232; Send Broadcast</button>
+        <button class="btn btn-outline" style="padding:16px;width:100%;">&#9881;&#65039; System Config</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const pageNames = {
+  'dashboard': 'Dashboard',
+  'smart-stack': 'Smart Stack',
+  'bill-boss': 'Bill Boss',
+  'stack-circle': 'Stack Circle',
+  'settings': 'Settings',
+  'admin': 'Admin'
+};
+
+function switchPage(page) {
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // Show target page
+  document.getElementById('page-' + page).classList.add('active');
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector('.nav-item[data-page="' + page + '"]').classList.add('active');
+  // Update title
+  document.getElementById('page-title').textContent = pageNames[page];
+  // Scroll to top
+  document.querySelector('.content').scrollTop = 0;
+  window.scrollTo(0, 0);
+}
+
+function switchTab(el, prefix) {
+  const bar = el.parentElement;
+  const tabs = bar.querySelectorAll('.tab');
+  let idx = 0;
+  tabs.forEach((t, i) => { t.classList.remove('active'); if (t === el) idx = i; });
+  el.classList.add('active');
+  // Show/hide tab content
+  let i = 0;
+  let sibling = bar.nextElementSibling;
+  while (sibling && sibling.classList.contains('tab-content')) {
+    sibling.style.display = (i === idx) ? 'block' : 'none';
+    if (i === idx) sibling.classList.add('active'); else sibling.classList.remove('active');
+    i++;
+    sibling = sibling.nextElementSibling;
+  }
+  // Fallback: search by id
+  if (i === 0) {
+    for (let j = 0; j < tabs.length; j++) {
+      const tc = document.getElementById(prefix + '-tab-' + j);
+      if (tc) {
+        tc.style.display = (j === idx) ? 'block' : 'none';
+      }
+    }
+  }
+}
+</script>
+</body>
+</html>
