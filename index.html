@@ -1,0 +1,2633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORCA - Financial Command Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body, #root {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #09090b;
+            color: #fafafa;
+            line-height: 1.6;
+            overflow: hidden;
+        }
+
+        /* Animation keyframes */
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+        }
+
+        /* Utility classes */
+        .slide-up {
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        /* Glass morphism cards */
+        .glass {
+            background: rgba(24, 24, 27, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(39, 39, 42, 0.6);
+            border-radius: 18px;
+        }
+
+        .glass:hover {
+            border-color: rgba(39, 39, 42, 0.9);
+            background: rgba(24, 24, 27, 0.9);
+        }
+
+        /* Gold gradient */
+        .gradient-gold {
+            background: linear-gradient(135deg, #d4a843 0%, #a88840 100%);
+        }
+
+        .gradient-gold-text {
+            background: linear-gradient(135deg, #d4a843 0%, #a88840 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Layout */
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            background: #09090b;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: linear-gradient(180deg, #1a1a1f 0%, #09090b 100%);
+            border-right: 1px solid #27272a;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 24px 16px;
+            gap: 8px;
+        }
+
+        .sidebar-logo {
+            font-size: 24px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #d4a843 0%, #a88840 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 24px;
+            letter-spacing: -0.5px;
+        }
+
+        .nav-item {
+            padding: 12px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: rgba(212, 168, 67, 0.1);
+            border-color: rgba(212, 168, 67, 0.2);
+        }
+
+        .nav-item.active {
+            background: rgba(212, 168, 67, 0.15);
+            border-color: #d4a843;
+            color: #d4a843;
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .top-bar {
+            height: 64px;
+            background: linear-gradient(90deg, rgba(24, 24, 27, 0.95) 0%, rgba(15, 15, 19, 0.95) 100%);
+            border-bottom: 1px solid #27272a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            backdrop-filter: blur(8px);
+        }
+
+        .top-bar-title {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #d4a843 0%, #a88840 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #09090b;
+            font-size: 14px;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px;
+            max-width: 720px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .bottom-nav {
+            display: none;
+            height: 64px;
+            background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
+            border-top: 1px solid #27272a;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 8px 0;
+            gap: 0;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .bottom-nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            cursor: pointer;
+            color: #a1a1a6;
+            font-size: 12px;
+            transition: all 0.2s ease;
+            padding: 8px 0;
+        }
+
+        .bottom-nav-item.active {
+            color: #d4a843;
+        }
+
+        .bottom-nav-icon {
+            font-size: 20px;
+        }
+
+        /* Mobile styles */
+        @media (max-width: 767px) {
+            .sidebar {
+                display: none;
+            }
+
+            .top-bar {
+                padding: 0 16px;
+            }
+
+            .content {
+                padding: 16px;
+                padding-bottom: 80px;
+                max-width: 100%;
+                margin-bottom: 0;
+            }
+
+            .bottom-nav {
+                display: flex;
+            }
+
+            .admin-only {
+                display: none;
+            }
+        }
+
+        /* Form styles */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #fafafa;
+        }
+
+        .input, .select, textarea {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(39, 39, 42, 0.4);
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            color: #fafafa;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .input:focus, .select:focus, textarea:focus {
+            outline: none;
+            border-color: #d4a843;
+            background: rgba(39, 39, 42, 0.6);
+            box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.1);
+        }
+
+        .input::placeholder {
+            color: #71717a;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #d4a843 0%, #a88840 100%);
+            color: #09090b;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(212, 168, 67, 0.2);
+        }
+
+        .btn-secondary {
+            background: rgba(39, 39, 42, 0.6);
+            color: #fafafa;
+            border: 1px solid #27272a;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(39, 39, 42, 0.8);
+            border-color: #3f3f46;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: #d4a843;
+            border: 1px solid #d4a843;
+        }
+
+        .btn-ghost:hover {
+            background: rgba(212, 168, 67, 0.1);
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 13px;
+        }
+
+        .btn-block {
+            width: 100%;
+        }
+
+        /* Card styles */
+        .card {
+            background: rgba(24, 24, 27, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(39, 39, 42, 0.6);
+            border-radius: 18px;
+            padding: 24px;
+            margin-bottom: 20px;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .card-subtitle {
+            font-size: 13px;
+            color: #a1a1a6;
+            font-weight: 500;
+        }
+
+        .card-value {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin: 8px 0;
+        }
+
+        .card-value-small {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .card-meta {
+            font-size: 13px;
+            color: #a1a1a6;
+            margin-top: 8px;
+        }
+
+        /* Badge styles */
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .badge-info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+        }
+
+        .badge-gold {
+            background: rgba(212, 168, 67, 0.2);
+            color: #d4a843;
+        }
+
+        /* Progress bar */
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(39, 39, 42, 0.6);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #d4a843 0%, #a88840 100%);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        /* Modal styles */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .modal {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #18181b;
+            border-top: 1px solid #27272a;
+            border-radius: 24px 24px 0 0;
+            padding: 24px;
+            max-height: 80vh;
+            overflow-y: auto;
+            z-index: 1001;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #a1a1a6;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+        }
+
+        .modal-close:hover {
+            color: #fafafa;
+        }
+
+        /* Tab styles */
+        .tabs {
+            display: flex;
+            gap: 16px;
+            border-bottom: 1px solid #27272a;
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            padding: 12px 0;
+            border: none;
+            background: none;
+            color: #a1a1a6;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab.active {
+            color: #d4a843;
+            border-bottom-color: #d4a843;
+        }
+
+        .tab:hover {
+            color: #fafafa;
+        }
+
+        /* Grid layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 767px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .grid-7 {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 767px) {
+            .grid-7 {
+                grid-template-columns: repeat(7, 1fr);
+                gap: 6px;
+            }
+        }
+
+        /* Day cell for calendar */
+        .day-cell {
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(39, 39, 42, 0.4);
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 11px;
+            padding: 4px;
+            text-align: center;
+        }
+
+        .day-cell:hover {
+            border-color: #d4a843;
+            background: rgba(212, 168, 67, 0.1);
+        }
+
+        .day-cell.work-day {
+            background: rgba(212, 168, 67, 0.15);
+            border-color: #d4a843;
+        }
+
+        .day-cell-day {
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .day-cell-label {
+            font-size: 10px;
+            color: #a1a1a6;
+            margin-top: 2px;
+        }
+
+        /* List items */
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: rgba(39, 39, 42, 0.4);
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .list-item:hover {
+            background: rgba(39, 39, 42, 0.6);
+            border-color: #3f3f46;
+        }
+
+        .list-item-info {
+            flex: 1;
+        }
+
+        .list-item-name {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .list-item-meta {
+            font-size: 13px;
+            color: #a1a1a6;
+        }
+
+        .list-item-amount {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .list-item-amount.positive {
+            color: #22c55e;
+        }
+
+        .list-item-amount.negative {
+            color: #ef4444;
+        }
+
+        /* Auth screen */
+        .auth-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(135deg, #09090b 0%, #1a1a1f 100%);
+            padding: 20px;
+        }
+
+        .auth-card {
+            background: rgba(24, 24, 27, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(212, 168, 67, 0.2);
+            border-radius: 24px;
+            padding: 48px;
+            max-width: 420px;
+            width: 100%;
+            animation: slideUp 0.4s ease-out;
+        }
+
+        .auth-logo {
+            font-size: 48px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #d4a843 0%, #a88840 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 8px;
+            letter-spacing: -1px;
+        }
+
+        .auth-tagline {
+            text-align: center;
+            color: #a1a1a6;
+            margin-bottom: 32px;
+            font-size: 14px;
+        }
+
+        .auth-form-group {
+            margin-bottom: 16px;
+        }
+
+        .auth-button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 32px;
+        }
+
+        .auth-toggle {
+            text-align: center;
+            font-size: 13px;
+            color: #a1a1a6;
+            margin-top: 16px;
+        }
+
+        .auth-toggle button {
+            background: none;
+            border: none;
+            color: #d4a843;
+            cursor: pointer;
+            text-decoration: underline;
+            font-weight: 600;
+        }
+
+        .auth-version {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 12px;
+            color: #71717a;
+        }
+
+        /* Split payment colors */
+        .split-2 { background: linear-gradient(135deg, rgba(212, 168, 67, 0.3) 0%, rgba(212, 168, 67, 0.1) 100%); }
+        .split-3 { background: linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.1) 100%); }
+        .split-4 { background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(34, 197, 94, 0.1) 100%); }
+
+        /* Chart styles */
+        .chart-container {
+            width: 100%;
+            height: 200px;
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            padding: 20px 0;
+        }
+
+        .chart-bar {
+            flex: 1;
+            background: linear-gradient(180deg, #d4a843 0%, #a88840 100%);
+            border-radius: 8px 8px 0 0;
+            min-height: 20px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .chart-bar:hover {
+            opacity: 0.8;
+        }
+
+        /* SVG color classes */
+        svg circle.score-ring {
+            fill: none;
+            stroke: rgba(212, 168, 67, 0.2);
+            stroke-width: 8;
+        }
+
+        svg circle.score-ring-fill {
+            fill: none;
+            stroke: url(#goldGradient);
+            stroke-width: 8;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+
+        .color-bills { color: #ef4444; }
+        .color-savings { color: #22c55e; }
+        .color-spending { color: #3b82f6; }
+
+        /* Scrollbar styling */
+        .sidebar::-webkit-scrollbar,
+        .content::-webkit-scrollbar,
+        .modal::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track,
+        .content::-webkit-scrollbar-track,
+        .modal::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb,
+        .content::-webkit-scrollbar-thumb,
+        .modal::-webkit-scrollbar-thumb {
+            background: rgba(212, 168, 67, 0.3);
+            border-radius: 3px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover,
+        .content::-webkit-scrollbar-thumb:hover,
+        .modal::-webkit-scrollbar-thumb:hover {
+            background: rgba(212, 168, 67, 0.5);
+        }
+
+        /* Input number styling */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        /* Activity feed */
+        .activity-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(39, 39, 42, 0.4);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(212, 168, 67, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .activity-action {
+            color: #a1a1a6;
+            font-size: 13px;
+        }
+
+        .activity-time {
+            color: #71717a;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        /* Utilities */
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .mt-8 { margin-top: 8px; }
+        .mt-16 { margin-top: 16px; }
+        .mt-24 { margin-top: 24px; }
+        .mb-8 { margin-bottom: 8px; }
+        .mb-16 { margin-bottom: 16px; }
+        .mb-24 { margin-bottom: 24px; }
+        .text-muted { color: #a1a1a6; }
+        .text-small { font-size: 13px; }
+        .font-bold { font-weight: 700; }
+        .flex { display: flex; }
+        .flex-center { display: flex; align-items: center; justify-content: center; }
+        .gap-8 { gap: 8px; }
+        .gap-16 { gap: 16px; }
+        .w-full { width: 100%; }
+
+        /* Slider styles */
+        .slider-input {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(39, 39, 42, 0.6);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider-input::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #d4a843 0%, #a88840 100%);
+            cursor: pointer;
+            border: 2px solid #09090b;
+        }
+
+        .slider-input::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #d4a843 0%, #a88840 100%);
+            cursor: pointer;
+            border: 2px solid #09090b;
+        }
+
+        /* Color picker */
+        input[type="color"] {
+            width: 60px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        /* Confirmation modal */
+        .confirmation-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 18px;
+            padding: 32px;
+            max-width: 380px;
+            z-index: 1002;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .confirmation-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .confirmation-text {
+            color: #a1a1a6;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+
+        .confirmation-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .confirmation-buttons button {
+            flex: 1;
+        }
+
+        /* Rent reporter */
+        .rent-history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: rgba(39, 39, 42, 0.4);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .rent-history-month {
+            font-weight: 600;
+        }
+
+        .rent-history-date {
+            color: #a1a1a6;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useContext, createContext, useEffect, useRef } = React;
+
+        // Theme Context
+        const ThemeContext = createContext();
+
+        // Demo data function
+        function getDemoData() {
+            return {
+                user: {
+                    name: "Alex Johnson",
+                    email: "alex.johnson@example.com",
+                    phone: "+1 (555) 234-5678",
+                    payFrequency: "biweekly",
+                    payRate: 22.50,
+                    hoursPerDay: 8,
+                    creditScore: 742,
+                    creditUtilization: 28,
+                    onTimePayments: 97,
+                    accountAge: 8,
+                    hardInquiries: 1,
+                    bankConnected: false,
+                    syncedAt: null
+                },
+                income: [
+                    { id: 1, name: "Primary Job", amount: 3200, frequency: "biweekly" },
+                    { id: 2, name: "Freelance", amount: 800, frequency: "monthly" }
+                ],
+                bills: [
+                    { id: 1, name: "Rent", amount: 1400, dueDate: 1, category: "housing", paid: false },
+                    { id: 2, name: "Car Insurance", amount: 180, dueDate: 15, category: "insurance", paid: false },
+                    { id: 3, name: "Phone", amount: 85, dueDate: 10, category: "utilities", paid: false },
+                    { id: 4, name: "Internet", amount: 65, dueDate: 20, category: "utilities", paid: false },
+                    { id: 5, name: "Netflix", amount: 15.99, dueDate: 25, category: "subscriptions", paid: false },
+                    { id: 6, name: "Gym", amount: 30, dueDate: 5, category: "wellness", paid: false },
+                    { id: 7, name: "Electricity", amount: 120, dueDate: 18, category: "utilities", paid: false }
+                ],
+                expenses: [
+                    { id: 1, name: "Groceries", amount: 156, category: "food" },
+                    { id: 2, name: "Gas", amount: 45, category: "transport" },
+                    { id: 3, name: "Coffee", amount: 12, category: "food" },
+                    { id: 4, name: "Amazon", amount: 67, category: "shopping" }
+                ],
+                savingsGoals: [
+                    { id: 1, name: "Emergency Fund", target: 10000, current: 3200, weeklyAmount: 100 },
+                    { id: 2, name: "Vacation", target: 2500, current: 800, weeklyAmount: 50 }
+                ],
+                paidBills: [
+                    { id: 101, name: "Rent", amount: 1400, paidDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
+                    { id: 102, name: "Car Insurance", amount: 180, paidDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) }
+                ],
+                group: {
+                    id: 1,
+                    name: "Weekend Warriors",
+                    description: "Group savings for weekend activities",
+                    target: 5000,
+                    current: 2150,
+                    members: [
+                        { id: 1, name: "Alex Johnson", amount: 800, avatar: "AJ" },
+                        { id: 2, name: "Jordan Smith", amount: 600, avatar: "JS" },
+                        { id: 3, name: "Casey Lee", amount: 450, avatar: "CL" },
+                        { id: 4, name: "Taylor Brown", amount: 300, avatar: "TB" }
+                    ],
+                    inviteCode: "WW2024",
+                    activity: [
+                        { id: 1, member: "Alex Johnson", action: "added", amount: 100, timestamp: "2 hours ago" },
+                        { id: 2, member: "Jordan Smith", action: "added", amount: 200, timestamp: "5 hours ago" },
+                        { id: 3, member: "Casey Lee", action: "added", amount: 50, timestamp: "1 day ago" },
+                        { id: 4, member: "Alex Johnson", action: "added", amount: 100, timestamp: "3 days ago" },
+                        { id: 5, member: "Taylor Brown", action: "added", amount: 100, timestamp: "1 week ago" }
+                    ]
+                },
+                roommates: {
+                    rent: 2100,
+                    utilities: [
+                        { id: 1, name: "Electricity", amount: 120 },
+                        { id: 2, name: "Water", amount: 65 },
+                        { id: 3, name: "Internet", amount: 60 }
+                    ],
+                    members: [
+                        { id: 1, name: "Alex Johnson", share: 50, paid: true },
+                        { id: 2, name: "Jordan Smith", share: 25, paid: false },
+                        { id: 3, name: "Casey Lee", share: 25, paid: true }
+                    ]
+                },
+                creditHistory: [
+                    { month: "Sep", score: 718 },
+                    { month: "Oct", score: 725 },
+                    { month: "Nov", score: 730 },
+                    { month: "Dec", score: 735 },
+                    { month: "Jan", score: 739 },
+                    { month: "Feb", score: 742 }
+                ],
+                paychecks: [
+                    { id: 1, date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), amount: 3200, status: "paid" },
+                    { id: 2, date: new Date(Date.now() - 46 * 24 * 60 * 60 * 1000), amount: 3200, status: "paid" },
+                    { id: 3, date: new Date(Date.now() - 32 * 24 * 60 * 60 * 1000), amount: 3200, status: "paid" },
+                    { id: 4, date: new Date(Date.now() - 18 * 24 * 60 * 60 * 1000), amount: 3200, status: "paid" },
+                    { id: 5, date: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000), amount: 3200, status: "upcoming" },
+                    { id: 6, date: new Date(Date.now() + 18 * 24 * 60 * 60 * 1000), amount: 3200, status: "projected" },
+                    { id: 7, date: new Date(Date.now() + 32 * 24 * 60 * 60 * 1000), amount: 3200, status: "projected" },
+                    { id: 8, date: new Date(Date.now() + 46 * 24 * 60 * 60 * 1000), amount: 3200, status: "projected" }
+                ],
+                rentReports: [
+                    { id: 1, month: "February 2024", reportedDate: new Date(Date.now() - 48 * 24 * 60 * 60 * 1000) },
+                    { id: 2, month: "January 2024", reportedDate: new Date(Date.now() - 78 * 24 * 60 * 60 * 1000) },
+                    { id: 3, month: "December 2023", reportedDate: new Date(Date.now() - 108 * 24 * 60 * 60 * 1000) }
+                ],
+                notifications: [
+                    { id: 1, title: "Upcoming Bill", message: "Car Insurance due in 3 days", type: "warning" },
+                    { id: 2, title: "Savings Goal", message: "You're 35% towards Emergency Fund", type: "info" },
+                    { id: 3, title: "Credit Score", message: "Your score increased by 3 points!", type: "success" }
+                ],
+                branding: {
+                    appName: "ORCA",
+                    tagline: "Financial Command Center",
+                    logoUrl: "",
+                    accentColor: "#d4a843"
+                }
+            };
+        }
+
+        // Custom hook for window width
+        function useWindowWidth() {
+            const [width, setWidth] = useState(window.innerWidth);
+
+            useEffect(() => {
+                const handleResize = () => setWidth(window.innerWidth);
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+
+            return width;
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            }).format(amount);
+        }
+
+        // Format date
+        function formatDate(date) {
+            if (typeof date === 'string') date = new Date(date);
+            return new Intl.DateTimeFormat('en-US', {
+                month: 'short',
+                day: 'numeric'
+            }).format(date);
+        }
+
+        // Format full date
+        function formatFullDate(date) {
+            if (typeof date === 'string') date = new Date(date);
+            return new Intl.DateTimeFormat('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+            }).format(date);
+        }
+
+        // Auth Screen Component
+        function AuthScreen({ onLogin }) {
+            const [isSignIn, setIsSignIn] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (email && password) {
+                    onLogin();
+                }
+            };
+
+            return (
+                <div className="auth-container">
+                    <div className="auth-card">
+                        <div className="auth-logo">ORCA</div>
+                        <div className="auth-tagline">Financial Command Center</div>
+
+                        <form onSubmit={handleSubmit}>
+                            <div className="auth-form-group">
+                                <input
+                                    type="email"
+                                    placeholder="Email address"
+                                    className="input"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            <div className="auth-form-group">
+                                <input
+                                    type="password"
+                                    placeholder="Password"
+                                    className="input"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            <div className="auth-button-group">
+                                <button type="submit" className="btn btn-primary btn-block">
+                                    {isSignIn ? 'Sign In' : 'Sign Up'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-block"
+                                    onClick={() => {
+                                        onLogin();
+                                    }}
+                                >
+                                    Try Demo
+                                </button>
+                            </div>
+                        </form>
+
+                        <div className="auth-toggle">
+                            {isSignIn ? "Don't have an account? " : "Already have an account? "}
+                            <button onClick={() => setIsSignIn(!isSignIn)}>
+                                {isSignIn ? 'Sign Up' : 'Sign In'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="auth-version">v1.0.0</div>
+                </div>
+            );
+        }
+
+        // Dashboard Component
+        function Dashboard({ user, data }) {
+            const weeklyIncome = data.income.reduce((sum, inc) => {
+                return sum + (inc.frequency === 'biweekly' ? inc.amount / 2 : inc.amount / 4.33);
+            }, 0);
+
+            const weeklyBills = data.bills.reduce((sum, bill) => sum + bill.amount, 0) / 4.33;
+            const weeklySavings = data.savingsGoals.reduce((sum, goal) => sum + goal.weeklyAmount, 0);
+            const safeToSpend = Math.max(0, weeklyIncome - weeklyBills - weeklySavings);
+
+            const nextPayDate = new Date();
+            nextPayDate.setDate(nextPayDate.getDate() + ((3 - nextPayDate.getDay() + 7) % 7) || 7);
+
+            const upcomingBills = data.bills.filter(b => !b.paid).slice(0, 3);
+            const topSavings = data.savingsGoals.slice(0, 2);
+
+            return (
+                <div className="content">
+                    <div className="card">
+                        <div className="card-subtitle">Welcome back</div>
+                        <div className="card-title">{user.name}</div>
+                    </div>
+
+                    <div className="grid-2">
+                        <div className="card gradient-gold" style={{ color: '#09090b' }}>
+                            <div className="card-subtitle" style={{ color: 'rgba(9, 9, 11, 0.7)' }}>Safe to Spend</div>
+                            <div className="card-value">{formatCurrency(safeToSpend)}</div>
+                            <div className="card-meta" style={{ color: 'rgba(9, 9, 11, 0.6)' }}>This week</div>
+                        </div>
+
+                        <div className="card glass">
+                            <div className="card-subtitle">Next Pay</div>
+                            <div className="card-value">{formatCurrency(3200)}</div>
+                            <div className="card-meta">{formatDate(nextPayDate)}</div>
+                        </div>
+                    </div>
+
+                    <div className="card glass">
+                        <div className="card-title">Allocated</div>
+                        <div style={{ marginTop: '16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '14px' }}>
+                                <span className="color-bills">Bills</span>
+                                <span className="color-bills">{formatCurrency(weeklyBills)}</span>
+                            </div>
+                            <div className="progress-bar">
+                                <div className="progress-fill" style={{ width: '60%', background: '#ef4444' }}></div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', marginTop: '16px', fontSize: '14px' }}>
+                                <span className="color-savings">Savings</span>
+                                <span className="color-savings">{formatCurrency(weeklySavings)}</span>
+                            </div>
+                            <div className="progress-bar">
+                                <div className="progress-fill" style={{ width: '25%', background: '#22c55e' }}></div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', marginTop: '16px', fontSize: '14px' }}>
+                                <span className="color-spending">Spending</span>
+                                <span className="color-spending">{formatCurrency(safeToSpend)}</span>
+                            </div>
+                            <div className="progress-bar">
+                                <div className="progress-fill" style={{ width: '15%', background: '#3b82f6' }}></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="card glass">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className="card-title">Credit Score</div>
+                            <button className="btn btn-ghost btn-sm">View Details</button>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginTop: '20px' }}>
+                            <div style={{ flex: '0 0 auto' }}>
+                                <svg width="120" height="120" viewBox="0 0 120 120" style={{ transform: 'rotate(-90deg)' }}>
+                                    <defs>
+                                        <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stopColor="#d4a843" />
+                                            <stop offset="100%" stopColor="#a88840" />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle cx="60" cy="60" r="50" className="score-ring" />
+                                    <circle
+                                        cx="60"
+                                        cy="60"
+                                        r="50"
+                                        className="score-ring-fill"
+                                        style={{ strokeDasharray: '314', strokeDashoffset: '314 * (1 - 0.75)' }}
+                                    />
+                                </svg>
+                            </div>
+                            <div>
+                                <div className="card-value-small">{user.creditScore}</div>
+                                <div className="card-subtitle">Good</div>
+                                <div className="card-meta" style={{ marginTop: '12px' }}>
+                                    <div style={{ marginBottom: '4px' }}>Utilization: {user.creditUtilization}%</div>
+                                    <div>On-time: {user.onTimePayments}%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="card glass">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <div className="card-title">Upcoming Bills</div>
+                            <button className="btn btn-ghost btn-sm">See All</button>
+                        </div>
+                        {upcomingBills.map(bill => (
+                            <div key={bill.id} className="list-item">
+                                <div className="list-item-info">
+                                    <div className="list-item-name">{bill.name}</div>
+                                    <div className="list-item-meta">Due {bill.dueDate}th</div>
+                                </div>
+                                <div className="list-item-amount negative">{formatCurrency(bill.amount)}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="card glass">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <div className="card-title">Savings Goals</div>
+                            <button className="btn btn-ghost btn-sm">See All</button>
+                        </div>
+                        {topSavings.map(goal => (
+                            <div key={goal.id} style={{ marginBottom: '16px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                    <div className="list-item-name">{goal.name}</div>
+                                    <div className="list-item-amount positive">{Math.round((goal.current / goal.target) * 100)}%</div>
+                                </div>
+                                <div className="progress-bar">
+                                    <div className="progress-fill" style={{ width: `${(goal.current / goal.target) * 100}%` }}></div>
+                                </div>
+                                <div className="card-meta">{formatCurrency(goal.current)} of {formatCurrency(goal.target)}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {data.group && (
+                        <div className="card glass">
+                            <div className="card-title" style={{ marginBottom: '16px' }}>{data.group.name}</div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                <div>
+                                    <div className="card-value-small">{formatCurrency(data.group.current)}</div>
+                                    <div className="card-meta">of {formatCurrency(data.group.target)}</div>
+                                </div>
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginLeft: '16px' }}>
+                                    <div className="progress-bar">
+                                        <div className="progress-fill" style={{ width: `${(data.group.current / data.group.target) * 100}%` }}></div>
+                                    </div>
+                                    <div className="card-meta" style={{ marginTop: '8px' }}>{data.group.members.length} members</div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Smart Stack Component
+        function SmartStack({ user, data }) {
+            const [activeTab, setActiveTab] = useState('budget');
+            const [workDays, setWorkDays] = useState(Array(7).fill(true));
+            const [hourlyRate, setHourlyRate] = useState(user.payRate);
+            const [goalName, setGoalName] = useState('');
+            const [goalTarget, setGoalTarget] = useState('');
+            const [goalCurrent, setGoalCurrent] = useState('');
+            const [goalWeekly, setGoalWeekly] = useState('');
+            const [creditUtilization, setCreditUtilization] = useState(user.creditUtilization);
+            const [onTimePayments, setOnTimePayments] = useState(user.onTimePayments);
+
+            const weeklyIncome = data.income.reduce((sum, inc) => {
+                return sum + (inc.frequency === 'biweekly' ? inc.amount / 2 : inc.amount / 4.33);
+            }, 0);
+
+            const weeklyBills = data.bills.reduce((sum, bill) => sum + bill.amount, 0) / 4.33;
+            const weeklySavings = data.savingsGoals.reduce((sum, goal) => sum + goal.weeklyAmount, 0);
+            const safeToSpend = Math.max(0, weeklyIncome - weeklyBills - weeklySavings);
+
+            const totalIncome = data.income.reduce((sum, inc) => sum + inc.amount, 0);
+            const totalExpenses = data.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+            const incomeExpenseRatio = (totalIncome / (totalIncome + totalExpenses)) * 100;
+
+            const projectedPaycheck = user.hoursPerDay * 5 * hourlyRate * workDays.filter(d => d).length / 5;
+
+            const toggleWorkDay = (index) => {
+                const newWorkDays = [...workDays];
+                newWorkDays[index] = !newWorkDays[index];
+                setWorkDays(newWorkDays);
+            };
+
+            const handleAddGoal = () => {
+                if (goalName && goalTarget && goalCurrent && goalWeekly) {
+                    // In a real app, this would add to state
+                    setGoalName('');
+                    setGoalTarget('');
+                    setGoalCurrent('');
+                    setGoalWeekly('');
+                }
+            };
+
+            const simulatedScore = (() => {
+                let base = user.creditScore;
+                const utilDelta = (user.creditUtilization - creditUtilization) * 0.3;
+                const onTimeDelta = (user.onTimePayments - onTimePayments) * 0.5;
+                return Math.round(base + utilDelta + onTimeDelta);
+            })();
+
+            return (
+                <div className="content">
+                    <div className="tabs">
+                        <button className={`tab ${activeTab === 'budget' ? 'active' : ''}`} onClick={() => setActiveTab('budget')}>
+                            Budget
+                        </button>
+                        <button className={`tab ${activeTab === 'savings' ? 'active' : ''}`} onClick={() => setActiveTab('savings')}>
+                            Savings
+                        </button>
+                        <button className={`tab ${activeTab === 'credit' ? 'active' : ''}`} onClick={() => setActiveTab('credit')}>
+                            Credit
+                        </button>
+                    </div>
+
+                    {activeTab === 'budget' && (
+                        <>
+                            <div className="card gradient-gold" style={{ color: '#09090b' }}>
+                                <div className="card-subtitle" style={{ color: 'rgba(9, 9, 11, 0.7)' }}>Weekly Safe to Spend</div>
+                                <div className="card-value">{formatCurrency(safeToSpend)}</div>
+                                <div className="card-meta" style={{ color: 'rgba(9, 9, 11, 0.6)' }}>After bills & savings</div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title">Income / Expense Ratio</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginTop: '20px' }}>
+                                    <div>
+                                        <div className="card-value-small">{incomeExpenseRatio.toFixed(0)}%</div>
+                                        <div className="card-meta">Healthy</div>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div className="progress-bar">
+                                            <div className="progress-fill" style={{ width: `${incomeExpenseRatio}%` }}></div>
+                                        </div>
+                                        <div className="card-meta" style={{ marginTop: '8px' }}>Income covers {incomeExpenseRatio.toFixed(0)}% of expenses</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '20px' }}>Check Projection Calendar</div>
+                                <div className="grid-7">
+                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                                        <div key={index} className={`day-cell ${workDays[index] ? 'work-day' : ''}`} onClick={() => toggleWorkDay(index)}>
+                                            <div className="day-cell-day">{day[0]}</div>
+                                            <div className="day-cell-label">{workDays[index] ? '✓' : '-'}</div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Hourly Rate</label>
+                                    <input
+                                        type="number"
+                                        value={hourlyRate}
+                                        onChange={(e) => setHourlyRate(parseFloat(e.target.value))}
+                                        className="input"
+                                    />
+                                </div>
+
+                                <div style={{ background: 'rgba(212, 168, 67, 0.1)', border: '1px solid rgba(212, 168, 67, 0.3)', borderRadius: '12px', padding: '16px', marginTop: '16px' }}>
+                                    <div className="card-subtitle">Projected Check</div>
+                                    <div className="card-value">{formatCurrency(projectedPaycheck)}</div>
+                                    <div className="card-meta">Based on {workDays.filter(d => d).length} work days/week</div>
+                                </div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '20px' }}>Check Splitter</div>
+                                <div style={{ marginBottom: '16px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                                        <span>Bills (60%)</span>
+                                        <span>{formatCurrency(projectedPaycheck * 0.6)}</span>
+                                    </div>
+                                    <div className="progress-bar">
+                                        <div className="progress-fill" style={{ width: '60%', background: '#ef4444' }}></div>
+                                    </div>
+                                </div>
+
+                                <div style={{ marginBottom: '16px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                                        <span>Savings (20%)</span>
+                                        <span>{formatCurrency(projectedPaycheck * 0.2)}</span>
+                                    </div>
+                                    <div className="progress-bar">
+                                        <div className="progress-fill" style={{ width: '20%', background: '#22c55e' }}></div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                                        <span>Spending (20%)</span>
+                                        <span>{formatCurrency(projectedPaycheck * 0.2)}</span>
+                                    </div>
+                                    <div className="progress-bar">
+                                        <div className="progress-fill" style={{ width: '20%', background: '#3b82f6' }}></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>Paycheck History</div>
+                                {data.paychecks.map(pc => (
+                                    <div key={pc.id} className="list-item">
+                                        <div className="list-item-info">
+                                            <div className="list-item-name">{formatDate(pc.date)}</div>
+                                            <div className="list-item-meta">
+                                                {pc.status === 'paid' && 'Received'}
+                                                {pc.status === 'upcoming' && 'Upcoming'}
+                                                {pc.status === 'projected' && 'Projected'}
+                                            </div>
+                                        </div>
+                                        <div className="list-item-amount">{formatCurrency(pc.amount)}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'savings' && (
+                        <>
+                            <div className="card glass">
+                                <div className="card-title">Total Saved</div>
+                                <div className="card-value">{formatCurrency(data.savingsGoals.reduce((sum, g) => sum + g.current, 0))}</div>
+                                <div className="card-meta">Across {data.savingsGoals.length} goals</div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '20px' }}>Create New Goal</div>
+                                <div className="form-group">
+                                    <label className="label">Goal Name</label>
+                                    <select className="select" value={goalName} onChange={(e) => setGoalName(e.target.value)}>
+                                        <option value="">Select a goal</option>
+                                        <option value="Emergency Fund">Emergency Fund</option>
+                                        <option value="Vacation">Vacation</option>
+                                        <option value="Car Down Payment">Car Down Payment</option>
+                                        <option value="Home Improvement">Home Improvement</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Target Amount</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.00"
+                                        className="input"
+                                        value={goalTarget}
+                                        onChange={(e) => setGoalTarget(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Current Savings</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.00"
+                                        className="input"
+                                        value={goalCurrent}
+                                        onChange={(e) => setGoalCurrent(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Weekly Amount</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.00"
+                                        className="input"
+                                        value={goalWeekly}
+                                        onChange={(e) => setGoalWeekly(e.target.value)}
+                                    />
+                                </div>
+
+                                <button className="btn btn-primary btn-block" onClick={handleAddGoal}>
+                                    Create Goal
+                                </button>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>Your Goals</div>
+                                {data.savingsGoals.map(goal => (
+                                    <div key={goal.id} style={{ marginBottom: '20px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <div className="list-item-name">{goal.name}</div>
+                                            <button className="btn btn-sm btn-ghost">Add Money</button>
+                                        </div>
+                                        <div className="progress-bar">
+                                            <div className="progress-fill" style={{ width: `${(goal.current / goal.target) * 100}%` }}></div>
+                                        </div>
+                                        <div className="card-meta" style={{ marginTop: '8px' }}>{formatCurrency(goal.current)} of {formatCurrency(goal.target)}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'credit' && (
+                        <>
+                            <div className="card glass" style={{ textAlign: 'center' }}>
+                                <div className="card-subtitle">Your Credit Score</div>
+                                <div className="card-value" style={{ fontSize: '64px', margin: '20px 0' }}>{simulatedScore}</div>
+                                <div className="badge badge-success">Excellent</div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '20px' }}>Score History</div>
+                                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '150px', gap: '8px' }}>
+                                    {data.creditHistory.map((item, idx) => (
+                                        <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                            <div className="chart-bar" style={{ height: `${(item.score / 800) * 100}%` }}></div>
+                                            <div style={{ fontSize: '11px', marginTop: '8px', color: '#a1a1a6' }}>{item.month}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '20px' }}>Credit Factors</div>
+                                {[
+                                    { name: 'Payment History', score: onTimePayments },
+                                    { name: 'Credit Utilization', score: 100 - creditUtilization },
+                                    { name: 'Credit Age', score: user.accountAge * 10 },
+                                    { name: 'Account Variety', score: 85 },
+                                    { name: 'Hard Inquiries', score: 100 - user.hardInquiries * 10 }
+                                ].map((factor, idx) => (
+                                    <div key={idx} style={{ marginBottom: '16px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <span>{factor.name}</span>
+                                            <span>{Math.min(factor.score, 100)}%</span>
+                                        </div>
+                                        <div className="progress-bar">
+                                            <div className="progress-fill" style={{ width: `${Math.min(factor.score, 100)}%` }}></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '20px' }}>Score Simulator</div>
+
+                                <div className="form-group">
+                                    <label className="label">Credit Utilization: {creditUtilization}%</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={creditUtilization}
+                                        onChange={(e) => setCreditUtilization(parseInt(e.target.value))}
+                                        className="slider-input"
+                                    />
+                                    <div className="card-meta" style={{ marginTop: '8px' }}>Lower is better (30% is ideal)</div>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">On-Time Payments: {onTimePayments}%</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={onTimePayments}
+                                        onChange={(e) => setOnTimePayments(parseInt(e.target.value))}
+                                        className="slider-input"
+                                    />
+                                    <div className="card-meta" style={{ marginTop: '8px' }}>100% is optimal</div>
+                                </div>
+
+                                <div style={{ background: 'rgba(212, 168, 67, 0.1)', border: '1px solid rgba(212, 168, 67, 0.3)', borderRadius: '12px', padding: '16px', marginTop: '20px' }}>
+                                    <div className="card-subtitle">Simulated Score</div>
+                                    <div className="card-value">{simulatedScore}</div>
+                                    <div className="card-meta" style={{ marginTop: '8px' }}>
+                                        {simulatedScore > user.creditScore ? '+' : ''}{simulatedScore - user.creditScore} points
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>AI Insights & Tips</div>
+                                {[
+                                    { title: 'Keep Utilization Low', desc: 'Try to keep credit utilization below 30% for better scores.' },
+                                    { title: 'Pay on Time Always', desc: 'Payment history is 35% of your credit score.' },
+                                    { title: 'Diversify Credit', desc: 'Mix of credit types (cards, loans) improves your profile.' },
+                                    { title: 'Monitor for Fraud', desc: 'Review statements monthly to spot unauthorized activity.' },
+                                    { title: 'Limit Hard Inquiries', desc: 'Multiple applications in short periods can lower scores.' },
+                                    { title: 'Build History', desc: 'Keep old accounts open to increase average account age.' }
+                                ].map((tip, idx) => (
+                                    <div key={idx} style={{ marginBottom: '12px', padding: '12px', background: 'rgba(39, 39, 42, 0.4)', borderRadius: '12px' }}>
+                                        <div style={{ fontWeight: '600', marginBottom: '4px' }}>{tip.title}</div>
+                                        <div style={{ fontSize: '13px', color: '#a1a1a6' }}>{tip.desc}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        // Bill Boss Component
+        function BillBoss({ data, onUpdate }) {
+            const [showForm, setShowForm] = useState(false);
+            const [billName, setBillName] = useState('');
+            const [billAmount, setBillAmount] = useState('');
+            const [billDate, setBillDate] = useState('');
+            const [billCategory, setBillCategory] = useState('housing');
+            const [showSplitModal, setShowSplitModal] = useState(false);
+            const [splitCount, setSplitCount] = useState(2);
+            const [showRentModal, setShowRentModal] = useState(false);
+            const [rentMonth, setRentMonth] = useState('');
+
+            const totalBills = data.bills.reduce((sum, b) => sum + b.amount, 0);
+            const unpaidBills = data.bills.filter(b => !b.paid);
+
+            const handleAddBill = () => {
+                if (billName && billAmount && billDate) {
+                    setShowForm(false);
+                    setBillName('');
+                    setBillAmount('');
+                    setBillDate('');
+                    setBillCategory('housing');
+                }
+            };
+
+            const handleReportRent = () => {
+                if (rentMonth) {
+                    setShowRentModal(false);
+                    setRentMonth('');
+                }
+            };
+
+            const handlePayBill = (billId) => {
+                // In a real app, this would update state
+            };
+
+            const handleUndoPay = (paidBillId) => {
+                // In a real app, this would undo the payment
+            };
+
+            return (
+                <div className="content">
+                    <div className="card gradient-gold" style={{ color: '#09090b' }}>
+                        <div className="card-subtitle" style={{ color: 'rgba(9, 9, 11, 0.7)' }}>Monthly Bills</div>
+                        <div className="card-value">{formatCurrency(totalBills)}</div>
+                        <div className="card-meta" style={{ color: 'rgba(9, 9, 11, 0.6)' }}>{unpaidBills.length} unpaid</div>
+                    </div>
+
+                    <div className="card glass">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <div className="card-title">Add Bill</div>
+                            <button className="btn btn-sm btn-ghost" onClick={() => setShowForm(!showForm)}>
+                                {showForm ? 'Cancel' : 'New Bill'}
+                            </button>
+                        </div>
+
+                        {showForm && (
+                            <div>
+                                <div className="form-group">
+                                    <label className="label">Bill Name</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g., Rent, Utilities"
+                                        className="input"
+                                        value={billName}
+                                        onChange={(e) => setBillName(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Amount</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0.00"
+                                        className="input"
+                                        value={billAmount}
+                                        onChange={(e) => setBillAmount(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Due Date</label>
+                                    <input
+                                        type="number"
+                                        placeholder="Day of month"
+                                        min="1"
+                                        max="31"
+                                        className="input"
+                                        value={billDate}
+                                        onChange={(e) => setBillDate(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Category</label>
+                                    <select className="select" value={billCategory} onChange={(e) => setBillCategory(e.target.value)}>
+                                        <option value="housing">Housing</option>
+                                        <option value="utilities">Utilities</option>
+                                        <option value="insurance">Insurance</option>
+                                        <option value="subscriptions">Subscriptions</option>
+                                        <option value="wellness">Wellness</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+
+                                <button className="btn btn-primary btn-block" onClick={handleAddBill}>
+                                    Add Bill
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="card glass">
+                        <div className="card-title" style={{ marginBottom: '16px' }}>Bills</div>
+                        {unpaidBills.map(bill => (
+                            <div key={bill.id} className="list-item">
+                                <div className="list-item-info">
+                                    <div className="list-item-name">{bill.name}</div>
+                                    <div className="list-item-meta">Due {bill.dueDate}th</div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <div className="list-item-amount negative">{formatCurrency(bill.amount)}</div>
+                                    <button className="btn btn-sm btn-secondary" onClick={() => handlePayBill(bill.id)}>Pay</button>
+                                    <button className="btn btn-sm btn-secondary" onClick={() => setShowSplitModal(true)}>Split</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {data.paidBills.length > 0 && (
+                        <div className="card glass">
+                            <div className="card-title" style={{ marginBottom: '16px' }}>Paid Bills</div>
+                            {data.paidBills.map(bill => (
+                                <div key={bill.id} className="list-item">
+                                    <div className="list-item-info">
+                                        <div className="list-item-name">{bill.name}</div>
+                                        <div className="list-item-meta">Paid {formatDate(bill.paidDate)}</div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <div className="list-item-amount positive">{formatCurrency(bill.amount)}</div>
+                                        <button className="btn btn-sm btn-secondary" onClick={() => handleUndoPay(bill.id)}>Undo</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="card glass">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <div className="card-title">Rent Reporter</div>
+                            <button className="btn btn-sm btn-primary" onClick={() => setShowRentModal(true)}>Report Rent</button>
+                        </div>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <div className="card-subtitle" style={{ marginBottom: '12px' }}>History</div>
+                            {data.rentReports.map(report => (
+                                <div key={report.id} className="rent-history-item">
+                                    <span className="rent-history-month">{report.month}</span>
+                                    <span className="rent-history-date">Reported {formatDate(report.reportedDate)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {showSplitModal && (
+                        <>
+                            <div className="modal-backdrop" onClick={() => setShowSplitModal(false)}></div>
+                            <div className="modal">
+                                <div className="modal-header">
+                                    <span>Split Payment</span>
+                                    <button className="modal-close" onClick={() => setShowSplitModal(false)}>×</button>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Split into how many payments?</label>
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        {[2, 3, 4].map(num => (
+                                            <button
+                                                key={num}
+                                                className={`btn btn-block ${splitCount === num ? 'btn-primary' : 'btn-secondary'}`}
+                                                onClick={() => setSplitCount(num)}
+                                            >
+                                                {num} Payments
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div style={{ marginTop: '20px', padding: '16px', background: `rgba(212, 168, 67, 0.1)`, borderRadius: '12px' }}>
+                                    <div className="card-subtitle">Payment Schedule</div>
+                                    {Array(splitCount).fill(0).map((_, idx) => (
+                                        <div key={idx} style={{ padding: '8px 0', borderBottom: idx < splitCount - 1 ? '1px solid rgba(39, 39, 42, 0.4)' : 'none' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>Payment {idx + 1}</span>
+                                                <span>{formatCurrency(500 / splitCount)}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button className="btn btn-primary btn-block" style={{ marginTop: '20px' }}>
+                                    Create Split
+                                </button>
+                            </div>
+                        </>
+                    )}
+
+                    {showRentModal && (
+                        <>
+                            <div className="modal-backdrop" onClick={() => setShowRentModal(false)}></div>
+                            <div className="modal">
+                                <div className="modal-header">
+                                    <span>Report Rent Payment</span>
+                                    <button className="modal-close" onClick={() => setShowRentModal(false)}>×</button>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="label">Month & Year</label>
+                                    <input
+                                        type="month"
+                                        className="input"
+                                        value={rentMonth}
+                                        onChange={(e) => setRentMonth(e.target.value)}
+                                    />
+                                </div>
+
+                                <div style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
+                                    <div className="card-subtitle">Benefits of Rent Reporting</div>
+                                    <ul style={{ fontSize: '13px', color: '#a1a1a6', marginTop: '8px', paddingLeft: '20px' }}>
+                                        <li style={{ marginBottom: '4px' }}>Build credit history</li>
+                                        <li style={{ marginBottom: '4px' }}>Improve credit score</li>
+                                        <li>Show payment reliability</li>
+                                    </ul>
+                                </div>
+
+                                <button className="btn btn-primary btn-block" onClick={handleReportRent}>
+                                    Report Payment
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        // Stack Circle Component
+        function StackCircle({ data }) {
+            const [activeTab, setActiveTab] = useState('group');
+            const [addAmount, setAddAmount] = useState('');
+
+            const handleAddMoney = () => {
+                if (addAmount) {
+                    setAddAmount('');
+                }
+            };
+
+            const totalUtilities = data.roommates.utilities.reduce((sum, u) => sum + u.amount, 0);
+            const totalHousing = data.roommates.rent + totalUtilities;
+
+            return (
+                <div className="content">
+                    <div className="tabs">
+                        <button className={`tab ${activeTab === 'group' ? 'active' : ''}`} onClick={() => setActiveTab('group')}>
+                            Group Savings
+                        </button>
+                        <button className={`tab ${activeTab === 'roommates' ? 'active' : ''}`} onClick={() => setActiveTab('roommates')}>
+                            Roommates
+                        </button>
+                    </div>
+
+                    {activeTab === 'group' && (
+                        <>
+                            <div className="card glass">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
+                                    <div>
+                                        <div className="card-title">{data.group.name}</div>
+                                        <div className="card-meta">{data.group.members.length} members</div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontSize: '12px', color: '#a1a1a6', marginBottom: '4px' }}>Invite Code</div>
+                                        <div style={{ fontWeight: '700', fontSize: '18px', color: '#d4a843' }}>{data.group.inviteCode}</div>
+                                    </div>
+                                </div>
+
+                                <div style={{ marginBottom: '16px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                        <div className="card-subtitle">Progress</div>
+                                        <div className="card-subtitle">{Math.round((data.group.current / data.group.target) * 100)}%</div>
+                                    </div>
+                                    <div className="progress-bar">
+                                        <div className="progress-fill" style={{ width: `${(data.group.current / data.group.target) * 100}%` }}></div>
+                                    </div>
+                                    <div className="card-meta" style={{ marginTop: '8px' }}>{formatCurrency(data.group.current)} of {formatCurrency(data.group.target)}</div>
+                                </div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>Add Money</div>
+                                <div className="form-group">
+                                    <input
+                                        type="number"
+                                        placeholder="0.00"
+                                        className="input"
+                                        value={addAmount}
+                                        onChange={(e) => setAddAmount(e.target.value)}
+                                    />
+                                </div>
+                                <button className="btn btn-primary btn-block" onClick={handleAddMoney}>
+                                    Add to Pool
+                                </button>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>Members & Contributions</div>
+                                {data.group.members.map(member => (
+                                    <div key={member.id} className="list-item">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div className="activity-avatar" style={{ background: 'linear-gradient(135deg, #d4a843 0%, #a88840 100%)' }}>
+                                                {member.avatar}
+                                            </div>
+                                            <div className="list-item-info">
+                                                <div className="list-item-name">{member.name}</div>
+                                                <div className="list-item-meta">{Math.round((member.amount / data.group.current) * 100)}% of total</div>
+                                            </div>
+                                        </div>
+                                        <div className="list-item-amount">{formatCurrency(member.amount)}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>Activity Feed</div>
+                                {data.group.activity.map(item => (
+                                    <div key={item.id} className="activity-item">
+                                        <div className="activity-avatar"></div>
+                                        <div className="activity-content">
+                                            <div className="activity-name">{item.member}</div>
+                                            <div className="activity-action">{item.action} {formatCurrency(item.amount)}</div>
+                                            <div className="activity-time">{item.timestamp}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'roommates' && (
+                        <>
+                            <div className="card gradient-gold" style={{ color: '#09090b' }}>
+                                <div className="card-subtitle" style={{ color: 'rgba(9, 9, 11, 0.7)' }}>Monthly Housing</div>
+                                <div className="card-value">{formatCurrency(totalHousing)}</div>
+                                <div className="card-meta" style={{ color: 'rgba(9, 9, 11, 0.6)' }}>Rent + Utilities</div>
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>Rent</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'rgba(39, 39, 42, 0.4)', borderRadius: '12px' }}>
+                                    <div className="card-value-small">{formatCurrency(data.roommates.rent)}</div>
+                                    <button className="btn btn-sm btn-ghost">Edit</button>
+                                </div>
+                            </div>
+
+                            <div className="card glass">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <div className="card-title">Shared Utilities</div>
+                                    <button className="btn btn-sm btn-primary">Add</button>
+                                </div>
+                                {data.roommates.utilities.map(util => (
+                                    <div key={util.id} className="list-item">
+                                        <div className="list-item-info">
+                                            <div className="list-item-name">{util.name}</div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                            <div className="list-item-amount">{formatCurrency(util.amount)}</div>
+                                            <button className="btn btn-sm btn-secondary">Remove</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>Roommates</div>
+                                {data.roommates.members.map(member => {
+                                    const share = Math.round((totalHousing * member.share) / 100);
+                                    return (
+                                        <div key={member.id} className="list-item">
+                                            <div style={{ flex: 1 }}>
+                                                <div className="list-item-name">{member.name}</div>
+                                                <div className="list-item-meta">
+                                                    {member.share}% share • {member.paid ? '✓ Paid' : '⏳ Pending'}
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div className="list-item-amount">{formatCurrency(share)}</div>
+                                                <input type="checkbox" checked={member.paid} readOnly style={{ cursor: 'pointer' }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="card glass">
+                                <div className="card-title" style={{ marginBottom: '16px' }}>Split Summary</div>
+                                <div style={{ padding: '16px', background: 'rgba(212, 168, 67, 0.1)', borderRadius: '12px' }}>
+                                    {data.roommates.members.map(member => {
+                                        const share = Math.round((totalHousing * member.share) / 100);
+                                        return (
+                                            <div key={member.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(39, 39, 42, 0.4)' }}>
+                                                <span>{member.name}</span>
+                                                <span style={{ fontWeight: '700' }}>{formatCurrency(share)}</span>
+                                            </div>
+                                        );
+                                    })}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(212, 168, 67, 0.3)', marginTop: '8px', fontWeight: '700' }}>
+                                        <span>Total</span>
+                                        <span>{formatCurrency(totalHousing)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        // Settings Component
+        function Settings({ user, data, onUpdateBranding }) {
+            const [theme, setTheme] = useState('dark');
+            const [profileName, setProfileName] = useState(user.name);
+            const [profileEmail, setProfileEmail] = useState(user.email);
+            const [profilePhone, setProfilePhone] = useState(user.phone);
+            const [showPlaid, setShowPlaid] = useState(false);
+            const [plaidStep, setPlaidStep] = useState('select');
+            const [bankSelected, setBankSelected] = useState('');
+            const [showConfirm, setShowConfirm] = useState(false);
+            const [appName, setAppName] = useState(data.branding.appName);
+            const [tagline, setTagline] = useState(data.branding.tagline);
+            const [accentColor, setAccentColor] = useState(data.branding.accentColor);
+            const [logoUrl, setLogoUrl] = useState(data.branding.logoUrl);
+
+            const handleSaveBranding = () => {
+                onUpdateBranding({
+                    appName,
+                    tagline,
+                    accentColor,
+                    logoUrl
+                });
+            };
+
+            const handleConnectBank = () => {
+                setPlaidStep('institutions');
+            };
+
+            const handleBankSelect = (bank) => {
+                setBankSelected(bank);
+                setPlaidStep('credentials');
+            };
+
+            const handlePlaidConnect = () => {
+                setPlaidStep('loading');
+                setTimeout(() => {
+                    setPlaidStep('success');
+                }, 2000);
+            };
+
+            const handlePlaidDone = () => {
+                setShowPlaid(false);
+                setPlaidStep('select');
+                setBankSelected('');
+            };
+
+            const handleResetData = () => {
+                setShowConfirm(true);
+            };
+
+            return (
+                <div className="content">
+                    <div className="card glass">
+                        <div className="card-title" style={{ marginBottom: '20px' }}>Profile</div>
+                        <div style={{ padding: '16px', background: 'rgba(39, 39, 42, 0.4)', borderRadius: '12px', marginBottom: '20px' }}>
+                            <div className="user-avatar" style={{ width: '56px', height: '56px', fontSize: '24px', marginBottom: '12px' }}>
+                                {user.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div className="card-title">{user.name}</div>
+                            <div className="card-meta">{user.email}</div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <span className="card-title">Dark Mode</span>
+                            <button className="btn btn-secondary btn-sm" style={{ opacity: theme === 'dark' ? 1 : 0.6 }}>
+                                {theme === 'dark' ? 'On' : 'Off'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="card glass">
+                        <div className="card-title" style={{ marginBottom: '20px' }}>Personal Information</div>
+
+                        <div className="form-group">
+                            <label className="label">Full Name</label>
+                            <input
+                                type="text"
+                                className="input"
+                                value={profileName}
+                                onChange={(e) => setProfileName(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="label">Email</label>
+                            <input
+                                type="email"
+                                className="input"
+                                value={profileEmail}
+                                onChange={(e) => setProfileEmail(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="label">Phone</label>
+                            <input
+                                type="tel"
+                                className="input"
+                                value={profilePhone}
+                                onChange={(e) => setProfilePhone(e.target.value)}
+                            />
+                        </div>
+
+                        <button className="btn btn-primary btn-block">Save Changes</button>
+                    </div>
+
+                    <div className="card glass">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <div className="card-title">Bank Connection</div>
+                            {user.bankConnected && <span className="badge badge-success">Connected</span>}
+                        </div>
+
+                        {!user.bankConnected ? (
+                            <button className="btn btn-primary btn-block" onClick={() => setShowPlaid(true)}>
+                                Connect Bank Account
+                            </button>
+                        ) : (
+                            <div style={{ padding: '12px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '12px', marginBottom: '12px' }}>
+                                <div className="card-meta">Last synced: {user.syncedAt || 'Never'}</div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="card glass">
+                        <div className="card-title" style={{ marginBottom: '20px' }}>Branding</div>
+
+                        <div className="form-group">
+                            <label className="label">App Name</label>
+                            <input
+                                type="text"
+                                className="input"
+                                value={appName}
+                                onChange={(e) => setAppName(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="label">Tagline</label>
+                            <input
+                                type="text"
+                                className="input"
+                                value={tagline}
+                                onChange={(e) => setTagline(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="label">Accent Color</label>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <input
+                                    type="color"
+                                    value={accentColor}
+                                    onChange={(e) => setAccentColor(e.target.value)}
+                                />
+                                <input
+                                    type="text"
+                                    className="input"
+                                    style={{ flex: 1 }}
+                                    value={accentColor}
+                                    onChange={(e) => setAccentColor(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="label">Logo URL</label>
+                            <input
+                                type="url"
+                                className="input"
+                                placeholder="https://example.com/logo.png"
+                                value={logoUrl}
+                                onChange={(e) => setLogoUrl(e.target.value)}
+                            />
+                        </div>
+
+                        <button className="btn btn-primary btn-block" onClick={handleSaveBranding}>
+                            Save Branding
+                        </button>
+                    </div>
+
+                    <div className="card glass">
+                        <div className="card-title" style={{ marginBottom: '16px' }}>Data Management</div>
+                        <button className="btn btn-secondary btn-block" style={{ marginBottom: '12px' }} onClick={handleResetData}>
+                            Reset All Data
+                        </button>
+                        <button className="btn btn-ghost btn-block">Sign Out</button>
+                    </div>
+
+                    {showPlaid && (
+                        <>
+                            <div className="modal-backdrop" onClick={() => setShowPlaid(false)}></div>
+                            <div className="modal">
+                                <div className="modal-header">
+                                    <span>Connect Bank Account</span>
+                                    <button className="modal-close" onClick={() => setShowPlaid(false)}>×</button>
+                                </div>
+
+                                {plaidStep === 'select' && (
+                                    <>
+                                        <div style={{ padding: '20px', background: 'rgba(212, 168, 67, 0.1)', borderRadius: '12px', marginBottom: '20px' }}>
+                                            <div style={{ fontWeight: '600', marginBottom: '8px' }}>Secure Connection</div>
+                                            <div style={{ fontSize: '13px', color: '#a1a1a6' }}>We use Plaid to securely connect to 12,000+ financial institutions.</div>
+                                        </div>
+                                        <button className="btn btn-primary btn-block" onClick={handleConnectBank}>
+                                            Connect Bank
+                                        </button>
+                                    </>
+                                )}
+
+                                {plaidStep === 'institutions' && (
+                                    <>
+                                        <div className="form-group">
+                                            <label className="label">Search Your Bank</label>
+                                            <input type="text" placeholder="Search..." className="input" />
+                                        </div>
+                                        {['Chase', 'Bank of America', 'Wells Fargo', 'Citibank', 'US Bank'].map(bank => (
+                                            <button
+                                                key={bank}
+                                                className="list-item"
+                                                style={{ background: 'rgba(39, 39, 42, 0.4)', border: '1px solid #27272a', cursor: 'pointer', width: '100%', marginBottom: '12px' }}
+                                                onClick={() => handleBankSelect(bank)}
+                                            >
+                                                <div style={{ textAlign: 'left' }}>{bank}</div>
+                                            </button>
+                                        ))}
+                                    </>
+                                )}
+
+                                {plaidStep === 'credentials' && (
+                                    <>
+                                        <div style={{ marginBottom: '20px', padding: '12px', background: 'rgba(212, 168, 67, 0.1)', borderRadius: '12px' }}>
+                                            <div className="card-subtitle">{bankSelected}</div>
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="label">Username</label>
+                                            <input type="text" className="input" placeholder="Your banking username" />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="label">Password</label>
+                                            <input type="password" className="input" placeholder="Your banking password" />
+                                        </div>
+                                        <button className="btn btn-primary btn-block" onClick={handlePlaidConnect}>
+                                            Connect
+                                        </button>
+                                    </>
+                                )}
+
+                                {plaidStep === 'loading' && (
+                                    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                                        <div style={{ fontSize: '48px', marginBottom: '16px' }} className="pulse">⏳</div>
+                                        <div className="card-title">Connecting...</div>
+                                        <div className="card-meta" style={{ marginTop: '8px' }}>Securely verifying your account</div>
+                                    </div>
+                                )}
+
+                                {plaidStep === 'success' && (
+                                    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                                        <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
+                                        <div className="card-title">Connection Successful!</div>
+                                        <div className="card-meta" style={{ marginTop: '8px' }}>Your bank account has been connected.</div>
+                                        <button className="btn btn-primary btn-block" style={{ marginTop: '20px' }} onClick={handlePlaidDone}>
+                                            Done
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+
+                    {showConfirm && (
+                        <>
+                            <div className="modal-backdrop" onClick={() => setShowConfirm(false)}></div>
+                            <div className="confirmation-modal">
+                                <div className="confirmation-title">Reset All Data?</div>
+                                <div className="confirmation-text">
+                                    This will delete all your data including bills, savings goals, and transactions. This action cannot be undone.
+                                </div>
+                                <div className="confirmation-buttons">
+                                    <button className="btn btn-secondary" onClick={() => setShowConfirm(false)}>Cancel</button>
+                                    <button className="btn btn-danger" style={{ background: '#ef4444' }} onClick={() => setShowConfirm(false)}>Reset</button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        // Admin Component
+        function Admin({ branding, onUpdateBranding }) {
+            const [appName, setAppName] = useState(branding.appName);
+            const [tagline, setTagline] = useState(branding.tagline);
+            const [logoUrl, setLogoUrl] = useState(branding.logoUrl);
+            const [accentColor, setAccentColor] = useState(branding.accentColor);
+
+            const handleSave = () => {
+                onUpdateBranding({
+                    appName,
+                    tagline,
+                    logoUrl,
+                    accentColor
+                });
+            };
+
+            return (
+                <div className="content">
+                    <div className="card glass">
+                        <div className="card-title" style={{ marginBottom: '20px' }}>Branding Settings</div>
+
+                        <div className="form-group">
+                            <label className="label">App Name</label>
+                            <input
+                                type="text"
+                                className="input"
+                                value={appName}
+                                onChange={(e) => setAppName(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="label">Tagline</label>
+                            <input
+                                type="text"
+                                className="input"
+                                value={tagline}
+                                onChange={(e) => setTagline(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="label">Logo URL</label>
+                            <input
+                                type="url"
+                                className="input"
+                                placeholder="https://example.com/logo.png"
+                                value={logoUrl}
+                                onChange={(e) => setLogoUrl(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="label">Accent Color</label>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <input
+                                    type="color"
+                                    value={accentColor}
+                                    onChange={(e) => setAccentColor(e.target.value)}
+                                />
+                                <input
+                                    type="text"
+                                    className="input"
+                                    style={{ flex: 1 }}
+                                    value={accentColor}
+                                    onChange={(e) => setAccentColor(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                            <button className="btn btn-primary btn-block" onClick={handleSave}>
+                                Save Changes
+                            </button>
+                            <button className="btn btn-secondary btn-block">Back</button>
+                        </div>
+                    </div>
+
+                    <div className="card glass">
+                        <div className="card-title" style={{ marginBottom: '20px' }}>Preview</div>
+                        <div style={{ padding: '20px', background: 'rgba(39, 39, 42, 0.4)', borderRadius: '12px', textAlign: 'center' }}>
+                            {logoUrl && <img src={logoUrl} alt="Logo" style={{ maxHeight: '60px', marginBottom: '12px' }} />}
+                            <div style={{ fontSize: '32px', fontWeight: '800', background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}99 100%)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', marginBottom: '8px' }}>
+                                {appName}
+                            </div>
+                            <div className="card-meta">{tagline}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [currentPage, setCurrentPage] = useState('dashboard');
+            const [data, setData] = useState(null);
+            const [user, setUser] = useState(null);
+            const [branding, setBranding] = useState(null);
+            const windowWidth = useWindowWidth();
+            const isMobile = windowWidth < 768;
+
+            useEffect(() => {
+                const savedData = localStorage.getItem('orcaData');
+                if (savedData) {
+                    const parsed = JSON.parse(savedData);
+                    setData(parsed.data);
+                    setUser(parsed.user);
+                    setBranding(parsed.branding);
+                    setIsAuthenticated(true);
+                }
+            }, []);
+
+            const handleLogin = () => {
+                const demoData = getDemoData();
+                setData(demoData);
+                setUser(demoData.user);
+                setBranding(demoData.branding);
+                setIsAuthenticated(true);
+                localStorage.setItem('orcaData', JSON.stringify({ data: demoData, user: demoData.user, branding: demoData.branding }));
+            };
+
+            const handleUpdateBranding = (newBranding) => {
+                const updated = { ...branding, ...newBranding };
+                setBranding(updated);
+                localStorage.setItem('orcaData', JSON.stringify({ data, user, branding: updated }));
+            };
+
+            if (!isAuthenticated) {
+                return <AuthScreen onLogin={handleLogin} />;
+            }
+
+            if (!data || !user || !branding) {
+                return null;
+            }
+
+            const navigationItems = [
+                { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+                { id: 'smartstack', label: 'Smart Stack', icon: '💰' },
+                { id: 'billboss', label: 'Bill Boss', icon: '💳' },
+                { id: 'stackcircle', label: 'Stack Circle', icon: '👥' },
+                { id: 'settings', label: 'Settings', icon: '⚙️' },
+                { id: 'admin', label: 'Admin', icon: '🔧', adminOnly: true }
+            ];
+
+            return (
+                <div className="container">
+                    {!isMobile && (
+                        <div className="sidebar">
+                            <div className="sidebar-logo">{branding.appName}</div>
+                            {navigationItems.filter(item => !item.adminOnly).map(item => (
+                                <button
+                                    key={item.id}
+                                    className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
+                                    onClick={() => setCurrentPage(item.id)}
+                                >
+                                    <span style={{ marginRight: '8px' }}>{item.icon}</span>
+                                    {item.label}
+                                </button>
+                            ))}
+                            <div style={{ flex: 1 }}></div>
+                            <button
+                                className={`nav-item ${currentPage === 'admin' ? 'active' : ''}`}
+                                onClick={() => setCurrentPage('admin')}
+                            >
+                                <span style={{ marginRight: '8px' }}>🔧</span>
+                                Admin
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="main-container">
+                        <div className="top-bar">
+                            <div className="top-bar-title">
+                                {navigationItems.find(item => item.id === currentPage)?.label}
+                            </div>
+                            <div className="user-menu">
+                                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div style={{ fontSize: '14px', fontWeight: '600' }}>{user.name}</div>
+                                    <div style={{ fontSize: '12px', color: '#a1a1a6' }}>{user.email}</div>
+                                </div>
+                                <div className="user-avatar">
+                                    {user.name.split(' ').map(n => n[0]).join('')}
+                                </div>
+                            </div>
+                        </div>
+
+                        {currentPage === 'dashboard' && <Dashboard user={user} data={data} />}
+                        {currentPage === 'smartstack' && <SmartStack user={user} data={data} />}
+                        {currentPage === 'billboss' && <BillBoss data={data} />}
+                        {currentPage === 'stackcircle' && <StackCircle data={data} />}
+                        {currentPage === 'settings' && <Settings user={user} data={data} onUpdateBranding={handleUpdateBranding} />}
+                        {currentPage === 'admin' && <Admin branding={branding} onUpdateBranding={handleUpdateBranding} />}
+                    </div>
+
+                    {isMobile && (
+                        <div className="bottom-nav">
+                            {navigationItems.filter(item => !item.adminOnly).map(item => (
+                                <button
+                                    key={item.id}
+                                    className={`bottom-nav-item ${currentPage === item.id ? 'active' : ''}`}
+                                    onClick={() => setCurrentPage(item.id)}
+                                >
+                                    <div className="bottom-nav-icon">{item.icon}</div>
+                                    <div style={{ fontSize: '11px' }}>{item.label}</div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Render App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
