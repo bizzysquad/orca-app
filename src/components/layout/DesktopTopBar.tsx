@@ -3,11 +3,12 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Bell, Settings } from 'lucide-react'
+import { Bell, Settings, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface DesktopTopBarProps {
   notificationCount?: number
+  onMenuToggle?: () => void
 }
 
 const ROUTE_TITLES: Record<string, string> = {
@@ -19,7 +20,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/admin': 'Admin Panel',
 }
 
-export default function DesktopTopBar({ notificationCount = 0 }: DesktopTopBarProps) {
+export default function DesktopTopBar({ notificationCount = 0, onMenuToggle }: DesktopTopBarProps) {
   const pathname = usePathname()
   const title = ROUTE_TITLES[pathname] || 'ORCA'
 
@@ -29,13 +30,22 @@ export default function DesktopTopBar({ notificationCount = 0 }: DesktopTopBarPr
         'sticky top-0 z-40',
         'bg-[#09090b]/80 backdrop-blur-xl',
         'border-b border-[#27272a]/60',
-        'flex items-center justify-between px-8 py-4'
+        'flex items-center justify-between px-4 sm:px-8 py-3 sm:py-4'
       )}
     >
-      <h1 className="text-xl font-semibold text-[#fafafa]">{title}</h1>
+      <div className="flex items-center gap-3">
+        {/* Hamburger menu — mobile only */}
+        <button
+          onClick={onMenuToggle}
+          className="md:hidden p-2 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors duration-200"
+        >
+          <Menu size={22} />
+        </button>
+        <h1 className="text-lg sm:text-xl font-semibold text-[#fafafa]">{title}</h1>
+      </div>
 
-      <div className="flex items-center gap-2">
-        <button className="relative p-2.5 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors duration-200">
+      <div className="flex items-center gap-1 sm:gap-2">
+        <button className="relative p-2 sm:p-2.5 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors duration-200">
           <Bell size={20} strokeWidth={1.5} />
           {notificationCount > 0 && (
             <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-[#d4a843] text-[#0A0A0A] text-[10px] font-bold flex items-center justify-center">
@@ -45,7 +55,7 @@ export default function DesktopTopBar({ notificationCount = 0 }: DesktopTopBarPr
         </button>
         <Link
           href="/settings"
-          className="p-2.5 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors duration-200"
+          className="p-2 sm:p-2.5 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors duration-200"
         >
           <Settings size={20} strokeWidth={1.5} />
         </Link>

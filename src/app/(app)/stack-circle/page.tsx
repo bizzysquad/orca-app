@@ -8,8 +8,11 @@ import {
   MapPin,
   X,
   Trash2,
-  ChevronDown,
-  ChevronUp,
+  Link2,
+  Copy,
+  Check,
+  Share2,
+  ExternalLink,
 } from 'lucide-react';
 import { getDemoData } from '@/lib/demo-data';
 import { fmt, pct, gid } from '@/lib/utils';
@@ -126,6 +129,8 @@ export default function StackCirclePage() {
   const [utilityAmount, setUtilityAmount] = useState('');
   const [addingMember, setAddingMember] = useState(false);
   const [memberName, setMemberName] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   // Calculations
   const totalUtilities = roommates.utilities.reduce((sum, u) => sum + u.amount, 0);
@@ -133,6 +138,25 @@ export default function StackCirclePage() {
   const allPaidRent = roommates.members.every((m) => m.paidRent);
   const allPaidUtils = roommates.members.every((m) => m.paidUtilities);
   const allPaid = allPaidRent && allPaidUtils;
+
+  // Invite link
+  const inviteLink = group ? `https://orca.app/invite/${group.code}` : '';
+
+  const handleCopyLink = () => {
+    if (inviteLink) {
+      navigator.clipboard.writeText(inviteLink).catch(() => {});
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
+  const handleCopyCode = () => {
+    if (group?.code) {
+      navigator.clipboard.writeText(group.code).catch(() => {});
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
 
   const handleAddMoney = () => {
     if (addMoneyAmount && !isNaN(Number(addMoneyAmount))) {
@@ -241,15 +265,11 @@ export default function StackCirclePage() {
     return (totalUtilities * share) / 100;
   };
 
-  const getMemberTotal = (share: number) => {
-    return getMemberRentShare(share) + getMemberUtilsShare(share);
-  };
-
   return (
-    <div className="min-h-screen bg-[#09090b] text-[#fafafa] pb-32">
+    <div className="min-h-screen bg-[#09090b] text-[#fafafa] pb-32 overflow-x-hidden">
       {/* Header */}
       <motion.div
-        className="border-b border-[#27272a] bg-[#09090b] px-6 py-8"
+        className="border-b border-[#27272a] bg-[#09090b] px-4 sm:px-6 py-6 sm:py-8"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -264,7 +284,7 @@ export default function StackCirclePage() {
       </motion.div>
 
       {/* Tabs */}
-      <div className="border-b border-[#27272a] bg-[#09090b] px-6">
+      <div className="border-b border-[#27272a] bg-[#09090b] px-4 sm:px-6">
         <div className="flex gap-8">
           <button
             onClick={() => setActiveTab('group')}
@@ -291,7 +311,7 @@ export default function StackCirclePage() {
 
       {/* Content */}
       <motion.div
-        className="px-6 py-8 space-y-8"
+        className="px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -304,12 +324,12 @@ export default function StackCirclePage() {
                 {/* Group Overview Card */}
                 <motion.div
                   variants={itemVariants}
-                  className="rounded-2xl bg-gradient-to-br from-[#d4a843]/20 to-[#d4a843]/5 border border-[#d4a843]/30 p-8 text-center"
+                  className="rounded-2xl bg-gradient-to-br from-[#d4a843]/20 to-[#d4a843]/5 border border-[#d4a843]/30 p-5 sm:p-8 text-center"
                 >
                   <h2 className="text-[#d4a843] font-bold text-2xl mb-4">
                     {group.name}
                   </h2>
-                  <div className="text-5xl font-bold text-[#d4a843] mb-6">
+                  <div className="text-3xl sm:text-5xl font-bold text-[#d4a843] mb-4 sm:mb-6">
                     {fmt(group.current)}
                   </div>
                   <div className="mb-6">
@@ -342,6 +362,92 @@ export default function StackCirclePage() {
                     <p className="font-mono font-bold text-[#d4a843]">
                       {group.code}
                     </p>
+                  </div>
+                </motion.div>
+
+                {/* Invite Link Card — Discord-style */}
+                <motion.div
+                  variants={itemVariants}
+                  className="rounded-2xl bg-[#18181b] border border-[#27272a] p-4 sm:p-6"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-[#d4a843]/20">
+                      <Share2 className="w-5 h-5 text-[#d4a843]" />
+                    </div>
+                    <div>
+                      <h3 className="text-[#fafafa] font-bold text-lg">Invite Friends</h3>
+                      <p className="text-[#71717a] text-sm">Share a link to join your circle</p>
+                    </div>
+                  </div>
+
+                  {/* Invite Link Display */}
+                  <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-4 mb-4">
+                    <p className="text-[#71717a] text-xs mb-2 font-semibold uppercase tracking-wider">Invite Link</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0 bg-[#18181b] border border-[#27272a] rounded-lg px-3 sm:px-4 py-2.5 font-mono text-xs sm:text-sm text-[#d4a843] truncate">
+                        {inviteLink}
+                      </div>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handleCopyLink}
+                        className={`px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all ${
+                          copiedLink
+                            ? 'bg-[#22c55e] text-[#09090b]'
+                            : 'bg-[#d4a843] text-[#09090b] hover:bg-[#e5b75d]'
+                        }`}
+                      >
+                        {copiedLink ? (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4" />
+                            Copy
+                          </>
+                        )}
+                      </motion.button>
+                    </div>
+                  </div>
+
+                  {/* Quick Share Buttons */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleCopyCode}
+                      className="py-3 rounded-xl bg-[#27272a] text-[#fafafa] font-medium text-sm flex items-center justify-center gap-2 hover:bg-[#3f3f46] transition-colors"
+                    >
+                      <Copy className="w-4 h-4 text-[#d4a843]" />
+                      Copy Code: {group.code}
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setShowInviteModal(true)}
+                      className="py-3 rounded-xl bg-[#27272a] text-[#fafafa] font-medium text-sm flex items-center justify-center gap-2 hover:bg-[#3f3f46] transition-colors"
+                    >
+                      <Link2 className="w-4 h-4 text-[#d4a843]" />
+                      Share via...
+                    </motion.button>
+                  </div>
+
+                  {/* Link Settings */}
+                  <div className="mt-4 pt-4 border-t border-[#27272a]/60">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[#a1a1aa] text-sm font-medium">Link expires in</p>
+                        <p className="text-[#71717a] text-xs">Anyone with the link can join</p>
+                      </div>
+                      <select className="bg-[#27272a] border border-[#27272a] rounded-lg px-3 py-2 text-sm text-[#fafafa] focus:outline-none focus:border-[#d4a843]">
+                        <option>7 days</option>
+                        <option>24 hours</option>
+                        <option>1 hour</option>
+                        <option>Never</option>
+                      </select>
+                    </div>
                   </div>
                 </motion.div>
 
@@ -459,15 +565,15 @@ export default function StackCirclePage() {
             {/* Monthly Overview Card */}
             <motion.div
               variants={itemVariants}
-              className="rounded-2xl bg-gradient-to-br from-[#d4a843]/20 to-[#d4a843]/5 border border-[#d4a843]/30 p-8 text-center"
+              className="rounded-2xl bg-gradient-to-br from-[#d4a843]/20 to-[#d4a843]/5 border border-[#d4a843]/30 p-5 sm:p-8 text-center"
             >
               <p className="text-[#a1a1aa] text-sm mb-2">
                 Total Monthly Housing
               </p>
-              <div className="text-5xl font-bold text-[#d4a843] mb-6">
+              <div className="text-3xl sm:text-5xl font-bold text-[#d4a843] mb-4 sm:mb-6">
                 {fmt(totalMonthly)}
               </div>
-              <div className="flex justify-center gap-8 mb-6">
+              <div className="flex justify-center gap-4 sm:gap-8 mb-4 sm:mb-6">
                 <div>
                   <p className="text-[#71717a] text-sm">Rent</p>
                   <p className="text-[#fafafa] font-bold text-lg">
@@ -792,6 +898,87 @@ export default function StackCirclePage() {
           </>
         )}
       </motion.div>
+
+      {/* Share Modal */}
+      <AnimatePresence>
+        {showInviteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+            onClick={() => setShowInviteModal(false)}
+          >
+            <motion.div
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full sm:max-w-md bg-[#18181b] rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 space-y-4"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-[#fafafa] font-bold text-lg">Share Invite</h2>
+                <button
+                  onClick={() => setShowInviteModal(false)}
+                  className="p-1 hover:bg-[#27272a] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#a1a1aa]" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    handleCopyLink();
+                    setShowInviteModal(false);
+                  }}
+                  className="w-full p-4 rounded-xl bg-[#27272a] text-[#fafafa] flex items-center gap-3 hover:bg-[#3f3f46] transition-colors"
+                >
+                  <Copy className="w-5 h-5 text-[#d4a843]" />
+                  <div className="text-left">
+                    <p className="font-semibold text-sm">Copy Link</p>
+                    <p className="text-xs text-[#71717a]">Copy invite link to clipboard</p>
+                  </div>
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    window.open(`sms:?body=Join my ORCA Stack Circle! ${inviteLink}`, '_blank');
+                    setShowInviteModal(false);
+                  }}
+                  className="w-full p-4 rounded-xl bg-[#27272a] text-[#fafafa] flex items-center gap-3 hover:bg-[#3f3f46] transition-colors"
+                >
+                  <ExternalLink className="w-5 h-5 text-[#22c55e]" />
+                  <div className="text-left">
+                    <p className="font-semibold text-sm">Text Message</p>
+                    <p className="text-xs text-[#71717a]">Send via SMS</p>
+                  </div>
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    window.open(`mailto:?subject=Join my ORCA Stack Circle&body=Join my group savings circle! ${inviteLink}`, '_blank');
+                    setShowInviteModal(false);
+                  }}
+                  className="w-full p-4 rounded-xl bg-[#27272a] text-[#fafafa] flex items-center gap-3 hover:bg-[#3f3f46] transition-colors"
+                >
+                  <ExternalLink className="w-5 h-5 text-[#3b82f6]" />
+                  <div className="text-left">
+                    <p className="font-semibold text-sm">Email</p>
+                    <p className="text-xs text-[#71717a]">Send invite via email</p>
+                  </div>
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

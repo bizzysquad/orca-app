@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X } from 'lucide-react'
+import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, Calendar, Upload } from 'lucide-react'
 import { getDemoData } from '@/lib/demo-data'
 import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
 
@@ -21,6 +21,157 @@ const CATEGORIES = [
   'Other',
 ]
 
+function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedDay }: {
+  bills: Bill[]
+  month: number
+  year: number
+  onMonthChange: (dir: number) => void
+  onDayClick?: (day: number) => void
+  selectedDay?: number | null
+}) {
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const todayDate = new Date()
+  const isCurrentMonth = todayDate.getFullYear() === year && todayDate.getMonth() === month
+  const todayDay = isCurrentMonth ? todayDate.getDate() : -1
+  const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  // Get all events for a day including split payments
+  const getEventsForDay = (day: number) => {
+    const events: { label: string; amount: number; type: 'bill' | 'split'; paid: boolean }[] = []
+
+    bills.forEach(b => {
+      // Check main due date
+      const d = new Date(b.due + 'T00:00:00')
+      if (d.getDate() === day && d.getMonth() === month && d.getFullYear() === year) {
+        if (b.alloc.length === 0) {
+          events.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
+        }
+      }
+
+      // Check split payment dates
+      b.alloc.forEach(a => {
+        const ad = new Date(a.date + 'T00:00:00')
+        if (ad.getDate() === day && ad.getMonth() === month && ad.getFullYear() === year) {
+          events.push({ label: `${b.name} (split)`, amount: a.amount, type: 'split', paid: a.paid })
+        }
+      })
+    })
+
+    return events
+  }
+
+  const cells = []
+  for (let i = 0; i < firstDay; i++) {
+    cells.push(<div key={`empty-${i}`} className="aspect-square" />)
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayEvents = getEventsForDay(d)
+    const isToday = d === todayDay
+    const hasBill = dayEvents.length > 0
+    const allPaid = dayEvents.length > 0 && dayEvents.every(e => e.paid)
+
+    cells.push(
+      <div
+        key={d}
+        onClick={() => onDayClick?.(d)}
+        className={`aspect-square rounded-lg flex flex-col items-center justify-center relative text-xs sm:text-sm transition-all cursor-pointer ${
+          isToday ? 'bg-[#d4a843]/20 border border-[#d4a843]' : ''
+        } ${selectedDay === d ? 'bg-[#d4a843]/10 border border-[#d4a843]/50' : ''} ${hasBill && !allPaid && selectedDay !== d ? 'bg-[#ef4444]/10' : ''} ${allPaid && selectedDay !== d ? 'bg-[#22c55e]/10' : ''}`}
+      >
+        <span className={`font-medium ${isToday ? 'text-[#d4a843]' : hasBill ? 'text-[#fafafa]' : 'text-[#71717a]'}`}>
+          {d}
+        </span>
+        {hasBill && (
+          <div className="flex gap-0.5 mt-0.5">
+            {dayEvents.slice(0, 3).map((ev, i) => (
+              <div key={i} className={`w-1.5 h-1.5 rounded-full ${ev.paid ? 'bg-[#22c55e]' : ev.type === 'split' ? 'bg-[#f59e0b]' : 'bg-[#ef4444]'}`} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-[#18181b] border border-[#27272a] rounded-2xl p-4 sm:p-6">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => onMonthChange(-1)} className="p-2 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors">
+          <ChevronLeft size={18} />
+        </button>
+        <div className="flex items-center gap-2">
+          <Calendar size={16} className="text-[#d4a843]" />
+          <h3 className="font-semibold text-[#fafafa]">{monthName}</h3>
+        </div>
+        <button onClick={() => onMonthChange(1)} className="p-2 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors">
+          <ChevronRight size={18} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+          <div key={i} className="text-center text-[10px] sm:text-xs font-semibold text-[#71717a] py-1">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {cells}
+      </div>
+
+      <div className="flex gap-4 mt-4 pt-3 border-t border-[#27272a]/60">
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-[#ef4444]" />
+          <span className="text-[10px] sm:text-xs text-[#a1a1aa]">Unpaid</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-[#f59e0b]" />
+          <span className="text-[10px] sm:text-xs text-[#a1a1aa]">Split</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
+          <span className="text-[10px] sm:text-xs text-[#a1a1aa]">Paid</span>
+        </div>
+      </div>
+
+      {/* Selected Day Detail */}
+      {selectedDay && selectedDay > 0 && (
+        <div className="mt-4 pt-3 border-t border-[#27272a]/60">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-[#fafafa]">
+              {new Date(year, month, selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
+            <button onClick={() => onDayClick?.(0)} className="text-xs text-[#a1a1aa] hover:text-[#fafafa]">Close</button>
+          </div>
+          {getEventsForDay(selectedDay).length > 0 ? (
+            <div className="space-y-2">
+              {getEventsForDay(selectedDay).map((ev, i) => (
+                <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-[#27272a]/40">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${ev.paid ? 'bg-[#22c55e]' : ev.type === 'split' ? 'bg-[#f59e0b]' : 'bg-[#ef4444]'}`} />
+                    <div>
+                      <p className="text-sm font-medium text-[#fafafa]">{ev.label}</p>
+                      <p className="text-xs text-[#71717a]">
+                        {new Date(year, month, selectedDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  <p className={`text-sm font-bold ${ev.paid ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+                    -{fmt(ev.amount)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[#71717a]">No bills due this day</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function BillBossPage() {
   const demoData = useMemo(() => getDemoData(), [])
 
@@ -28,6 +179,10 @@ export default function BillBossPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [splitModalBillId, setSplitModalBillId] = useState<string | null>(null)
   const [customCategory, setCustomCategory] = useState('')
+  const [calMonth, setCalMonth] = useState(2)
+  const [calYear, setCalYear] = useState(2026)
+  const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [rentReceipts, setRentReceipts] = useState<Record<string, string>>({})
 
   const [formData, setFormData] = useState({
     name: '',
@@ -36,6 +191,15 @@ export default function BillBossPage() {
     cat: CATEGORIES[0],
     freq: 'monthly',
   })
+
+  const handleMonthChange = (dir: number) => {
+    let m = calMonth + dir
+    let y = calYear
+    if (m < 0) { m = 11; y-- }
+    if (m > 11) { m = 0; y++ }
+    setCalMonth(m)
+    setCalYear(y)
+  }
 
   // Calculate unpaid total
   const unpaidTotal = bills
@@ -167,7 +331,7 @@ export default function BillBossPage() {
           <div className="relative overflow-hidden rounded-2xl p-8 bg-gradient-to-br from-[#d4a843] to-[#b8941e] text-[#09090b]">
             <div className="text-center">
               <p className="text-sm font-medium opacity-90 mb-2">Total Monthly Bills</p>
-              <p className="text-5xl font-bold mb-6">{fmt(unpaidTotal)}</p>
+              <p className="text-4xl sm:text-5xl font-bold mb-6">{fmt(unpaidTotal)}</p>
               <div className="bg-[#09090b]/10 rounded-lg inline-block px-4 py-2">
                 <p className="text-sm">
                   Paid: <span className="font-bold">{fmt(paidTotal)}</span>
@@ -175,6 +339,22 @@ export default function BillBossPage() {
               </div>
             </div>
           </div>
+        </motion.div>
+
+        {/* Bill Calendar */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+        >
+          <BillCalendar
+            bills={bills}
+            month={calMonth}
+            year={calYear}
+            onMonthChange={handleMonthChange}
+            onDayClick={(day) => setSelectedDay(day === 0 ? null : day)}
+            selectedDay={selectedDay}
+          />
         </motion.div>
 
         {/* 2. Add Bill Button */}
@@ -405,7 +585,7 @@ export default function BillBossPage() {
           >
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-[#d4a843] font-bold text-lg">Rent Reporter</h3>
+                <h3 className="text-[#d4a843] font-bold text-lg">Rent Tracker</h3>
                 <p className="text-[#a1a1aa] text-sm mt-1">Monthly: {fmt(rentBill.amount)}</p>
               </div>
               <div className="bg-[#d4a843] text-[#09090b] rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
@@ -425,19 +605,44 @@ export default function BillBossPage() {
 
             {rentEntries.length > 0 && (
               <div className="bg-[#09090b] rounded-lg p-4 border border-[#27272a]">
-                <p className="text-xs font-bold text-[#a1a1aa] mb-3">History</p>
-                <div className="space-y-2">
+                <p className="text-xs font-bold text-[#a1a1aa] mb-3">Payment History</p>
+                <div className="space-y-3">
                   {rentEntries.map(entry => (
-                    <div key={entry.id} className="flex justify-between items-center text-sm">
-                      <span className="text-[#a1a1aa]">{entry.month}</span>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          entry.reported
-                            ? 'bg-[#22c55e]/20 text-[#22c55e]'
-                            : 'bg-[#71717a]/20 text-[#a1a1aa]'
-                        }`}>
-                          {entry.reported ? 'Reported' : 'Pending'}
-                        </span>
+                    <div key={entry.id} className="p-3 rounded-lg bg-[#18181b] border border-[#27272a]">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-[#fafafa] font-medium">{entry.month}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            entry.reported
+                              ? 'bg-[#22c55e]/20 text-[#22c55e]'
+                              : 'bg-[#71717a]/20 text-[#a1a1aa]'
+                          }`}>
+                            {entry.reported ? 'Paid' : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-[#71717a]">{fmt(rentBill.amount)}</p>
+                        {rentReceipts[entry.id] ? (
+                          <span className="text-xs text-[#22c55e] flex items-center gap-1">
+                            <Check size={12} /> Receipt uploaded
+                          </span>
+                        ) : (
+                          <label className="text-xs text-[#d4a843] flex items-center gap-1 cursor-pointer hover:text-[#e5b75d]">
+                            <Upload size={12} />
+                            Upload Receipt
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                if (e.target.files?.[0]) {
+                                  setRentReceipts(prev => ({ ...prev, [entry.id]: e.target.files![0].name }))
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
                       </div>
                     </div>
                   ))}

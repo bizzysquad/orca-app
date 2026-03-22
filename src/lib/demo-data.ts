@@ -13,6 +13,8 @@ export const DEMO_USER: OrcaUser = {
   payRate: '28.50',
   hoursPerDay: '8',
   nextPay: '2026-04-03',
+  grossIncome: 4940,
+  netIncome: 3820,
   creditScore: 742,
   utilization: 24,
   onTime: 98,

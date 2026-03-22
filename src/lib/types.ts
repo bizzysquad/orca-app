@@ -27,6 +27,8 @@ export interface OrcaUser {
   payRate: string
   hoursPerDay: string
   nextPay: string
+  grossIncome?: number
+  netIncome?: number
   creditScore: number
   utilization: number
   onTime: number

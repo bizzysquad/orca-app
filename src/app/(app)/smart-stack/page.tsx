@@ -19,14 +19,50 @@ export default function SmartStackPage() {
     data.user.payFreq as 'weekly' | 'biweekly'
   );
   const [hourlyRate, setHourlyRate] = useState(parseFloat(data.user.payRate));
-  const [totalHours, setTotalHours] = useState(0);
-  const [workingDays, setWorkingDays] = useState<boolean[]>(
-    Array.from({ length: 31 }, (_, i) => {
-      const day = i + 1;
-      const dayOfWeek = new Date(2026, 2, day).getDay();
-      return dayOfWeek !== 0 && dayOfWeek !== 6;
+  const defaultHours = parseInt(data.user.hoursPerDay) || 8;
+  // Pay period start: next pay date as reference, show only the days in the current period
+  const payPeriodStart = useMemo(() => {
+    const nextPay = new Date(data.user.nextPay + 'T00:00:00');
+    const periodDays = payFreqToggle === 'weekly' ? 7 : 14;
+    // Find the start of the current pay period (go back from nextPay by periodDays)
+    const start = new Date(nextPay);
+    start.setDate(start.getDate() - periodDays);
+    return start;
+  }, [data.user.nextPay, payFreqToggle]);
+
+  const periodDays = payFreqToggle === 'weekly' ? 7 : 14;
+
+  // Build array of dates in the pay period
+  const payPeriodDates = useMemo(() => {
+    return Array.from({ length: periodDays }, (_, i) => {
+      const d = new Date(payPeriodStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+  }, [payPeriodStart, periodDays]);
+
+  const [dayHours, setDayHours] = useState<number[]>(
+    Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(payPeriodStart);
+      d.setDate(d.getDate() + i);
+      const dow = d.getDay();
+      return dow !== 0 && dow !== 6 ? defaultHours : 0;
     })
   );
+  const [editingDayHours, setEditingDayHours] = useState<number | null>(null);
+
+  // Reset day hours when frequency changes
+  const resetDayHours = (freq: 'weekly' | 'biweekly') => {
+    const days = freq === 'weekly' ? 7 : 14;
+    const newHours = Array.from({ length: days }, (_, i) => {
+      const d = new Date(payPeriodStart);
+      d.setDate(d.getDate() + i);
+      const dow = d.getDay();
+      return dow !== 0 && dow !== 6 ? defaultHours : 0;
+    });
+    setDayHours(newHours);
+    setEditingDayHours(null);
+  };
   const [budgetLocked, setBudgetLocked] = useState(false);
 
   // Savings tab state
@@ -51,15 +87,20 @@ export default function SmartStackPage() {
     return { label: 'Over Budget', color: '#ef4444' };
   }, [paycheckAmount, alloc.br]);
 
-  const workingDaysCount = useMemo(() => workingDays.filter(Boolean).length, [workingDays]);
+  // Only count hours from the active pay period days
+  const activeDayHours = useMemo(() => dayHours.slice(0, periodDays), [dayHours, periodDays]);
+  const workingDaysCount = useMemo(() => activeDayHours.filter(h => h > 0).length, [activeDayHours]);
+  const totalHoursCalc = useMemo(() => activeDayHours.reduce((sum, h) => sum + h, 0), [activeDayHours]);
   const projectedCheckAmount = useMemo(() => {
-    const hours = workingDaysCount * parseInt(data.user.hoursPerDay);
-    return hours * hourlyRate;
-  }, [workingDaysCount, hourlyRate]);
+    return totalHoursCalc * hourlyRate;
+  }, [totalHoursCalc, hourlyRate]);
 
+  // When budget is locked, the check splitter uses the projected check amount
+  const activeCheckAmount = budgetLocked ? projectedCheckAmount : paycheckAmount;
   const billsWeekly = useMemo(() => alloc.br, [alloc.br]);
   const savingsWeekly = useMemo(() => alloc.sr, [alloc.sr]);
-  const spendingWeekly = useMemo(() => alloc.sts, [alloc.sts]);
+  const lockedSpending = useMemo(() => Math.max(0, activeCheckAmount - alloc.br - alloc.sr), [activeCheckAmount, alloc.br, alloc.sr]);
+  const spendingWeekly = budgetLocked ? lockedSpending : alloc.sts;
 
   const totalAllocated = billsWeekly + savingsWeekly + spendingWeekly;
   const billsPct = totalAllocated > 0 ? pct(billsWeekly, totalAllocated) : 0;
@@ -220,7 +261,10 @@ export default function SmartStackPage() {
           {(['weekly', 'biweekly'] as const).map(freq => (
             <button
               key={freq}
-              onClick={() => setPayFreqToggle(freq)}
+              onClick={() => {
+                setPayFreqToggle(freq);
+                resetDayHours(freq);
+              }}
               className={`px-4 py-2 rounded-lg font-medium transition-all ${
                 payFreqToggle === freq
                   ? 'bg-[#d4a843] text-[#09090b]'
@@ -248,47 +292,94 @@ export default function SmartStackPage() {
           </div>
           <div>
             <label className="text-[#a1a1aa] text-xs block mb-2">Total Hours</label>
-            <p className="text-[#fafafa] text-lg font-semibold px-3 py-2">{workingDaysCount * parseInt(data.user.hoursPerDay)}</p>
+            <p className="text-[#fafafa] text-lg font-semibold px-3 py-2">{totalHoursCalc}h</p>
+            <p className="text-[#71717a] text-xs">Tap a day to adjust hours</p>
           </div>
+        </div>
+
+        {/* Pay Period Label */}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[#a1a1aa] text-xs">
+            Pay Period: {payPeriodDates[0]?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {payPeriodDates[periodDays - 1]?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </p>
+          <p className="text-[#71717a] text-xs">{periodDays} days</p>
         </div>
 
         {/* Calendar Grid */}
         <div className="bg-[#09090b] rounded-lg p-4 mb-6">
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} className="text-center text-[#a1a1aa] text-xs font-semibold py-2">
-                {day}
+          <div className={`grid ${periodDays === 7 ? 'grid-cols-7' : 'grid-cols-7'} gap-2 mb-2`}>
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+              <div key={i} className="text-center text-[#a1a1aa] text-[10px] font-semibold py-1">
+                {d}
               </div>
             ))}
           </div>
 
+          {/* Render only the pay period days, aligned to correct weekday columns */}
           <div className="grid grid-cols-7 gap-2">
-            {workingDays.map((isWorking, i) => {
-              const day = i + 1;
-              const dayOfWeek = new Date(2026, 2, day).getDay();
-              const isToday = day === 20;
-              const isOffDay = dayOfWeek === 0 || dayOfWeek === 6;
+            {/* Empty cells before first day of period */}
+            {Array.from({ length: payPeriodDates[0]?.getDay() || 0 }, (_, i) => (
+              <div key={`empty-${i}`} className="aspect-square" />
+            ))}
+            {payPeriodDates.map((dateObj, i) => {
+              const hours = dayHours[i] ?? 0;
+              const today = new Date();
+              const isToday = dateObj.getDate() === today.getDate() && dateObj.getMonth() === today.getMonth() && dateObj.getFullYear() === today.getFullYear();
+              const isWorking = hours > 0;
+              const isEditing = editingDayHours === i;
+              const dayNum = dateObj.getDate();
 
               return (
-                <button
-                  key={i}
-                  onClick={() => {
-                    const newDays = [...workingDays];
-                    newDays[i] = !newDays[i];
-                    setWorkingDays(newDays);
-                  }}
-                  className={`aspect-square rounded-lg font-semibold text-sm transition-all ${
-                    isToday ? 'border-2 border-[#d4a843]' : 'border border-[#27272a]'
-                  } ${
-                    isWorking
-                      ? 'bg-[#22c55e]/20 text-[#22c55e]'
-                      : 'bg-[#ef4444]/20 text-[#ef4444]'
-                  } ${
-                    isOffDay && !isWorking ? 'opacity-50' : ''
-                  }`}
-                >
-                  {day}
-                </button>
+                <div key={i} className="relative">
+                  <button
+                    onClick={() => {
+                      if (isEditing) {
+                        setEditingDayHours(null);
+                      } else {
+                        setEditingDayHours(i);
+                      }
+                    }}
+                    onDoubleClick={() => {
+                      const newHours = [...dayHours];
+                      newHours[i] = hours > 0 ? 0 : defaultHours;
+                      setDayHours(newHours);
+                    }}
+                    className={`w-full aspect-square rounded-lg font-semibold text-sm transition-all ${
+                      isToday ? 'border-2 border-[#d4a843]' : 'border border-[#27272a]'
+                    } ${
+                      isWorking
+                        ? 'bg-[#22c55e]/20 text-[#22c55e]'
+                        : 'bg-[#ef4444]/20 text-[#ef4444]'
+                    } ${
+                      isEditing ? 'ring-2 ring-[#d4a843]' : ''
+                    }`}
+                  >
+                    <div className="flex flex-col items-center">
+                      <span className="text-xs">{dayNum}</span>
+                      {isWorking && <span className="text-[8px] opacity-70">{hours}h</span>}
+                    </div>
+                  </button>
+                  {isEditing && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-10 bg-[#27272a] border border-[#d4a843]/50 rounded-lg p-2 shadow-lg min-w-[80px]">
+                      <input
+                        type="number"
+                        min="0"
+                        max="24"
+                        value={hours}
+                        onChange={(e) => {
+                          const newHours = [...dayHours];
+                          newHours[i] = Math.min(24, Math.max(0, parseInt(e.target.value) || 0));
+                          setDayHours(newHours);
+                        }}
+                        className="w-full bg-[#09090b] border border-[#27272a] text-[#fafafa] rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-[#d4a843]"
+                        autoFocus
+                        onBlur={() => setEditingDayHours(null)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingDayHours(null); }}
+                      />
+                      <p className="text-[8px] text-[#71717a] text-center mt-1">hours</p>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -301,12 +392,12 @@ export default function SmartStackPage() {
             <p className="text-[#22c55e] font-bold text-lg">{workingDaysCount}</p>
           </div>
           <div className="bg-[#27272a] rounded-lg p-3 text-center">
-            <p className="text-[#a1a1aa] text-xs mb-1">Extra Off</p>
-            <p className="text-[#ef4444] font-bold text-lg">{Math.max(0, 22 - workingDaysCount)}</p>
+            <p className="text-[#a1a1aa] text-xs mb-1">Days Off</p>
+            <p className="text-[#ef4444] font-bold text-lg">{periodDays - workingDaysCount}</p>
           </div>
           <div className="bg-[#27272a] rounded-lg p-3 text-center">
             <p className="text-[#a1a1aa] text-xs mb-1">Total Hours</p>
-            <p className="text-[#d4a843] font-bold text-lg">{workingDaysCount * parseInt(data.user.hoursPerDay)}</p>
+            <p className="text-[#d4a843] font-bold text-lg">{totalHoursCalc}</p>
           </div>
         </div>
 

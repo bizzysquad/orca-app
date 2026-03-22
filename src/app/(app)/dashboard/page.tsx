@@ -1,18 +1,19 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
-  ChevronRight, Users, Copy,
+  ChevronRight, Users, Copy, ChevronLeft,
+  DollarSign, Receipt, Palmtree, Calendar,
 } from 'lucide-react'
 
 import { getDemoData } from '@/lib/demo-data'
 import { fmt, fmtD, daysTo, calcAlloc, pct } from '@/lib/utils'
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 14 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
+  hidden: { opacity: 0, y: 20, scale: 0.98 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 200, damping: 24 } },
 }
 
 function CreditScoreRing({ score, limit }: { score: number; limit: number }) {
@@ -72,11 +73,179 @@ function ProgressBar({ current, target, color = '#d4a843' }: { current: number; 
   )
 }
 
+// Calendar event types
+interface CalendarEvent {
+  date: number
+  type: 'paycheck' | 'bill' | 'dayoff'
+  label: string
+  amount?: number
+}
+
+function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selectedDay }: {
+  events: CalendarEvent[]
+  month: number
+  year: number
+  onMonthChange: (dir: number) => void
+  onDayClick?: (day: number) => void
+  selectedDay?: number | null
+}) {
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const todayDate = new Date()
+  const isCurrentMonth = todayDate.getFullYear() === year && todayDate.getMonth() === month
+  const todayDay = isCurrentMonth ? todayDate.getDate() : -1
+
+  const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  const getEventsForDay = (day: number) => events.filter(e => e.date === day)
+
+  const eventDot = (type: string) => {
+    if (type === 'paycheck') return '#22c55e'
+    if (type === 'bill') return '#ef4444'
+    if (type === 'dayoff') return '#3b82f6'
+    return '#71717a'
+  }
+
+  const cells = []
+  for (let i = 0; i < firstDay; i++) {
+    cells.push(<div key={`empty-${i}`} className="aspect-square" />)
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayEvents = getEventsForDay(d)
+    const isToday = d === todayDay
+    cells.push(
+      <div
+        key={d}
+        onClick={() => onDayClick?.(d)}
+        className={`aspect-square rounded-lg flex flex-col items-center justify-center relative transition-all text-xs sm:text-sm cursor-pointer ${
+          isToday
+            ? 'bg-[#d4a843]/20 border border-[#d4a843]'
+            : selectedDay === d
+            ? 'bg-[#d4a843]/10 border border-[#d4a843]/50'
+            : 'hover:bg-[#27272a]/50'
+        }`}
+      >
+        <span className={`font-medium ${isToday ? 'text-[#d4a843]' : 'text-[#a1a1aa]'}`}>
+          {d}
+        </span>
+        {dayEvents.length > 0 && (
+          <div className="flex gap-0.5 mt-0.5">
+            {dayEvents.slice(0, 3).map((ev, i) => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: eventDot(ev.type) }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="glass rounded-2xl p-4 sm:p-6 glass-hover depth-1">
+      {/* Month Navigation */}
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => onMonthChange(-1)} className="p-2 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors">
+          <ChevronLeft size={18} />
+        </button>
+        <div className="flex items-center gap-2">
+          <Calendar size={16} className="text-[#d4a843]" />
+          <h3 className="font-semibold text-[#fafafa]">{monthName}</h3>
+        </div>
+        <button onClick={() => onMonthChange(1)} className="p-2 rounded-lg text-[#a1a1aa] hover:text-[#d4a843] transition-colors">
+          <ChevronRight size={18} />
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+          <div key={i} className="text-center text-[10px] sm:text-xs font-semibold text-[#71717a] py-1">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {cells}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 sm:gap-4 mt-4 pt-3 border-t border-[#27272a]/60">
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
+          <span className="text-[10px] sm:text-xs text-[#a1a1aa]">Paycheck</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-[#ef4444]" />
+          <span className="text-[10px] sm:text-xs text-[#a1a1aa]">Bill Due</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-[#3b82f6]" />
+          <span className="text-[10px] sm:text-xs text-[#a1a1aa]">Day Off</span>
+        </div>
+      </div>
+
+      {/* Selected Day Detail */}
+      {selectedDay && (
+        <div className="mt-4 pt-3 border-t border-[#27272a]/60">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-[#fafafa]">
+              {new Date(year, month, selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
+            <button onClick={() => onDayClick?.(0)} className="text-xs text-[#a1a1aa] hover:text-[#fafafa]">Close</button>
+          </div>
+          {getEventsForDay(selectedDay).length > 0 ? (
+            <div className="space-y-2">
+              {getEventsForDay(selectedDay).map((ev, i) => (
+                <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-[#27272a]/40">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: eventDot(ev.type) }} />
+                    <div>
+                      <p className="text-sm font-medium text-[#fafafa]">{ev.label}</p>
+                      <p className="text-xs text-[#71717a]">
+                        {new Date(year, month, selectedDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  {ev.amount && (
+                    <p className="text-sm font-bold" style={{ color: eventDot(ev.type) }}>
+                      {ev.type === 'bill' ? '-' : '+'}{fmt(ev.amount)}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[#71717a]">No events scheduled</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const data = useMemo(() => getDemoData(), [])
-
-  const { user, income, bills, goals, plaid, groups } = data
+  const { user, income, bills, goals, groups } = data
   const group = groups[0] || null
+
+  const [calMonth, setCalMonth] = useState(2) // March 2026
+  const [calYear, setCalYear] = useState(2026)
+  const [spendView, setSpendView] = useState<'weekly' | 'daily'>('weekly')
+  const [selectedDay, setSelectedDay] = useState<number | null>(null)
+
+  const handleMonthChange = (dir: number) => {
+    let m = calMonth + dir
+    let y = calYear
+    if (m < 0) { m = 11; y-- }
+    if (m > 11) { m = 0; y++ }
+    setCalMonth(m)
+    setCalYear(y)
+  }
 
   const allocation = useMemo(() => calcAlloc(income, bills, goals), [income, bills, goals])
   const paycheckAmt = useMemo(() => {
@@ -95,53 +264,112 @@ export default function DashboardPage() {
     [goals]
   )
 
+  // Build calendar events for the selected month
+  const calendarEvents = useMemo(() => {
+    const events: CalendarEvent[] = []
+
+    // Paycheck dates: biweekly from nextPay
+    const nextPayDate = new Date(user.nextPay + 'T00:00:00')
+    for (let i = -8; i <= 8; i++) {
+      const d = new Date(nextPayDate)
+      d.setDate(d.getDate() + i * 14)
+      if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
+        events.push({ date: d.getDate(), type: 'paycheck', label: 'Paycheck', amount: paycheckAmt })
+      }
+    }
+
+    // Bill due dates
+    bills.forEach(bill => {
+      const d = new Date(bill.due + 'T00:00:00')
+      if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
+        events.push({ date: d.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+      }
+    })
+
+    // Demo days off / vacation
+    const demoVacation = [
+      { month: 2, days: [25, 26, 27] },
+      { month: 3, days: [14, 15] },
+    ]
+    demoVacation.forEach(v => {
+      if (v.month === calMonth) {
+        v.days.forEach(day => {
+          events.push({ date: day, type: 'dayoff', label: 'Day Off' })
+        })
+      }
+    })
+
+    return events
+  }, [calMonth, calYear, bills, user.nextPay, paycheckAmt])
+
+  // Get upcoming events list for the calendar section
+  const upcomingEvents = useMemo(() => {
+    return calendarEvents
+      .sort((a, b) => a.date - b.date)
+      .slice(0, 5)
+  }, [calendarEvents])
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#09090b', color: '#fafafa' }}>
       <motion.div
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.08 } } }}
-        className="px-5 py-6 pb-12 space-y-6 max-w-4xl"
+        className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-4xl"
       >
         {/* Welcome Message */}
         <motion.div variants={fadeUp} className="space-y-1">
-          <h1 className="text-5xl font-bold" style={{ color: '#d4a843' }}>
+          <h1 className="text-3xl sm:text-5xl font-bold" style={{ color: '#d4a843' }}>
             Welcome back, {firstName}
           </h1>
           <p className="text-lg" style={{ color: '#a1a1aa' }}>
-            Here's your financial snapshot
+            Here&apos;s your financial snapshot
           </p>
         </motion.div>
 
         {/* Safe to Spend + Next Pay */}
-        <motion.div variants={fadeUp} className="grid grid-cols-2 gap-4">
+        <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {/* Safe to Spend Card */}
-          <div
-            className="rounded-2xl p-6 backdrop-blur-sm border"
-            style={{
-              backgroundColor: 'rgba(212, 168, 67, 0.08)',
-              borderColor: '#d4a843',
-            }}
-          >
-            <p className="text-sm mb-3" style={{ color: '#a1a1aa' }}>Safe to Spend</p>
-            <p className="text-4xl font-bold mb-2" style={{ color: '#d4a843' }}>
-              {fmt(allocation.sts)}
+          <div className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm" style={{ color: '#a1a1aa' }}>Safe to Spend</p>
+              <div className="flex bg-[#27272a]/60 rounded-lg p-0.5">
+                <button
+                  onClick={() => setSpendView('daily')}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    spendView === 'daily'
+                      ? 'bg-[#d4a843] text-[#09090b]'
+                      : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                  }`}
+                >
+                  Daily
+                </button>
+                <button
+                  onClick={() => setSpendView('weekly')}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    spendView === 'weekly'
+                      ? 'bg-[#d4a843] text-[#09090b]'
+                      : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                  }`}
+                >
+                  Weekly
+                </button>
+              </div>
+            </div>
+            <p className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: '#d4a843' }}>
+              {spendView === 'weekly' ? fmt(allocation.sts) : fmt(allocation.daily)}
             </p>
             <p className="text-sm" style={{ color: '#71717a' }}>
-              ~{fmt(allocation.daily)}/day
+              {spendView === 'weekly'
+                ? `~${fmt(allocation.daily)}/day`
+                : `~${fmt(allocation.sts)}/week`}
             </p>
           </div>
 
           {/* Next Pay Card */}
-          <div
-            className="rounded-2xl p-6 border"
-            style={{
-              backgroundColor: '#18181b',
-              borderColor: '#27272a',
-            }}
-          >
+          <div className="glass rounded-2xl p-6 glass-hover depth-1">
             <p className="text-sm mb-2" style={{ color: '#a1a1aa' }}>Next Paycheck</p>
-            <p className="text-3xl font-bold mb-1" style={{ color: '#d4a843' }}>
+            <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#d4a843' }}>
               {fmt(paycheckAmt)}
             </p>
             <p className="text-sm" style={{ color: '#71717a' }}>
@@ -153,14 +381,16 @@ export default function DashboardPage() {
         {/* Allocated Card */}
         <motion.div
           variants={fadeUp}
-          className="rounded-2xl p-6 border w-full"
+          className="rounded-2xl p-6 w-full glass-hover"
           style={{
-            backgroundColor: allocation.short <= 0 ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-            borderColor: allocation.short <= 0 ? '#22c55e' : '#ef4444',
+            background: allocation.short <= 0 ? 'rgba(34, 197, 94, 0.06)' : 'rgba(239, 68, 68, 0.06)',
+            backdropFilter: 'blur(16px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+            border: `1px solid ${allocation.short <= 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
           }}
         >
           <p className="text-sm mb-3" style={{ color: '#a1a1aa' }}>Allocated</p>
-          <p className="text-4xl font-bold mb-1" style={{
+          <p className="text-3xl sm:text-4xl font-bold mb-1" style={{
             color: allocation.short <= 0 ? '#22c55e' : '#ef4444',
           }}>
             {fmt(allocation.br + allocation.sr)}
@@ -170,61 +400,53 @@ export default function DashboardPage() {
           </p>
         </motion.div>
 
-        {/* Plaid Linked Accounts */}
+        {/* Monthly Calendar */}
         <motion.div variants={fadeUp}>
-          {plaid?.connected ? (
-            <div className="grid grid-cols-3 gap-3">
-              {/* Checking */}
-              <div
-                className="rounded-xl p-4 border"
-                style={{
-                  backgroundColor: '#18181b',
-                  borderColor: '#27272a',
-                }}
-              >
-                <p className="text-xs mb-2" style={{ color: '#a1a1aa' }}>Checking</p>
-                <p className="text-xl font-bold" style={{ color: '#22c55e' }}>
-                  {fmt(plaid!.checkingBalance)}
-                </p>
-              </div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold">Calendar</h2>
+          </div>
+          <MonthlyCalendar
+            events={calendarEvents}
+            month={calMonth}
+            year={calYear}
+            onMonthChange={handleMonthChange}
+            onDayClick={(day) => setSelectedDay(day === 0 ? null : day)}
+            selectedDay={selectedDay}
+          />
 
-              {/* Savings */}
-              <div
-                className="rounded-xl p-4 border"
-                style={{
-                  backgroundColor: '#18181b',
-                  borderColor: '#27272a',
-                }}
-              >
-                <p className="text-xs mb-2" style={{ color: '#a1a1aa' }}>Savings</p>
-                <p className="text-xl font-bold" style={{ color: '#d4a843' }}>
-                  {fmt(plaid!.savingsBalance)}
-                </p>
-              </div>
-
-              {/* Credit */}
-              <div
-                className="rounded-xl p-4 border"
-                style={{
-                  backgroundColor: '#18181b',
-                  borderColor: '#27272a',
-                }}
-              >
-                <p className="text-xs mb-2" style={{ color: '#a1a1aa' }}>Credit Used</p>
-                <p className="text-xl font-bold" style={{ color: '#ef4444' }}>
-                  {fmt(plaid!.creditUsed)}/{fmt(plaid!.creditLimit)}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div
-              className="rounded-xl p-4 border text-center"
-              style={{
-                backgroundColor: '#18181b',
-                borderColor: '#27272a',
-              }}
-            >
-              <p style={{ color: '#71717a' }}>Connect your bank to see account balances</p>
+          {/* Upcoming Events List */}
+          {upcomingEvents.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {upcomingEvents.map((ev, i) => {
+                const iconColor = ev.type === 'paycheck' ? '#22c55e' : ev.type === 'bill' ? '#ef4444' : '#3b82f6'
+                const Icon = ev.type === 'paycheck' ? DollarSign : ev.type === 'bill' ? Receipt : Palmtree
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    className="glass rounded-xl p-3 flex items-center justify-between glass-hover depth-1"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${iconColor}20` }}>
+                        <Icon size={14} style={{ color: iconColor }} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[#fafafa]">{ev.label}</p>
+                        <p className="text-xs text-[#71717a]">
+                          {new Date(calYear, calMonth, ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                    {ev.amount && (
+                      <p className="text-sm font-bold" style={{ color: iconColor }}>
+                        {ev.type === 'bill' ? '-' : '+'}{fmt(ev.amount)}
+                      </p>
+                    )}
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </motion.div>
@@ -232,11 +454,7 @@ export default function DashboardPage() {
         {/* Credit Score Card */}
         <motion.div
           variants={fadeUp}
-          className="rounded-2xl p-6 border cursor-pointer hover:opacity-90 transition-opacity"
-          style={{
-            backgroundColor: '#18181b',
-            borderColor: '#27272a',
-          }}
+          className="glass rounded-2xl p-6 cursor-pointer glass-hover depth-1"
           onClick={() => window.location.href = '/smart-stack'}
         >
           <div className="flex items-center justify-between">
@@ -274,11 +492,7 @@ export default function DashboardPage() {
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.06 }}
-                  className="rounded-xl p-4 border flex items-center justify-between hover:opacity-80 transition-opacity"
-                  style={{
-                    backgroundColor: '#18181b',
-                    borderColor: '#27272a',
-                  }}
+                  className="glass rounded-xl p-4 flex items-center justify-between glass-hover depth-1"
                 >
                   <div>
                     <p className="font-semibold">{bill.name}</p>
@@ -299,11 +513,7 @@ export default function DashboardPage() {
         {group && (
           <motion.div
             variants={fadeUp}
-            className="rounded-2xl p-6 border"
-            style={{
-              backgroundColor: 'rgba(212, 168, 67, 0.05)',
-              borderColor: '#d4a843',
-            }}
+            className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold"
           >
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -358,11 +568,7 @@ export default function DashboardPage() {
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.06 }}
-                  className="rounded-xl p-4 border"
-                  style={{
-                    backgroundColor: '#18181b',
-                    borderColor: '#27272a',
-                  }}
+                  className="glass rounded-xl p-4 glass-hover depth-1"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <p className="font-semibold">{goal.name}</p>

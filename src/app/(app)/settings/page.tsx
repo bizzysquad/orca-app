@@ -6,13 +6,13 @@ import {
   User,
   Mail,
   Shield,
-  Link2,
   Moon,
   Sun,
   LogOut,
   Trash2,
-  Cloud,
   Save,
+  DollarSign,
+  Briefcase,
 } from 'lucide-react'
 import { getDemoData } from '@/lib/demo-data'
 import { fmt } from '@/lib/utils'
@@ -20,7 +20,6 @@ import { fmt } from '@/lib/utils'
 export default function SettingsPage() {
   const demoData = getDemoData()
   const user = demoData.user
-  const plaidData = demoData.plaid
 
   // Personal info edit state
   const [editingName, setEditingName] = useState(false)
@@ -28,22 +27,20 @@ export default function SettingsPage() {
   const [editName, setEditName] = useState(user.name)
   const [editEmail, setEditEmail] = useState(user.email)
 
+  // Income state
+  const [grossIncome, setGrossIncome] = useState(String(user.grossIncome || ''))
+  const [netIncome, setNetIncome] = useState(String(user.netIncome || ''))
+  const [payRate, setPayRate] = useState(user.payRate)
+  const [hoursPerDay, setHoursPerDay] = useState(user.hoursPerDay)
+  const [payFreq, setPayFreq] = useState(user.payFreq)
+  const [editingIncome, setEditingIncome] = useState(false)
+  const [creditScore, setCreditScore] = useState(String(user.creditScore || ''))
+
   // Theme state
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
-  // Plaid connect flow state
-  const [plaidStep, setPlaidStep] = useState<number | null>(null)
-  const [selectedBank, setSelectedBank] = useState<string | null>(null)
+  // Reset confirmation state
   const [showResetConfirm, setShowResetConfirm] = useState(false)
-
-  const banks = [
-    { id: 'chase', name: 'Chase', logo: '🏦' },
-    { id: 'bofa', name: 'Bank of America', logo: '🏦' },
-    { id: 'wellsfargo', name: 'Wells Fargo', logo: '🏦' },
-    { id: 'ally', name: 'Ally Bank', logo: '🏦' },
-    { id: 'capitalone', name: 'Capital One', logo: '🏦' },
-    { id: 'citi', name: 'Citibank', logo: '🏦' },
-  ]
 
   // Handlers
   const handleSaveName = () => {
@@ -54,30 +51,16 @@ export default function SettingsPage() {
     setEditingEmail(false)
   }
 
-  const handleStartPlaidConnect = () => {
-    setPlaidStep(1)
-  }
-
-  const handleBankSelect = (bankId: string) => {
-    setSelectedBank(bankId)
-    setPlaidStep(2)
-  }
-
-  const handlePlaidNext = () => {
-    if (plaidStep === 2) {
-      setPlaidStep(3)
-    } else if (plaidStep === 3) {
-      setPlaidStep(4)
-    }
-  }
-
-  const handleDisconnectBank = () => {
-    setPlaidStep(null)
+  const handleSaveIncome = () => {
+    setEditingIncome(false)
   }
 
   const handleResetData = () => {
     setShowResetConfirm(false)
   }
+
+  // Calculate effective income for display
+  const effectiveIncome = netIncome ? parseFloat(netIncome) : (grossIncome ? parseFloat(grossIncome) : 0)
 
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: '#09090b' }}>
@@ -127,7 +110,203 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* 2. Appearance */}
+        {/* 2. Income & Pay Settings */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+        >
+          <h2 className="text-lg font-semibold mb-4" style={{ color: '#fafafa' }}>
+            Income & Pay
+          </h2>
+          <div
+            className="rounded-lg p-6 space-y-5"
+            style={{
+              backgroundColor: '#18181b',
+              borderColor: '#27272a',
+              borderWidth: '1px',
+            }}
+          >
+            {/* Gross Income */}
+            <div>
+              <label
+                className="text-sm font-medium mb-2 block"
+                style={{ color: '#a1a1aa' }}
+              >
+                Gross Income (per pay period)
+              </label>
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4" style={{ color: '#71717a' }} />
+                <input
+                  type="number"
+                  value={grossIncome}
+                  onChange={e => setGrossIncome(e.target.value)}
+                  placeholder="e.g., 4940"
+                  className="flex-1 px-3 py-2 rounded-lg"
+                  style={{
+                    backgroundColor: '#27272a',
+                    borderColor: '#27272a',
+                    borderWidth: '1px',
+                    color: '#fafafa',
+                  }}
+                />
+              </div>
+              <p className="text-xs mt-1" style={{ color: '#71717a' }}>
+                Your total earnings before taxes and deductions
+              </p>
+            </div>
+
+            {/* Net Income */}
+            <div>
+              <label
+                className="text-sm font-medium mb-2 block"
+                style={{ color: '#a1a1aa' }}
+              >
+                Net Income (per pay period)
+              </label>
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4" style={{ color: '#22c55e' }} />
+                <input
+                  type="number"
+                  value={netIncome}
+                  onChange={e => setNetIncome(e.target.value)}
+                  placeholder="e.g., 3820"
+                  className="flex-1 px-3 py-2 rounded-lg"
+                  style={{
+                    backgroundColor: '#27272a',
+                    borderColor: '#27272a',
+                    borderWidth: '1px',
+                    color: '#fafafa',
+                  }}
+                />
+              </div>
+              <p className="text-xs mt-1" style={{ color: '#71717a' }}>
+                Your take-home pay after taxes — used for budgeting calculations
+              </p>
+            </div>
+
+            {/* Divider */}
+            <div style={{ borderTop: '1px solid #27272a', marginTop: '8px', marginBottom: '8px' }} />
+
+            {/* Pay Frequency */}
+            <div>
+              <label
+                className="text-sm font-medium mb-2 block"
+                style={{ color: '#a1a1aa' }}
+              >
+                Pay Frequency
+              </label>
+              <select
+                value={payFreq}
+                onChange={e => setPayFreq(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg"
+                style={{
+                  backgroundColor: '#27272a',
+                  borderColor: '#27272a',
+                  borderWidth: '1px',
+                  color: '#fafafa',
+                }}
+              >
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Bi-Weekly</option>
+                <option value="semimonthly">Semi-Monthly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+
+            {/* Hourly Rate & Hours/Day */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label
+                  className="text-sm font-medium mb-2 block"
+                  style={{ color: '#a1a1aa' }}
+                >
+                  Hourly Rate
+                </label>
+                <div className="flex items-center gap-2">
+                  <span style={{ color: '#71717a' }}>$</span>
+                  <input
+                    type="number"
+                    value={payRate}
+                    onChange={e => setPayRate(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg"
+                    style={{
+                      backgroundColor: '#27272a',
+                      borderColor: '#27272a',
+                      borderWidth: '1px',
+                      color: '#fafafa',
+                    }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label
+                  className="text-sm font-medium mb-2 block"
+                  style={{ color: '#a1a1aa' }}
+                >
+                  Hours/Day
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="24"
+                  value={hoursPerDay}
+                  onChange={e => setHoursPerDay(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg"
+                  style={{
+                    backgroundColor: '#27272a',
+                    borderColor: '#27272a',
+                    borderWidth: '1px',
+                    color: '#fafafa',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Credit Score */}
+            <div>
+              <label
+                className="text-sm font-medium mb-2 block"
+                style={{ color: '#a1a1aa' }}
+              >
+                Credit Score
+              </label>
+              <input
+                type="number"
+                min="300"
+                max="850"
+                value={creditScore}
+                onChange={e => setCreditScore(e.target.value)}
+                placeholder="e.g., 720"
+                className="w-full px-3 py-2 rounded-lg"
+                style={{
+                  backgroundColor: '#27272a',
+                  borderColor: '#27272a',
+                  borderWidth: '1px',
+                  color: '#fafafa',
+                }}
+              />
+              <p className="text-xs mt-1" style={{ color: '#71717a' }}>
+                Your current credit score (300-850)
+              </p>
+            </div>
+
+            {/* Save Button */}
+            <button
+              onClick={handleSaveIncome}
+              className="w-full py-2.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+              style={{
+                backgroundColor: '#d4a843',
+                color: '#09090b',
+              }}
+            >
+              <Save className="w-4 h-4" />
+              Save Income Settings
+            </button>
+          </div>
+        </motion.div>
+
+        {/* 3. Appearance */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -167,7 +346,7 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* 3. Personal Info */}
+        {/* 4. Personal Info */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -290,144 +469,7 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* 4. Linked Accounts (Plaid) */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-        >
-          <h2 className="text-lg font-semibold mb-4" style={{ color: '#fafafa' }}>
-            Linked Bank Accounts
-          </h2>
-
-          {plaidData?.connected ? (
-            <div
-              className="rounded-lg p-6"
-              style={{
-                backgroundColor: '#18181b',
-                borderColor: '#27272a',
-                borderWidth: '1px',
-              }}
-            >
-              {/* Connected Card */}
-              <div className="flex items-center gap-3 mb-4">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: '#22c55e' }}
-                />
-                <span className="font-semibold" style={{ color: '#22c55e' }}>
-                  Bank Connected
-                </span>
-              </div>
-              <p
-                className="text-sm mb-4"
-                style={{ color: '#a1a1aa' }}
-              >
-                {plaidData?.accounts?.length || 0} account(s) linked • Last synced{' '}
-                {plaidData?.lastSync ? new Date(plaidData.lastSync).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : 'N/A'}
-              </p>
-
-              {/* Accounts List */}
-              <div className="space-y-3 mb-6">
-                {plaidData?.accounts?.map((account: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-lg"
-                    style={{
-                      backgroundColor: '#27272a',
-                    }}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div style={{ color: '#fafafa' }}>{account.name}</div>
-                        <div style={{ color: '#71717a' }} className="text-sm">
-                          {account.type === 'checking'
-                            ? 'Checking'
-                            : account.type === 'savings'
-                            ? 'Savings'
-                            : 'Credit'}{' '}
-                          • ••••{account.mask}
-                        </div>
-                      </div>
-                      <div style={{ color: '#d4a843' }} className="font-semibold">
-                        {fmt(account.balance)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                onClick={handleDisconnectBank}
-                className="w-full py-2 rounded-lg font-semibold transition-all"
-                style={{
-                  backgroundColor: '#ef4444',
-                  color: '#fafafa',
-                }}
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <div
-              className="rounded-lg p-6 border-2"
-              style={{
-                backgroundColor: '#18181b',
-                borderColor: '#27272a',
-                borderStyle: 'dashed',
-              }}
-            >
-              <div className="flex flex-col items-center gap-3 mb-6">
-                <Link2 className="w-8 h-8" style={{ color: '#a1a1aa' }} />
-                <h3 className="text-lg font-semibold" style={{ color: '#fafafa' }}>
-                  Link Your Bank
-                </h3>
-                <p style={{ color: '#a1a1aa' }} className="text-sm text-center">
-                  Connect your bank account to see your balance and transactions
-                </p>
-              </div>
-              <button
-                onClick={handleStartPlaidConnect}
-                className="w-full py-3 rounded-lg font-semibold transition-all"
-                style={{
-                  backgroundColor: '#d4a843',
-                  color: '#09090b',
-                }}
-              >
-                Connect Bank Account
-              </button>
-            </div>
-          )}
-        </motion.div>
-
-        {/* 5. Cloud Sync Status */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="rounded-lg p-6 flex items-center gap-3"
-          style={{
-            backgroundColor: '#18181b',
-            borderColor: '#27272a',
-            borderWidth: '1px',
-          }}
-        >
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: '#22c55e' }}
-          />
-          <div className="flex-1">
-            <h3 className="font-semibold" style={{ color: '#22c55e' }}>
-              Connected to Cloud
-            </h3>
-            <p style={{ color: '#a1a1aa' }} className="text-sm">
-              Your settings sync across all devices
-            </p>
-          </div>
-          <Cloud className="w-5 h-5" style={{ color: '#22c55e' }} />
-        </motion.div>
-
-        {/* 6. Privacy & Data */}
+        {/* 5. Privacy & Data */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -462,7 +504,7 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* 7. Sign Out */}
+        {/* 8. Sign Out */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -480,208 +522,6 @@ export default function SettingsPage() {
           </button>
         </motion.div>
       </div>
-
-      {/* Plaid Connect Flow Modal */}
-      <AnimatePresence>
-        {plaidStep !== null && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-            onClick={() => setPlaidStep(null)}
-          >
-            <motion.div
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto"
-              style={{ backgroundColor: '#18181b' }}
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Step 1: Bank Selection */}
-              {plaidStep === 1 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-bold mb-2" style={{ color: '#fafafa' }}>
-                      Select Your Bank
-                    </h2>
-                    <p style={{ color: '#a1a1aa' }}>
-                      Choose your financial institution
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {banks.map(bank => (
-                      <button
-                        key={bank.id}
-                        onClick={() => handleBankSelect(bank.id)}
-                        className="p-4 rounded-lg font-semibold transition-all border"
-                        style={{
-                          backgroundColor: '#27272a',
-                          borderColor: '#27272a',
-                          color: '#fafafa',
-                        }}
-                      >
-                        <div className="text-2xl mb-2">{bank.logo}</div>
-                        <div className="text-sm">{bank.name}</div>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setPlaidStep(null)}
-                    className="w-full py-2 rounded-lg"
-                    style={{
-                      backgroundColor: '#27272a',
-                      color: '#a1a1aa',
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {/* Step 2: Credentials */}
-              {plaidStep === 2 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-bold mb-2" style={{ color: '#fafafa' }}>
-                      Enter Credentials
-                    </h2>
-                    <p style={{ color: '#a1a1aa' }}>
-                      Sandbox mode - pre-filled credentials
-                    </p>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <label style={{ color: '#a1a1aa' }} className="text-sm block mb-1">
-                        Username
-                      </label>
-                      <input
-                        value="user_good"
-                        readOnly
-                        className="w-full px-3 py-2 rounded-lg"
-                        style={{
-                          backgroundColor: '#27272a',
-                          color: '#fafafa',
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ color: '#a1a1aa' }} className="text-sm block mb-1">
-                        Password
-                      </label>
-                      <input
-                        value="pass_good"
-                        readOnly
-                        type="password"
-                        className="w-full px-3 py-2 rounded-lg"
-                        style={{
-                          backgroundColor: '#27272a',
-                          color: '#fafafa',
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <button
-                    onClick={handlePlaidNext}
-                    className="w-full py-3 rounded-lg font-semibold"
-                    style={{
-                      backgroundColor: '#d4a843',
-                      color: '#09090b',
-                    }}
-                  >
-                    Continue
-                  </button>
-                  <button
-                    onClick={() => setPlaidStep(null)}
-                    className="w-full py-2 rounded-lg"
-                    style={{
-                      backgroundColor: '#27272a',
-                      color: '#a1a1aa',
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {/* Step 3: Loading */}
-              {plaidStep === 3 && (
-                <div className="space-y-6 text-center">
-                  <div>
-                    <h2 className="text-2xl font-bold mb-2" style={{ color: '#fafafa' }}>
-                      Connecting...
-                    </h2>
-                  </div>
-                  <div className="flex justify-center">
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                    >
-                      <div
-                        className="w-12 h-12 rounded-full border-4 border-transparent border-t-4"
-                        style={{
-                          borderTopColor: '#d4a843',
-                          borderRightColor: 'rgba(212, 168, 67, 0.2)',
-                          borderBottomColor: 'rgba(212, 168, 67, 0.2)',
-                          borderLeftColor: 'rgba(212, 168, 67, 0.2)',
-                        }}
-                      />
-                    </motion.div>
-                  </div>
-                  <p style={{ color: '#a1a1aa' }}>
-                    Authenticating with your bank...
-                  </p>
-                  <button
-                    onClick={() => handlePlaidNext()}
-                    className="w-full py-2 text-sm"
-                    style={{
-                      backgroundColor: '#27272a',
-                      color: '#a1a1aa',
-                    }}
-                  >
-                    Simulating connection...
-                  </button>
-                </div>
-              )}
-
-              {/* Step 4: Success */}
-              {plaidStep === 4 && (
-                <div className="space-y-6 text-center">
-                  <div>
-                    <h2 className="text-2xl font-bold mb-2" style={{ color: '#fafafa' }}>
-                      Connected!
-                    </h2>
-                    <p style={{ color: '#a1a1aa' }}>
-                      Your bank account is now linked
-                    </p>
-                  </div>
-                  <div className="text-4xl">✓</div>
-                  <div className="space-y-2">
-                    <div style={{ color: '#fafafa' }}>
-                      <strong>Checking</strong> • ...1234
-                    </div>
-                    <div style={{ color: '#a1a1aa' }} className="text-sm">
-                      Balance: $5,234.56
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setPlaidStep(null)}
-                    className="w-full py-3 rounded-lg font-semibold"
-                    style={{
-                      backgroundColor: '#d4a843',
-                      color: '#09090b',
-                    }}
-                  >
-                    Done
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Reset Data Confirmation Modal */}
       <AnimatePresence>
