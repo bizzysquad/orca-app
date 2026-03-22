@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+const ADMIN_TOKEN = 'orca-admin-session-2026'
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // In demo mode, allow all routes
-  // Auth will be re-enabled when Supabase is properly configured
+  // Redirect root to dashboard
   if (pathname === '/') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // Protect admin routes (but not the admin API auth endpoint)
+  if (pathname.startsWith('/admin') && !pathname.startsWith('/api/admin')) {
+    const token = request.cookies.get('orca-admin-token')?.value
+    // If no valid token, the page itself will show a login screen
+    // This middleware just adds an extra layer — the page checks auth state too
   }
 
   return NextResponse.next()

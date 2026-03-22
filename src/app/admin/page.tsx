@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Shield,
@@ -358,16 +358,41 @@ export default function AdminPage() {
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
   const [adminError, setAdminError] = useState('')
-  const [adminPin] = useState('ORCA2026') // Admin password
+  const [authLoading, setAuthLoading] = useState(true)
 
-  const handleAdminLogin = () => {
-    if (adminPassword === adminPin) {
-      setAdminAuthenticated(true)
-      setAdminError('')
-    } else {
-      setAdminError('Invalid admin password')
+  // Check existing session on mount
+  useEffect(() => {
+    fetch('/api/admin/auth')
+      .then((res) => {
+        if (res.ok) setAdminAuthenticated(true)
+      })
+      .catch(() => {})
+      .finally(() => setAuthLoading(false))
+  }, [])
+
+  const handleAdminLogin = async () => {
+    try {
+      const res = await fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword }),
+      })
+      if (res.ok) {
+        setAdminAuthenticated(true)
+        setAdminError('')
+      } else {
+        setAdminError('Invalid admin password')
+        setAdminPassword('')
+      }
+    } catch {
+      setAdminError('Authentication failed')
       setAdminPassword('')
     }
+  }
+
+  const handleAdminLogout = async () => {
+    await fetch('/api/admin/auth', { method: 'DELETE' })
+    setAdminAuthenticated(false)
   }
 
   // Core state
@@ -711,6 +736,17 @@ export default function AdminPage() {
     )
   }, [users, supportSearch])
 
+  if (authLoading) {
+    return (
+      <div style={{ backgroundColor: BG_DARK, color: TEXT_PRIMARY }} className="min-h-screen flex items-center justify-center">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+          <div style={{ borderColor: `${GOLD}44`, borderTopColor: GOLD }} className="w-10 h-10 border-3 rounded-full animate-spin mx-auto mb-4" />
+          <p style={{ color: TEXT_MUTED }} className="text-sm">Verifying session...</p>
+        </motion.div>
+      </div>
+    )
+  }
+
   if (!adminAuthenticated) {
     return (
       <div style={{ backgroundColor: BG_DARK, color: TEXT_PRIMARY }} className="min-h-screen flex items-center justify-center">
@@ -784,6 +820,20 @@ export default function AdminPage() {
                   System & User Management
                 </p>
               </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <a href="/dashboard" style={{ color: TEXT_SECONDARY, borderColor: BORDER_COLOR }} className="px-4 py-2 rounded-lg border text-sm hover:opacity-80 transition-opacity">
+                ← Back to App
+              </a>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleAdminLogout}
+                style={{ backgroundColor: '#ef444422', borderColor: '#ef4444', color: '#ef4444' }}
+                className="px-4 py-2 rounded-lg border text-sm font-medium flex items-center gap-2"
+              >
+                <Lock size={14} /> Logout
+              </motion.button>
             </div>
           </div>
         </div>
