@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Phone, Shield, ChevronLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Phone, Shield, ChevronLeft, CheckCircle } from 'lucide-react'
 import Input from '@/components/ui/Input'
 
 type LoginMethod = 'email' | 'phone'
@@ -13,7 +12,7 @@ type LoginStep = 'credentials' | 'phone-verify' | '2fa'
 
 export default function LoginPage() {
   const router = useRouter()
-  const supabase = createClient()
+  const searchParams = useSearchParams()
 
   // Login method
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email')
@@ -34,11 +33,22 @@ export default function LoginPage() {
   // 2FA
   const [twoFACode, setTwoFACode] = useState(['', '', '', '', '', ''])
   const twoFAInputRefs = useRef<(HTMLInputElement | null)[]>([])
-  const [twoFAEnabled] = useState(true) // Demo: 2FA is enabled
 
   // General
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+
+  // Check for success message from signup redirect
+  useEffect(() => {
+    const message = searchParams.get('message')
+    if (message === 'account-created') {
+      setSuccessMessage('Account created! Please check your email to verify, then sign in.')
+    }
+    if (message === 'email-verified') {
+      setSuccessMessage('Email verified successfully! You can now sign in.')
+    }
+  }, [searchParams])
 
   // Phone code timer
   useEffect(() => {
@@ -56,7 +66,6 @@ export default function LoginPage() {
     value: string
   ) => {
     if (value.length > 1) {
-      // Handle paste
       const digits = value.replace(/\D/g, '').slice(0, 6).split('')
       const newCodes = [...codes]
       digits.forEach((d, i) => {
@@ -91,10 +100,11 @@ export default function LoginPage() {
     }
   }
 
-  // Email sign in
+  // Email sign in - real Supabase auth
   const handleEmailSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
+    setSuccessMessage('')
     setLoading(true)
 
     const form = e.currentTarget
@@ -108,21 +118,25 @@ export default function LoginPage() {
     }
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: formEmail,
-        password: formPassword,
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formEmail, password: formPassword }),
       })
-      if (signInError) {
-        setError(signInError.message)
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (data.code === 'EMAIL_NOT_CONFIRMED') {
+          setError('Please verify your email before signing in. Check your inbox for a confirmation link.')
+        } else {
+          setError(data.error || 'Sign in failed. Please try again.')
+        }
         setLoading(false)
         return
       }
-      // If 2FA enabled, go to 2FA step
-      if (twoFAEnabled) {
-        setStep('2fa')
-        setLoading(false)
-        return
-      }
+
+      // Success - redirect to dashboard
       router.push('/dashboard')
       router.refresh()
     } catch {
@@ -131,20 +145,42 @@ export default function LoginPage() {
     }
   }
 
-  // Phone verification - send code
-  const handleSendPhoneCode = () => {
-    if (!phoneNumber || phoneNumber.length < 10) {
+  // Phone verification - send code via real Supabase
+  const handleSendPhoneCode = async () => {
+    if (!phoneNumber || phoneNumber.replace(/\D/g, '').length < 10) {
       setError('Please enter a valid phone number')
       return
     }
     setError('')
-    setPhoneSent(true)
-    setPhoneTimer(60)
-    setStep('phone-verify')
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/auth/phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneNumber }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to send verification code')
+        setLoading(false)
+        return
+      }
+
+      setPhoneSent(true)
+      setPhoneTimer(60)
+      setStep('phone-verify')
+      setLoading(false)
+    } catch {
+      setError('Failed to send verification code. Please try again.')
+      setLoading(false)
+    }
   }
 
-  // Phone verification - verify code
-  const handleVerifyPhoneCode = () => {
+  // Phone verification - verify code via real Supabase
+  const handleVerifyPhoneCode = async () => {
     const code = phoneCode.join('')
     if (code.length < 6) {
       setError('Please enter the full 6-digit code')
@@ -152,19 +188,32 @@ export default function LoginPage() {
     }
     setLoading(true)
     setError('')
-    // Demo: accept any 6-digit code
-    setTimeout(() => {
-      if (twoFAEnabled) {
-        setStep('2fa')
+
+    try {
+      const res = await fetch('/api/auth/phone', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneNumber, code }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Invalid verification code')
         setLoading(false)
-      } else {
-        router.push('/dashboard')
-        router.refresh()
+        return
       }
-    }, 1000)
+
+      // Success - redirect to dashboard
+      router.push('/dashboard')
+      router.refresh()
+    } catch {
+      setError('Verification failed. Please try again.')
+      setLoading(false)
+    }
   }
 
-  // 2FA verification
+  // 2FA verification (placeholder - real 2FA would go through Supabase MFA)
   const handleVerify2FA = () => {
     const code = twoFACode.join('')
     if (code.length < 6) {
@@ -173,11 +222,9 @@ export default function LoginPage() {
     }
     setLoading(true)
     setError('')
-    // Demo: accept any 6-digit code
-    setTimeout(() => {
-      router.push('/dashboard')
-      router.refresh()
-    }, 1000)
+    // For now, 2FA is not active in Supabase - direct to dashboard
+    router.push('/dashboard')
+    router.refresh()
   }
 
   const goBack = () => {
@@ -216,7 +263,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-[360px] z-10 animate-fade-in">
         {/* Logo & Branding */}
         <div className="flex justify-center mb-8">
-          <Image src="/logo-sm.png" alt="ORCA" width={48} height={48} className="rounded-xl" priority />
+          <Image src="/logo.svg" alt="ORCA" width={48} height={48} className="rounded-xl" priority />
         </div>
 
         <h1 className="text-center text-3xl font-bold mb-2" style={{ color: '#d4a843' }}>
@@ -228,6 +275,14 @@ export default function LoginPage() {
         <p className="text-center text-xs mb-8 text-text-muted">
           Financial Command Center
         </p>
+
+        {/* Success Message */}
+        {successMessage && (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 mb-6 flex items-center gap-2">
+            <CheckCircle size={16} className="text-emerald-400 shrink-0" />
+            <p className="text-emerald-400 text-sm">{successMessage}</p>
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -357,13 +412,6 @@ export default function LoginPage() {
                 <span className="text-gold font-semibold">Create one</span>
               </Link>
             </div>
-
-            {/* Demo Skip */}
-            <div className="text-center">
-              <Link href="/dashboard" className="text-xs text-text-muted hover:text-gold transition-colors">
-                Try Demo →
-              </Link>
-            </div>
           </>
         )}
 
@@ -399,7 +447,7 @@ export default function LoginPage() {
                 <p className="text-xs text-text-muted">Resend code in {phoneTimer}s</p>
               ) : (
                 <button
-                  onClick={() => { setPhoneTimer(60); setPhoneCode(['', '', '', '', '', '']) }}
+                  onClick={() => { handleSendPhoneCode(); setPhoneCode(['', '', '', '', '', '']) }}
                   className="text-xs text-gold hover:text-gold/80 transition-colors font-semibold"
                 >
                   Resend Code

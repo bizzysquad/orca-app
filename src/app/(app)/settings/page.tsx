@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User,
@@ -18,6 +19,7 @@ import { getDemoData } from '@/lib/demo-data'
 import { fmt } from '@/lib/utils'
 
 export default function SettingsPage() {
+  const router = useRouter()
   const demoData = getDemoData()
   const user = demoData.user
 
@@ -511,6 +513,7 @@ export default function SettingsPage() {
           transition={{ delay: 0.4 }}
         >
           <button
+            onClick={() => router.push('/auth/login')}
             className="w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
             style={{
               backgroundColor: '#ef4444',

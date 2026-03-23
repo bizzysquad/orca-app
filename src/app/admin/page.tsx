@@ -47,6 +47,10 @@ import {
   RefreshCw,
   Send,
   X,
+  ClipboardList,
+  ListTodo,
+  ShoppingCart,
+  Calendar,
 } from 'lucide-react'
 
 // Color constants
@@ -324,7 +328,6 @@ const DEFAULT_NAV: NavItem[] = [
   { id: 'bill-boss', label: 'Bill Boss', order: 3, visible: true },
   { id: 'stack-circle', label: 'Stack Circle', order: 4, visible: true },
   { id: 'settings', label: 'Settings', order: 5, visible: true },
-  { id: 'weekly-split', label: 'Weekly Split', order: 6, visible: true },
 ]
 
 // Default Theme
@@ -338,20 +341,34 @@ const DEFAULT_THEME: ThemeConfig = {
   textMuted: TEXT_MUTED,
 }
 
-// Tabs Configuration
+// Tabs Configuration — grouped to fit without scrolling
 const TABS = [
-  { id: 'users', label: 'User Management', icon: Users },
-  { id: 'subscription', label: 'Subscription & Trial', icon: CreditCard },
-  { id: 'settings', label: 'App Settings', icon: Settings },
-  { id: 'security', label: 'Security & Audit', icon: ShieldAlert },
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'billing-subs', label: 'Billing & Subs', icon: CreditCard },
+  { id: 'modules', label: 'Modules', icon: Puzzle },
+  { id: 'customize', label: 'Customize', icon: Palette },
+  { id: 'security', label: 'Security', icon: ShieldAlert },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'modules', label: 'Smart Modules', icon: Puzzle },
-  { id: 'support', label: 'Support & Help', icon: HelpCircle },
-  { id: 'billing', label: 'Billing', icon: DollarSign },
-  { id: 'theme', label: 'Theme', icon: Palette },
-  { id: 'navigation', label: 'Navigation', icon: ArrowUpDown },
+  { id: 'support', label: 'Support', icon: HelpCircle },
 ]
+
+// Sub-tabs for grouped sections
+const SUB_TABS: Record<string, { id: string; label: string }[]> = {
+  'billing-subs': [
+    { id: 'subscription', label: 'Subscription & Trial' },
+    { id: 'billing', label: 'Invoices & Billing' },
+  ],
+  'modules': [
+    { id: 'modules', label: 'Smart Modules' },
+    { id: 'tasklist', label: 'Task Lists' },
+  ],
+  'customize': [
+    { id: 'settings', label: 'App Settings' },
+    { id: 'theme', label: 'Theme & Branding' },
+    { id: 'navigation', label: 'Navigation' },
+  ],
+}
 
 export default function AdminPage() {
   // Admin auth state
@@ -397,6 +414,7 @@ export default function AdminPage() {
 
   // Core state
   const [activeTab, setActiveTab] = useState('users')
+  const [activeSubTab, setActiveSubTab] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [users, setUsers] = useState<AdminUser[]>(DEMO_USERS)
@@ -430,7 +448,7 @@ export default function AdminPage() {
     { id: 'smart-stack', name: 'Smart Stack', enabled: true },
     { id: 'bill-boss', name: 'Bill Boss', enabled: true },
     { id: 'stack-circle', name: 'Stack Circle', enabled: true },
-    { id: 'weekly-split', name: 'Weekly Split', enabled: true },
+    { id: 'task-lists', name: 'Task Lists', enabled: true },
   ])
   const [moduleSettings, setModuleSettings] = useState<Record<string, any>>({})
 
@@ -492,7 +510,7 @@ export default function AdminPage() {
     smartStack: true,
     billBoss: true,
     stackCircle: true,
-    weeklySplit: true,
+    taskLists: true,
     darkMode: true,
     pushNotifications: true,
     receiptUpload: true,
@@ -529,7 +547,7 @@ export default function AdminPage() {
     'smart-stack': { defaultAllocBR: 50, defaultAllocSR: 20, defaultAllocSP: 30, maxCategories: 10, autoLockBudget: true },
     'bill-boss': { reminderDays: 3, lateFeeAlert: true, receiptUploadEnabled: true, splitPayments: true, rentTrackerEnabled: true },
     'stack-circle': { maxGroupSize: 50, maxGroups: 5, moderationEnabled: true, inviteOnly: false, anonymousMode: false },
-    'weekly-split': { defaultViewDays: 7, showProjections: true, autoSplit: false, showBreakdown: true },
+    'task-lists': { maxTodoItems: 100, maxGroceryLists: 20, meetingReminders: true, quickNotes: true, taskSharing: false, calendarSync: false },
   })
 
   // Security extras
@@ -839,34 +857,59 @@ export default function AdminPage() {
         </div>
       </motion.div>
 
-      {/* Tab Navigation */}
+      {/* Tab Navigation — fixed, no scroll */}
       <div style={{ backgroundColor: BG_CARD, borderBottomColor: BORDER_COLOR }} className="border-b sticky top-[104px] z-30 backdrop-blur">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="overflow-x-auto">
-            <div className="flex gap-1 py-4 min-w-full">
-              {TABS.map((tab) => {
-                const Icon = tab.icon
-                const isActive = activeTab === tab.id
+          <div className="flex flex-wrap gap-1 py-3">
+            {TABS.map((tab) => {
+              const Icon = tab.icon
+              const isActive = activeTab === tab.id
+              return (
+                <motion.button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id)
+                    // Auto-select first sub-tab for grouped sections
+                    const subs = SUB_TABS[tab.id]
+                    setActiveSubTab(subs ? subs[0].id : null)
+                  }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  style={{
+                    backgroundColor: isActive ? BG_DARK : 'transparent',
+                    borderColor: isActive ? GOLD : BORDER_COLOR,
+                    color: isActive ? GOLD : TEXT_SECONDARY,
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border transition-all text-sm font-medium"
+                >
+                  <Icon size={16} />
+                  {tab.label}
+                </motion.button>
+              )
+            })}
+          </div>
+          {/* Sub-tab bar for grouped sections */}
+          {SUB_TABS[activeTab] && (
+            <div className="flex gap-1 pb-3 -mt-1">
+              {SUB_TABS[activeTab].map((sub) => {
+                const isSubActive = activeSubTab === sub.id
                 return (
-                  <motion.button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                  <button
+                    key={sub.id}
+                    onClick={() => setActiveSubTab(sub.id)}
                     style={{
-                      backgroundColor: isActive ? BG_DARK : 'transparent',
-                      borderColor: isActive ? GOLD : BORDER_COLOR,
-                      color: isActive ? GOLD : TEXT_SECONDARY,
+                      backgroundColor: isSubActive ? `${GOLD}18` : 'transparent',
+                      borderColor: isSubActive ? `${GOLD}66` : 'transparent',
+                      color: isSubActive ? GOLD : TEXT_MUTED,
                     }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border transition-all whitespace-nowrap"
+                    className="px-3 py-1.5 rounded-md text-xs font-medium border transition-all hover:opacity-80"
                   >
-                    <Icon size={18} />
-                    <span className="text-sm font-medium">{tab.label}</span>
-                  </motion.button>
+                    {sub.label}
+                  </button>
                 )
               })}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -1167,7 +1210,7 @@ export default function AdminPage() {
               </div>
             )}
 
-            {activeTab === 'subscription' && (
+            {activeTab === 'billing-subs' && activeSubTab === 'subscription' && (
               <div className="space-y-6">
                 {/* Trial Settings */}
                 <motion.div
@@ -1473,7 +1516,7 @@ export default function AdminPage() {
               </div>
             )}
 
-            {activeTab === 'settings' && (
+            {activeTab === 'customize' && activeSubTab === 'settings' && (
               <div className="space-y-6">
                 {/* General Settings */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
@@ -1725,7 +1768,6 @@ export default function AdminPage() {
                       { feature: 'Smart Stack', usage: 78, color: '#8b5cf6' },
                       { feature: 'Bill Boss', usage: 65, color: '#10b981' },
                       { feature: 'Stack Circle', usage: 42, color: '#3b82f6' },
-                      { feature: 'Weekly Split', usage: 38, color: '#f59e0b' },
                       { feature: 'Credit Score Tracker', usage: 55, color: '#ec4899' },
                     ].map((f) => (
                       <div key={f.feature}>
@@ -1864,7 +1906,7 @@ export default function AdminPage() {
               </div>
             )}
 
-            {activeTab === 'modules' && (
+            {activeTab === 'modules' && activeSubTab === 'modules' && (
               <div className="space-y-6">
                 {/* Module Toggle Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1940,19 +1982,27 @@ export default function AdminPage() {
                               </div>
                             </>
                           )}
-                          {mod.id === 'weekly-split' && (
+                          {mod.id === 'task-lists' && (
                             <>
                               <div className="flex items-center justify-between">
-                                <span style={{ color: TEXT_SECONDARY }} className="text-sm">Default View Days</span>
-                                <input type="number" value={moduleConfigs[mod.id].defaultViewDays} onChange={(e) => handleModuleConfigChange(mod.id, 'defaultViewDays', parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-20 px-2 py-1 rounded border text-sm text-right focus:outline-none" />
+                                <span style={{ color: TEXT_SECONDARY }} className="text-sm">Max To-Do Items</span>
+                                <input type="number" value={moduleConfigs[mod.id].maxTodoItems} onChange={(e) => handleModuleConfigChange(mod.id, 'maxTodoItems', parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-20 px-2 py-1 rounded border text-sm text-right focus:outline-none" />
                               </div>
                               <div className="flex items-center justify-between">
-                                <span style={{ color: TEXT_SECONDARY }} className="text-sm">Show Projections</span>
-                                <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleModuleConfigChange(mod.id, 'showProjections', !moduleConfigs[mod.id].showProjections)} style={{ backgroundColor: moduleConfigs[mod.id].showProjections ? '#10b98144' : BORDER_COLOR, borderColor: moduleConfigs[mod.id].showProjections ? '#10b981' : BORDER_COLOR, color: moduleConfigs[mod.id].showProjections ? '#10b981' : TEXT_MUTED }} className="px-2 py-0.5 rounded-full text-xs font-semibold border">{moduleConfigs[mod.id].showProjections ? 'ON' : 'OFF'}</motion.button>
+                                <span style={{ color: TEXT_SECONDARY }} className="text-sm">Max Grocery Lists</span>
+                                <input type="number" value={moduleConfigs[mod.id].maxGroceryLists} onChange={(e) => handleModuleConfigChange(mod.id, 'maxGroceryLists', parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-20 px-2 py-1 rounded border text-sm text-right focus:outline-none" />
                               </div>
                               <div className="flex items-center justify-between">
-                                <span style={{ color: TEXT_SECONDARY }} className="text-sm">Show Breakdown</span>
-                                <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleModuleConfigChange(mod.id, 'showBreakdown', !moduleConfigs[mod.id].showBreakdown)} style={{ backgroundColor: moduleConfigs[mod.id].showBreakdown ? '#10b98144' : BORDER_COLOR, borderColor: moduleConfigs[mod.id].showBreakdown ? '#10b981' : BORDER_COLOR, color: moduleConfigs[mod.id].showBreakdown ? '#10b981' : TEXT_MUTED }} className="px-2 py-0.5 rounded-full text-xs font-semibold border">{moduleConfigs[mod.id].showBreakdown ? 'ON' : 'OFF'}</motion.button>
+                                <span style={{ color: TEXT_SECONDARY }} className="text-sm">Meeting Reminders</span>
+                                <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleModuleConfigChange(mod.id, 'meetingReminders', !moduleConfigs[mod.id].meetingReminders)} style={{ backgroundColor: moduleConfigs[mod.id].meetingReminders ? '#10b98144' : BORDER_COLOR, borderColor: moduleConfigs[mod.id].meetingReminders ? '#10b981' : BORDER_COLOR, color: moduleConfigs[mod.id].meetingReminders ? '#10b981' : TEXT_MUTED }} className="px-2 py-0.5 rounded-full text-xs font-semibold border">{moduleConfigs[mod.id].meetingReminders ? 'ON' : 'OFF'}</motion.button>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span style={{ color: TEXT_SECONDARY }} className="text-sm">Quick Notes</span>
+                                <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleModuleConfigChange(mod.id, 'quickNotes', !moduleConfigs[mod.id].quickNotes)} style={{ backgroundColor: moduleConfigs[mod.id].quickNotes ? '#10b98144' : BORDER_COLOR, borderColor: moduleConfigs[mod.id].quickNotes ? '#10b981' : BORDER_COLOR, color: moduleConfigs[mod.id].quickNotes ? '#10b981' : TEXT_MUTED }} className="px-2 py-0.5 rounded-full text-xs font-semibold border">{moduleConfigs[mod.id].quickNotes ? 'ON' : 'OFF'}</motion.button>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span style={{ color: TEXT_SECONDARY }} className="text-sm">Task Sharing</span>
+                                <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleModuleConfigChange(mod.id, 'taskSharing', !moduleConfigs[mod.id].taskSharing)} style={{ backgroundColor: moduleConfigs[mod.id].taskSharing ? '#10b98144' : BORDER_COLOR, borderColor: moduleConfigs[mod.id].taskSharing ? '#10b981' : BORDER_COLOR, color: moduleConfigs[mod.id].taskSharing ? '#10b981' : TEXT_MUTED }} className="px-2 py-0.5 rounded-full text-xs font-semibold border">{moduleConfigs[mod.id].taskSharing ? 'ON' : 'OFF'}</motion.button>
                               </div>
                             </>
                           )}
@@ -2052,7 +2102,7 @@ export default function AdminPage() {
               </div>
             )}
 
-            {activeTab === 'billing' && (
+            {activeTab === 'billing-subs' && activeSubTab === 'billing' && (
               <div className="space-y-6">
                 {/* Billing Overview */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2126,7 +2176,7 @@ export default function AdminPage() {
               </div>
             )}
 
-            {activeTab === 'theme' && (
+            {activeTab === 'customize' && activeSubTab === 'theme' && (
               <div className="space-y-6">
                 {/* Theme Presets */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
@@ -2227,10 +2277,110 @@ export default function AdminPage() {
                     <motion.button style={{ backgroundColor: themeConfig.primaryColor, color: themeConfig.bgDark }} className="w-full py-2 rounded-lg font-bold text-sm">Sample Button</motion.button>
                   </div>
                 </motion.div>
+
+                {/* ─── Branding: Logo Management ─── */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.25 }}
+                  className="rounded-xl p-6 border"
+                  style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
+                >
+                  <h3 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Logo Management</h3>
+                  <p className="text-sm mb-6" style={{ color: TEXT_MUTED }}>Upload a new logo to update it across the entire app — login page, sidebar, and admin header.</p>
+
+                  <div className="flex flex-col md:flex-row gap-6">
+                    {/* Current Logo Preview */}
+                    <div className="flex-shrink-0">
+                      <p className="text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: TEXT_SECONDARY }}>Current Logo</p>
+                      <div className="w-32 h-32 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden" style={{ borderColor: BORDER_COLOR, backgroundColor: BG_DARK }}>
+                        <img src="/logo.svg" alt="Current Logo" className="w-20 h-20 object-contain" />
+                      </div>
+                    </div>
+
+                    {/* Upload Section */}
+                    <div className="flex-1 space-y-4">
+                      <p className="text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: TEXT_SECONDARY }}>Upload New Logo</p>
+                      <div
+                        className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all hover:border-opacity-60"
+                        style={{ borderColor: GOLD + '40', backgroundColor: GOLD + '05' }}
+                        onClick={() => document.getElementById('logo-upload-input')?.click()}
+                      >
+                        <Upload size={32} className="mx-auto mb-3" style={{ color: GOLD }} />
+                        <p className="text-sm font-medium mb-1" style={{ color: TEXT_PRIMARY }}>Click to upload</p>
+                        <p className="text-xs" style={{ color: TEXT_MUTED }}>SVG, PNG, or JPG (recommended: 200×200px)</p>
+                        <input
+                          id="logo-upload-input"
+                          type="file"
+                          accept="image/svg+xml,image/png,image/jpeg"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              alert(`Logo "${file.name}" selected. In production, this would upload to storage and update all logo references across the app.`);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Logo Locations */}
+                      <div className="rounded-lg p-4 border" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }}>
+                        <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: TEXT_SECONDARY }}>Updates Applied To</p>
+                        <div className="space-y-2">
+                          {[
+                            { location: 'Login Page', desc: 'Main logo above sign-in form', file: '/logo.svg' },
+                            { location: 'Signup Page', desc: 'Logo on registration screens', file: '/logo.svg' },
+                            { location: 'Sidebar', desc: 'Navigation sidebar header logo', file: '/logo.svg' },
+                            { location: 'Admin Header', desc: 'Admin console shield icon', file: '/logo.svg' },
+                            { location: 'Favicon', desc: 'Browser tab icon', file: '/logo-sm.png' },
+                          ].map((item) => (
+                            <div key={item.location} className="flex items-center justify-between py-1.5">
+                              <div>
+                                <p className="text-sm font-medium" style={{ color: TEXT_PRIMARY }}>{item.location}</p>
+                                <p className="text-xs" style={{ color: TEXT_MUTED }}>{item.desc}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: '#22c55e20', color: '#22c55e' }}>Active</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Brand Colors Overview */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="rounded-xl p-6 border"
+                  style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
+                >
+                  <h3 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Brand Colors</h3>
+                  <p className="text-sm mb-4" style={{ color: TEXT_MUTED }}>Current brand palette derived from theme settings above.</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { name: 'Gold (Primary)', hex: themeConfig.primaryColor },
+                      { name: 'Background', hex: themeConfig.bgDark },
+                      { name: 'Card', hex: themeConfig.bgCard },
+                      { name: 'Border', hex: themeConfig.borderColor },
+                    ].map((c) => (
+                      <div key={c.name} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: BORDER_COLOR }}>
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0" style={{ backgroundColor: c.hex }} />
+                        <div>
+                          <p className="text-xs font-medium" style={{ color: TEXT_PRIMARY }}>{c.name}</p>
+                          <p className="text-xs font-mono" style={{ color: TEXT_MUTED }}>{c.hex}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
               </div>
             )}
 
-            {activeTab === 'navigation' && (
+            {activeTab === 'customize' && activeSubTab === 'navigation' && (
               <div className="space-y-6">
                 {/* Nav Editor */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
@@ -2283,6 +2433,126 @@ export default function AdminPage() {
                 </motion.div>
               </div>
             )}
+
+            {activeTab === 'modules' && activeSubTab === 'tasklist' && (
+              <div className="space-y-6">
+                {/* Task List Overview */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                  <h2 className="text-xl font-bold mb-2" style={{ color: GOLD }}>Task List & Reminders</h2>
+                  <p style={{ color: TEXT_MUTED }} className="text-sm mb-6">Manage the task list feature settings and view usage analytics</p>
+
+                  {/* Feature Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    {[
+                      { label: 'Active Users', value: '8', icon: Users, color: GOLD },
+                      { label: 'Total Tasks', value: '47', icon: ListTodo, color: '#10b981' },
+                      { label: 'Notes Created', value: '23', icon: FileText, color: '#8b5cf6' },
+                      { label: 'Grocery Lists', value: '12', icon: ShoppingCart, color: '#3b82f6' },
+                    ].map((stat) => {
+                      const Icon = stat.icon
+                      return (
+                        <div key={stat.label} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-lg border p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Icon size={16} style={{ color: stat.color }} />
+                            <span className="text-xs" style={{ color: TEXT_MUTED }}>{stat.label}</span>
+                          </div>
+                          <p className="text-2xl font-bold" style={{ color: TEXT_PRIMARY }}>{stat.value}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+
+                {/* Feature Configuration */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                  <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Feature Configuration</h2>
+                  <div className="space-y-4">
+                    {[
+                      { label: 'To-Do Lists', desc: 'Allow users to create and manage to-do items with priorities', enabled: true },
+                      { label: 'Grocery Lists', desc: 'Enable grocery list tracking with categories', enabled: true },
+                      { label: 'Meeting Reminders', desc: 'Meeting scheduling with date/time and reminders', enabled: true },
+                      { label: 'Quick Notes', desc: 'Color-coded sticky notes for quick thoughts', enabled: true },
+                      { label: 'Task Sharing', desc: 'Allow users to share task lists with Stack Circle members', enabled: false },
+                      { label: 'Calendar Sync', desc: 'Sync meetings with external calendar apps', enabled: false },
+                    ].map((feature) => (
+                      <div key={feature.label} className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, borderWidth: 1 }}>
+                        <div>
+                          <p className="font-medium text-sm" style={{ color: TEXT_PRIMARY }}>{feature.label}</p>
+                          <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>{feature.desc}</p>
+                        </div>
+                        <div className={`w-10 h-5 rounded-full relative cursor-pointer transition-all ${feature.enabled ? 'bg-[#10b981]' : 'bg-[#27272a]'}`}>
+                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${feature.enabled ? 'left-5' : 'left-0.5'}`} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+
+                {/* Recent Activity */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                  <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Recent Task Activity</h2>
+                  <div className="space-y-3">
+                    {[
+                      { user: 'Sarah Chen', action: 'created 3 grocery items', time: '2 minutes ago', icon: ShoppingCart },
+                      { user: 'Marcus Rodriguez', action: 'completed "Review budget report"', time: '15 minutes ago', icon: CheckCircle },
+                      { user: 'Emma Thompson', action: 'added a meeting reminder for Mar 25', time: '1 hour ago', icon: Calendar },
+                      { user: 'Alex Johnson', action: 'created a note "Investment Ideas"', time: '2 hours ago', icon: FileText },
+                      { user: 'James Wilson', action: 'completed 5 to-do items', time: '3 hours ago', icon: ListTodo },
+                    ].map((activity, i) => {
+                      const Icon = activity.icon
+                      return (
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: BG_DARK }}>
+                          <div className="p-2 rounded-lg" style={{ backgroundColor: `${GOLD}15` }}>
+                            <Icon size={14} style={{ color: GOLD }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm" style={{ color: TEXT_PRIMARY }}>
+                              <span className="font-semibold">{activity.user}</span>{' '}
+                              <span style={{ color: TEXT_SECONDARY }}>{activity.action}</span>
+                            </p>
+                          </div>
+                          <span className="text-xs flex-shrink-0" style={{ color: TEXT_MUTED }}>{activity.time}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+
+                {/* Category Limits */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                  <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Category Limits</h2>
+                  <p style={{ color: TEXT_MUTED }} className="text-sm mb-4">Set maximum items per category for each plan</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr style={{ borderBottomColor: BORDER_COLOR }} className="border-b">
+                          <th className="text-left py-3 text-xs font-medium" style={{ color: TEXT_MUTED }}>Category</th>
+                          <th className="text-center py-3 text-xs font-medium" style={{ color: TEXT_MUTED }}>Trial</th>
+                          <th className="text-center py-3 text-xs font-medium" style={{ color: TEXT_MUTED }}>Premium</th>
+                          <th className="text-center py-3 text-xs font-medium" style={{ color: TEXT_MUTED }}>Founding</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { cat: 'To-Do Items', trial: '25', premium: '100', founding: 'Unlimited' },
+                          { cat: 'Grocery Lists', trial: '5', premium: '20', founding: 'Unlimited' },
+                          { cat: 'Meetings', trial: '10', premium: '50', founding: 'Unlimited' },
+                          { cat: 'Notes', trial: '10', premium: '50', founding: 'Unlimited' },
+                        ].map((row) => (
+                          <tr key={row.cat} style={{ borderBottomColor: BORDER_COLOR }} className="border-b last:border-b-0">
+                            <td className="py-3 text-sm font-medium" style={{ color: TEXT_PRIMARY }}>{row.cat}</td>
+                            <td className="py-3 text-center text-sm" style={{ color: TEXT_SECONDARY }}>{row.trial}</td>
+                            <td className="py-3 text-center text-sm" style={{ color: TEXT_SECONDARY }}>{row.premium}</td>
+                            <td className="py-3 text-center text-sm" style={{ color: GOLD }}>{row.founding}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+
           </motion.div>
         </AnimatePresence>
       </div>

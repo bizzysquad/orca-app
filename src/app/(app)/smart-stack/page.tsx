@@ -331,36 +331,40 @@ export default function SmartStackPage() {
 
               return (
                 <div key={i} className="relative">
-                  <button
-                    onClick={() => {
-                      if (isEditing) {
-                        setEditingDayHours(null);
-                      } else {
-                        setEditingDayHours(i);
-                      }
-                    }}
-                    onDoubleClick={() => {
-                      const newHours = [...dayHours];
-                      newHours[i] = hours > 0 ? 0 : defaultHours;
-                      setDayHours(newHours);
-                    }}
-                    className={`w-full aspect-square rounded-lg font-semibold text-sm transition-all ${
+                  <div
+                    className={`w-full aspect-square rounded-lg font-semibold text-sm transition-all flex flex-col items-center justify-center ${
                       isToday ? 'border-2 border-[#d4a843]' : 'border border-[#27272a]'
                     } ${
                       isWorking
                         ? 'bg-[#22c55e]/20 text-[#22c55e]'
                         : 'bg-[#ef4444]/20 text-[#ef4444]'
-                    } ${
-                      isEditing ? 'ring-2 ring-[#d4a843]' : ''
                     }`}
                   >
-                    <div className="flex flex-col items-center">
-                      <span className="text-xs">{dayNum}</span>
-                      {isWorking && <span className="text-[8px] opacity-70">{hours}h</span>}
-                    </div>
-                  </button>
-                  {isEditing && (
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-10 bg-[#27272a] border border-[#d4a843]/50 rounded-lg p-2 shadow-lg min-w-[80px]">
+                    {/* Day number — click to toggle day off/on */}
+                    <button
+                      onClick={() => {
+                        const newHours = [...dayHours];
+                        newHours[i] = hours > 0 ? 0 : defaultHours;
+                        setDayHours(newHours);
+                        setEditingDayHours(null);
+                      }}
+                      className="text-xs leading-none hover:opacity-70 transition-opacity"
+                    >
+                      {isWorking ? dayNum : '✕'}
+                    </button>
+                    {/* Hours — click to edit inline */}
+                    {isWorking && !isEditing && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingDayHours(i);
+                        }}
+                        className="text-[8px] opacity-70 hover:opacity-100 hover:text-[#d4a843] transition-all cursor-text"
+                      >
+                        {hours}h
+                      </button>
+                    )}
+                    {isWorking && isEditing && (
                       <input
                         type="number"
                         min="0"
@@ -371,14 +375,17 @@ export default function SmartStackPage() {
                           newHours[i] = Math.min(24, Math.max(0, parseInt(e.target.value) || 0));
                           setDayHours(newHours);
                         }}
-                        className="w-full bg-[#09090b] border border-[#27272a] text-[#fafafa] rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-[#d4a843]"
+                        className="w-[28px] bg-transparent border-b border-[#d4a843] text-[#d4a843] text-[9px] text-center focus:outline-none"
                         autoFocus
+                        onClick={(e) => e.stopPropagation()}
                         onBlur={() => setEditingDayHours(null)}
                         onKeyDown={(e) => { if (e.key === 'Enter') setEditingDayHours(null); }}
                       />
-                      <p className="text-[8px] text-[#71717a] text-center mt-1">hours</p>
-                    </div>
-                  )}
+                    )}
+                    {!isWorking && (
+                      <span className="text-[7px] opacity-50">OFF</span>
+                    )}
+                  </div>
                 </div>
               );
             })}

@@ -2,6 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -9,6 +10,7 @@ import {
   Receipt,
   Users,
   Settings,
+  ClipboardList,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -33,6 +35,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
     { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', emoji: '🏠' },
     { name: 'Smart Stack', icon: BarChart3, href: '/smart-stack', emoji: '📊' },
     { name: 'Bill Boss', icon: Receipt, href: '/bill-boss', emoji: '📄' },
+    { name: 'Task List', icon: ClipboardList, href: '/task-list', emoji: '📝' },
     { name: 'Stack Circle', icon: Users, href: '/stack-circle', emoji: '👥' },
     { name: 'Settings', icon: Settings, href: '/settings', emoji: '⚙️' },
   ]
@@ -72,9 +75,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         {/* Logo and Brand */}
         <div className="flex items-center justify-between px-5 mb-8 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#d4a843] to-[#b8860b] flex items-center justify-center shadow-lg shadow-[#d4a843]/20">
-              <span className="text-[#0A0A0A] font-black text-sm">O</span>
-            </div>
+            <Image src="/logo.svg" alt="ORCA" width={40} height={40} className="rounded-xl shadow-lg shadow-[#d4a843]/20" />
             <div className="flex flex-col">
               <h1 className="font-black text-base text-[#fafafa] tracking-[-1px]" style={{ color: '#d4a843' }}>ORCA</h1>
               <p className="text-[10px] text-[#a1a1aa] tracking-[2px] uppercase">Financial Control</p>

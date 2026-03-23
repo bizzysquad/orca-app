@@ -4,12 +4,11 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Check, Mail, Phone, Shield, ArrowRight, ChevronLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { Eye, EyeOff, Check, Mail, Phone, Shield, ArrowRight } from 'lucide-react'
 import Input from '@/components/ui/Input'
 
 type PasswordStrength = 'weak' | 'fair' | 'strong'
-type SignupStep = 'credentials' | 'phone-setup' | '2fa-setup' | 'success'
+type SignupStep = 'credentials' | 'phone-setup' | '2fa-setup' | 'verify-email'
 
 function getPasswordStrength(password: string): PasswordStrength {
   if (password.length < 8) return 'weak'
@@ -37,7 +36,6 @@ const strengthLabels = {
 
 export default function SignupPage() {
   const router = useRouter()
-  const supabase = createClient()
 
   const [step, setStep] = useState<SignupStep>('credentials')
   const [email, setEmail] = useState('')
@@ -54,6 +52,7 @@ export default function SignupPage() {
   const phoneRefs = useRef<(HTMLInputElement | null)[]>([])
   const [phoneVerified, setPhoneVerified] = useState(false)
   const [phoneSent, setPhoneSent] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
 
   // 2FA setup
   const [setup2FA, setSetup2FA] = useState(false)
@@ -146,51 +145,97 @@ export default function SignupPage() {
         return
       }
 
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/api/auth/callback?next=/dashboard`,
-        },
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       })
 
-      if (signUpError) {
-        setError(signUpError.message)
-        setLoading(false)
-        return
-      }
+      const data = await res.json()
 
-      if (!authData.user) {
-        setError('Failed to create account')
+      if (!res.ok) {
+        setError(data.error || 'Failed to create account')
         setLoading(false)
         return
       }
 
       setLoading(false)
-      setStep('phone-setup')
+
+      if (data.needsEmailConfirmation) {
+        // Go to email verification screen
+        setStep('verify-email')
+      } else {
+        // Go to phone setup
+        setStep('phone-setup')
+      }
     } catch {
       setError('An unexpected error occurred. Please try again.')
       setLoading(false)
     }
   }
 
-  const handleSendPhoneCode = () => {
+  const handleSendPhoneCode = async () => {
     if (!phoneNumber || phoneNumber.length < 10) {
-      setError('Please enter a valid phone number')
+      setPhoneError('Please enter a valid phone number')
       return
     }
-    setError('')
-    setPhoneSent(true)
+    setPhoneError('')
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/auth/phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneNumber }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setPhoneError(data.error || 'Failed to send code')
+        setLoading(false)
+        return
+      }
+
+      setPhoneSent(true)
+      setLoading(false)
+    } catch {
+      setPhoneError('Failed to send verification code')
+      setLoading(false)
+    }
   }
 
-  const handleVerifyPhone = () => {
+  const handleVerifyPhone = async () => {
     const code = phoneCode.join('')
     if (code.length < 6) {
-      setError('Please enter the full 6-digit code')
+      setPhoneError('Please enter the full 6-digit code')
       return
     }
-    setPhoneVerified(true)
-    setStep('2fa-setup')
+    setLoading(true)
+    setPhoneError('')
+
+    try {
+      const res = await fetch('/api/auth/phone', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneNumber, code }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setPhoneError(data.error || 'Invalid code')
+        setLoading(false)
+        return
+      }
+
+      setPhoneVerified(true)
+      setLoading(false)
+      setStep('2fa-setup')
+    } catch {
+      setPhoneError('Verification failed')
+      setLoading(false)
+    }
   }
 
   const handleSetup2FA = () => {
@@ -200,32 +245,53 @@ export default function SignupPage() {
       return
     }
     setSetup2FA(true)
-    setStep('success')
+    // Redirect to login since they need to verify email
+    router.push('/auth/login?message=account-created')
   }
 
-  // Success screen
-  if (step === 'success') {
+  // Email verification screen
+  if (step === 'verify-email') {
     return (
       <div className="min-h-screen bg-brand-black flex items-center justify-center p-4 hero-glow">
         <div className="relative w-full max-w-md text-center animate-fade-in">
           <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center bg-success">
-              <Check className="w-8 h-8 text-brand-black" />
+            <div className="w-16 h-16 rounded-full flex items-center justify-center bg-[#d4a843]/20">
+              <Mail className="w-8 h-8 text-[#d4a843]" />
             </div>
           </div>
-          <h2 className="text-2xl font-bold mb-2 text-gold">Account Created!</h2>
+          <h2 className="text-2xl font-bold mb-2 text-gold">Check Your Email</h2>
           <p className="text-sm mb-2 text-text-secondary">
-            {phoneVerified && 'Phone verified. '}
-            {setup2FA && '2FA enabled. '}
-            Your account is secured and ready.
+            We sent a verification link to
           </p>
-          <p className="text-xs mb-6 text-text-muted">Verify your email to complete setup.</p>
+          <p className="text-base font-semibold mb-6 text-[#fafafa]">{email}</p>
+          <p className="text-xs mb-8 text-text-muted">
+            Click the link in your email to verify your account, then come back here to sign in.
+          </p>
           <button
-            onClick={() => { router.push('/dashboard'); router.refresh() }}
+            onClick={() => router.push('/auth/login?message=verify-email')}
             className="px-8 py-3 rounded-lg font-semibold gold-bg text-brand-black inline-flex items-center gap-2"
           >
-            Go to Dashboard <ArrowRight size={16} />
+            Go to Sign In <ArrowRight size={16} />
           </button>
+          <div className="mt-6">
+            <p className="text-xs text-text-muted">
+              Didn&apos;t get the email? Check your spam folder or{' '}
+              <button
+                onClick={async () => {
+                  setLoading(true)
+                  await fetch('/api/auth/signup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                  })
+                  setLoading(false)
+                }}
+                className="text-gold hover:text-gold/80 transition-colors font-semibold"
+              >
+                {loading ? 'Sending...' : 'resend it'}
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     )
@@ -236,7 +302,7 @@ export default function SignupPage() {
       <div className="relative w-full max-w-[360px] z-10 animate-fade-in">
         {/* Logo & Branding */}
         <div className="flex justify-center mb-8">
-          <Image src="/logo-sm.png" alt="ORCA" width={48} height={48} className="rounded-xl" />
+          <Image src="/logo.svg" alt="ORCA" width={48} height={48} className="rounded-xl" />
         </div>
 
         <h1 className="text-center text-3xl font-bold mb-2 text-gold">ORCA</h1>
@@ -263,9 +329,9 @@ export default function SignupPage() {
         </div>
 
         {/* Error */}
-        {error && (
+        {(error || phoneError) && (
           <div className="bg-danger/10 border border-danger/20 rounded-lg p-3 mb-6">
-            <p className="text-danger text-sm text-center">{error}</p>
+            <p className="text-danger text-sm text-center">{error || phoneError}</p>
           </div>
         )}
 
@@ -367,8 +433,8 @@ export default function SignupPage() {
                     <input type="tel" placeholder="(555) 123-4567" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value.replace(/[^\d()-\s+]/g, ''))} className="w-full bg-[#18181b] border border-[#27272a] rounded-xl pl-11 pr-4 py-3 text-[#fafafa] placeholder-[#71717a] focus:outline-none focus:ring-2 focus:ring-[#d4a843]/50 focus:border-[#d4a843] transition-all" />
                   </div>
                 </div>
-                <button onClick={handleSendPhoneCode} disabled={!phoneNumber} className="w-full py-3 rounded-lg font-semibold transition-all gold-bg text-brand-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                  Send Code <ArrowRight size={16} />
+                <button onClick={handleSendPhoneCode} disabled={!phoneNumber || loading} className="w-full py-3 rounded-lg font-semibold transition-all gold-bg text-brand-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {loading ? 'Sending...' : 'Send Code'} {!loading && <ArrowRight size={16} />}
                 </button>
               </>
             ) : (
@@ -377,8 +443,8 @@ export default function SignupPage() {
                   Code sent to <span className="text-[#fafafa] font-medium">{phoneNumber}</span>
                 </p>
                 {renderCodeInputs(phoneCode, setPhoneCode, phoneRefs)}
-                <button onClick={handleVerifyPhone} disabled={phoneCode.join('').length < 6} className="w-full py-3 rounded-lg font-semibold transition-all gold-bg text-brand-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                  Verify Phone <ArrowRight size={16} />
+                <button onClick={handleVerifyPhone} disabled={phoneCode.join('').length < 6 || loading} className="w-full py-3 rounded-lg font-semibold transition-all gold-bg text-brand-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {loading ? 'Verifying...' : 'Verify Phone'} {!loading && <ArrowRight size={16} />}
                 </button>
               </>
             )}
@@ -403,7 +469,6 @@ export default function SignupPage() {
             <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
               <p className="text-xs text-text-muted mb-2">Scan this QR code with your authenticator app:</p>
               <div className="bg-white rounded-lg p-4 mx-auto w-fit">
-                {/* Placeholder QR code visual */}
                 <div className="w-32 h-32 grid grid-cols-8 gap-0.5">
                   {Array.from({ length: 64 }).map((_, i) => (
                     <div key={i} className={`w-full aspect-square ${Math.random() > 0.5 ? 'bg-black' : 'bg-white'}`} />
@@ -425,7 +490,7 @@ export default function SignupPage() {
               Enable 2FA <Shield size={16} />
             </button>
 
-            <button onClick={() => setStep('success')} className="w-full text-center text-xs text-text-muted hover:text-gold transition-colors">
+            <button onClick={() => router.push('/auth/login?message=account-created')} className="w-full text-center text-xs text-text-muted hover:text-gold transition-colors">
               Skip for now
             </button>
           </div>

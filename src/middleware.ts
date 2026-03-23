@@ -1,25 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-const ADMIN_TOKEN = 'orca-admin-session-2026'
+import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Redirect root to dashboard
+  // Create a Supabase client for middleware
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // Refresh session if it exists
+  const { data: { session } } = await supabase.auth.getSession()
+
+  // Public routes that don't require authentication
+  const publicRoutes = ['/auth/login', '/auth/signup', '/api/', '/admin']
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
+
+  // Allow static assets and public routes
+  if (isPublicRoute) {
+    return response
+  }
+
+  // Redirect root to login if not authenticated, dashboard if authenticated
   if (pathname === '/') {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  // Protect admin routes (but not the admin API auth endpoint)
-  if (pathname.startsWith('/admin') && !pathname.startsWith('/api/admin')) {
-    const token = request.cookies.get('orca-admin-token')?.value
-    // If no valid token, the page itself will show a login screen
-    // This middleware just adds an extra layer — the page checks auth state too
+  // Protect all other routes - redirect to login if no session
+  if (!session) {
+    const redirectUrl = new URL('/auth/login', request.url)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png|logo-sm.png|.*\\.svg$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|logo\\.svg|logo\\.png|logo-sm\\.png).*)'],
 }

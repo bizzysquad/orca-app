@@ -1,0 +1,51 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8c547;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d4a843;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Main shield shape with whale-fin curve -->
+  <g filter="url(#shadow)">
+    <!-- Shield body -->
+    <path d="M 100 20 L 140 50 L 140 110 Q 100 160 100 160 Q 60 110 60 110 L 60 50 Z"
+          fill="url(#goldGradient)"
+          stroke="#a88835"
+          stroke-width="1.5"/>
+
+    <!-- Whale fin accent inside shield -->
+    <path d="M 100 50 Q 85 80 85 110 L 115 110 Q 115 80 100 50"
+          fill="rgba(255,255,255,0.08)"
+          stroke="none"/>
+  </g>
+
+  <!-- Letter O - circular element -->
+  <g>
+    <!-- Outer circle of O -->
+    <circle cx="100" cy="80" r="22"
+            fill="none"
+            stroke="#d4a843"
+            stroke-width="4"/>
+
+    <!-- Inner circle detail for O -->
+    <circle cx="100" cy="80" r="14"
+            fill="none"
+            stroke="rgba(212,168,67,0.3)"
+            stroke-width="2"/>
+
+    <!-- Accent dot at bottom of O -->
+    <circle cx="100" cy="107" r="2"
+            fill="#d4a843"/>
+  </g>
+
+  <!-- Subtle wave pattern at bottom (financial/secure motion) -->
+  <path d="M 70 145 Q 85 140 100 145 Q 115 150 130 145"
+        fill="none"
+        stroke="rgba(212,168,67,0.2)"
+        stroke-width="1.5"
+        stroke-linecap="round"/>
+</svg>
