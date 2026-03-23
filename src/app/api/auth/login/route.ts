@@ -5,7 +5,10 @@ export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
 
+    console.log('[AUTH/LOGIN] Login attempt for:', email)
+
     if (!email || !password) {
+      console.log('[AUTH/LOGIN] Missing email or password')
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
@@ -20,6 +23,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
+      console.error('[AUTH/LOGIN] Supabase error:', error.message, '| Status:', error.status)
       if (error.message.includes('Email not confirmed')) {
         return NextResponse.json(
           { error: 'Please verify your email before signing in. Check your inbox for a confirmation link.', code: 'EMAIL_NOT_CONFIRMED' },
@@ -38,6 +42,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('[AUTH/LOGIN] Login successful for:', email, '| User ID:', data.user.id)
+
     return NextResponse.json({
       success: true,
       user: {
@@ -50,7 +56,8 @@ export async function POST(request: NextRequest) {
         expiresAt: data.session.expires_at,
       },
     })
-  } catch {
+  } catch (err) {
+    console.error('[AUTH/LOGIN] Unexpected error:', err)
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }
