@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Mail, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, Mail, ArrowRight, UserIcon } from 'lucide-react'
 import Input from '@/components/ui/Input'
 
 type PasswordStrength = 'weak' | 'fair' | 'strong'
@@ -37,6 +37,7 @@ export default function SignupPage() {
   const router = useRouter()
 
   const [step, setStep] = useState<'credentials' | 'verify-email'>('credentials')
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -65,10 +66,16 @@ export default function SignupPage() {
         return
       }
 
+      if (!fullName.trim()) {
+        setError('Please enter your name')
+        setLoading(false)
+        return
+      }
+
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, fullName: fullName.trim() }),
       })
 
       const data = await res.json()
@@ -164,6 +171,18 @@ export default function SignupPage() {
 
         {/* Signup Form */}
         <form onSubmit={handleSignUp} className="space-y-5">
+          <div>
+            <Input
+              type="text"
+              label="Full Name"
+              placeholder="Your name"
+              prefix={<UserIcon size={16} />}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
+          </div>
+
           <div>
             <Input
               type="email"

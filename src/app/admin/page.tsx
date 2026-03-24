@@ -512,6 +512,7 @@ export default function AdminPage() {
     stackCircle: true,
     taskLists: true,
     darkMode: true,
+    lightMode: true,
     pushNotifications: true,
     receiptUpload: true,
     creditScoreTracker: true,
@@ -519,6 +520,12 @@ export default function AdminPage() {
     exportReports: false,
     aiInsights: false,
     socialSharing: false,
+    selfEmployedMode: true,
+    incomeAllocator: true,
+    billRecurrence: true,
+    calendarSync: true,
+    inviteSystem: true,
+    savingsModule: true,
   })
   const [onboardingText, setOnboardingText] = useState(
     'Welcome to ORCA! Let\'s set up your financial dashboard and start building smart money habits.'
@@ -544,10 +551,10 @@ export default function AdminPage() {
 
   // Module settings extras
   const [moduleConfigs, setModuleConfigs] = useState<Record<string, Record<string, any>>>({
-    'smart-stack': { defaultAllocBR: 50, defaultAllocSR: 20, defaultAllocSP: 30, maxCategories: 10, autoLockBudget: true },
-    'bill-boss': { reminderDays: 3, lateFeeAlert: true, receiptUploadEnabled: true, splitPayments: true, rentTrackerEnabled: true },
-    'stack-circle': { maxGroupSize: 50, maxGroups: 5, moderationEnabled: true, inviteOnly: false, anonymousMode: false },
-    'task-lists': { maxTodoItems: 100, maxGroceryLists: 20, meetingReminders: true, quickNotes: true, taskSharing: false, calendarSync: false },
+    'smart-stack': { defaultAllocBR: 50, defaultAllocSR: 20, defaultAllocSP: 30, maxCategories: 10, autoLockBudget: true, selfEmployedAllocator: true, incomeAllocationEnabled: true },
+    'bill-boss': { reminderDays: 3, lateFeeAlert: true, receiptUploadEnabled: true, splitPayments: true, rentTrackerEnabled: true, recurrenceOptions: true, weeklyMonthlyToggle: true, incomeExpenseRatio: true },
+    'stack-circle': { maxGroupSize: 50, maxGroups: 5, moderationEnabled: true, inviteOnly: false, anonymousMode: false, customGroupNames: true, inviteSystem: true, inviteDomain: 'orcafin.app' },
+    'task-lists': { maxTodoItems: 100, maxGroceryLists: 20, meetingReminders: true, quickNotes: true, taskSharing: false, calendarSync: true },
   })
 
   // Security extras

@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/context/ThemeContext'
 
 interface NavItem {
   name: string
@@ -30,6 +31,7 @@ interface SidebarProps {
 
 export default function Sidebar({ userName = 'User', open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
+  const { theme, isDark } = useTheme()
 
   const navItems: NavItem[] = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', emoji: '🏠' },
@@ -52,7 +54,8 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
       {/* Mobile backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 backdrop-blur-sm md:hidden"
+          style={{ backgroundColor: theme.overlay }}
           onClick={onClose}
         />
       )}
@@ -62,29 +65,33 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         className={cn(
           'fixed left-0 top-0 bottom-0 z-50',
           'w-[220px]',
-          'glass-strong border-r border-[#27272a]/40',
+          'border-r',
           'flex flex-col',
           'pt-6 pb-6',
           'transition-transform duration-300 ease-out',
-          // Mobile: off-screen by default, slide in when open
           open ? 'translate-x-0' : '-translate-x-full',
-          // Desktop: always visible
           'md:translate-x-0'
         )}
+        style={{
+          backgroundColor: theme.nav,
+          borderColor: `${theme.border}66`,
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        }}
       >
         {/* Logo and Brand */}
         <div className="flex items-center justify-between px-5 mb-8 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <Image src="/logo.svg" alt="ORCA" width={40} height={40} className="rounded-xl shadow-lg shadow-[#d4a843]/20" />
+            <Image src="/logo.svg" alt="ORCA" width={40} height={40} className="rounded-xl" style={{ boxShadow: `0 4px 12px ${theme.gold}33` }} />
             <div className="flex flex-col">
-              <h1 className="font-black text-base text-[#fafafa] tracking-[-1px]" style={{ color: '#d4a843' }}>ORCA</h1>
-              <p className="text-[10px] text-[#a1a1aa] tracking-[2px] uppercase">Financial Control</p>
+              <h1 className="font-black text-base tracking-[-1px]" style={{ color: theme.gold }}>ORCA</h1>
+              <p className="text-[10px] tracking-[2px] uppercase" style={{ color: theme.textS }}>Financial Control</p>
             </div>
           </div>
-          {/* Close button — mobile only */}
           <button
             onClick={onClose}
-            className="md:hidden p-1.5 rounded-lg text-[#a1a1aa] hover:text-[#fafafa] transition-colors"
+            className="md:hidden p-1.5 rounded-lg transition-colors"
+            style={{ color: theme.textS }}
           >
             <X size={20} />
           </button>
@@ -105,13 +112,17 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
                   'px-4 py-3 rounded-xl',
                   'transition-all duration-300 ease-out',
                   'text-sm font-medium',
-                  active
-                    ? 'glass-gold text-[#d4a843] inner-glow-gold'
-                    : 'text-[#a1a1aa] hover:text-[#fafafa] hover:bg-white/[0.04]'
                 )}
+                style={{
+                  color: active ? theme.gold : theme.textS,
+                  backgroundColor: active ? theme.goldBg2 : 'transparent',
+                }}
               >
                 {active && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-[#d4a843]" />
+                  <div
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
+                    style={{ backgroundColor: theme.gold }}
+                  />
                 )}
                 <Icon
                   size={18}
@@ -125,14 +136,20 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         </nav>
 
         {/* User Profile at Bottom */}
-        <div className="border-t border-[#27272a]/60 pt-4 px-3 flex-shrink-0">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl glass-subtle">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#d4a843] to-[#b8860b] flex items-center justify-center flex-shrink-0">
-              <span className="text-[#0A0A0A] font-bold text-xs">{initials}</span>
+        <div className="pt-4 px-3 flex-shrink-0" style={{ borderTop: `1px solid ${theme.border}99` }}>
+          <div
+            className="flex items-center gap-3 px-4 py-3 rounded-xl"
+            style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)' }}
+          >
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: `linear-gradient(135deg, ${theme.gold}, ${theme.goldD})` }}
+            >
+              <span className="font-bold text-xs" style={{ color: isDark ? '#0A0A0A' : '#ffffff' }}>{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[#fafafa] truncate">{userName}</p>
-              <p className="text-[10px] text-[#71717a] truncate">Active</p>
+              <p className="text-sm font-medium truncate" style={{ color: theme.text }}>{userName}</p>
+              <p className="text-[10px] truncate" style={{ color: theme.textM }}>Active</p>
             </div>
           </div>
         </div>

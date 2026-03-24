@@ -13,9 +13,12 @@ import {
   Check,
   Share2,
   ExternalLink,
+  Edit3,
+  UserPlus,
 } from 'lucide-react';
 import { getDemoData } from '@/lib/demo-data';
 import { fmt, pct, gid } from '@/lib/utils';
+import { useTheme } from '@/context/ThemeContext';
 
 interface Utility {
   id: string;
@@ -47,6 +50,8 @@ interface GroupMember {
   target: number;
   contrib: number;
   balance: number;
+  invitedBy?: string;
+  joinedAt?: string;
 }
 
 interface GroupActivity {
@@ -59,7 +64,8 @@ interface GroupActivity {
 interface Group {
   id: string;
   name: string;
-  goal: number;
+  customName?: string;
+  goal: string;
   target: number;
   current: number;
   date: string;
@@ -88,9 +94,20 @@ const itemVariants = {
   },
 };
 
+// Helper: Convert group name to slug for invite URL
+const toSlug = (name: string): string => {
+  return name
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+};
+
 export default function StackCirclePage() {
+  const { theme } = useTheme();
   const demoData = getDemoData();
   const group = demoData.groups[0] || null;
+
   const initialRoommates: RoommateData = {
     enabled: true,
     totalRent: 3600,
@@ -131,6 +148,11 @@ export default function StackCirclePage() {
   const [memberName, setMemberName] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [currentGroup, setCurrentGroup] = useState<Group | null>(group);
+  const [editingGroupName, setEditingGroupName] = useState(false);
+  const [groupNameInput, setGroupNameInput] = useState(
+    group?.customName || group?.name || ''
+  );
 
   // Calculations
   const totalUtilities = roommates.utilities.reduce((sum, u) => sum + u.amount, 0);
@@ -139,8 +161,11 @@ export default function StackCirclePage() {
   const allPaidUtils = roommates.members.every((m) => m.paidUtilities);
   const allPaid = allPaidRent && allPaidUtils;
 
-  // Invite link
-  const inviteLink = group ? `https://orca.app/invite/${group.code}` : '';
+  // Invite link - using orcafin.app/invite/{group-name-slug}
+  const groupNameSlug = toSlug(currentGroup?.customName || currentGroup?.name || '');
+  const inviteLink = currentGroup
+    ? `https://orcafin.app/invite/${groupNameSlug}`
+    : '';
 
   const handleCopyLink = () => {
     if (inviteLink) {
@@ -151,16 +176,41 @@ export default function StackCirclePage() {
   };
 
   const handleCopyCode = () => {
-    if (group?.code) {
-      navigator.clipboard.writeText(group.code).catch(() => {});
+    if (currentGroup?.code) {
+      navigator.clipboard.writeText(currentGroup.code).catch(() => {});
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     }
   };
 
+  const handleSaveGroupName = () => {
+    if (groupNameInput && currentGroup) {
+      setCurrentGroup({
+        ...currentGroup,
+        customName: groupNameInput,
+      });
+      setEditingGroupName(false);
+    }
+  };
+
   const handleAddMoney = () => {
     if (addMoneyAmount && !isNaN(Number(addMoneyAmount))) {
-      console.log(`Added $${addMoneyAmount} to group`);
+      if (currentGroup) {
+        const newCurrent = currentGroup.current + Number(addMoneyAmount);
+        setCurrentGroup({
+          ...currentGroup,
+          current: newCurrent,
+          activity: [
+            {
+              id: gid(),
+              user: 'You',
+              msg: `Added ${fmt(Number(addMoneyAmount))} to the group`,
+              date: new Date().toLocaleDateString(),
+            },
+            ...currentGroup.activity,
+          ],
+        });
+      }
       setAddMoneyAmount('');
     }
   };
@@ -265,34 +315,52 @@ export default function StackCirclePage() {
     return (totalUtilities * share) / 100;
   };
 
+  const displayGroupName =
+    currentGroup?.customName || currentGroup?.name || 'Stack Circle';
+
   return (
-    <div className="min-h-screen bg-[#09090b] text-[#fafafa] pb-32 overflow-x-hidden">
+    <div
+      className="min-h-screen pb-32 overflow-x-hidden transition-colors"
+      style={{ backgroundColor: theme.bg, color: theme.text }}
+    >
       {/* Header */}
       <motion.div
-        className="border-b border-[#27272a] bg-[#09090b] px-4 sm:px-6 py-6 sm:py-8"
+        className="border-b px-4 sm:px-6 py-6 sm:py-8 transition-colors"
+        style={{ borderColor: theme.border, backgroundColor: theme.bg }}
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
         <div className="flex items-center gap-3 mb-2">
-          <div className="p-2.5 rounded-xl bg-[#d4a843]">
-            <Users className="w-5 h-5 text-[#09090b]" />
+          <div className="p-2.5 rounded-xl" style={{ backgroundColor: theme.gold }}>
+            <Users className="w-5 h-5" style={{ color: theme.bg }} />
           </div>
-          <h1 className="text-3xl font-bold text-[#fafafa]">Stack Circle</h1>
+          <h1 className="text-3xl font-bold" style={{ color: theme.text }}>
+            Stack Circle
+          </h1>
         </div>
-        <p className="text-sm text-[#a1a1aa]">Save together, achieve more</p>
+        <p className="text-sm" style={{ color: theme.textM }}>
+          Save together, achieve more
+        </p>
       </motion.div>
 
       {/* Tabs */}
-      <div className="border-b border-[#27272a] bg-[#09090b] px-4 sm:px-6">
+      <div
+        className="border-b px-4 sm:px-6 transition-colors"
+        style={{ borderColor: theme.border, backgroundColor: theme.bg }}
+      >
         <div className="flex gap-8">
           <button
             onClick={() => setActiveTab('group')}
             className={`py-4 px-0 font-semibold text-sm border-b-2 transition-colors ${
               activeTab === 'group'
-                ? 'border-[#d4a843] text-[#d4a843]'
-                : 'border-transparent text-[#71717a] hover:text-[#fafafa]'
+                ? 'border-b-2'
+                : 'border-transparent'
             }`}
+            style={{
+              borderColor: activeTab === 'group' ? theme.gold : 'transparent',
+              color: activeTab === 'group' ? theme.gold : theme.textS,
+            }}
           >
             Group Savings
           </button>
@@ -300,9 +368,13 @@ export default function StackCirclePage() {
             onClick={() => setActiveTab('roommates')}
             className={`py-4 px-0 font-semibold text-sm border-b-2 transition-colors ${
               activeTab === 'roommates'
-                ? 'border-[#d4a843] text-[#d4a843]'
-                : 'border-transparent text-[#71717a] hover:text-[#fafafa]'
+                ? 'border-b-2'
+                : 'border-transparent'
             }`}
+            style={{
+              borderColor: activeTab === 'roommates' ? theme.gold : 'transparent',
+              color: activeTab === 'roommates' ? theme.gold : theme.textS,
+            }}
           >
             Roommates
           </button>
@@ -319,36 +391,115 @@ export default function StackCirclePage() {
         {/* GROUP SAVINGS TAB */}
         {activeTab === 'group' && (
           <>
-            {group ? (
+            {currentGroup ? (
               <>
                 {/* Group Overview Card */}
                 <motion.div
                   variants={itemVariants}
-                  className="rounded-2xl bg-gradient-to-br from-[#d4a843]/20 to-[#d4a843]/5 border border-[#d4a843]/30 p-5 sm:p-8 text-center"
+                  className="rounded-2xl border p-5 sm:p-8 text-center transition-colors"
+                  style={{
+                    backgroundColor: theme.goldBg,
+                    borderColor: theme.gold,
+                  }}
                 >
-                  <h2 className="text-[#d4a843] font-bold text-2xl mb-4">
-                    {group.name}
-                  </h2>
-                  <div className="text-3xl sm:text-5xl font-bold text-[#d4a843] mb-4 sm:mb-6">
-                    {fmt(group.current)}
+                  {/* Editable Group Name */}
+                  <div className="flex items-center justify-center gap-3 mb-4">
+                    {!editingGroupName ? (
+                      <div className="flex items-center gap-3">
+                        <h2
+                          className="text-2xl font-bold"
+                          style={{ color: theme.gold }}
+                        >
+                          {displayGroupName}
+                        </h2>
+                        <button
+                          onClick={() => {
+                            setEditingGroupName(true);
+                            setGroupNameInput(
+                              currentGroup.customName || currentGroup.name
+                            );
+                          }}
+                          className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                          style={{ backgroundColor: theme.goldBg2 }}
+                        >
+                          <Edit3
+                            className="w-4 h-4"
+                            style={{ color: theme.gold }}
+                          />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 w-full max-w-sm">
+                        <input
+                          type="text"
+                          value={groupNameInput}
+                          onChange={(e) => setGroupNameInput(e.target.value)}
+                          placeholder="Group name (e.g., Vacation Fund)"
+                          className="flex-1 px-3 py-2 rounded-lg text-sm focus:outline-none transition-colors"
+                          style={{
+                            backgroundColor: theme.card,
+                            borderColor: theme.gold,
+                            color: theme.text,
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleSaveGroupName}
+                          className="px-3 py-2 rounded-lg font-semibold text-sm transition-colors"
+                          style={{
+                            backgroundColor: theme.gold,
+                            color: theme.bg,
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingGroupName(false)}
+                          className="px-3 py-2 rounded-lg font-semibold text-sm transition-colors"
+                          style={{
+                            backgroundColor: theme.border,
+                            color: theme.text,
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    className="text-3xl sm:text-5xl font-bold mb-4 sm:mb-6"
+                    style={{ color: theme.gold }}
+                  >
+                    {fmt(currentGroup.current)}
                   </div>
                   <div className="mb-6">
-                    <p className="text-[#a1a1aa] text-sm mb-2">
-                      Target: {fmt(group.target)}{' '}
-                      <span className="text-[#d4a843] font-bold">
-                        {pct(group.current, group.target)}%
+                    <p
+                      className="text-sm mb-2"
+                      style={{ color: theme.textM }}
+                    >
+                      Target: {fmt(currentGroup.target)}{' '}
+                      <span
+                        className="font-bold"
+                        style={{ color: theme.gold }}
+                      >
+                        {pct(currentGroup.current, currentGroup.target)}%
                       </span>
                     </p>
                   </div>
 
                   {/* Progress Bar */}
-                  <div className="w-full h-3 bg-[#27272a] rounded-full overflow-hidden mb-6">
+                  <div
+                    className="w-full h-3 rounded-full overflow-hidden mb-6"
+                    style={{ backgroundColor: theme.border }}
+                  >
                     <motion.div
-                      className="h-full bg-gradient-to-r from-[#d4a843] to-[#d4a843]"
+                      className="h-full"
+                      style={{ backgroundColor: theme.gold }}
                       initial={{ width: 0 }}
                       animate={{
                         width: `${Math.min(
-                          (group.current / group.target) * 100,
+                          (currentGroup.current / currentGroup.target) * 100,
                           100
                         )}%`,
                       }}
@@ -357,45 +508,117 @@ export default function StackCirclePage() {
                   </div>
 
                   {/* Invite Code */}
-                  <div className="bg-[#18181b] border border-[#27272a] rounded-lg p-3 inline-block">
-                    <p className="text-[#71717a] text-xs mb-1">Invite Code</p>
-                    <p className="font-mono font-bold text-[#d4a843]">
-                      {group.code}
+                  <div
+                    className="border rounded-lg p-3 inline-block transition-colors"
+                    style={{
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <p
+                      className="text-xs mb-1"
+                      style={{ color: theme.textS }}
+                    >
+                      Invite Code
+                    </p>
+                    <p
+                      className="font-mono font-bold"
+                      style={{ color: theme.gold }}
+                    >
+                      {currentGroup.code}
                     </p>
                   </div>
                 </motion.div>
 
-                {/* Invite Link Card — Discord-style */}
+                {/* Invite Link Card */}
                 <motion.div
                   variants={itemVariants}
-                  className="rounded-2xl bg-[#18181b] border border-[#27272a] p-4 sm:p-6"
+                  className="rounded-2xl border p-4 sm:p-6 transition-colors"
+                  style={{
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  }}
                 >
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-[#d4a843]/20">
-                      <Share2 className="w-5 h-5 text-[#d4a843]" />
+                    <div
+                      className="p-2 rounded-lg"
+                      style={{ backgroundColor: theme.goldBg }}
+                    >
+                      <Share2
+                        className="w-5 h-5"
+                        style={{ color: theme.gold }}
+                      />
                     </div>
                     <div>
-                      <h3 className="text-[#fafafa] font-bold text-lg">Invite Friends</h3>
-                      <p className="text-[#71717a] text-sm">Share a link to join your circle</p>
+                      <h3
+                        className="font-bold text-lg"
+                        style={{ color: theme.text }}
+                      >
+                        Invite Friends
+                      </h3>
+                      <p
+                        className="text-sm"
+                        style={{ color: theme.textS }}
+                      >
+                        Share a link to join your circle
+                      </p>
                     </div>
                   </div>
 
+                  {/* Info about new vs existing users */}
+                  <div
+                    className="rounded-xl p-3 mb-4 border text-sm"
+                    style={{
+                      backgroundColor: theme.goldBg2,
+                      borderColor: theme.gold,
+                    }}
+                  >
+                    <p style={{ color: theme.text }}>
+                      <span className="font-semibold">New users:</span> Will see
+                      a sign-up flow
+                    </p>
+                    <p style={{ color: theme.text }}>
+                      <span className="font-semibold">Existing users:</span> Will
+                      be prompted to log in and auto-join
+                    </p>
+                  </div>
+
                   {/* Invite Link Display */}
-                  <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-4 mb-4">
-                    <p className="text-[#71717a] text-xs mb-2 font-semibold uppercase tracking-wider">Invite Link</p>
+                  <div
+                    className="border rounded-xl p-4 mb-4 transition-colors"
+                    style={{
+                      backgroundColor: theme.bg,
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <p
+                      className="text-xs mb-2 font-semibold uppercase tracking-wider"
+                      style={{ color: theme.textS }}
+                    >
+                      Invite Link
+                    </p>
                     <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0 bg-[#18181b] border border-[#27272a] rounded-lg px-3 sm:px-4 py-2.5 font-mono text-xs sm:text-sm text-[#d4a843] truncate">
+                      <div
+                        className="flex-1 min-w-0 border rounded-lg px-3 sm:px-4 py-2.5 font-mono text-xs sm:text-sm truncate transition-colors"
+                        style={{
+                          backgroundColor: theme.card,
+                          borderColor: theme.border,
+                          color: theme.gold,
+                        }}
+                      >
                         {inviteLink}
                       </div>
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={handleCopyLink}
-                        className={`px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all ${
-                          copiedLink
-                            ? 'bg-[#22c55e] text-[#09090b]'
-                            : 'bg-[#d4a843] text-[#09090b] hover:bg-[#e5b75d]'
-                        }`}
+                        className="px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all"
+                        style={{
+                          backgroundColor: copiedLink
+                            ? theme.ok
+                            : theme.gold,
+                          color: theme.bg,
+                        }}
                       >
                         {copiedLink ? (
                           <>
@@ -418,30 +641,61 @@ export default function StackCirclePage() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleCopyCode}
-                      className="py-3 rounded-xl bg-[#27272a] text-[#fafafa] font-medium text-sm flex items-center justify-center gap-2 hover:bg-[#3f3f46] transition-colors"
+                      className="py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors font-medium hover:opacity-80"
+                      style={{
+                        backgroundColor: theme.border,
+                        color: theme.text,
+                      }}
                     >
-                      <Copy className="w-4 h-4 text-[#d4a843]" />
-                      Copy Code: {group.code}
+                      <Copy
+                        className="w-4 h-4"
+                        style={{ color: theme.gold }}
+                      />
+                      Copy Code: {currentGroup.code}
                     </motion.button>
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setShowInviteModal(true)}
-                      className="py-3 rounded-xl bg-[#27272a] text-[#fafafa] font-medium text-sm flex items-center justify-center gap-2 hover:bg-[#3f3f46] transition-colors"
+                      className="py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors font-medium hover:opacity-80"
+                      style={{
+                        backgroundColor: theme.border,
+                        color: theme.text,
+                      }}
                     >
-                      <Link2 className="w-4 h-4 text-[#d4a843]" />
+                      <Link2
+                        className="w-4 h-4"
+                        style={{ color: theme.gold }}
+                      />
                       Share via...
                     </motion.button>
                   </div>
 
                   {/* Link Settings */}
-                  <div className="mt-4 pt-4 border-t border-[#27272a]/60">
+                  <div
+                    className="mt-4 pt-4 border-t"
+                    style={{ borderColor: theme.border }}
+                  >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-[#a1a1aa] text-sm font-medium">Link expires in</p>
-                        <p className="text-[#71717a] text-xs">Anyone with the link can join</p>
+                        <p
+                          className="text-sm font-medium"
+                          style={{ color: theme.textM }}
+                        >
+                          Link expires in
+                        </p>
+                        <p className="text-xs" style={{ color: theme.textS }}>
+                          Anyone with the link can join
+                        </p>
                       </div>
-                      <select className="bg-[#27272a] border border-[#27272a] rounded-lg px-3 py-2 text-sm text-[#fafafa] focus:outline-none focus:border-[#d4a843]">
+                      <select
+                        className="rounded-lg px-3 py-2 text-sm focus:outline-none transition-colors"
+                        style={{
+                          backgroundColor: theme.border,
+                          borderColor: theme.border,
+                          color: theme.text,
+                        }}
+                      >
                         <option>7 days</option>
                         <option>24 hours</option>
                         <option>1 hour</option>
@@ -454,9 +708,16 @@ export default function StackCirclePage() {
                 {/* Add Money Card */}
                 <motion.div
                   variants={itemVariants}
-                  className="rounded-2xl bg-[#18181b] border border-[#27272a] p-6"
+                  className="rounded-2xl border p-6 transition-colors"
+                  style={{
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  }}
                 >
-                  <h3 className="text-[#fafafa] font-bold text-lg mb-4">
+                  <h3
+                    className="font-bold text-lg mb-4"
+                    style={{ color: theme.text }}
+                  >
                     Add Money to Group
                   </h3>
                   <div className="flex gap-3">
@@ -465,13 +726,22 @@ export default function StackCirclePage() {
                       placeholder="$0.00"
                       value={addMoneyAmount}
                       onChange={(e) => setAddMoneyAmount(e.target.value)}
-                      className="flex-1 bg-[#09090b] border border-[#27272a] rounded-lg px-4 py-3 text-[#fafafa] placeholder-[#71717a] focus:outline-none focus:border-[#d4a843]"
+                      className="flex-1 border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                      style={{
+                        backgroundColor: theme.bg,
+                        borderColor: theme.border,
+                        color: theme.text,
+                      }}
                     />
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={handleAddMoney}
-                      className="bg-[#d4a843] text-[#09090b] font-bold px-6 py-3 rounded-lg hover:shadow-lg hover:shadow-[#d4a843]/30 transition-shadow"
+                      className="font-bold px-6 py-3 rounded-lg transition-shadow"
+                      style={{
+                        backgroundColor: theme.gold,
+                        color: theme.bg,
+                      }}
                     >
                       Add
                     </motion.button>
@@ -483,25 +753,57 @@ export default function StackCirclePage() {
                   variants={itemVariants}
                   className="space-y-3"
                 >
-                  <h3 className="text-[#fafafa] font-bold text-lg">Members</h3>
-                  {group.members.map((member) => (
+                  <h3
+                    className="font-bold text-lg"
+                    style={{ color: theme.text }}
+                  >
+                    Members
+                  </h3>
+                  {currentGroup.members.map((member) => (
                     <div
                       key={member.id}
-                      className="rounded-lg bg-[#18181b] border border-[#27272a] p-4 flex items-center justify-between"
+                      className="rounded-lg border p-4 flex items-center justify-between transition-colors"
+                      style={{
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      }}
                     >
                       <div>
-                        <p className="text-[#fafafa] font-semibold">
+                        <p
+                          className="font-semibold"
+                          style={{ color: theme.text }}
+                        >
                           {member.name}
                         </p>
-                        <p className="text-[#71717a] text-sm">
+                        <p
+                          className="text-sm"
+                          style={{ color: theme.textS }}
+                        >
                           Contributed: {fmt(member.contrib)}
                         </p>
+                        {member.invitedBy && (
+                          <p
+                            className="text-xs mt-1"
+                            style={{ color: theme.textM }}
+                          >
+                            Invited by {member.invitedBy}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
-                        <p className="text-[#d4a843] font-bold">
+                        <p
+                          className="font-bold"
+                          style={{ color: theme.gold }}
+                        >
                           {fmt(member.balance)}
                         </p>
-                        <span className="inline-block bg-[#27272a] text-[#a1a1aa] text-xs font-semibold px-3 py-1 rounded mt-1">
+                        <span
+                          className="inline-block text-xs font-semibold px-3 py-1 rounded mt-1"
+                          style={{
+                            backgroundColor: theme.border,
+                            color: theme.textS,
+                          }}
+                        >
                           {member.role === 'coordinator'
                             ? 'Coordinator'
                             : 'Member'}
@@ -512,23 +814,43 @@ export default function StackCirclePage() {
                 </motion.div>
 
                 {/* Activity Feed */}
-                {group.activity && group.activity.length > 0 && (
+                {currentGroup.activity && currentGroup.activity.length > 0 && (
                   <motion.div
                     variants={itemVariants}
                     className="space-y-3"
                   >
-                    <h3 className="text-[#fafafa] font-bold text-lg">
+                    <h3
+                      className="font-bold text-lg"
+                      style={{ color: theme.text }}
+                    >
                       Activity Feed
                     </h3>
-                    {group.activity.slice(0, 5).map((act) => (
+                    {currentGroup.activity.slice(0, 5).map((act) => (
                       <div
                         key={act.id}
-                        className="rounded-lg bg-[#18181b] border border-[#27272a] p-4 flex gap-3"
+                        className="rounded-lg border p-4 flex gap-3 transition-colors"
+                        style={{
+                          backgroundColor: theme.card,
+                          borderColor: theme.border,
+                        }}
                       >
-                        <MapPin className="w-4 h-4 text-[#d4a843] flex-shrink-0 mt-1" />
+                        <MapPin
+                          className="w-4 h-4 flex-shrink-0 mt-1"
+                          style={{ color: theme.gold }}
+                        />
                         <div className="flex-1">
-                          <p className="text-[#fafafa] text-sm">{act.msg}</p>
-                          <p className="text-[#71717a] text-xs mt-1">{act.date}</p>
+                          <p
+                            className="text-sm"
+                            style={{ color: theme.text }}
+                          >
+                            {act.msg}
+                          </p>
+                          <p
+                            className="text-xs mt-1"
+                            style={{ color: theme.textS }}
+                          >
+                            {act.date}
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -538,19 +860,35 @@ export default function StackCirclePage() {
             ) : (
               <motion.div
                 variants={itemVariants}
-                className="text-center py-16 px-6 rounded-2xl border-2 border-dashed border-[#27272a]"
+                className="text-center py-16 px-6 rounded-2xl border-2 border-dashed transition-colors"
+                style={{
+                  borderColor: theme.border,
+                }}
               >
-                <Users className="w-12 h-12 text-[#71717a] mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-[#a1a1aa] mb-2">
+                <Users
+                  className="w-12 h-12 mx-auto mb-4"
+                  style={{ color: theme.textS }}
+                />
+                <h3
+                  className="text-lg font-bold mb-2"
+                  style={{ color: theme.textM }}
+                >
                   No Groups Yet
                 </h3>
-                <p className="text-sm text-[#71717a] mb-6">
+                <p
+                  className="text-sm mb-6"
+                  style={{ color: theme.textS }}
+                >
                   Create a group to start saving together
                 </p>
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="bg-[#d4a843] text-[#09090b] font-bold px-6 py-3 rounded-lg hover:shadow-lg hover:shadow-[#d4a843]/30 transition-shadow"
+                  className="font-bold px-6 py-3 rounded-lg transition-shadow"
+                  style={{
+                    backgroundColor: theme.gold,
+                    color: theme.bg,
+                  }}
                 >
                   Create Group
                 </motion.button>
@@ -565,31 +903,66 @@ export default function StackCirclePage() {
             {/* Monthly Overview Card */}
             <motion.div
               variants={itemVariants}
-              className="rounded-2xl bg-gradient-to-br from-[#d4a843]/20 to-[#d4a843]/5 border border-[#d4a843]/30 p-5 sm:p-8 text-center"
+              className="rounded-2xl border p-5 sm:p-8 text-center transition-colors"
+              style={{
+                backgroundColor: theme.goldBg,
+                borderColor: theme.gold,
+              }}
             >
-              <p className="text-[#a1a1aa] text-sm mb-2">
+              <p
+                className="text-sm mb-2"
+                style={{ color: theme.textM }}
+              >
                 Total Monthly Housing
               </p>
-              <div className="text-3xl sm:text-5xl font-bold text-[#d4a843] mb-4 sm:mb-6">
+              <div
+                className="text-3xl sm:text-5xl font-bold mb-4 sm:mb-6"
+                style={{ color: theme.gold }}
+              >
                 {fmt(totalMonthly)}
               </div>
               <div className="flex justify-center gap-4 sm:gap-8 mb-4 sm:mb-6">
                 <div>
-                  <p className="text-[#71717a] text-sm">Rent</p>
-                  <p className="text-[#fafafa] font-bold text-lg">
+                  <p
+                    className="text-sm"
+                    style={{ color: theme.textS }}
+                  >
+                    Rent
+                  </p>
+                  <p
+                    className="font-bold text-lg"
+                    style={{ color: theme.text }}
+                  >
                     {fmt(roommates.totalRent)}
                   </p>
                 </div>
-                <div className="w-px bg-[#27272a]" />
+                <div
+                  className="w-px"
+                  style={{ backgroundColor: theme.border }}
+                />
                 <div>
-                  <p className="text-[#71717a] text-sm">Utilities</p>
-                  <p className="text-[#fafafa] font-bold text-lg">
+                  <p
+                    className="text-sm"
+                    style={{ color: theme.textS }}
+                  >
+                    Utilities
+                  </p>
+                  <p
+                    className="font-bold text-lg"
+                    style={{ color: theme.text }}
+                  >
                     {fmt(totalUtilities)}
                   </p>
                 </div>
               </div>
               {allPaid && (
-                <span className="inline-block bg-[#22c55e] text-[#09090b] text-xs font-bold px-4 py-2 rounded-full">
+                <span
+                  className="inline-block text-xs font-bold px-4 py-2 rounded-full transition-colors"
+                  style={{
+                    backgroundColor: theme.ok,
+                    color: theme.bg,
+                  }}
+                >
                   All Paid This Month
                 </span>
               )}
@@ -598,22 +971,35 @@ export default function StackCirclePage() {
             {/* Rent Section */}
             <motion.div
               variants={itemVariants}
-              className="rounded-2xl bg-[#18181b] border border-[#27272a] p-6"
+              className="rounded-2xl border p-6 transition-colors"
+              style={{
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              }}
             >
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-[#fafafa] font-bold text-lg">Rent</h3>
+                <h3
+                  className="font-bold text-lg"
+                  style={{ color: theme.text }}
+                >
+                  Rent
+                </h3>
                 <button
                   onClick={() => {
                     setEditingRent(!editingRent);
                     setRentInput(String(roommates.totalRent));
                   }}
-                  className="text-[#d4a843] text-sm font-semibold hover:text-[#d4a843]/80"
+                  className="text-sm font-semibold hover:opacity-80 transition-opacity"
+                  style={{ color: theme.gold }}
                 >
                   {editingRent ? 'Cancel' : 'Edit'}
                 </button>
               </div>
               {!editingRent ? (
-                <p className="text-3xl font-bold text-[#d4a843]">
+                <p
+                  className="text-3xl font-bold"
+                  style={{ color: theme.gold }}
+                >
                   {fmt(roommates.totalRent)}
                 </p>
               ) : (
@@ -622,13 +1008,22 @@ export default function StackCirclePage() {
                     type="number"
                     value={rentInput}
                     onChange={(e) => setRentInput(e.target.value)}
-                    className="flex-1 bg-[#09090b] border border-[#27272a] rounded-lg px-4 py-3 text-[#fafafa] placeholder-[#71717a] focus:outline-none focus:border-[#d4a843]"
+                    className="flex-1 border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                    style={{
+                      backgroundColor: theme.bg,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    }}
                   />
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleSaveRent}
-                    className="bg-[#d4a843] text-[#09090b] font-bold px-6 py-3 rounded-lg"
+                    className="font-bold px-6 py-3 rounded-lg transition-shadow"
+                    style={{
+                      backgroundColor: theme.gold,
+                      color: theme.bg,
+                    }}
                   >
                     Save
                   </motion.button>
@@ -639,15 +1034,23 @@ export default function StackCirclePage() {
             {/* Shared Utilities Section */}
             <motion.div
               variants={itemVariants}
-              className="rounded-2xl bg-[#18181b] border border-[#27272a] p-6"
+              className="rounded-2xl border p-6 transition-colors"
+              style={{
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              }}
             >
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-[#fafafa] font-bold text-lg">
+                <h3
+                  className="font-bold text-lg"
+                  style={{ color: theme.text }}
+                >
                   Shared Utilities
                 </h3>
                 <button
                   onClick={() => setAddingUtility(!addingUtility)}
-                  className="text-[#d4a843] text-sm font-semibold hover:text-[#d4a843]/80 flex items-center gap-1"
+                  className="text-sm font-semibold hover:opacity-80 transition-opacity flex items-center gap-1"
+                  style={{ color: theme.gold }}
                 >
                   <Plus className="w-4 h-4" />
                   {addingUtility ? 'Cancel' : 'Add'}
@@ -660,14 +1063,20 @@ export default function StackCirclePage() {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="space-y-3 mb-6 pb-6 border-b border-[#27272a]"
+                    className="space-y-3 mb-6 pb-6 border-b transition-colors"
+                    style={{ borderColor: theme.border }}
                   >
                     <input
                       type="text"
                       placeholder="Utility name"
                       value={utilityName}
                       onChange={(e) => setUtilityName(e.target.value)}
-                      className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-4 py-3 text-[#fafafa] placeholder-[#71717a] focus:outline-none focus:border-[#d4a843]"
+                      className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                      style={{
+                        backgroundColor: theme.bg,
+                        borderColor: theme.border,
+                        color: theme.text,
+                      }}
                     />
                     <div className="flex gap-3">
                       <input
@@ -675,13 +1084,22 @@ export default function StackCirclePage() {
                         placeholder="$0.00"
                         value={utilityAmount}
                         onChange={(e) => setUtilityAmount(e.target.value)}
-                        className="flex-1 bg-[#09090b] border border-[#27272a] rounded-lg px-4 py-3 text-[#fafafa] placeholder-[#71717a] focus:outline-none focus:border-[#d4a843]"
+                        className="flex-1 border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                        style={{
+                          backgroundColor: theme.bg,
+                          borderColor: theme.border,
+                          color: theme.text,
+                        }}
                       />
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={handleAddUtility}
-                        className="bg-[#d4a843] text-[#09090b] font-bold px-6 py-3 rounded-lg"
+                        className="font-bold px-6 py-3 rounded-lg transition-shadow"
+                        style={{
+                          backgroundColor: theme.gold,
+                          color: theme.bg,
+                        }}
                       >
                         Add
                       </motion.button>
@@ -694,17 +1112,30 @@ export default function StackCirclePage() {
                 {roommates.utilities.map((utility) => (
                   <div
                     key={utility.id}
-                    className="flex items-center justify-between p-4 bg-[#09090b] rounded-lg border border-[#27272a]"
+                    className="flex items-center justify-between p-4 rounded-lg border transition-colors"
+                    style={{
+                      backgroundColor: theme.bg,
+                      borderColor: theme.border,
+                    }}
                   >
                     <div>
-                      <p className="text-[#fafafa] font-semibold">
+                      <p
+                        className="font-semibold"
+                        style={{ color: theme.text }}
+                      >
                         {utility.name}
                       </p>
-                      <p className="text-[#71717a] text-sm">{fmt(utility.amount)}</p>
+                      <p
+                        className="text-sm"
+                        style={{ color: theme.textS }}
+                      >
+                        {fmt(utility.amount)}
+                      </p>
                     </div>
                     <button
                       onClick={() => handleRemoveUtility(utility.id)}
-                      className="text-[#ef4444] hover:text-[#ef4444]/80 transition-colors"
+                      className="hover:opacity-80 transition-opacity"
+                      style={{ color: theme.bad }}
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -716,13 +1147,23 @@ export default function StackCirclePage() {
             {/* Roommates Section */}
             <motion.div
               variants={itemVariants}
-              className="rounded-2xl bg-[#18181b] border border-[#27272a] p-6"
+              className="rounded-2xl border p-6 transition-colors"
+              style={{
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              }}
             >
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-[#fafafa] font-bold text-lg">Roommates</h3>
+                <h3
+                  className="font-bold text-lg"
+                  style={{ color: theme.text }}
+                >
+                  Roommates
+                </h3>
                 <button
                   onClick={() => setAddingMember(!addingMember)}
-                  className="text-[#d4a843] text-sm font-semibold hover:text-[#d4a843]/80 flex items-center gap-1"
+                  className="text-sm font-semibold hover:opacity-80 transition-opacity flex items-center gap-1"
+                  style={{ color: theme.gold }}
                 >
                   <Plus className="w-4 h-4" />
                   {addingMember ? 'Cancel' : 'Add'}
@@ -735,20 +1176,30 @@ export default function StackCirclePage() {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="flex gap-3 mb-6 pb-6 border-b border-[#27272a]"
+                    className="flex gap-3 mb-6 pb-6 border-b transition-colors"
+                    style={{ borderColor: theme.border }}
                   >
                     <input
                       type="text"
                       placeholder="Name"
                       value={memberName}
                       onChange={(e) => setMemberName(e.target.value)}
-                      className="flex-1 bg-[#09090b] border border-[#27272a] rounded-lg px-4 py-3 text-[#fafafa] placeholder-[#71717a] focus:outline-none focus:border-[#d4a843]"
+                      className="flex-1 border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                      style={{
+                        backgroundColor: theme.bg,
+                        borderColor: theme.border,
+                        color: theme.text,
+                      }}
                     />
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={handleAddMember}
-                      className="bg-[#d4a843] text-[#09090b] font-bold px-6 py-3 rounded-lg"
+                      className="font-bold px-6 py-3 rounded-lg transition-shadow"
+                      style={{
+                        backgroundColor: theme.gold,
+                        color: theme.bg,
+                      }}
                     >
                       Add
                     </motion.button>
@@ -766,33 +1217,45 @@ export default function StackCirclePage() {
                   return (
                     <div
                       key={member.id}
-                      className={`rounded-lg bg-[#09090b] border-2 p-4 transition-colors ${
-                        isPaid
-                          ? 'border-[#22c55e]/50'
-                          : 'border-[#27272a]'
-                      }`}
+                      className="rounded-lg p-4 transition-colors"
+                      style={{
+                        backgroundColor: theme.bg,
+                        borderColor: isPaid ? theme.ok : theme.border,
+                        borderWidth: '2px',
+                      }}
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div>
-                          <p className="text-[#fafafa] font-bold text-base">
+                          <p
+                            className="font-bold text-base"
+                            style={{ color: theme.text }}
+                          >
                             {member.name}
                           </p>
-                          <p className="text-[#71717a] text-sm">
+                          <p
+                            className="text-sm"
+                            style={{ color: theme.textS }}
+                          >
                             Share: {member.share}% · Owes {fmt(totalShare)}/mo
                           </p>
                         </div>
                         <span
-                          className={`text-xs font-bold px-3 py-1 rounded ${
-                            isPaid
-                              ? 'bg-[#22c55e] text-[#09090b]'
-                              : 'bg-[#eab308] text-[#09090b]'
-                          }`}
+                          className="text-xs font-bold px-3 py-1 rounded transition-colors"
+                          style={{
+                            backgroundColor: isPaid
+                              ? theme.ok
+                              : theme.warn,
+                            color: theme.bg,
+                          }}
                         >
                           {isPaid ? 'Paid' : 'Pending'}
                         </span>
                       </div>
 
-                      <div className="space-y-2 mb-4 text-sm text-[#a1a1aa]">
+                      <div
+                        className="space-y-2 mb-4 text-sm"
+                        style={{ color: theme.textM }}
+                      >
                         <p>Rent share: {fmt(rentShare)}</p>
                         <p>Utilities share: {fmt(utilsShare)}</p>
                       </div>
@@ -802,11 +1265,15 @@ export default function StackCirclePage() {
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           onClick={() => handleToggleRentPaid(member.id)}
-                          className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-colors ${
-                            member.paidRent
-                              ? 'bg-[#22c55e] text-[#09090b]'
-                              : 'bg-[#27272a] text-[#fafafa] hover:bg-[#3f3f46]'
-                          }`}
+                          className="flex-1 py-2 rounded-lg font-semibold text-sm transition-colors"
+                          style={{
+                            backgroundColor: member.paidRent
+                              ? theme.ok
+                              : theme.border,
+                            color: member.paidRent
+                              ? theme.bg
+                              : theme.text,
+                          }}
                         >
                           {member.paidRent ? '✓ Rent Paid' : 'Mark Rent Paid'}
                         </motion.button>
@@ -814,11 +1281,15 @@ export default function StackCirclePage() {
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           onClick={() => handleToggleUtilsPaid(member.id)}
-                          className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-colors ${
-                            member.paidUtilities
-                              ? 'bg-[#22c55e] text-[#09090b]'
-                              : 'bg-[#27272a] text-[#fafafa] hover:bg-[#3f3f46]'
-                          }`}
+                          className="flex-1 py-2 rounded-lg font-semibold text-sm transition-colors"
+                          style={{
+                            backgroundColor: member.paidUtilities
+                              ? theme.ok
+                              : theme.border,
+                            color: member.paidUtilities
+                              ? theme.bg
+                              : theme.text,
+                          }}
                         >
                           {member.paidUtilities
                             ? '✓ Utils Paid'
@@ -839,11 +1310,17 @@ export default function StackCirclePage() {
                                 Math.min(100, Math.max(0, Number(e.target.value)))
                               )
                             }
-                            className="flex-1 bg-[#18181b] border border-[#27272a] rounded px-3 py-2 text-[#fafafa] text-sm focus:outline-none focus:border-[#d4a843]"
+                            className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none transition-colors"
+                            style={{
+                              backgroundColor: theme.card,
+                              borderColor: theme.border,
+                              color: theme.text,
+                            }}
                           />
                           <button
                             onClick={() => handleRemoveMember(member.id)}
-                            className="text-[#ef4444] hover:text-[#ef4444]/80 transition-colors p-2"
+                            className="p-2 hover:opacity-80 transition-opacity"
+                            style={{ color: theme.bad }}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -859,9 +1336,16 @@ export default function StackCirclePage() {
             {roommates.members.length >= 2 && (
               <motion.div
                 variants={itemVariants}
-                className="rounded-2xl bg-[#18181b] border border-[#27272a] p-6"
+                className="rounded-2xl border p-6 transition-colors"
+                style={{
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                }}
               >
-                <h3 className="text-[#fafafa] font-bold text-lg mb-4">
+                <h3
+                  className="font-bold text-lg mb-4"
+                  style={{ color: theme.text }}
+                >
                   Split Summary
                 </h3>
                 <div className="space-y-3">
@@ -873,22 +1357,38 @@ export default function StackCirclePage() {
                     return (
                       <div
                         key={member.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-[#09090b] border border-[#27272a]"
+                        className="flex items-center justify-between p-3 rounded-lg border transition-colors"
+                        style={{
+                          backgroundColor: theme.bg,
+                          borderColor: theme.border,
+                        }}
                       >
-                        <p className="text-[#fafafa]">{member.name}</p>
+                        <p style={{ color: theme.text }}>{member.name}</p>
                         <p
-                          className={`font-bold ${
-                            isPaid ? 'text-[#22c55e]' : 'text-[#fafafa]'
-                          }`}
+                          className="font-bold"
+                          style={{
+                            color: isPaid ? theme.ok : theme.text,
+                          }}
                         >
                           {isPaid && '✓ '} {fmt(totalShare)}
                         </p>
                       </div>
                     );
                   })}
-                  <div className="border-t border-[#27272a] pt-3 mt-3 flex items-center justify-between">
-                    <p className="text-[#fafafa] font-bold">Total</p>
-                    <p className="text-[#d4a843] font-bold text-lg">
+                  <div
+                    className="border-t pt-3 mt-3 flex items-center justify-between transition-colors"
+                    style={{ borderColor: theme.border }}
+                  >
+                    <p
+                      className="font-bold"
+                      style={{ color: theme.text }}
+                    >
+                      Total
+                    </p>
+                    <p
+                      className="font-bold text-lg"
+                      style={{ color: theme.gold }}
+                    >
                       {fmt(totalMonthly)}
                     </p>
                   </div>
@@ -899,14 +1399,15 @@ export default function StackCirclePage() {
         )}
       </motion.div>
 
-      {/* Share Modal */}
+      {/* Invite Modal */}
       <AnimatePresence>
         {showInviteModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+            className="fixed inset-0 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center transition-colors"
+            style={{ backgroundColor: theme.overlay }}
             onClick={() => setShowInviteModal(false)}
           >
             <motion.div
@@ -914,15 +1415,27 @@ export default function StackCirclePage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full sm:max-w-md bg-[#18181b] rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 space-y-4"
+              className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 space-y-4 transition-colors"
+              style={{
+                backgroundColor: theme.card,
+              }}
             >
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-[#fafafa] font-bold text-lg">Share Invite</h2>
+                <h2
+                  className="font-bold text-lg"
+                  style={{ color: theme.text }}
+                >
+                  Share Invite
+                </h2>
                 <button
                   onClick={() => setShowInviteModal(false)}
-                  className="p-1 hover:bg-[#27272a] rounded-lg transition-colors"
+                  className="p-1 rounded-lg transition-colors hover:opacity-80"
+                  style={{ backgroundColor: theme.border }}
                 >
-                  <X className="w-5 h-5 text-[#a1a1aa]" />
+                  <X
+                    className="w-5 h-5"
+                    style={{ color: theme.textM }}
+                  />
                 </button>
               </div>
 
@@ -934,12 +1447,24 @@ export default function StackCirclePage() {
                     handleCopyLink();
                     setShowInviteModal(false);
                   }}
-                  className="w-full p-4 rounded-xl bg-[#27272a] text-[#fafafa] flex items-center gap-3 hover:bg-[#3f3f46] transition-colors"
+                  className="w-full p-4 rounded-xl flex items-center gap-3 transition-colors hover:opacity-90"
+                  style={{
+                    backgroundColor: theme.border,
+                    color: theme.text,
+                  }}
                 >
-                  <Copy className="w-5 h-5 text-[#d4a843]" />
+                  <Copy
+                    className="w-5 h-5"
+                    style={{ color: theme.gold }}
+                  />
                   <div className="text-left">
                     <p className="font-semibold text-sm">Copy Link</p>
-                    <p className="text-xs text-[#71717a]">Copy invite link to clipboard</p>
+                    <p
+                      className="text-xs"
+                      style={{ color: theme.textS }}
+                    >
+                      Copy invite link to clipboard
+                    </p>
                   </div>
                 </motion.button>
 
@@ -947,15 +1472,30 @@ export default function StackCirclePage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
-                    window.open(`sms:?body=Join my ORCA Stack Circle! ${inviteLink}`, '_blank');
+                    window.open(
+                      `sms:?body=Join my ORCA Stack Circle! ${inviteLink}`,
+                      '_blank'
+                    );
                     setShowInviteModal(false);
                   }}
-                  className="w-full p-4 rounded-xl bg-[#27272a] text-[#fafafa] flex items-center gap-3 hover:bg-[#3f3f46] transition-colors"
+                  className="w-full p-4 rounded-xl flex items-center gap-3 transition-colors hover:opacity-90"
+                  style={{
+                    backgroundColor: theme.border,
+                    color: theme.text,
+                  }}
                 >
-                  <ExternalLink className="w-5 h-5 text-[#22c55e]" />
+                  <ExternalLink
+                    className="w-5 h-5"
+                    style={{ color: theme.ok }}
+                  />
                   <div className="text-left">
                     <p className="font-semibold text-sm">Text Message</p>
-                    <p className="text-xs text-[#71717a]">Send via SMS</p>
+                    <p
+                      className="text-xs"
+                      style={{ color: theme.textS }}
+                    >
+                      Send via SMS
+                    </p>
                   </div>
                 </motion.button>
 
@@ -963,15 +1503,30 @@ export default function StackCirclePage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
-                    window.open(`mailto:?subject=Join my ORCA Stack Circle&body=Join my group savings circle! ${inviteLink}`, '_blank');
+                    window.open(
+                      `mailto:?subject=Join my ORCA Stack Circle&body=Join my group savings circle! ${inviteLink}`,
+                      '_blank'
+                    );
                     setShowInviteModal(false);
                   }}
-                  className="w-full p-4 rounded-xl bg-[#27272a] text-[#fafafa] flex items-center gap-3 hover:bg-[#3f3f46] transition-colors"
+                  className="w-full p-4 rounded-xl flex items-center gap-3 transition-colors hover:opacity-90"
+                  style={{
+                    backgroundColor: theme.border,
+                    color: theme.text,
+                  }}
                 >
-                  <ExternalLink className="w-5 h-5 text-[#3b82f6]" />
+                  <ExternalLink
+                    className="w-5 h-5"
+                    style={{ color: theme.gold }}
+                  />
                   <div className="text-left">
                     <p className="font-semibold text-sm">Email</p>
-                    <p className="text-xs text-[#71717a]">Send invite via email</p>
+                    <p
+                      className="text-xs"
+                      style={{ color: theme.textS }}
+                    >
+                      Send invite via email
+                    </p>
                   </div>
                 </motion.button>
               </div>

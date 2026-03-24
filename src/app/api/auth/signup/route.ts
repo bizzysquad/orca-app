@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json()
+    const { email, password, fullName } = await request.json()
 
-    console.log('[AUTH/SIGNUP] Signup attempt for:', email)
+    console.log('[AUTH/SIGNUP] Signup attempt for:', email, '| Name:', fullName)
 
     if (!email || !password) {
       console.log('[AUTH/SIGNUP] Missing email or password')
@@ -33,6 +33,10 @@ export async function POST(request: NextRequest) {
       password,
       options: {
         emailRedirectTo: redirectTo,
+        data: {
+          full_name: fullName || '',
+          display_name: fullName || '',
+        },
       },
     })
 

@@ -1,994 +1,932 @@
 'use client';
-
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, DollarSign, Target, Heart,
   Lock, Edit3, Plus, Trash2, Pause, Play, LineChart,
-  AlertCircle, CheckCircle, Zap, Check, Calendar,
+  AlertCircle, CheckCircle, Zap, Check, Calendar, Briefcase,
 } from 'lucide-react';
 import { getDemoData } from '@/lib/demo-data';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
+import { useTheme } from '@/context/ThemeContext';
+
+type Tab = 'budget' | 'savings' | 'credit';
+
+interface Obligation {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate: string;
+  source: 'bill' | 'savings' | 'task';
+}
+
+interface IncomeRequirement {
+  daily: number;
+  weekly: number;
+  total: number;
+}
 
 export default function SmartStackPage() {
+  const { theme } = useTheme();
   const data = getDemoData();
-  const [activeTab, setActiveTab] = useState<'budget' | 'savings' | 'credit'>('budget');
-
-  // Budget tab state
-  const [payFreqToggle, setPayFreqToggle] = useState<'weekly' | 'biweekly'>(
-    data.user.payFreq as 'weekly' | 'biweekly'
-  );
-  const [hourlyRate, setHourlyRate] = useState(parseFloat(data.user.payRate));
-  const defaultHours = parseInt(data.user.hoursPerDay) || 8;
-  // Pay period start: next pay date as reference, show only the days in the current period
-  const payPeriodStart = useMemo(() => {
-    const nextPay = new Date(data.user.nextPay + 'T00:00:00');
-    const periodDays = payFreqToggle === 'weekly' ? 7 : 14;
-    // Find the start of the current pay period (go back from nextPay by periodDays)
-    const start = new Date(nextPay);
-    start.setDate(start.getDate() - periodDays);
-    return start;
-  }, [data.user.nextPay, payFreqToggle]);
-
-  const periodDays = payFreqToggle === 'weekly' ? 7 : 14;
-
-  // Build array of dates in the pay period
-  const payPeriodDates = useMemo(() => {
-    return Array.from({ length: periodDays }, (_, i) => {
-      const d = new Date(payPeriodStart);
-      d.setDate(d.getDate() + i);
-      return d;
-    });
-  }, [payPeriodStart, periodDays]);
-
-  const [dayHours, setDayHours] = useState<number[]>(
-    Array.from({ length: 14 }, (_, i) => {
-      const d = new Date(payPeriodStart);
-      d.setDate(d.getDate() + i);
-      const dow = d.getDay();
-      return dow !== 0 && dow !== 6 ? defaultHours : 0;
-    })
-  );
-  const [editingDayHours, setEditingDayHours] = useState<number | null>(null);
-
-  // Reset day hours when frequency changes
-  const resetDayHours = (freq: 'weekly' | 'biweekly') => {
-    const days = freq === 'weekly' ? 7 : 14;
-    const newHours = Array.from({ length: days }, (_, i) => {
-      const d = new Date(payPeriodStart);
-      d.setDate(d.getDate() + i);
-      const dow = d.getDay();
-      return dow !== 0 && dow !== 6 ? defaultHours : 0;
-    });
-    setDayHours(newHours);
-    setEditingDayHours(null);
-  };
+  const [activeTab, setActiveTab] = useState<Tab>('budget');
   const [budgetLocked, setBudgetLocked] = useState(false);
+  const [paycheckHistory, setPaycheckHistory] = useState<any[]>([]);
+  const [forecastedIncome, setForecastedIncome] = useState<any[]>([]);
+  const [checkAmount, setCheckAmount] = useState(1500);
+  const [frequency, setFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('biweekly');
+  const [creditScore, setCreditScore] = useState(720);
+  const [creditScoreSim, setCreditScoreSim] = useState(720);
+  const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
+  const [selfEmployedIncome, setSelfEmployedIncome] = useState(0);
 
-  // Savings tab state
-  const [goals, setGoals] = useState(data.goals);
-  const [newGoalName, setNewGoalName] = useState('');
-  const [newGoalTarget, setNewGoalTarget] = useState('');
-  const [newGoalCurrent, setNewGoalCurrent] = useState('');
-  const [newGoalWeekly, setNewGoalWeekly] = useState('');
+  const isSelfEmployed = data.user?.employmentType === 'self-employed';
+  const rentAmount = data.user?.rentAmount || 1400;
 
-  // Credit tab state
-  const [simUtilization, setSimUtilization] = useState(data.user.utilization);
-  const [simOnTime, setSimOnTime] = useState(data.user.onTime);
+  // ============== BUDGET LOCK LOGIC ==============
+  const handleBudgetLock = () => {
+    if (!budgetLocked) {
+      // Lock in the budget - update paycheck history and forecasted income
+      const newHistory = [
+        {
+          date: new Date().toISOString().split('T')[0],
+          amount: checkAmount,
+          frequency,
+        },
+        ...paycheckHistory.slice(0, 11),
+      ];
+      setPaycheckHistory(newHistory);
 
-  // ─── BUDGET CALCULATIONS ───
-  const alloc = useMemo(() => calcAlloc(data.income, data.bills, data.goals), []);
-  const paycheckAmount = useMemo(() => getPaycheckAmount(data.user, data.income), []);
+      // Generate forecasted income for next 12 months
+      const forecasted = Array.from({ length: 12 }).map((_, i) => ({
+        month: i,
+        amount: checkAmount,
+        frequency,
+      }));
+      setForecastedIncome(forecasted);
+      setBudgetLocked(true);
+    } else {
+      // Unlock budget
+      setBudgetLocked(false);
+    }
+  };
 
-  const budgetHealth = useMemo(() => {
-    const ratio = paycheckAmount > 0 ? (alloc.br / paycheckAmount) * 100 : 0;
-    if (ratio < 70) return { label: 'Healthy', color: '#22c55e' };
-    if (ratio < 90) return { label: 'Tight', color: '#f59e0b' };
-    return { label: 'Over Budget', color: '#ef4444' };
-  }, [paycheckAmount, alloc.br]);
+  // ============== SELF-EMPLOYED INCOME ALLOCATOR ==============
+  const obligations = useMemo<Obligation[]>(() => {
+    const obs: Obligation[] = [];
 
-  // Only count hours from the active pay period days
-  const activeDayHours = useMemo(() => dayHours.slice(0, periodDays), [dayHours, periodDays]);
-  const workingDaysCount = useMemo(() => activeDayHours.filter(h => h > 0).length, [activeDayHours]);
-  const totalHoursCalc = useMemo(() => activeDayHours.reduce((sum, h) => sum + h, 0), [activeDayHours]);
-  const projectedCheckAmount = useMemo(() => {
-    return totalHoursCalc * hourlyRate;
-  }, [totalHoursCalc, hourlyRate]);
-
-  // When budget is locked, the check splitter uses the projected check amount
-  const activeCheckAmount = budgetLocked ? projectedCheckAmount : paycheckAmount;
-  const billsWeekly = useMemo(() => alloc.br, [alloc.br]);
-  const savingsWeekly = useMemo(() => alloc.sr, [alloc.sr]);
-  const lockedSpending = useMemo(() => Math.max(0, activeCheckAmount - alloc.br - alloc.sr), [activeCheckAmount, alloc.br, alloc.sr]);
-  const spendingWeekly = budgetLocked ? lockedSpending : alloc.sts;
-
-  const totalAllocated = billsWeekly + savingsWeekly + spendingWeekly;
-  const billsPct = totalAllocated > 0 ? pct(billsWeekly, totalAllocated) : 0;
-  const savingsPct = totalAllocated > 0 ? pct(savingsWeekly, totalAllocated) : 0;
-  const spendingPct = totalAllocated > 0 ? pct(spendingWeekly, totalAllocated) : 0;
-
-  const allocItems = [
-    { name: 'Bills', amount: billsWeekly, pct: billsPct, color: '#ef4444', type: 'Bill' },
-    { name: 'Savings', amount: savingsWeekly, pct: savingsPct, color: '#22c55e', type: 'Goal' },
-    { name: 'Expenses', amount: spendingWeekly, pct: spendingPct, color: '#3b82f6', type: 'Expenses' },
-  ];
-
-  // Paycheck history (4 past, 1 next, 3 future)
-  const paycheckHistory = useMemo(() => {
-    const today = new Date(2026, 2, 20);
-    const dates = [];
-
-    for (let i = -4; i <= 3; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() + (i * 14));
-      dates.push({
-        date: date.toISOString().split('T')[0],
-        isPast: i < 0,
-        isNext: i === 0,
-        isFuture: i > 0,
+    // Add bills
+    if (data.bills) {
+      data.bills.forEach((bill: any, idx: number) => {
+        obs.push({
+          id: `bill-${idx}`,
+          name: bill.name,
+          amount: bill.amount,
+          dueDate: bill.dueDate || new Date().toISOString().split('T')[0],
+          source: 'bill',
+        });
       });
     }
-    return dates;
-  }, []);
 
-  // ─── SAVINGS CALCULATIONS ───
-  const totalSaved = useMemo(() => goals.reduce((sum, g) => sum + g.current, 0), [goals]);
+    // Add rent if not already in bills
+    obs.push({
+      id: 'rent',
+      name: 'Rent',
+      amount: rentAmount,
+      dueDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+        .toISOString()
+        .split('T')[0],
+      source: 'bill',
+    });
 
-  const handleCreateGoal = () => {
-    if (!newGoalName || !newGoalTarget) return;
-    const newGoal = {
-      id: `g${Date.now()}`,
-      name: newGoalName,
-      target: parseFloat(newGoalTarget),
-      current: parseFloat(newGoalCurrent) || 0,
-      date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      cType: 'fixed' as const,
-      cVal: parseFloat(newGoalWeekly) || 50,
-      active: true,
+    // Add savings goals
+    if (data.goals) {
+      data.goals.forEach((goal: any, idx: number) => {
+        obs.push({
+          id: `goal-${idx}`,
+          name: goal.name,
+          amount: goal.targetAmount,
+          dueDate: goal.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split('T')[0],
+          source: 'savings',
+        });
+      });
+    }
+
+    return obs;
+  }, [data, rentAmount]);
+
+  const incomeRequirements = useMemo<IncomeRequirement>(() => {
+    if (!isSelfEmployed || selectedObligations.length === 0) {
+      return { daily: 0, weekly: 0, total: 0 };
+    }
+
+    const today = new Date();
+    let totalRequired = 0;
+
+    selectedObligations.forEach((obligationId) => {
+      const obligation = obligations.find((o) => o.id === obligationId);
+      if (!obligation) return;
+
+      const dueDate = new Date(obligation.dueDate);
+      const daysUntilDue = Math.max(1, Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+      totalRequired += obligation.amount / daysUntilDue;
+    });
+
+    // Calculate daily requirement (total needed / days)
+    const dailyRequired = totalRequired;
+    const weeklyRequired = dailyRequired * 7;
+
+    return {
+      daily: dailyRequired,
+      weekly: weeklyRequired,
+      total: totalRequired,
     };
-    setGoals([...goals, newGoal]);
-    setNewGoalName('');
-    setNewGoalTarget('');
-    setNewGoalCurrent('');
-    setNewGoalWeekly('');
-  };
+  }, [selectedObligations, obligations, isSelfEmployed]);
 
-  const handleAddToGoal = (id: string, amount: number) => {
-    setGoals(goals.map(g =>
-      g.id === id ? { ...g, current: Math.min(g.current + amount, g.target) } : g
-    ));
-  };
+  // ============== RENT TRACKER ==============
+  const rentPayments = useMemo(() => {
+    return [
+      { date: '2025-03-01', amount: rentAmount, status: 'paid' },
+      { date: '2025-04-01', amount: rentAmount, status: 'paid' },
+    ];
+  }, [rentAmount]);
 
-  const handleToggleGoal = (id: string) => {
-    setGoals(goals.map(g => g.id === id ? { ...g, active: !g.active } : g));
-  };
-
-  const handleDeleteGoal = (id: string) => {
-    setGoals(goals.filter(g => g.id !== id));
-  };
-
-  // ─── CREDIT CALCULATIONS ───
-  const simScore = useMemo(() => {
-    const base = data.user.creditScore;
-    const utilChange = (simUtilization - data.user.utilization) * 0.5;
-    const paymentChange = (simOnTime - data.user.onTime) * 0.3;
-    return Math.max(300, Math.min(850, Math.round(base + utilChange + paymentChange)));
-  }, [simUtilization, simOnTime]);
-
-  const scoreColor = useMemo(() => {
-    if (simScore >= 750) return '#22c55e';
-    if (simScore >= 700) return '#f59e0b';
-    return '#ef4444';
-  }, [simScore]);
-
-  const scoreLabel = useMemo(() => {
-    if (simScore >= 800) return 'Excellent';
-    if (simScore >= 740) return 'Very Good';
-    if (simScore >= 670) return 'Good';
-    if (simScore >= 580) return 'Fair';
-    return 'Poor';
-  }, [simScore]);
-
-  // ─── RENDER TAB CONTENT ───
-  const renderBudgetTab = () => (
-    <div className="space-y-6 pb-24">
-      {/* Weekly Safe to Spend */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-[#18181b] to-[#09090b] border border-[#27272a] rounded-xl p-8 text-center"
-      >
-        <p className="text-[#a1a1aa] text-sm mb-2">Weekly Safe to Spend</p>
-        <p className="text-[#d4a843] text-4xl font-bold">{fmt(alloc.sts)}</p>
-        <p className="text-[#71717a] text-sm mt-2">{fmt(alloc.daily)}/day</p>
-      </motion.div>
-
-      {/* Income / Expense Ratio */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[#fafafa] font-semibold">Income / Expense Ratio</h3>
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/30">
-            <CheckCircle size={14} className="text-[#22c55e]" />
-            <span className="text-[#22c55e] text-xs font-medium">{budgetHealth.label}</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="bg-[#09090b] rounded-lg p-4">
-            <p className="text-[#a1a1aa] text-xs mb-1">Paycheck</p>
-            <p className="text-[#22c55e] text-xl font-bold">{fmt(paycheckAmount)}</p>
-          </div>
-          <div className="bg-[#09090b] rounded-lg p-4">
-            <p className="text-[#a1a1aa] text-xs mb-1">Allocated</p>
-            <p className="text-[#ef4444] text-xl font-bold">{fmt(alloc.br)}</p>
-          </div>
-        </div>
-
-        <div className="w-full bg-[#27272a] rounded-full h-2 overflow-hidden mb-3">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${Math.min(100, (alloc.br / paycheckAmount) * 100)}%` }}
-            className="h-full bg-gradient-to-r from-[#22c55e] to-[#ef4444]"
-          />
-        </div>
-
-        <p className="text-[#a1a1aa] text-sm">
-          {alloc.br <= paycheckAmount ? (
-            <>Remaining: <span className="text-[#22c55e] font-semibold">{fmt(paycheckAmount - alloc.br)}</span></>
-          ) : (
-            <>Deficit: <span className="text-[#ef4444] font-semibold">{fmt(alloc.br - paycheckAmount)}</span></>
-          )}
-          {' '} • <span className="text-[#d4a843]">{Math.round((alloc.br / paycheckAmount) * 100)}% used</span>
-        </p>
-      </motion.div>
-
-      {/* Check Projection Calendar */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
-      >
-        <h3 className="text-[#fafafa] font-semibold mb-4">Check Projection Calendar</h3>
-
-        {/* Frequency Toggle */}
-        <div className="flex gap-2 mb-6">
-          {(['weekly', 'biweekly'] as const).map(freq => (
-            <button
-              key={freq}
-              onClick={() => {
-                setPayFreqToggle(freq);
-                resetDayHours(freq);
-              }}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                payFreqToggle === freq
-                  ? 'bg-[#d4a843] text-[#09090b]'
-                  : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#2d2d30]'
-              }`}
-            >
-              {freq === 'weekly' ? 'Weekly' : 'Bi-Weekly'}
-            </button>
-          ))}
-        </div>
-
-        {/* Rate & Hours */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="text-[#a1a1aa] text-xs block mb-2">Hourly Rate</label>
-            <div className="flex items-center gap-2">
-              <span className="text-[#71717a]">$</span>
-              <input
-                type="number"
-                value={hourlyRate}
-                onChange={(e) => setHourlyRate(parseFloat(e.target.value) || 0)}
-                className="bg-[#27272a] border border-[#2d2d30] text-[#fafafa] rounded px-3 py-2 flex-1 focus:outline-none focus:border-[#d4a843]"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-[#a1a1aa] text-xs block mb-2">Total Hours</label>
-            <p className="text-[#fafafa] text-lg font-semibold px-3 py-2">{totalHoursCalc}h</p>
-            <p className="text-[#71717a] text-xs">Tap a day to adjust hours</p>
-          </div>
-        </div>
-
-        {/* Pay Period Label */}
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[#a1a1aa] text-xs">
-            Pay Period: {payPeriodDates[0]?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {payPeriodDates[periodDays - 1]?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          </p>
-          <p className="text-[#71717a] text-xs">{periodDays} days</p>
-        </div>
-
-        {/* Calendar Grid */}
-        <div className="bg-[#09090b] rounded-lg p-4 mb-6">
-          <div className={`grid ${periodDays === 7 ? 'grid-cols-7' : 'grid-cols-7'} gap-2 mb-2`}>
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-              <div key={i} className="text-center text-[#a1a1aa] text-[10px] font-semibold py-1">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Render only the pay period days, aligned to correct weekday columns */}
-          <div className="grid grid-cols-7 gap-2">
-            {/* Empty cells before first day of period */}
-            {Array.from({ length: payPeriodDates[0]?.getDay() || 0 }, (_, i) => (
-              <div key={`empty-${i}`} className="aspect-square" />
-            ))}
-            {payPeriodDates.map((dateObj, i) => {
-              const hours = dayHours[i] ?? 0;
-              const today = new Date();
-              const isToday = dateObj.getDate() === today.getDate() && dateObj.getMonth() === today.getMonth() && dateObj.getFullYear() === today.getFullYear();
-              const isWorking = hours > 0;
-              const isEditing = editingDayHours === i;
-              const dayNum = dateObj.getDate();
-
-              return (
-                <div key={i} className="relative">
-                  <div
-                    className={`w-full aspect-square rounded-lg font-semibold text-sm transition-all flex flex-col items-center justify-center ${
-                      isToday ? 'border-2 border-[#d4a843]' : 'border border-[#27272a]'
-                    } ${
-                      isWorking
-                        ? 'bg-[#22c55e]/20 text-[#22c55e]'
-                        : 'bg-[#ef4444]/20 text-[#ef4444]'
-                    }`}
-                  >
-                    {/* Day number — click to toggle day off/on */}
-                    <button
-                      onClick={() => {
-                        const newHours = [...dayHours];
-                        newHours[i] = hours > 0 ? 0 : defaultHours;
-                        setDayHours(newHours);
-                        setEditingDayHours(null);
-                      }}
-                      className="text-xs leading-none hover:opacity-70 transition-opacity"
-                    >
-                      {isWorking ? dayNum : '✕'}
-                    </button>
-                    {/* Hours — click to edit inline */}
-                    {isWorking && !isEditing && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingDayHours(i);
-                        }}
-                        className="text-[8px] opacity-70 hover:opacity-100 hover:text-[#d4a843] transition-all cursor-text"
-                      >
-                        {hours}h
-                      </button>
-                    )}
-                    {isWorking && isEditing && (
-                      <input
-                        type="number"
-                        min="0"
-                        max="24"
-                        value={hours}
-                        onChange={(e) => {
-                          const newHours = [...dayHours];
-                          newHours[i] = Math.min(24, Math.max(0, parseInt(e.target.value) || 0));
-                          setDayHours(newHours);
-                        }}
-                        className="w-[28px] bg-transparent border-b border-[#d4a843] text-[#d4a843] text-[9px] text-center focus:outline-none"
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                        onBlur={() => setEditingDayHours(null)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingDayHours(null); }}
-                      />
-                    )}
-                    {!isWorking && (
-                      <span className="text-[7px] opacity-50">OFF</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-[#27272a] rounded-lg p-3 text-center">
-            <p className="text-[#a1a1aa] text-xs mb-1">Days Working</p>
-            <p className="text-[#22c55e] font-bold text-lg">{workingDaysCount}</p>
-          </div>
-          <div className="bg-[#27272a] rounded-lg p-3 text-center">
-            <p className="text-[#a1a1aa] text-xs mb-1">Days Off</p>
-            <p className="text-[#ef4444] font-bold text-lg">{periodDays - workingDaysCount}</p>
-          </div>
-          <div className="bg-[#27272a] rounded-lg p-3 text-center">
-            <p className="text-[#a1a1aa] text-xs mb-1">Total Hours</p>
-            <p className="text-[#d4a843] font-bold text-lg">{totalHoursCalc}</p>
-          </div>
-        </div>
-
-        {/* Projected Check Card */}
+  // ============== TAB: BUDGET ==============
+  const renderBudgetTab = () => {
+    if (isSelfEmployed) {
+      return (
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className={`rounded-xl p-6 text-center mb-4 ${
-            projectedCheckAmount >= paycheckAmount
-              ? 'bg-gradient-to-br from-[#22c55e]/20 to-[#16a34a]/10 border border-[#22c55e]/30'
-              : 'bg-gradient-to-br from-[#ef4444]/20 to-[#dc2626]/10 border border-[#ef4444]/30'
-          }`}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-8"
         >
-          <p className="text-[#a1a1aa] text-sm mb-2">Projected Check</p>
-          <p className={`text-3xl font-bold ${projectedCheckAmount >= paycheckAmount ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-            {fmt(projectedCheckAmount)}
-          </p>
-          {projectedCheckAmount !== paycheckAmount && (
-            <p className="text-[#a1a1aa] text-xs mt-2">
-              {projectedCheckAmount > paycheckAmount ? '+' : ''}{fmt(projectedCheckAmount - paycheckAmount)}
-            </p>
-          )}
-        </motion.div>
+          {/* Self-Employed Income Allocator */}
+          <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 style={{ color: theme.text }} className="text-2xl font-bold flex items-center gap-3">
+                <Briefcase size={28} style={{ color: theme.gold }} />
+                Income Allocator
+              </h3>
+            </div>
 
-        {/* Lock/Edit Button */}
-        <button
-          onClick={() => setBudgetLocked(!budgetLocked)}
-          className="w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2"
-          style={{
-            backgroundColor: budgetLocked ? '#d4a843' : '#27272a',
-            color: budgetLocked ? '#09090b' : '#fafafa',
-          }}
-        >
-          {budgetLocked ? (
-            <>
-              <Lock size={16} />
-              Locked In
-            </>
-          ) : (
-            <>
-              <Edit3 size={16} />
-              Edit
-            </>
-          )}
-        </button>
-      </motion.div>
-
-      {/* Check Splitter */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
-      >
-        <h3 className="text-[#fafafa] font-semibold mb-4">Check Splitter</h3>
-        <div className="space-y-3">
-          {allocItems.map((item, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.05 * idx }}
-              className="bg-[#09090b] rounded-lg p-4"
-            >
-              <div className="flex items-start gap-3 mb-2">
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
-                  style={{ backgroundColor: item.color }}
-                />
-                <div className="flex-1">
-                  <div className="flex justify-between items-baseline">
-                    <p className="text-[#fafafa] font-medium">{item.name}</p>
-                    <p className="text-[#d4a843] font-bold">{fmt(item.amount)}</p>
-                  </div>
-                  <p className="text-[#a1a1aa] text-xs">{item.type}</p>
-                </div>
+            {/* Obligations List */}
+            <div className="mb-8">
+              <h4 style={{ color: theme.textS }} className="text-sm font-semibold uppercase mb-4">
+                Financial Obligations
+              </h4>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {obligations.map((obl) => {
+                  const daysRemaining = daysTo(obl.dueDate);
+                  const isSelected = selectedObligations.includes(obl.id);
+                  return (
+                    <motion.div
+                      key={obl.id}
+                      whileHover={{ scale: 1.02 }}
+                      onClick={() => {
+                        setSelectedObligations((prev) =>
+                          prev.includes(obl.id) ? prev.filter((id) => id !== obl.id) : [...prev, obl.id]
+                        );
+                      }}
+                      style={{
+                        backgroundColor: isSelected ? theme.goldBg : theme.bg,
+                        borderColor: isSelected ? theme.gold : theme.border,
+                      }}
+                      className="border rounded-lg p-4 cursor-pointer transition-all"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p style={{ color: theme.text }} className="font-semibold">
+                            {obl.name}
+                          </p>
+                          <p style={{ color: theme.textM }} className="text-sm">
+                            Due in {daysRemaining} days
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p style={{ color: theme.text }} className="font-bold">
+                            {fmt(obl.amount)}
+                          </p>
+                          {isSelected && <CheckCircle size={20} style={{ color: theme.gold }} className="ml-auto mt-2" />}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
-              <div className="w-full bg-[#27272a] rounded-full h-1.5 overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${item.pct}%` }}
-                  className="h-full"
-                  style={{ backgroundColor: item.color }}
-                />
-              </div>
-              <p className="text-[#71717a] text-xs mt-2 text-right">{item.pct}%</p>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
+            </div>
 
-      {/* Paycheck History */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
-      >
-        <h3 className="text-[#fafafa] font-semibold mb-4">Paycheck History</h3>
-        <div className="space-y-2">
-          {paycheckHistory.map((pc, idx) => {
-            const daysFromNow = daysTo(pc.date);
-            return (
+            {/* Income Requirements */}
+            {selectedObligations.length > 0 && (
               <motion.div
-                key={idx}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.05 * idx }}
-                className={`flex items-center justify-between p-3 rounded-lg transition-all ${
-                  pc.isNext
-                    ? 'bg-[#d4a843]/10 border border-[#d4a843]/30'
-                    : 'bg-[#27272a] border border-[#27272a]'
-                }`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                className="border rounded-lg p-6 space-y-6"
               >
-                <div className="flex items-center gap-3 flex-1">
-                  {pc.isPast && <CheckCircle size={16} className="text-[#22c55e]" />}
-                  {pc.isNext && <Zap size={16} className="text-[#d4a843]" />}
-                  {pc.isFuture && <Calendar size={16} className="text-[#71717a]" />}
-                  <div>
-                    <p className="text-[#fafafa] text-sm font-medium">{fmtD(pc.date)}</p>
-                    <p className="text-[#a1a1aa] text-xs">
-                      {pc.isPast && 'Paid ✓'}
-                      {pc.isNext && 'Next'}
-                      {pc.isFuture && `In ${daysFromNow} days`}
+                <h4 style={{ color: theme.textS }} className="text-sm font-semibold uppercase">
+                  Required Income Target
+                </h4>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div
+                    style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
+                    className="border-2 rounded-lg p-4"
+                  >
+                    <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-2">
+                      Daily Target
+                    </p>
+                    <p style={{ color: theme.gold }} className="text-2xl font-bold">
+                      {fmt(incomeRequirements.daily)}
+                    </p>
+                  </div>
+
+                  <div
+                    style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
+                    className="border-2 rounded-lg p-4"
+                  >
+                    <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-2">
+                      Weekly Target
+                    </p>
+                    <p style={{ color: theme.gold }} className="text-2xl font-bold">
+                      {fmt(incomeRequirements.weekly)}
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  {pc.isNext && (
-                    <span className="inline-block px-2 py-1 rounded text-xs font-semibold bg-[#d4a843] text-[#09090b] mr-2">
-                      Next
-                    </span>
-                  )}
-                  <p className="text-[#fafafa] font-bold">{fmt(paycheckAmount)}</p>
+
+                {/* Current Income vs Required */}
+                <div className="space-y-3">
+                  <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase">
+                    Your Current Pace
+                  </p>
+                  <div className="space-y-2">
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span style={{ color: theme.textM }} className="text-sm">
+                          Daily Income
+                        </span>
+                        <span style={{ color: theme.text }} className="text-sm font-semibold">
+                          {fmt(selfEmployedIncome)}
+                        </span>
+                      </div>
+                      <div style={{ backgroundColor: theme.bg }} className="h-2 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{
+                            width: Math.min(
+                              100,
+                              (selfEmployedIncome / Math.max(1, incomeRequirements.daily)) * 100
+                            ),
+                          }}
+                          style={{
+                            backgroundColor:
+                              selfEmployedIncome >= incomeRequirements.daily ? theme.ok : theme.warn,
+                          }}
+                          className="h-full transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 p-3 rounded-lg" style={{ backgroundColor: theme.bgS }}>
+                      <p style={{ color: theme.textM }} className="text-xs mb-2">
+                        Status:
+                      </p>
+                      {selfEmployedIncome >= incomeRequirements.daily ? (
+                        <p style={{ color: theme.ok }} className="font-semibold flex items-center gap-2">
+                          <CheckCircle size={16} />
+                          On track to meet all obligations
+                        </p>
+                      ) : (
+                        <p style={{ color: theme.warn }} className="font-semibold flex items-center gap-2">
+                          <AlertCircle size={16} />
+                          Need {fmt(incomeRequirements.daily - selfEmployedIncome)}/day to stay on track
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Income Input */}
+                <div className="space-y-3 pt-4 border-t" style={{ borderColor: theme.border }}>
+                  <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase">
+                    Daily Income
+                  </p>
+                  <input
+                    type="number"
+                    value={selfEmployedIncome}
+                    onChange={(e) => setSelfEmployedIncome(parseFloat(e.target.value) || 0)}
+                    style={{
+                      backgroundColor: theme.bg,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    }}
+                    className="w-full border rounded-lg px-4 py-2 font-semibold"
+                    placeholder="Enter daily income"
+                  />
                 </div>
               </motion.div>
-            );
-          })}
-        </div>
-      </motion.div>
-    </div>
-  );
-
-  const renderSavingsTab = () => (
-    <div className="space-y-6 pb-24">
-      {/* Total Saved */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-[#22c55e]/20 to-[#16a34a]/10 border border-[#22c55e]/30 rounded-xl p-8 text-center"
-      >
-        <p className="text-[#a1a1aa] text-sm mb-2">Total Saved</p>
-        <p className="text-[#22c55e] text-4xl font-bold">{fmt(totalSaved)}</p>
-      </motion.div>
-
-      {/* Create Goal Form */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
-      >
-        <h3 className="text-[#fafafa] font-semibold mb-4">Create New Goal</h3>
-        <div className="space-y-3 mb-4">
-          <div>
-            <label className="text-[#a1a1aa] text-xs block mb-2">Goal Name</label>
-            <input
-              type="text"
-              value={newGoalName}
-              onChange={(e) => setNewGoalName(e.target.value)}
-              placeholder="e.g., Emergency Fund"
-              className="w-full bg-[#27272a] border border-[#2d2d30] text-[#fafafa] rounded-lg px-3 py-2 focus:outline-none focus:border-[#d4a843] placeholder-[#71717a]"
-            />
+            )}
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-[#a1a1aa] text-xs block mb-2">Target</label>
-              <input
-                type="number"
-                value={newGoalTarget}
-                onChange={(e) => setNewGoalTarget(e.target.value)}
-                placeholder="10000"
-                className="w-full bg-[#27272a] border border-[#2d2d30] text-[#fafafa] rounded-lg px-3 py-2 focus:outline-none focus:border-[#d4a843] placeholder-[#71717a]"
-              />
-            </div>
-            <div>
-              <label className="text-[#a1a1aa] text-xs block mb-2">Current</label>
-              <input
-                type="number"
-                value={newGoalCurrent}
-                onChange={(e) => setNewGoalCurrent(e.target.value)}
-                placeholder="2000"
-                className="w-full bg-[#27272a] border border-[#2d2d30] text-[#fafafa] rounded-lg px-3 py-2 focus:outline-none focus:border-[#d4a843] placeholder-[#71717a]"
-              />
-            </div>
-            <div>
-              <label className="text-[#a1a1aa] text-xs block mb-2">Weekly</label>
-              <input
-                type="number"
-                value={newGoalWeekly}
-                onChange={(e) => setNewGoalWeekly(e.target.value)}
-                placeholder="75"
-                className="w-full bg-[#27272a] border border-[#2d2d30] text-[#fafafa] rounded-lg px-3 py-2 focus:outline-none focus:border-[#d4a843] placeholder-[#71717a]"
-              />
+
+          {/* Rent Tracker */}
+          <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
+            <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
+              <Home size={28} style={{ color: theme.ok }} />
+              Rent Tracker
+            </h3>
+            <div className="space-y-3">
+              {rentPayments.map((payment, idx) => (
+                <motion.div
+                  key={idx}
+                  whileHover={{ scale: 1.02 }}
+                  style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                  className="border rounded-lg p-4 flex items-center justify-between"
+                >
+                  <div>
+                    <p style={{ color: theme.text }} className="font-semibold">
+                      {new Date(payment.date).toLocaleDateString()}
+                    </p>
+                    <p style={{ color: theme.textM }} className="text-sm capitalize">
+                      {payment.status}
+                    </p>
+                  </div>
+                  <p style={{ color: theme.text }} className="font-bold text-lg">
+                    {fmt(payment.amount)}
+                  </p>
+                </motion.div>
+              ))}
             </div>
           </div>
-        </div>
-        <button
-          onClick={handleCreateGoal}
-          className="w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 bg-[#d4a843] text-[#09090b] hover:bg-[#e5b75d]"
-        >
-          <Plus size={16} />
-          Create Goal
-        </button>
-      </motion.div>
+        </motion.div>
+      );
+    }
 
-      {/* Goals List */}
-      <div className="space-y-4">
-        {goals.map((goal, idx) => (
-          <motion.div
-            key={goal.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 * idx }}
-            className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <h4 className="text-[#fafafa] font-semibold">{goal.name}</h4>
-                <p className="text-[#a1a1aa] text-sm">
-                  {fmt(goal.current)} / {fmt(goal.target)}
+    // Employed users - Check Projection & Budget
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-8"
+      >
+        {/* Check Projection */}
+        <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 style={{ color: theme.text }} className="text-2xl font-bold flex items-center gap-3">
+              <DollarSign size={28} style={{ color: theme.gold }} />
+              Check Projection
+            </h3>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleBudgetLock}
+              style={{
+                backgroundColor: budgetLocked ? theme.gold : theme.border,
+                color: budgetLocked ? theme.bgS : theme.text,
+              }}
+              className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2"
+            >
+              {budgetLocked ? <Lock size={18} /> : <Edit3 size={18} />}
+              {budgetLocked ? 'Locked' : 'Edit'}
+            </motion.button>
+          </div>
+
+          {!budgetLocked ? (
+            <div className="space-y-6">
+              <div>
+                <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">
+                  Check Amount
+                </label>
+                <input
+                  type="number"
+                  value={checkAmount}
+                  onChange={(e) => setCheckAmount(parseFloat(e.target.value) || 0)}
+                  style={{
+                    backgroundColor: theme.bg,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  }}
+                  className="w-full border rounded-lg px-4 py-2 font-bold text-lg"
+                  placeholder="Enter check amount"
+                />
+              </div>
+
+              <div>
+                <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">
+                  Frequency
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(['weekly', 'biweekly', 'monthly'] as const).map((freq) => (
+                    <motion.button
+                      key={freq}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setFrequency(freq)}
+                      style={{
+                        backgroundColor: frequency === freq ? theme.gold : theme.bg,
+                        color: frequency === freq ? theme.bgS : theme.text,
+                        borderColor: theme.border,
+                      }}
+                      className="border rounded-lg py-2 font-semibold capitalize transition-all"
+                    >
+                      {freq}
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div
+                style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
+                className="border-2 rounded-lg p-4"
+              >
+                <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
+                  Locked Check
+                </p>
+                <p style={{ color: theme.gold }} className="text-3xl font-bold">
+                  {fmt(checkAmount)}
+                </p>
+                <p style={{ color: theme.textM }} className="text-sm mt-2 capitalize">
+                  {frequency}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-[#d4a843] font-bold text-lg">{pct(goal.current, goal.target)}%</p>
-              </div>
-            </div>
 
-            <div className="w-full bg-[#27272a] rounded-full h-2 overflow-hidden mb-4">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${pct(goal.current, goal.target)}%` }}
-                className="h-full bg-[#22c55e]"
-              />
+              {forecastedIncome.length > 0 && (
+                <div className="space-y-3">
+                  <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">
+                    12-Month Forecast
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+                    {forecastedIncome.map((forecast, idx) => (
+                      <div
+                        key={idx}
+                        style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                        className="border rounded p-2 text-center"
+                      >
+                        <p style={{ color: theme.textM }} className="text-xs">
+                          M{idx + 1}
+                        </p>
+                        <p style={{ color: theme.text }} className="text-sm font-bold">
+                          {fmt(forecast.amount)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-
-            <div className="flex items-center gap-2 mb-4">
-              <input
-                type="number"
-                placeholder="Add amount"
-                defaultValue=""
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const amount = parseFloat((e.target as HTMLInputElement).value);
-                    if (amount > 0) {
-                      handleAddToGoal(goal.id, amount);
-                      (e.target as HTMLInputElement).value = '';
-                    }
-                  }
-                }}
-                className="flex-1 bg-[#27272a] border border-[#2d2d30] text-[#fafafa] rounded-lg px-3 py-2 focus:outline-none focus:border-[#d4a843] placeholder-[#71717a] text-sm"
-              />
-              <button
-                onClick={() => {
-                  const input = document.querySelector(`input[placeholder="Add amount"]`) as HTMLInputElement;
-                  if (input) {
-                    const amount = parseFloat(input.value);
-                    if (amount > 0) {
-                      handleAddToGoal(goal.id, amount);
-                      input.value = '';
-                    }
-                  }
-                }}
-                className="px-3 py-2 bg-[#d4a843] text-[#09090b] rounded-lg font-medium transition-all hover:bg-[#e5b75d]"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleToggleGoal(goal.id)}
-                className={`flex-1 py-2 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
-                  goal.active
-                    ? 'bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/30'
-                    : 'bg-[#27272a] text-[#a1a1aa] border border-[#27272a]'
-                }`}
-              >
-                {goal.active ? <Play size={14} /> : <Pause size={14} />}
-                {goal.active ? 'Active' : 'Paused'}
-              </button>
-              <button
-                onClick={() => handleDeleteGoal(goal.id)}
-                className="px-4 py-2 rounded-lg font-medium transition-all bg-[#ef4444]/20 text-[#ef4444] border border-[#ef4444]/30 hover:bg-[#ef4444]/30"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderCreditTab = () => (
-    <div className="space-y-6 pb-24">
-      {/* Score Display */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-[#18181b] border border-[#27272a] rounded-xl p-8 text-center"
-      >
-        <p className="text-[#a1a1aa] text-sm mb-4">Credit Score</p>
-        <p style={{ color: scoreColor }} className="text-6xl font-bold mb-2">
-          {data.user.creditScore}
-        </p>
-        <p style={{ color: scoreColor }} className="font-semibold mb-4">
-          {scoreLabel}
-        </p>
-        <div className="w-full bg-[#27272a] rounded-full h-2 overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${((data.user.creditScore - 300) / 550) * 100}%` }}
-            className="h-full bg-gradient-to-r from-[#ef4444] via-[#f59e0b] to-[#22c55e]"
-          />
+          )}
         </div>
-        <div className="flex justify-between text-[#71717a] text-xs mt-2">
-          <span>300</span>
-          <span>850</span>
-        </div>
-      </motion.div>
 
-      {/* Score History Chart */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
-      >
-        <h3 className="text-[#fafafa] font-semibold mb-4">Score History</h3>
-        <div className="bg-[#09090b] rounded-lg p-4 h-48 flex items-end justify-between gap-2">
-          {data.user.scoreHistory.map((entry, idx) => {
-            const height = ((entry.s - 700) / 150) * 100;
-            return (
+        {/* Check Splitter */}
+        <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
+          <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
+            <TrendingDown size={28} style={{ color: theme.gold }} />
+            Check Splitter
+          </h3>
+
+          {budgetLocked && (
+            <div className="space-y-6">
+              {/* Calculate allocations */}
+              {(() => {
+                const billsWeekly = (data.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
+                const savingsWeekly = (data.goals || []).reduce(
+                  (sum: number, goal: any) => sum + (goal.targetAmount / 52),
+                  0
+                );
+                const spendingWeekly = checkAmount * 0.3; // 30% for spending
+                const totalWeekly = checkAmount / (frequency === 'weekly' ? 1 : frequency === 'biweekly' ? 2 : 4.33);
+
+                const billsPct = (billsWeekly / totalWeekly) * 100;
+                const savingsPct = (savingsWeekly / totalWeekly) * 100;
+                const spendingPct = (spendingWeekly / totalWeekly) * 100;
+
+                const allocItems = [
+                  { name: 'Bills', amount: billsWeekly, pct: billsPct, color: '#ef4444', type: 'Bills' },
+                  {
+                    name: 'Savings',
+                    amount: savingsWeekly,
+                    pct: savingsPct,
+                    color: '#22c55e',
+                    type: 'Goals',
+                  },
+                  { name: 'Expenses', amount: spendingWeekly, pct: spendingPct, color: '#3b82f6', type: 'Spending' },
+                ];
+
+                return (
+                  <>
+                    {/* Donut Chart Representation */}
+                    <div className="flex justify-center mb-8">
+                      <div className="relative w-48 h-48">
+                        <svg viewBox="0 0 120 120" className="w-full h-full">
+                          {(() => {
+                            let offset = 0;
+                            return allocItems.map((item, idx) => {
+                              const circumference = 2 * Math.PI * 45;
+                              const strokeDashoffset = circumference - (item.pct / 100) * circumference;
+                              const rotation = offset;
+                              offset += item.pct;
+
+                              return (
+                                <circle
+                                  key={idx}
+                                  cx="60"
+                                  cy="60"
+                                  r="45"
+                                  fill="none"
+                                  stroke={item.color}
+                                  strokeWidth="12"
+                                  strokeDasharray={circumference}
+                                  strokeDashoffset={strokeDashoffset}
+                                  transform={`rotate(${rotation * 3.6} 60 60)`}
+                                  strokeLinecap="round"
+                                />
+                              );
+                            });
+                          })()}
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="text-center">
+                            <p style={{ color: theme.textM }} className="text-sm">
+                              Per Check
+                            </p>
+                            <p style={{ color: theme.text }} className="text-2xl font-bold">
+                              {fmt(checkAmount)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Allocation Details */}
+                    <div className="space-y-4">
+                      {allocItems.map((item, idx) => (
+                        <motion.div
+                          key={idx}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.1 }}
+                          style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                          className="border rounded-lg p-4"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="w-4 h-4 rounded"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <p style={{ color: theme.text }} className="font-semibold">
+                                {item.name}
+                              </p>
+                            </div>
+                            <p style={{ color: theme.text }} className="font-bold">
+                              {fmt(item.amount)}/wk
+                            </p>
+                          </div>
+                          <div style={{ backgroundColor: theme.bgS }} className="h-2 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${item.pct}%` }}
+                              style={{ backgroundColor: item.color }}
+                              className="h-full transition-all"
+                            />
+                          </div>
+                          <p style={{ color: theme.textM }} className="text-xs mt-2">
+                            {item.pct.toFixed(1)}% of check
+                          </p>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* Rent Tracker */}
+        <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
+          <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
+            <Home size={28} style={{ color: theme.ok }} />
+            Rent Tracker
+          </h3>
+          <div className="space-y-3">
+            {rentPayments.map((payment, idx) => (
               <motion.div
                 key={idx}
-                initial={{ height: 0 }}
-                animate={{ height: `${Math.max(5, height)}%` }}
-                transition={{ delay: 0.05 * idx }}
-                className="flex-1 rounded-t-lg group relative"
-                style={{ backgroundColor: '#d4a843' }}
+                whileHover={{ scale: 1.02 }}
+                style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                className="border rounded-lg p-4 flex items-center justify-between"
               >
-                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 bg-[#27272a] text-[#fafafa] text-xs px-2 py-1 rounded whitespace-nowrap transition-opacity">
-                  {entry.s}
+                <div>
+                  <p style={{ color: theme.text }} className="font-semibold">
+                    {new Date(payment.date).toLocaleDateString()}
+                  </p>
+                  <p style={{ color: theme.textM }} className="text-sm capitalize">
+                    {payment.status}
+                  </p>
                 </div>
+                <p style={{ color: theme.text }} className="font-bold text-lg">
+                  {fmt(payment.amount)}
+                </p>
               </motion.div>
-            );
-          })}
-        </div>
-        <div className="grid grid-cols-6 gap-2 mt-4">
-          {data.user.scoreHistory.map((entry, idx) => (
-            <p key={idx} className="text-[#a1a1aa] text-xs text-center font-medium">
-              {entry.m}
-            </p>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Credit Factors */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="space-y-3"
-      >
-        <h3 className="text-[#fafafa] font-semibold px-2">What Makes Your Score</h3>
-        {[
-          { label: 'Payment History', pct: 35, current: data.user.onTime },
-          { label: 'Utilization', pct: 30, current: data.user.utilization },
-          { label: 'Account Age', pct: 15, current: Math.min(100, (data.user.acctAge / 10) * 100) },
-          { label: 'Credit Mix', pct: 10, current: 80 },
-          { label: 'Inquiries', pct: 10, current: Math.max(0, 100 - (data.user.inquiries * 15)) },
-        ].map((factor, idx) => (
-          <motion.div
-            key={idx}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.05 * idx }}
-            className="bg-[#18181b] border border-[#27272a] rounded-xl p-4"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[#fafafa] font-semibold text-sm">{factor.label}</p>
-              <p className="text-[#d4a843] text-sm font-bold">{factor.pct}%</p>
-            </div>
-            <div className="w-full bg-[#27272a] rounded-full h-1.5 overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${factor.current}%` }}
-                className="h-full bg-[#22c55e]"
-              />
-            </div>
-          </motion.div>
-        ))}
-      </motion.div>
-
-      {/* Score Simulator */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
-      >
-        <h3 className="text-[#fafafa] font-semibold mb-6">Score Simulator</h3>
-
-        <div className="bg-[#09090b] rounded-lg p-6 mb-6 text-center">
-          <p className="text-[#a1a1aa] text-sm mb-2">Simulated Score</p>
-          <p style={{ color: scoreColor }} className="text-5xl font-bold">
-            {simScore}
-          </p>
-          <p style={{ color: scoreColor }} className="text-sm mt-2">
-            {scoreLabel}
-          </p>
-        </div>
-
-        <div className="space-y-6">
-          <div>
-            <div className="flex justify-between items-center mb-3">
-              <label className="text-[#fafafa] font-medium text-sm">Utilization</label>
-              <span className="text-[#d4a843] font-bold">{simUtilization}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={simUtilization}
-              onChange={(e) => setSimUtilization(parseInt(e.target.value))}
-              className="w-full h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer accent-[#d4a843]"
-            />
-            <p className="text-[#71717a] text-xs mt-2">
-              Lower utilization = higher score (aim for under 10%)
-            </p>
-          </div>
-
-          <div>
-            <div className="flex justify-between items-center mb-3">
-              <label className="text-[#fafafa] font-medium text-sm">On-Time Payments</label>
-              <span className="text-[#d4a843] font-bold">{simOnTime}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={simOnTime}
-              onChange={(e) => setSimOnTime(parseInt(e.target.value))}
-              className="w-full h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer accent-[#d4a843]"
-            />
-            <p className="text-[#71717a] text-xs mt-2">
-              Payment history is 35% of your score (aim for 100%)
-            </p>
+            ))}
           </div>
         </div>
       </motion.div>
+    );
+  };
 
-      {/* AI Insights */}
+  // ============== TAB: SAVINGS ==============
+  const renderSavingsTab = () => {
+    const goals = data.goals || [];
+
+    return (
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="space-y-3"
+        className="space-y-8"
       >
-        <h3 className="text-[#fafafa] font-semibold px-2">AI Insights</h3>
-        {[
-          {
-            icon: TrendingDown,
-            title: 'Lower Your Utilization',
-            msg: `Your utilization is at ${data.user.utilization}%. Try to keep it under 10% for optimal credit health.`,
-            type: 'warn' as const,
-          },
-          {
-            icon: CheckCircle,
-            title: 'Excellent Payment History',
-            msg: `You're at ${data.user.onTime}% on-time payments. Keep it up to maintain a strong score!`,
-            type: 'ok' as const,
-          },
-          {
-            icon: Heart,
-            title: 'Rent Reporting Available',
-            msg: 'Connect your rent payments to build credit history even faster.',
-            type: 'info' as const,
-          },
-          {
-            icon: AlertCircle,
-            title: `${data.user.inquiries} Recent Inquiries`,
-            msg: `Each inquiry can temporarily lower your score. Space out new credit applications if possible.`,
-            type: 'warn' as const,
-          },
-          {
-            icon: TrendingUp,
-            title: 'Debt Snowball Strategy',
-            msg: 'Focus on paying off your highest-interest debt first to improve your score faster.',
-            type: 'info' as const,
-          },
-          {
-            icon: Target,
-            title: '50/30/20 Budget Rule',
-            msg: 'Allocate 50% to needs, 30% to wants, 20% to savings. Your current ratio shows good discipline.',
-            type: 'ok' as const,
-          },
-        ].map((insight, idx) => {
-          const Icon = insight.icon;
-          const bgColor =
-            insight.type === 'warn'
-              ? 'bg-[#f59e0b]/10 border-[#f59e0b]/30'
-              : insight.type === 'ok'
-              ? 'bg-[#22c55e]/10 border-[#22c55e]/30'
-              : 'bg-[#3b82f6]/10 border-[#3b82f6]/30';
-          const iconColor =
-            insight.type === 'warn'
-              ? 'text-[#f59e0b]'
-              : insight.type === 'ok'
-              ? 'text-[#22c55e]'
-              : 'text-[#3b82f6]';
+        <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
+          <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
+            <Heart size={28} style={{ color: theme.ok }} />
+            Savings Goals
+          </h3>
 
-          return (
+          {goals.length === 0 ? (
             <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 * idx }}
-              className={`bg-[#18181b] border rounded-xl p-4 ${bgColor}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{ backgroundColor: theme.bgS, borderColor: theme.border }}
+              className="border-2 border-dashed rounded-lg p-8 text-center"
             >
-              <div className="flex items-start gap-3">
-                <Icon size={18} className={`flex-shrink-0 mt-0.5 ${iconColor}`} />
-                <div className="flex-1">
-                  <p className="text-[#fafafa] font-semibold text-sm">{insight.title}</p>
-                  <p className="text-[#a1a1aa] text-sm mt-1">{insight.msg}</p>
-                </div>
-              </div>
+              <Heart size={48} style={{ color: theme.textM }} className="mx-auto mb-4 opacity-50" />
+              <p style={{ color: theme.textM }} className="mb-4">
+                No savings goals yet
+              </p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                style={{ backgroundColor: theme.gold, color: theme.bgS }}
+                className="px-6 py-2 rounded-lg font-semibold inline-flex items-center gap-2"
+              >
+                <Plus size={18} />
+                Add Goal
+              </motion.button>
             </motion.div>
-          );
-        })}
+          ) : (
+            <div className="space-y-4">
+              {goals.map((goal: any, idx: number) => {
+                const daysRemaining = daysTo(goal.deadline);
+                const progressPct = (goal.currentAmount / goal.targetAmount) * 100;
+
+                return (
+                  <motion.div
+                    key={idx}
+                    whileHover={{ scale: 1.02 }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                    className="border rounded-lg p-5"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <p style={{ color: theme.text }} className="font-bold text-lg">
+                          {goal.name}
+                        </p>
+                        <p style={{ color: theme.textM }} className="text-sm">
+                          Due in {daysRemaining} days
+                        </p>
+                      </div>
+                      <p style={{ color: theme.gold }} className="font-bold text-lg">
+                        {fmt(goal.currentAmount)} / {fmt(goal.targetAmount)}
+                      </p>
+                    </div>
+
+                    <div style={{ backgroundColor: theme.bgS }} className="h-3 rounded-full overflow-hidden mb-2">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, progressPct)}%` }}
+                        style={{ backgroundColor: progressPct >= 75 ? theme.ok : theme.warn }}
+                        className="h-full transition-all"
+                      />
+                    </div>
+
+                    <p style={{ color: theme.textM }} className="text-xs">
+                      {progressPct.toFixed(1)}% complete
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </motion.div>
-    </div>
-  );
+    );
+  };
+
+  // ============== TAB: CREDIT ==============
+  const renderCreditTab = () => {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-8"
+      >
+        <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
+          <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
+            <LineChart size={28} style={{ color: theme.gold }} />
+            Credit Score
+          </h3>
+
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <div
+              style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
+              className="border-2 rounded-lg p-6 text-center"
+            >
+              <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
+                Current Score
+              </p>
+              <p style={{ color: theme.gold }} className="text-4xl font-bold">
+                {creditScore}
+              </p>
+            </div>
+
+            <div
+              style={{ backgroundColor: theme.bgS, borderColor: theme.warn }}
+              className="border-2 rounded-lg p-6 text-center"
+            >
+              <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
+                Simulated Score
+              </p>
+              <p style={{ color: creditScoreSim >= creditScore ? theme.ok : theme.warn }} className="text-4xl font-bold">
+                {creditScoreSim}
+              </p>
+            </div>
+          </div>
+
+          {/* Credit Score Simulator */}
+          <div className="space-y-6">
+            <div>
+              <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-3">
+                Adjust Your Score
+              </label>
+              <input
+                type="range"
+                min="300"
+                max="850"
+                value={creditScoreSim}
+                onChange={(e) => setCreditScoreSim(parseInt(e.target.value))}
+                style={{ accentColor: theme.gold }}
+                className="w-full cursor-pointer"
+              />
+              <div className="flex justify-between mt-2">
+                <span style={{ color: theme.textM }} className="text-xs">
+                  300
+                </span>
+                <span style={{ color: theme.textM }} className="text-xs">
+                  850
+                </span>
+              </div>
+            </div>
+
+            {/* Score Impact */}
+            <div
+              style={{ backgroundColor: theme.bgS, borderColor: theme.border }}
+              className="border rounded-lg p-4 space-y-3"
+            >
+              <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">
+                Impact Analysis
+              </p>
+
+              {creditScoreSim > creditScore ? (
+                <div className="flex items-start gap-3">
+                  <TrendingUp size={20} style={{ color: theme.ok }} className="flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p style={{ color: theme.ok }} className="font-semibold">
+                      Score Improvement
+                    </p>
+                    <p style={{ color: theme.textM }} className="text-sm">
+                      +{creditScoreSim - creditScore} points • Better loan rates possible
+                    </p>
+                  </div>
+                </div>
+              ) : creditScoreSim < creditScore ? (
+                <div className="flex items-start gap-3">
+                  <TrendingDown size={20} style={{ color: theme.bad }} className="flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p style={{ color: theme.bad }} className="font-semibold">
+                      Score Decline
+                    </p>
+                    <p style={{ color: theme.textM }} className="text-sm">
+                      {creditScoreSim - creditScore} points • May affect loan eligibility
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3">
+                  <CheckCircle size={20} style={{ color: theme.ok }} className="flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p style={{ color: theme.ok }} className="font-semibold">
+                      No Change
+                    </p>
+                    <p style={{ color: theme.textM }} className="text-sm">
+                      Score remains stable
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Reset Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setCreditScoreSim(creditScore)}
+              style={{
+                backgroundColor: theme.border,
+                color: theme.text,
+              }}
+              className="w-full py-2 rounded-lg font-semibold transition-all"
+            >
+              Reset Simulation
+            </motion.button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-[#fafafa]">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#09090b] border-b border-[#27272a] px-6 py-4">
-        <h1 className="text-3xl font-bold text-[#d4a843]">Smart Stack</h1>
-        <p className="text-[#a1a1aa] text-sm mt-1">Monitor, plan, and optimize your finances</p>
-      </div>
+    <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen p-6">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <h1 style={{ color: theme.text }} className="text-4xl font-bold mb-2">
+            Smart Stack
+          </h1>
+          <p style={{ color: theme.textM }} className="text-lg">
+            Complete financial management at a glance
+          </p>
+        </motion.div>
 
-      {/* Content Area */}
-      <div className="px-6 pt-6">
+        {/* Tabs */}
+        <div
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          className="border rounded-xl p-2 mb-8 flex gap-2"
+        >
+          {(['budget', 'savings', 'credit'] as Tab[]).map((tab) => (
+            <motion.button
+              key={tab}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                backgroundColor: activeTab === tab ? theme.gold : 'transparent',
+                color: activeTab === tab ? theme.bgS : theme.textM,
+              }}
+              className="flex-1 py-3 rounded-lg font-semibold capitalize transition-all"
+            >
+              {tab === 'budget' && <DollarSign className="inline mr-2" size={18} />}
+              {tab === 'savings' && <Heart className="inline mr-2" size={18} />}
+              {tab === 'credit' && <LineChart className="inline mr-2" size={18} />}
+              {tab}
+            </motion.button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
         {activeTab === 'budget' && renderBudgetTab()}
         {activeTab === 'savings' && renderSavingsTab()}
         {activeTab === 'credit' && renderCreditTab()}
       </div>
-
-      {/* Sticky Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#09090b] border-t border-[#27272a] px-6">
-        <div className="flex justify-around max-w-4xl mx-auto">
-          {(['budget', 'savings', 'credit'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-4 font-semibold transition-all relative ${
-                activeTab === tab
-                  ? 'text-[#d4a843]'
-                  : 'text-[#71717a] hover:text-[#a1a1aa]'
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              {activeTab === tab && (
-                <motion.div
-                  layoutId="tab-border"
-                  className="absolute bottom-0 left-0 right-0 h-1 bg-[#d4a843]"
-                />
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
+  );
+}
+
+// Helper component for Home icon (not in lucide-react)
+function Home(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
   );
 }

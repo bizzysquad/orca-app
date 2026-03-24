@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import Sidebar from './Sidebar'
 import DesktopTopBar from './DesktopTopBar'
+import { useTheme } from '@/context/ThemeContext'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -12,9 +13,13 @@ interface AppShellProps {
 
 export default function AppShell({ children, notificationCount = 0, userName = 'User' }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { theme } = useTheme()
 
   return (
-    <div className="relative w-full min-h-screen bg-[#09090b] text-[#fafafa] flex">
+    <div
+      className="relative w-full min-h-screen flex"
+      style={{ backgroundColor: theme.bg, color: theme.text }}
+    >
       {/* Sidebar Navigation */}
       <Sidebar
         userName={userName}
@@ -26,7 +31,6 @@ export default function AppShell({ children, notificationCount = 0, userName = '
       <div className="flex-1 flex flex-col md:ml-[220px]">
         {/* Desktop Top Bar */}
         <DesktopTopBar
-          notificationCount={notificationCount}
           onMenuToggle={() => setSidebarOpen(true)}
         />
 

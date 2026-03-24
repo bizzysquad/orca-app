@@ -1,6 +1,7 @@
 import type {
   OrcaUser, IncomeSource, Bill, Expense, SavingsGoal,
-  Group, RentEntry, Notification, RoommateData, PlaidData, OrcaData, AdminConfig
+  Group, RentEntry, Notification, RoommateData, PlaidData, OrcaData, AdminConfig,
+  EmploymentType
 } from './types'
 
 // ── Demo User ──
@@ -8,6 +9,7 @@ export const DEMO_USER: OrcaUser = {
   name: 'Alex Johnson',
   email: 'alex@orca.app',
   onboarded: true,
+  employmentType: 'employed',
   payFreq: 'biweekly',
   payCycle: 'standard',
   payRate: '28.50',
@@ -15,6 +17,11 @@ export const DEMO_USER: OrcaUser = {
   nextPay: '2026-04-03',
   grossIncome: 4940,
   netIncome: 3820,
+  dailyIncome: 0,
+  weeklyIncome: 0,
+  manualCashInput: 0,
+  selfEmployedInputMethod: 'weekly',
+  rentAmount: 1400,
   creditScore: 742,
   utilization: 24,
   onTime: 98,
@@ -40,15 +47,15 @@ export const DEMO_INCOME: IncomeSource[] = [
 
 // ── Bills ──
 export const DEMO_BILLS: Bill[] = [
-  { id: 'b1', name: 'Rent', amount: 1400, cat: 'Housing', due: '2026-04-01', freq: 'monthly', status: 'upcoming', alloc: [] },
-  { id: 'b2', name: 'Car Payment', amount: 385, cat: 'Transportation', due: '2026-04-05', freq: 'monthly', status: 'upcoming', alloc: [] },
-  { id: 'b3', name: 'Car Insurance', amount: 142, cat: 'Insurance', due: '2026-04-10', freq: 'monthly', status: 'upcoming', alloc: [] },
-  { id: 'b4', name: 'Phone Bill', amount: 85, cat: 'Utilities', due: '2026-04-12', freq: 'monthly', status: 'upcoming', alloc: [] },
-  { id: 'b5', name: 'Netflix', amount: 15.99, cat: 'Entertainment', due: '2026-04-15', freq: 'monthly', status: 'upcoming', alloc: [] },
-  { id: 'b6', name: 'Gym Membership', amount: 49.99, cat: 'Health', due: '2026-04-08', freq: 'monthly', status: 'upcoming', alloc: [] },
-  { id: 'b7', name: 'Internet', amount: 65, cat: 'Utilities', due: '2026-04-18', freq: 'monthly', status: 'upcoming', alloc: [] },
-  { id: 'b8', name: 'Electric Bill', amount: 110, cat: 'Utilities', due: '2026-03-15', freq: 'monthly', status: 'paid', alloc: [] },
-  { id: 'b9', name: 'Spotify', amount: 10.99, cat: 'Entertainment', due: '2026-03-20', freq: 'monthly', status: 'paid', alloc: [] },
+  { id: 'b1', name: 'Rent', amount: 1400, cat: 'Housing', due: '2026-04-01', freq: 'monthly', recurrence: 'monthly', status: 'upcoming', alloc: [] },
+  { id: 'b2', name: 'Car Payment', amount: 385, cat: 'Transportation', due: '2026-04-05', freq: 'monthly', recurrence: 'monthly', status: 'upcoming', alloc: [] },
+  { id: 'b3', name: 'Car Insurance', amount: 142, cat: 'Insurance', due: '2026-04-10', freq: 'monthly', recurrence: 'monthly', status: 'upcoming', alloc: [] },
+  { id: 'b4', name: 'Phone Bill', amount: 85, cat: 'Utilities', due: '2026-04-12', freq: 'monthly', recurrence: 'monthly', status: 'upcoming', alloc: [] },
+  { id: 'b5', name: 'Netflix', amount: 15.99, cat: 'Entertainment', due: '2026-04-15', freq: 'monthly', recurrence: 'monthly', status: 'upcoming', alloc: [] },
+  { id: 'b6', name: 'Gym Membership', amount: 49.99, cat: 'Health', due: '2026-04-08', freq: 'monthly', recurrence: 'monthly', status: 'upcoming', alloc: [] },
+  { id: 'b7', name: 'Internet', amount: 65, cat: 'Utilities', due: '2026-04-18', freq: 'monthly', recurrence: 'monthly', status: 'upcoming', alloc: [] },
+  { id: 'b8', name: 'Electric Bill', amount: 110, cat: 'Utilities', due: '2026-03-15', freq: 'monthly', recurrence: 'monthly', status: 'paid', alloc: [] },
+  { id: 'b9', name: 'Spotify', amount: 10.99, cat: 'Entertainment', due: '2026-03-20', freq: 'monthly', recurrence: 'monthly', status: 'paid', alloc: [] },
 ]
 
 // ── Expenses ──
@@ -182,3 +189,51 @@ export function getDemoData(): OrcaData {
 let _demoMode = true
 export function isDemoMode() { return _demoMode }
 export function setDemoMode(v: boolean) { _demoMode = v }
+
+// ── Fresh user data (for new signups) ──
+export function getNewUserData(name: string, email: string): OrcaData {
+  return {
+    user: {
+      name,
+      email,
+      onboarded: false,
+      employmentType: 'employed',
+      payFreq: 'biweekly',
+      payCycle: 'standard',
+      payRate: '0',
+      hoursPerDay: '8',
+      nextPay: '',
+      grossIncome: 0,
+      netIncome: 0,
+      dailyIncome: 0,
+      weeklyIncome: 0,
+      manualCashInput: 0,
+      selfEmployedInputMethod: 'weekly',
+      rentAmount: 0,
+      creditScore: 0,
+      utilization: 0,
+      onTime: 0,
+      acctAge: 0,
+      inquiries: 0,
+      totalDebt: 0,
+      creditLimit: 0,
+      scoreHistory: [],
+    },
+    income: [],
+    bills: [],
+    expenses: [],
+    goals: [],
+    splitMode: 'equal',
+    notifs: [],
+    groups: [],
+    rent: [],
+    plaid: null,
+    roommates: {
+      enabled: false,
+      totalRent: 0,
+      utilities: [],
+      members: [],
+      history: [],
+    },
+  }
+}

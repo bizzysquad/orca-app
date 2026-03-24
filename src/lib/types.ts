@@ -17,11 +17,15 @@ export interface BudgetHealth {
   color: string
 }
 
+// ── Employment Type ──
+export type EmploymentType = 'employed' | 'self-employed'
+
 // ── User Profile ──
 export interface OrcaUser {
   name: string
   email: string
   onboarded: boolean
+  employmentType: EmploymentType
   payFreq: string
   payCycle: string
   payRate: string
@@ -29,6 +33,13 @@ export interface OrcaUser {
   nextPay: string
   grossIncome?: number
   netIncome?: number
+  // Self-employed income fields
+  dailyIncome?: number
+  weeklyIncome?: number
+  manualCashInput?: number
+  selfEmployedInputMethod?: 'daily' | 'weekly' | 'manual'
+  // Rent config
+  rentAmount?: number
   creditScore: number
   utilization: number
   onTime: number
@@ -60,6 +71,8 @@ export interface BillAlloc {
   paid: boolean
 }
 
+export type BillRecurrence = 'weekly' | 'monthly' | 'yearly' | 'custom'
+
 export interface Bill {
   id: string
   name: string
@@ -67,6 +80,8 @@ export interface Bill {
   cat: string
   due: string
   freq: string
+  recurrence: BillRecurrence
+  customRecurrenceDays?: number
   status: string
   alloc: BillAlloc[]
 }
@@ -113,6 +128,7 @@ export interface GroupActivity {
 export interface Group {
   id: string
   name: string
+  customName?: string
   goal: string
   target: number
   current: number
@@ -179,6 +195,18 @@ export interface PlaidData {
   creditLimit: number
 }
 
+// ── Income Allocation (Self-Employed) ──
+export interface IncomeAllocationTarget {
+  id: string
+  type: 'bill' | 'task' | 'savings'
+  sourceId: string
+  name: string
+  amount: number
+  dueDate: string
+  requiredDaily: number
+  requiredWeekly: number
+}
+
 // ── App Data ──
 export interface OrcaData {
   user: OrcaUser
@@ -192,6 +220,7 @@ export interface OrcaData {
   rent: RentEntry[]
   plaid: PlaidData | null
   roommates: RoommateData
+  incomeAllocations?: IncomeAllocationTarget[]
 }
 
 // ── Admin Config ──
