@@ -13,6 +13,7 @@ import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, calcAlloc, pct } from '@/lib/utils'
 import { createBrowserClient } from '@supabase/ssr'
 import { useTheme } from '@/context/ThemeContext'
+import type { Bill } from '@/lib/types'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20, scale: 0.98 },
@@ -309,8 +310,20 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
 export default function DashboardPage() {
   const { theme } = useTheme()
   const { data, loading } = useOrcaData()
-  const { user, income, bills, goals, groups } = data
+  const { user, income, goals, groups } = data
   const group = groups[0] || null
+
+  // Bills: use context data, fallback to localStorage
+  const bills: Bill[] = useMemo(() => {
+    if (data.bills && data.bills.length > 0) return data.bills
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('orca-bills')
+        if (saved) return JSON.parse(saved) as Bill[]
+      } catch {}
+    }
+    return []
+  }, [data.bills])
 
   // Fetch real user name from Supabase
   const [realUserName, setRealUserName] = useState<string | null>(null)
@@ -369,6 +382,8 @@ export default function DashboardPage() {
 
   const allocation = useMemo(() => calcAlloc(income, bills, goals), [income, bills, goals])
   const paycheckAmt = useMemo(() => {
+    // Use netIncome from Settings if available
+    if (user.netIncome && user.netIncome > 0) return user.netIncome
     const rate = parseFloat(user.payRate) || 0
     const hrs = parseFloat(user.hoursPerDay) || 8
     const mult: Record<string, number> = { weekly: 5, biweekly: 10, semimonthly: 10.83, monthly: 21.67 }
@@ -376,7 +391,22 @@ export default function DashboardPage() {
   }, [user])
 
   const totalSavings = useMemo(() => {
-    return goals.reduce((sum, g) => sum + g.current, 0)
+    // Include savings accounts from localStorage
+    let total = goals.reduce((sum, g) => sum + g.current, 0)
+    if (typeof window !== 'undefined') {
+      try {
+        const savedAccounts = localStorage.getItem('orca-savings-accounts')
+        if (savedAccounts) {
+          const accounts = JSON.parse(savedAccounts)
+          const acctTotal = accounts.reduce((sum: number, a: any) => sum + (a.amount || 0), 0)
+          // Only add if goals don't already include savings-acct- entries
+          if (!goals.some(g => g.id?.startsWith('savings-acct-'))) {
+            total += acctTotal
+          }
+        }
+      } catch {}
+    }
+    return total
   }, [goals])
 
   const allUpcomingBills = useMemo(
@@ -411,24 +441,80 @@ export default function DashboardPage() {
       }
     })
 
-    // Add tasks from window.__ORCA_TASKS
-    if (typeof window !== 'undefined' && (window as any).__ORCA_TASKS) {
-      const tasks = (window as any).__ORCA_TASKS
-      tasks.forEach((task: any) => {
-        if (task.dueDate) {
-          const taskDate = new Date(task.dueDate + 'T00:00:00')
-          if (taskDate.getMonth() === calMonth && taskDate.getFullYear() === calYear) {
-            events.push({ date: taskDate.getDate(), type: 'task', label: task.title || 'Task' })
-          }
+    // Add tasks from localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const savedTasks = localStorage.getItem('orca-tasks')
+        if (savedTasks) {
+          const tasks = JSON.parse(savedTasks)
+          tasks.forEach((task: any) => {
+            if (task.dueDate) {
+              const taskDate = new Date(task.dueDate + 'T00:00:00')
+              if (taskDate.getMonth() === calMonth && taskDate.getFullYear() === calYear) {
+                events.push({ date: taskDate.getDate(), type: 'task', label: task.title || task.name || task.text || 'Task' })
+              }
+            }
+          })
         }
-      })
+      } catch {}
+      // Also check window.__ORCA_TASKS as fallback
+      if ((window as any).__ORCA_TASKS) {
+        const tasks = (window as any).__ORCA_TASKS
+        tasks.forEach((task: any) => {
+          if (task.dueDate) {
+            const taskDate = new Date(task.dueDate + 'T00:00:00')
+            if (taskDate.getMonth() === calMonth && taskDate.getFullYear() === calYear) {
+              // Don't add duplicates
+              if (!events.some(e => e.type === 'task' && e.date === taskDate.getDate() && e.label === (task.title || task.name || 'Task'))) {
+                events.push({ date: taskDate.getDate(), type: 'task', label: task.title || task.name || task.text || 'Task' })
+              }
+            }
+          }
+        })
+      }
     }
 
-    // Add group date if group exists
+    // Add group dates from all groups in localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const savedGroups = localStorage.getItem('orca-stack-groups')
+        if (savedGroups) {
+          const allGroups = JSON.parse(savedGroups)
+          allGroups.forEach((g: any) => {
+            if (g.date) {
+              const gd = new Date(g.date + 'T00:00:00')
+              if (gd.getMonth() === calMonth && gd.getFullYear() === calYear) {
+                events.push({ date: gd.getDate(), type: 'group', label: g.customName || g.name || 'Stack Circle' })
+              }
+            }
+          })
+        }
+      } catch {}
+
+      // Add payment projection entries
+      try {
+        const savedPayments = localStorage.getItem('orca-payment-entries')
+        if (savedPayments) {
+          const payments = JSON.parse(savedPayments)
+          payments.forEach((p: any) => {
+            if (p.date) {
+              const pd = new Date(p.date + 'T00:00:00')
+              if (pd.getMonth() === calMonth && pd.getFullYear() === calYear) {
+                events.push({ date: pd.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
+              }
+            }
+          })
+        }
+      } catch {}
+    }
+
+    // Fallback: add group date from context if exists
     if (group?.date) {
       const groupDate = new Date(group.date + 'T00:00:00')
       if (groupDate.getMonth() === calMonth && groupDate.getFullYear() === calYear) {
-        events.push({ date: groupDate.getDate(), type: 'group', label: `${group.name} Event` })
+        if (!events.some(e => e.type === 'group' && e.date === groupDate.getDate())) {
+          events.push({ date: groupDate.getDate(), type: 'group', label: `${group.name} Event` })
+        }
       }
     }
 

@@ -436,34 +436,6 @@ export default function SmartStackPage() {
         </h3>
 
         <div className="space-y-6">
-          {/* Projected Check Amount */}
-          <div style={{ backgroundColor: theme.bg, borderColor: hasSettingsInput ? theme.gold : theme.border }} className="border-2 rounded-lg p-4">
-            <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
-              Projected Check Amount
-            </p>
-            <p style={{ color: theme.gold }} className="text-3xl font-bold">
-              {fmt(projectedCheckAmount)}
-            </p>
-            {!hasSettingsInput && (
-              <p style={{ color: theme.warn }} className="text-sm mt-2">
-                Set your pay rate and hours in{' '}
-                <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a>{' '}
-                to see your projected check.
-              </p>
-            )}
-            {hasSettingsInput && daysOff.length > 0 && (
-              <p style={{ color: theme.warn }} className="text-sm mt-2">
-                {fmt(incomeReduction)} reduction from {daysOff.length} day(s) off
-              </p>
-            )}
-            <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: theme.textM }}>
-              <Info size={14} />
-              <span>
-                Based on your <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a> ({hasSettingsInput ? `$${basePayRate}/hr × ${baseHoursPerDay}hrs` : 'not configured'})
-              </span>
-            </div>
-          </div>
-
           {/* Calendar */}
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -589,6 +561,34 @@ export default function SmartStackPage() {
             </motion.div>
           )}
 
+          {/* Projected Check Amount */}
+          <div style={{ backgroundColor: theme.bg, borderColor: hasSettingsInput ? theme.gold : theme.border }} className="border-2 rounded-lg p-4">
+            <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
+              Projected Check Amount
+            </p>
+            <p style={{ color: theme.gold }} className="text-3xl font-bold">
+              {fmt(projectedCheckAmount)}
+            </p>
+            {!hasSettingsInput && (
+              <p style={{ color: theme.warn }} className="text-sm mt-2">
+                Set your pay rate and hours in{' '}
+                <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a>{' '}
+                to see your projected check.
+              </p>
+            )}
+            {hasSettingsInput && daysOff.length > 0 && (
+              <p style={{ color: theme.warn }} className="text-sm mt-2">
+                {fmt(incomeReduction)} reduction from {daysOff.length} day(s) off
+              </p>
+            )}
+            <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: theme.textM }}>
+              <Info size={14} />
+              <span>
+                Based on your <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a> ({hasSettingsInput ? `$${basePayRate}/hr × ${baseHoursPerDay}hrs` : 'not configured'})
+              </span>
+            </div>
+          </div>
+
           {!budgetLocked ? (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -637,6 +637,7 @@ export default function SmartStackPage() {
       };
       const updated = [...paymentEntries, entry];
       setPaymentEntries(updated);
+      try { localStorage.setItem('orca-payment-entries', JSON.stringify(updated)) } catch {}
       // Sync payment dates to Dashboard calendar via data context
       const existingIncome = data.income || [];
       const newIncome = [...existingIncome, { id: entry.id, source: entry.description, amount: entry.amount, date: entry.date, frequency: 'once' as const }];
@@ -647,7 +648,9 @@ export default function SmartStackPage() {
     };
 
     const removePayment = (id: string) => {
-      setPaymentEntries(prev => prev.filter(p => p.id !== id));
+      const updated = paymentEntries.filter(p => p.id !== id);
+      setPaymentEntries(updated);
+      try { localStorage.setItem('orca-payment-entries', JSON.stringify(updated)) } catch {}
       const existingIncome = data.income || [];
       setData(prev => ({ ...prev, income: (existingIncome as any[]).filter((i: any) => i.id !== id) as any }));
     };
@@ -756,7 +759,7 @@ export default function SmartStackPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <p style={{ color: theme.gold }} className="font-bold">{fmt(entry.amount)}</p>
+                      <p style={{ color: '#22c55e' }} className="font-bold">+{fmt(entry.amount)}</p>
                       <motion.button
                         whileTap={{ scale: 0.9 }}
                         onClick={() => removePayment(entry.id)}
@@ -1363,37 +1366,7 @@ export default function SmartStackPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ color: theme.textS }} className="block text-xs font-semibold mb-1">Savings Goal (Optional)</label>
-                  <div className="relative">
-                    <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
-                    <input
-                      type="number"
-                      value={acct.goal || ''}
-                      onChange={(e) => updateSavingsAccount(acct.id, 'goal', parseFloat(e.target.value) || 0)}
-                      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                      className="w-full border rounded-lg pl-7 pr-3 py-2.5 font-semibold"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
-                {acct.goal > 0 && (
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span style={{ color: theme.textM }} className="text-xs">Progress</span>
-                      <span style={{ color: theme.text }} className="text-xs font-bold">{acctProgress.toFixed(1)}%</span>
-                    </div>
-                    <div style={{ backgroundColor: theme.bg }} className="h-2 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.min(100, acctProgress)}%` }}
-                        style={{ backgroundColor: acctProgress >= 100 ? theme.ok : theme.gold }}
-                        className="h-full"
-                      />
-                    </div>
-                  </div>
-                )}
+                {/* Goal removed per user request */}
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}

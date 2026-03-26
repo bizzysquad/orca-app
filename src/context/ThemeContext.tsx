@@ -113,11 +113,22 @@ function applyOverrides(base: Theme, overrides: AdminThemeOverrides): Theme {
 const ADMIN_THEME_KEY = 'orca-admin-theme'
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [isDark, setIsDark] = useState(true)
+  const [isDark, setIsDarkState] = useState(true)
   const [adminOverrides, setAdminOverrides] = useState<AdminThemeOverrides | null>(null)
 
-  // Load persisted admin theme on mount
+  // Persist dark/light preference
+  const setIsDark = (v: boolean) => {
+    setIsDarkState(v)
+    try { localStorage.setItem('orca-theme-mode', v ? 'dark' : 'light') } catch {}
+  }
+
+  // Load persisted theme mode and admin overrides on mount
   useEffect(() => {
+    try {
+      const mode = localStorage.getItem('orca-theme-mode')
+      if (mode === 'light') setIsDarkState(false)
+      else if (mode === 'dark') setIsDarkState(true)
+    } catch {}
     try {
       const saved = localStorage.getItem(ADMIN_THEME_KEY)
       if (saved) {

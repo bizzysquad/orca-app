@@ -24,7 +24,7 @@ import type { EmploymentType } from '@/lib/types'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { data, loading } = useOrcaData()
+  const { data, setData, loading } = useOrcaData()
   const user = data.user
   const { isDark, setIsDark, theme } = useTheme()
 
@@ -38,7 +38,6 @@ export default function SettingsPage() {
   const [employmentType, setEmploymentType] = useState<EmploymentType>(user.employmentType || 'employed')
 
   // Employed income state
-  const [grossIncome, setGrossIncome] = useState(String(user.grossIncome || ''))
   const [netIncome, setNetIncome] = useState(String(user.netIncome || ''))
   const [payRate, setPayRate] = useState(user.payRate)
   const [hoursPerDay, setHoursPerDay] = useState(user.hoursPerDay)
@@ -67,6 +66,22 @@ export default function SettingsPage() {
   const handleSaveEmail = () => setEditingEmail(false)
 
   const handleSaveIncome = () => {
+    const updatedUser = {
+      ...user,
+      netIncome: parseFloat(netIncome) || 0,
+      payRate: payRate,
+      hoursPerDay: hoursPerDay,
+      payFreq: payFreq,
+      employmentType: employmentType,
+      dailyIncome: parseFloat(dailyIncome) || 0,
+      weeklyIncome: parseFloat(weeklyIncome) || 0,
+      manualCashInput: parseFloat(manualCash) || 0,
+      selfEmployedInputMethod: selfEmployedMethod,
+      rentAmount: parseFloat(rentAmount) || 0,
+      creditScore: parseInt(creditScore) || 0,
+    }
+    setData(prev => ({ ...prev, user: updatedUser }))
+    try { localStorage.setItem('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -191,32 +206,6 @@ export default function SettingsPage() {
           >
             {employmentType === 'employed' ? (
               <>
-                {/* Gross Income */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                    Gross Income (per pay period)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4" style={{ color: textM }} />
-                    <input
-                      type="number"
-                      value={grossIncome}
-                      onChange={e => setGrossIncome(e.target.value)}
-                      placeholder="e.g., 4940"
-                      className="flex-1 px-3 py-2 rounded-lg"
-                      style={{
-                        backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                        borderColor: border,
-                        borderWidth: '1px',
-                        color: text,
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: textM }}>
-                    Your total earnings before taxes and deductions
-                  </p>
-                </div>
-
                 {/* Net Income */}
                 <div>
                   <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
@@ -528,8 +517,8 @@ export default function SettingsPage() {
               onClick={() => setIsDark(true)}
               className="flex-1 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
               style={{
-                backgroundColor: isDark ? gold : (isDark ? '#27272a' : '#e4e4e0'),
-                color: isDark ? '#09090b' : textS,
+                backgroundColor: isDark ? gold : '#e4e4e0',
+                color: isDark ? '#09090b' : '#52525b',
               }}
             >
               <Moon className="w-4 h-4" /> Dark
@@ -538,8 +527,8 @@ export default function SettingsPage() {
               onClick={() => setIsDark(false)}
               className="flex-1 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
               style={{
-                backgroundColor: !isDark ? gold : (isDark ? '#27272a' : '#e4e4e0'),
-                color: !isDark ? '#ffffff' : textS,
+                backgroundColor: !isDark ? gold : '#e4e4e0',
+                color: !isDark ? '#ffffff' : '#52525b',
               }}
             >
               <Sun className="w-4 h-4" /> Light

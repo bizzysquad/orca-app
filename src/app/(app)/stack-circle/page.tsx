@@ -113,32 +113,22 @@ export default function StackCirclePage() {
   const { theme } = useTheme();
   const { data: orcaData, loading } = useOrcaData();
 
-  const initialRoommates: RoommateData = {
-    enabled: true,
-    totalRent: 3600,
-    utilities: [
-      { id: gid(), name: 'Electric', amount: 120, split: 0 },
-      { id: gid(), name: 'Internet', amount: 80, split: 0 },
-      { id: gid(), name: 'Water', amount: 60, split: 0 },
-    ],
-    members: [
-      {
-        id: gid(),
-        name: 'You',
-        share: 50,
-        paidRent: true,
-        paidUtilities: true,
-      },
-      {
-        id: gid(),
-        name: 'Alex',
-        share: 50,
-        paidRent: false,
-        paidUtilities: true,
-      },
-    ],
-    history: [],
-  };
+  // Load roommate data from localStorage (no demo data)
+  const initialRoommates: RoommateData = (() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('orca-roommates');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return {
+      enabled: false,
+      totalRent: 0,
+      utilities: [],
+      members: [],
+      history: [],
+    };
+  })();
 
   // State for groups (stored in localStorage)
   const [groups, setGroups] = useState<Group[]>([]);
@@ -163,6 +153,12 @@ export default function StackCirclePage() {
   const [utilityAmount, setUtilityAmount] = useState('');
   const [addingMember, setAddingMember] = useState(false);
   const [memberName, setMemberName] = useState('');
+  // Persist roommate changes to localStorage
+  const persistRoommates = (updated: RoommateData) => {
+    setRoommates(updated);
+    try { localStorage.setItem('orca-roommates', JSON.stringify(updated)); } catch {}
+  };
+
   const [copiedLink, setCopiedLink] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [editingGroupName, setEditingGroupName] = useState(false);
@@ -316,17 +312,21 @@ export default function StackCirclePage() {
 
   const handleAddMoney = () => {
     if (addMoneyAmount && !isNaN(Number(addMoneyAmount)) && currentGroup) {
-      const newCurrent = currentGroup.current + Number(addMoneyAmount);
+      const amount = Number(addMoneyAmount);
+      const newCurrent = currentGroup.current + amount;
       const updatedGroups = groups.map((g) =>
         g.id === currentGroup.id
           ? {
               ...g,
               current: newCurrent,
+              members: g.members.map((m) =>
+                m.name === 'You' ? { ...m, contrib: (m.contrib || 0) + amount } : m
+              ),
               activity: [
                 {
                   id: gid(),
                   user: 'You',
-                  msg: `Added ${fmt(Number(addMoneyAmount))} to the group`,
+                  msg: `Added ${fmt(amount)} to the group`,
                   date: new Date().toLocaleDateString(),
                 },
                 ...g.activity,
@@ -341,7 +341,7 @@ export default function StackCirclePage() {
 
   const handleSaveRent = () => {
     if (rentInput && !isNaN(Number(rentInput))) {
-      setRoommates({ ...roommates, totalRent: Number(rentInput) });
+      persistRoommates({ ...roommates, totalRent: Number(rentInput) });
       setEditingRent(false);
     }
   };
@@ -354,7 +354,7 @@ export default function StackCirclePage() {
         amount: Number(utilityAmount),
         split: 0,
       };
-      setRoommates({
+      persistRoommates({
         ...roommates,
         utilities: [...roommates.utilities, newUtility],
       });
@@ -365,7 +365,7 @@ export default function StackCirclePage() {
   };
 
   const handleRemoveUtility = (id: string) => {
-    setRoommates({
+    persistRoommates({
       ...roommates,
       utilities: roommates.utilities.filter((u) => u.id !== id),
     });
@@ -386,7 +386,7 @@ export default function StackCirclePage() {
         paidRent: false,
         paidUtilities: false,
       });
-      setRoommates({ ...roommates, members: updatedMembers });
+      persistRoommates({ ...roommates, members: updatedMembers });
       setMemberName('');
       setAddingMember(false);
     }
@@ -400,12 +400,12 @@ export default function StackCirclePage() {
         ...m,
         share: newShare,
       }));
-      setRoommates({ ...roommates, members: updatedMembers });
+      persistRoommates({ ...roommates, members: updatedMembers });
     }
   };
 
   const handleToggleMemberShare = (id: string, newShare: number) => {
-    setRoommates({
+    persistRoommates({
       ...roommates,
       members: roommates.members.map((m) =>
         m.id === id ? { ...m, share: newShare } : m
@@ -414,7 +414,7 @@ export default function StackCirclePage() {
   };
 
   const handleToggleRentPaid = (id: string) => {
-    setRoommates({
+    persistRoommates({
       ...roommates,
       members: roommates.members.map((m) =>
         m.id === id ? { ...m, paidRent: !m.paidRent } : m
@@ -423,7 +423,7 @@ export default function StackCirclePage() {
   };
 
   const handleToggleUtilsPaid = (id: string) => {
-    setRoommates({
+    persistRoommates({
       ...roommates,
       members: roommates.members.map((m) =>
         m.id === id ? { ...m, paidUtilities: !m.paidUtilities } : m

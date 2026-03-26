@@ -182,6 +182,23 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
         },
       }
 
+      // Merge in any locally saved user settings
+      try {
+        const savedSettings = localStorage.getItem('orca-user-settings')
+        if (savedSettings) {
+          const localUser = JSON.parse(savedSettings)
+          orcaData.user = { ...orcaData.user, ...localUser }
+        }
+      } catch {}
+
+      // Merge in locally saved bills
+      try {
+        const savedBills = localStorage.getItem('orca-bills')
+        if (savedBills && (!orcaData.bills || orcaData.bills.length === 0)) {
+          orcaData.bills = JSON.parse(savedBills)
+        }
+      } catch {}
+
       setData(orcaData)
     } catch (err: any) {
       console.error('Error loading user data:', err)
