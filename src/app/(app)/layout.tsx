@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import AppShell from '@/components/layout/AppShell'
+import { OrcaDataProvider } from '@/context/OrcaDataContext'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -11,8 +12,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     || 'User'
 
   return (
-    <AppShell userName={userName} notificationCount={2}>
-      {children}
-    </AppShell>
+    <OrcaDataProvider>
+      <AppShell userName={userName} notificationCount={0}>
+        {children}
+      </AppShell>
+    </OrcaDataProvider>
   )
 }

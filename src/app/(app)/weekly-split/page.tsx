@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { getDemoData } from '@/lib/demo-data'
+import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo } from '@/lib/utils'
 import { buildWeeklySplit } from '@/lib/budget'
 
@@ -12,8 +12,16 @@ const statCard = {
 }
 
 export default function WeeklySplitPage() {
-  const data = useMemo(() => getDemoData(), [])
+  const { data, loading } = useOrcaData()
   const summary = useMemo(() => buildWeeklySplit(data.income, data.bills, data.goals, data.expenses, 'due-date-aware', data.user), [data])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#09090b] text-[#fafafa]">
+        <div>Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#09090b] text-[#fafafa] pb-14">

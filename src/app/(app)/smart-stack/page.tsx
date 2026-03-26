@@ -6,7 +6,7 @@ import {
   Lock, Edit3, Plus, Trash2, Pause, Play, LineChart,
   AlertCircle, CheckCircle, Zap, Check, Calendar, Briefcase,
 } from 'lucide-react';
-import { getDemoData } from '@/lib/demo-data';
+import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -28,7 +28,7 @@ interface IncomeRequirement {
 
 export default function SmartStackPage() {
   const { theme } = useTheme();
-  const data = getDemoData();
+  const { data, loading } = useOrcaData();
   const [activeTab, setActiveTab] = useState<Tab>('budget');
   const [budgetLocked, setBudgetLocked] = useState(false);
   const [paycheckHistory, setPaycheckHistory] = useState<any[]>([]);
@@ -858,6 +858,14 @@ export default function SmartStackPage() {
       </motion.div>
     );
   };
+
+  if (loading) {
+    return (
+      <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen flex items-center justify-center">
+        <div>Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen p-6">

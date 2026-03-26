@@ -17,15 +17,15 @@ import {
   Home,
   Building2,
 } from 'lucide-react'
-import { getDemoData } from '@/lib/demo-data'
+import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 import type { EmploymentType } from '@/lib/types'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const demoData = getDemoData()
-  const user = demoData.user
+  const { data, loading } = useOrcaData()
+  const user = data.user
   const { isDark, setIsDark, theme } = useTheme()
 
   // Personal info edit state
@@ -80,6 +80,14 @@ export default function SettingsPage() {
   const textS = theme.textS
   const textM = theme.textM
   const gold = theme.gold
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: bg }}>
+        <div style={{ color: text }}>Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: bg }}>

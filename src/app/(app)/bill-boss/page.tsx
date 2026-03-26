@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, Calendar, Upload } from 'lucide-react'
-import { getDemoData } from '@/lib/demo-data'
+import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, gid, calcAlloc, calcIncome } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -177,10 +177,10 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
 }
 
 export default function BillBossPage() {
-  const demoData = useMemo(() => getDemoData(), [])
+  const { data, loading } = useOrcaData()
   const { theme } = useTheme()
 
-  const [bills, setBills] = useState(demoData.bills || [] as Bill[])
+  const [bills, setBills] = useState(data.bills || [] as Bill[])
   const [showAddForm, setShowAddForm] = useState(false)
   const [splitModalBillId, setSplitModalBillId] = useState<string | null>(null)
   const [customCategory, setCustomCategory] = useState('')
@@ -357,6 +357,14 @@ export default function BillBossPage() {
   }
 
   const visibleBills = getVisibleBills()
+
+  if (loading) {
+    return (
+      <div style={{ backgroundColor: theme.bg }} className="min-h-screen flex items-center justify-center">
+        <div style={{ color: theme.text }}>Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ backgroundColor: theme.bg }} className="min-h-screen pb-20">

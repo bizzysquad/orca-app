@@ -9,7 +9,7 @@ import {
   Target, TrendingUp, Zap, ArrowRight,
 } from 'lucide-react'
 
-import { getDemoData } from '@/lib/demo-data'
+import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, calcAlloc, pct } from '@/lib/utils'
 import { createBrowserClient } from '@supabase/ssr'
 import { useTheme } from '@/context/ThemeContext'
@@ -458,7 +458,7 @@ function IncomeLog({ theme }: { theme: any }) {
 
 export default function DashboardPage() {
   const { theme } = useTheme()
-  const data = useMemo(() => getDemoData(), [])
+  const { data, loading } = useOrcaData()
   const { user, income, bills, goals, groups } = data
   const group = groups[0] || null
 
@@ -547,6 +547,14 @@ export default function DashboardPage() {
       .sort((a, b) => a.date - b.date)
       .slice(0, 5)
   }, [calendarEvents])
+
+  if (loading) {
+    return (
+      <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div>Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }}>

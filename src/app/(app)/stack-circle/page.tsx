@@ -16,7 +16,7 @@ import {
   Edit3,
   UserPlus,
 } from 'lucide-react';
-import { getDemoData } from '@/lib/demo-data';
+import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, pct, gid } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -105,8 +105,8 @@ const toSlug = (name: string): string => {
 
 export default function StackCirclePage() {
   const { theme } = useTheme();
-  const demoData = getDemoData();
-  const group = demoData.groups[0] || null;
+  const { data: orcaData, loading } = useOrcaData();
+  const group = orcaData.groups[0] || null;
 
   const initialRoommates: RoommateData = {
     enabled: true,
@@ -317,6 +317,14 @@ export default function StackCirclePage() {
 
   const displayGroupName =
     currentGroup?.customName || currentGroup?.name || 'Stack Circle';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: theme.bg, color: theme.text }}>
+        <div>Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div

@@ -58,26 +58,9 @@ const priorityConfig: Record<TaskPriority, { label: string }> = {
   high: { label: 'High' },
 }
 
-// Demo data
-const initialTasks: Task[] = [
-  { id: '1', text: 'Review monthly budget report', completed: false, category: 'todo', priority: 'high', dueDate: '2026-03-24', createdAt: '2026-03-22', starred: true },
-  { id: '2', text: 'Pay electricity bill', completed: true, category: 'todo', priority: 'medium', dueDate: '2026-03-23', createdAt: '2026-03-20', starred: false },
-  { id: '3', text: 'Set up automatic savings transfer', completed: false, category: 'todo', priority: 'medium', createdAt: '2026-03-21', starred: false },
-  { id: '4', text: 'Organic milk', completed: false, category: 'groceries', priority: 'low', createdAt: '2026-03-22', starred: false },
-  { id: '5', text: 'Chicken breast (2 lbs)', completed: false, category: 'groceries', priority: 'low', createdAt: '2026-03-22', starred: false },
-  { id: '6', text: 'Avocados (4)', completed: true, category: 'groceries', priority: 'low', createdAt: '2026-03-22', starred: false },
-  { id: '7', text: 'Brown rice', completed: false, category: 'groceries', priority: 'low', createdAt: '2026-03-22', starred: false },
-  { id: '8', text: 'Olive oil', completed: false, category: 'groceries', priority: 'low', createdAt: '2026-03-22', starred: false },
-  { id: '9', text: 'Financial advisor - Q1 review', completed: false, category: 'meetings', priority: 'high', dueDate: '2026-03-25T10:00', createdAt: '2026-03-20', starred: true },
-  { id: '10', text: 'Tax preparation call', completed: false, category: 'meetings', priority: 'high', dueDate: '2026-03-28T14:30', createdAt: '2026-03-21', starred: false },
-  { id: '11', text: 'Insurance renewal discussion', completed: true, category: 'meetings', priority: 'medium', dueDate: '2026-03-20T09:00', createdAt: '2026-03-18', starred: false },
-]
+const initialTasks: Task[] = []
 
-const initialNotes: Note[] = [
-  { id: 'n1', title: 'Investment Ideas', content: 'Look into index funds, consider increasing 401k contribution by 2%. Research REIT options for passive income.', createdAt: '2026-03-22', color: 'bg-[#d4a843]/20' },
-  { id: 'n2', title: 'Password Reminders', content: 'Update bank passwords this month. Enable 2FA on all financial accounts.', createdAt: '2026-03-21', color: 'bg-purple-500/20' },
-  { id: 'n3', title: 'Budget Notes', content: 'Dining out exceeded budget by $120 last month. Set weekly limit of $50.', createdAt: '2026-03-20', color: 'bg-blue-500/20' },
-]
+const initialNotes: Note[] = []
 
 const noteColors = ['bg-[#d4a843]/20', 'bg-purple-500/20', 'bg-blue-500/20', 'bg-emerald-500/20', 'bg-pink-500/20']
 

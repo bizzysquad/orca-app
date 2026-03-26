@@ -30,4 +30,8 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
+# temp/build artifacts
+tmp_chunk_*.txt
+admin_blob_payload.json
+push.html
+upload_blobs.py

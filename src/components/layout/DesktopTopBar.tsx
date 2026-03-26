@@ -31,49 +31,8 @@ const ROUTE_TITLES: Record<string, string> = {
   '/admin': 'Admin Panel',
 }
 
-// Demo notification data
-const DEMO_NOTIFICATIONS: Notification[] = [
-  {
-    id: '1',
-    type: 'bill',
-    title: 'Electricity Bill',
-    message: 'Your electricity bill of $125.50 is due in 5 days',
-    timestamp: new Date(Date.now() - 30 * 60000),
-    read: false,
-  },
-  {
-    id: '2',
-    type: 'task',
-    title: 'Monthly Budget Review',
-    message: 'Task updated: review completed, marked as done',
-    timestamp: new Date(Date.now() - 2 * 60 * 60000),
-    read: false,
-  },
-  {
-    id: '3',
-    type: 'savings',
-    title: 'Savings Goal Milestone',
-    message: "You've reached 50% of your Q1 savings goal!",
-    timestamp: new Date(Date.now() - 4 * 60 * 60000),
-    read: false,
-  },
-  {
-    id: '4',
-    type: 'group',
-    title: 'Stack Circle Update',
-    message: 'John shared a budget optimization tip in your group',
-    timestamp: new Date(Date.now() - 1 * 24 * 60 * 60000),
-    read: true,
-  },
-  {
-    id: '5',
-    type: 'bill',
-    title: 'Internet Bill',
-    message: 'Payment received: $79.99',
-    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60000),
-    read: true,
-  },
-]
+// Initial notifications
+const INITIAL_NOTIFICATIONS: Notification[] = []
 
 function formatTime(date: Date): string {
   const now = new Date()
@@ -124,7 +83,7 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
   const title = ROUTE_TITLES[pathname] || 'ORCA'
   const { theme } = useTheme()
 
-  const [notifications, setNotifications] = useState<Notification[]>(DEMO_NOTIFICATIONS)
+  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const bellRef = useRef<HTMLButtonElement>(null)
