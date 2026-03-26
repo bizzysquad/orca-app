@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useState, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
 const THEMES = {
   dark: {
@@ -64,24 +64,87 @@ const THEMES = {
 
 export type Theme = typeof THEMES.dark
 
+export interface AdminThemeOverrides {
+  primaryColor?: string
+  bgDark?: string
+  bgCard?: string
+  borderColor?: string
+  textPrimary?: string
+  textSecondary?: string
+  textMuted?: string
+}
+
 type ThemeContextType = {
   theme: Theme
   isDark: boolean
   setIsDark: (v: boolean) => void
+  applyAdminTheme: (overrides: AdminThemeOverrides) => void
+  resetTheme: () => void
 }
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: THEMES.dark,
   isDark: true,
   setIsDark: () => {},
+  applyAdminTheme: () => {},
+  resetTheme: () => {},
 })
+
+function applyOverrides(base: Theme, overrides: AdminThemeOverrides): Theme {
+  return {
+    ...base,
+    ...(overrides.primaryColor && {
+      gold: overrides.primaryColor,
+      goldL: overrides.primaryColor,
+      goldD: overrides.primaryColor,
+      goldBg: `${overrides.primaryColor}14`,
+      goldBg2: `${overrides.primaryColor}26`,
+      glow: `0 0 20px ${overrides.primaryColor}26`,
+    }),
+    ...(overrides.bgDark && { bg: overrides.bgDark }),
+    ...(overrides.bgCard && { card: overrides.bgCard, bgS: overrides.bgCard }),
+    ...(overrides.borderColor && { border: overrides.borderColor }),
+    ...(overrides.textPrimary && { text: overrides.textPrimary }),
+    ...(overrides.textSecondary && { textS: overrides.textSecondary }),
+    ...(overrides.textMuted && { textM: overrides.textMuted }),
+  }
+}
+
+const ADMIN_THEME_KEY = 'orca-admin-theme'
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDark] = useState(true)
-  const theme = isDark ? THEMES.dark : THEMES.light
+  const [adminOverrides, setAdminOverrides] = useState<AdminThemeOverrides | null>(null)
+
+  // Load persisted admin theme on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(ADMIN_THEME_KEY)
+      if (saved) {
+        setAdminOverrides(JSON.parse(saved))
+      }
+    } catch {}
+  }, [])
+
+  const baseTheme = isDark ? THEMES.dark : THEMES.light
+  const theme = adminOverrides ? applyOverrides(baseTheme, adminOverrides) : baseTheme
+
+  const applyAdminTheme = (overrides: AdminThemeOverrides) => {
+    setAdminOverrides(overrides)
+    try {
+      localStorage.setItem(ADMIN_THEME_KEY, JSON.stringify(overrides))
+    } catch {}
+  }
+
+  const resetTheme = () => {
+    setAdminOverrides(null)
+    try {
+      localStorage.removeItem(ADMIN_THEME_KEY)
+    } catch {}
+  }
 
   return (
-    <ThemeContext.Provider value={{ theme, isDark, setIsDark }}>
+    <ThemeContext.Provider value={{ theme, isDark, setIsDark, applyAdminTheme, resetTheme }}>
       {children}
     </ThemeContext.Provider>
   )

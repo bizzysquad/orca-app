@@ -183,7 +183,7 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
       <div className="flex flex-wrap gap-3 sm:gap-4 mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Paycheck</span>
+          <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Payment</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-[#ef4444]" />
@@ -360,7 +360,7 @@ export default function DashboardPage() {
         const d = new Date(nextPayDate)
         d.setDate(d.getDate() + i * 14)
         if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
-          events.push({ date: d.getDate(), type: 'paycheck', label: 'Paycheck', amount: paycheckAmt })
+          events.push({ date: d.getDate(), type: 'paycheck', label: 'Payment', amount: paycheckAmt })
         }
       }
     }
@@ -509,10 +509,10 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              {/* Next Paycheck / Cash Flow Card */}
+              {/* Next Payment Card */}
               <div className="glass rounded-2xl p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
                 <p className="text-sm mb-2" style={{ color: theme.textS }}>
-                  {user.employmentType === 'self-employed' ? 'Cash Flow' : 'Next Paycheck'}
+                  Next Payment
                 </p>
                 <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: theme.gold }}>
                   {fmt(paycheckAmt)}

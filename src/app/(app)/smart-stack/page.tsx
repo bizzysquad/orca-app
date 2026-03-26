@@ -43,6 +43,13 @@ interface DayOff {
   hoursPerDay?: number;
 }
 
+interface PaymentEntry {
+  id: string;
+  amount: number;
+  date: string;
+  description: string;
+}
+
 // ============== PROJECTION CALCULATOR COMPONENT ==============
 function ProjectionCalculator({ theme }: { theme: any }) {
   const [goalAmount, setGoalAmount] = useState('')
@@ -187,27 +194,61 @@ export default function SmartStackPage() {
   const [forecastedIncome, setForecastedIncome] = useState<any[]>([]);
   const [currentSavingsAmount, setCurrentSavingsAmount] = useState('');
   const [savingsGoal, setSavingsGoal] = useState('');
+  const [projectionMode, setProjectionMode] = useState<'check' | 'payment'>('check');
+  const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
+  const [newPaymentAmount, setNewPaymentAmount] = useState('');
+  const [newPaymentDate, setNewPaymentDate] = useState('');
+  const [newPaymentDesc, setNewPaymentDesc] = useState('');
 
   const isSelfEmployed = data.user?.employmentType === 'self-employed';
 
-  // Auto-calculate check amount for employed users
-  const autoCalculatedCheckAmount = useMemo(() => {
-    if (isSelfEmployed) return 0;
+  // Track which days have custom hours (key = date string, value = hours)
+  const [customHours, setCustomHours] = useState<Record<string, number>>({});
+  const [editingHoursDay, setEditingHoursDay] = useState<string | null>(null);
+  const [editingHoursValue, setEditingHoursValue] = useState('');
 
-    const payRate = parseFloat(data.user?.payRate || '0');
-    const hoursPerDay = parseFloat(data.user?.hoursPerDay || '8');
-    const payFreq = data.user?.payFreq || 'biweekly';
+  // Check amount is always derived from calendar interaction + Settings
+  // Defaults to $0 until user has configured payRate in Settings
+  const basePayRate = parseFloat(data.user?.payRate || '0');
+  const baseHoursPerDay = parseFloat(data.user?.hoursPerDay || '0');
+  const payFreq = data.user?.payFreq || 'biweekly';
+  const hasSettingsInput = basePayRate > 0 && baseHoursPerDay > 0;
 
-    if (!payRate || !hoursPerDay) return 0;
+  // Calculate projected check dynamically from calendar
+  const projectedCheckAmount = useMemo(() => {
+    if (isSelfEmployed || !hasSettingsInput) return 0;
 
-    let workDaysPerPeriod = 10; // biweekly default
-    if (payFreq === 'weekly') workDaysPerPeriod = 5;
+    const today = new Date();
+    const month = today.getMonth();
+    const year = today.getFullYear();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    return payRate * hoursPerDay * workDaysPerPeriod;
-  }, [data.user, isSelfEmployed]);
+    // Count work days (weekdays minus days off)
+    let totalHours = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d);
+      const dayOfWeek = date.getDay();
+      const dateStr = date.toISOString().split('T')[0];
 
-  // Use the calculated amount (or 0 for self-employed)
-  const checkAmount = isSelfEmployed ? 0 : autoCalculatedCheckAmount;
+      // Skip weekends
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+      // Skip days off
+      if (daysOff.some((off) => off.date === dateStr)) continue;
+
+      // Use custom hours if set, otherwise default
+      const hours = customHours[dateStr] ?? baseHoursPerDay;
+      totalHours += hours;
+    }
+
+    // Scale to pay period
+    const monthlyGross = totalHours * basePayRate;
+    if (payFreq === 'weekly') return monthlyGross / 4.33;
+    if (payFreq === 'biweekly') return monthlyGross / 2.167;
+    return monthlyGross; // fallback
+  }, [isSelfEmployed, hasSettingsInput, basePayRate, baseHoursPerDay, payFreq, daysOff, customHours]);
+
+  // For backward compat in other functions
+  const checkAmount = projectedCheckAmount;
 
   // ============== BUDGET LOCK LOGIC ==============
   const handleBudgetLock = () => {
@@ -308,7 +349,7 @@ export default function SmartStackPage() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDayOfMonth = new Date(year, month, 1).getDay();
 
-    const days = [];
+    const days: (Date | null)[] = [];
     for (let i = 0; i < firstDayOfMonth; i++) {
       days.push(null);
     }
@@ -323,8 +364,7 @@ export default function SmartStackPage() {
         if (exists) {
           return prev.filter((d) => d.date !== dateStr);
         } else {
-          const hoursPerDay = parseFloat(data.user?.hoursPerDay || '8');
-          return [...prev, { date: dateStr, hoursPerDay }];
+          return [...prev, { date: dateStr, hoursPerDay: baseHoursPerDay }];
         }
       });
     };
@@ -335,19 +375,35 @@ export default function SmartStackPage() {
       return daysOff.some((d) => d.date === dateStr);
     };
 
-    const payRate = parseFloat(data.user?.payRate || '0');
-    const hoursPerDay = parseFloat(data.user?.hoursPerDay || '8');
-    const payFreq = data.user?.payFreq || 'biweekly';
-    let workDaysPerPeriod = 10;
-    if (payFreq === 'weekly') workDaysPerPeriod = 5;
+    const isWeekend = (date: Date | null) => {
+      if (!date) return false;
+      const day = date.getDay();
+      return day === 0 || day === 6;
+    };
 
-    const hoursPerPeriod = hoursPerDay * workDaysPerPeriod;
-    const projectedIncomeReduction = daysOff.reduce((sum, day) => {
-      const hours = day.hoursPerDay || hoursPerDay;
-      return sum + (hours * payRate);
+    const startEditHours = (date: Date) => {
+      const dateStr = date.toISOString().split('T')[0];
+      const currentHours = customHours[dateStr] ?? baseHoursPerDay;
+      setEditingHoursDay(dateStr);
+      setEditingHoursValue(String(currentHours));
+    };
+
+    const saveEditHours = () => {
+      if (editingHoursDay) {
+        const hrs = parseFloat(editingHoursValue);
+        if (!isNaN(hrs) && hrs >= 0) {
+          setCustomHours((prev) => ({ ...prev, [editingHoursDay]: hrs }));
+        }
+        setEditingHoursDay(null);
+        setEditingHoursValue('');
+      }
+    };
+
+    // Calculate income reduction from days off
+    const incomeReduction = daysOff.reduce((sum, day) => {
+      const hrs = customHours[day.date] ?? baseHoursPerDay;
+      return sum + (hrs * basePayRate);
     }, 0);
-
-    const projectedCheckAmount = checkAmount - projectedIncomeReduction;
 
     return (
       <motion.div
@@ -363,58 +419,126 @@ export default function SmartStackPage() {
 
         <div className="space-y-6">
           {/* Projected Check Amount */}
-          <div style={{ backgroundColor: theme.bg, borderColor: theme.gold }} className="border-2 rounded-lg p-4">
+          <div style={{ backgroundColor: theme.bg, borderColor: hasSettingsInput ? theme.gold : theme.border }} className="border-2 rounded-lg p-4">
             <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
               Projected Check Amount
             </p>
             <p style={{ color: theme.gold }} className="text-3xl font-bold">
               {fmt(projectedCheckAmount)}
             </p>
-            {daysOff.length > 0 && (
+            {!hasSettingsInput && (
               <p style={{ color: theme.warn }} className="text-sm mt-2">
-                {fmt(projectedIncomeReduction)} reduction from {daysOff.length} day(s) off
+                Set your pay rate and hours in{' '}
+                <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a>{' '}
+                to see your projected check.
+              </p>
+            )}
+            {hasSettingsInput && daysOff.length > 0 && (
+              <p style={{ color: theme.warn }} className="text-sm mt-2">
+                {fmt(incomeReduction)} reduction from {daysOff.length} day(s) off
               </p>
             )}
             <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: theme.textM }}>
               <Info size={14} />
               <span>
-                Your check is calculated from your <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a>
+                Based on your <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a> ({hasSettingsInput ? `$${basePayRate}/hr × ${baseHoursPerDay}hrs` : 'not configured'})
               </span>
             </div>
           </div>
 
           {/* Calendar */}
           <div>
-            <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase mb-4">
-              {new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </p>
+            <div className="flex items-center justify-between mb-4">
+              <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">
+                {new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </p>
+              <p style={{ color: theme.textM }} className="text-xs">
+                Click a day to mark it off · Double-click to edit hours
+              </p>
+            </div>
 
             <div className="grid grid-cols-7 gap-2 mb-6">
-              {/* Day headers */}
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                 <div key={d} style={{ color: theme.textM }} className="text-center text-xs font-semibold py-2">
                   {d}
                 </div>
               ))}
 
-              {/* Calendar days */}
-              {days.map((date, idx) => (
-                <motion.button
-                  key={idx}
-                  whileHover={date ? { scale: 1.1 } : {}}
-                  onClick={() => date && toggleDayOff(date)}
-                  style={{
-                    backgroundColor: isDayOff(date) ? theme.gold : theme.bgS,
-                    borderColor: isDayOff(date) ? theme.gold : theme.border,
-                    color: isDayOff(date) ? theme.bgS : theme.text,
-                  }}
-                  className={`aspect-square rounded-lg border flex items-center justify-center text-sm font-semibold ${date ? 'cursor-pointer' : ''}`}
-                >
-                  {date?.getDate()}
-                </motion.button>
-              ))}
+              {days.map((date, idx) => {
+                const dateStr = date?.toISOString().split('T')[0] || '';
+                const isOff = isDayOff(date);
+                const isWknd = isWeekend(date);
+                const hasCustom = date && customHours[dateStr] !== undefined;
+
+                return (
+                  <motion.button
+                    key={idx}
+                    whileHover={date && !isWknd ? { scale: 1.1 } : {}}
+                    onClick={() => date && !isWknd && toggleDayOff(date)}
+                    onDoubleClick={(e) => {
+                      e.preventDefault();
+                      if (date && !isWknd && !isOff) startEditHours(date);
+                    }}
+                    style={{
+                      backgroundColor: isOff ? theme.gold : isWknd ? `${theme.border}40` : hasCustom ? `${theme.gold}15` : theme.bgS,
+                      borderColor: isOff ? theme.gold : hasCustom ? `${theme.gold}60` : theme.border,
+                      color: isOff ? theme.bgS : isWknd ? theme.textM : theme.text,
+                      opacity: isWknd ? 0.5 : 1,
+                    }}
+                    className={`aspect-square rounded-lg border flex flex-col items-center justify-center text-sm font-semibold ${date && !isWknd ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <span>{date?.getDate()}</span>
+                    {hasCustom && !isOff && (
+                      <span className="text-[8px]" style={{ color: theme.gold }}>{customHours[dateStr]}h</span>
+                    )}
+                  </motion.button>
+                );
+              })}
             </div>
           </div>
+
+          {/* Edit Hours Modal */}
+          {editingHoursDay && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
+              className="border-2 rounded-lg p-4"
+            >
+              <p style={{ color: theme.text }} className="text-sm font-semibold mb-3">
+                Edit hours for {new Date(editingHoursDay + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </p>
+              <div className="flex gap-3">
+                <input
+                  type="number"
+                  value={editingHoursValue}
+                  onChange={(e) => setEditingHoursValue(e.target.value)}
+                  min="0"
+                  max="24"
+                  step="0.5"
+                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                  autoFocus
+                />
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={saveEditHours}
+                  style={{ backgroundColor: theme.gold, color: theme.bgS }}
+                  className="px-4 py-2 rounded-lg font-semibold text-sm"
+                >
+                  Save
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setEditingHoursDay(null)}
+                  style={{ backgroundColor: theme.border, color: theme.text }}
+                  className="px-4 py-2 rounded-lg font-semibold text-sm"
+                >
+                  Cancel
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
 
           {/* Days Off Summary */}
           {daysOff.length > 0 && (
@@ -424,9 +548,18 @@ export default function SmartStackPage() {
               style={{ backgroundColor: theme.bgS, borderColor: theme.border }}
               className="border rounded-lg p-4 space-y-3"
             >
-              <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase">
-                Days Off: {daysOff.length}
-              </p>
+              <div className="flex items-center justify-between">
+                <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase">
+                  Days Off: {daysOff.length}
+                </p>
+                <button
+                  onClick={() => setDaysOff([])}
+                  style={{ color: theme.textM }}
+                  className="text-xs underline hover:no-underline"
+                >
+                  Clear All
+                </button>
+              </div>
               <div style={{ backgroundColor: theme.bg }} className="h-2 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
@@ -438,20 +571,186 @@ export default function SmartStackPage() {
             </motion.div>
           )}
 
-          {!budgetLocked && (
+          {!budgetLocked ? (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleBudgetLock}
+              disabled={projectedCheckAmount <= 0}
+              style={{
+                backgroundColor: projectedCheckAmount > 0 ? theme.gold : theme.border,
+                color: projectedCheckAmount > 0 ? theme.bgS : theme.textM,
+              }}
+              className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 disabled:cursor-not-allowed"
+            >
+              <Lock size={18} />
+              Lock In
+            </motion.button>
+          ) : (
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleBudgetLock}
               style={{
-                backgroundColor: theme.gold,
-                color: theme.bgS,
+                backgroundColor: theme.border,
+                color: theme.text,
               }}
-              className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2"
+              className="w-full py-2 rounded-lg font-semibold flex items-center justify-center gap-2"
             >
-              <Lock size={18} />
-              Lock In Budget
+              <Edit3 size={18} />
+              Edit
             </motion.button>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
+  // ============== PAYMENT PROJECTION (Self-Employed) ==============
+  const renderPaymentProjection = () => {
+    const addPayment = () => {
+      const amount = parseFloat(newPaymentAmount);
+      if (!amount || !newPaymentDate) return;
+      const entry: PaymentEntry = {
+        id: `pay-${Date.now()}`,
+        amount,
+        date: newPaymentDate,
+        description: newPaymentDesc || 'Payment',
+      };
+      const updated = [...paymentEntries, entry];
+      setPaymentEntries(updated);
+      // Sync payment dates to Dashboard calendar via data context
+      const existingIncome = data.income || [];
+      const newIncome = [...existingIncome, { id: entry.id, source: entry.description, amount: entry.amount, date: entry.date, frequency: 'once' as const }];
+      setData(prev => ({ ...prev, income: newIncome as any }));
+      setNewPaymentAmount('');
+      setNewPaymentDate('');
+      setNewPaymentDesc('');
+    };
+
+    const removePayment = (id: string) => {
+      setPaymentEntries(prev => prev.filter(p => p.id !== id));
+      const existingIncome = data.income || [];
+      setData(prev => ({ ...prev, income: (existingIncome as any[]).filter((i: any) => i.id !== id) as any }));
+    };
+
+    const totalPayments = paymentEntries.reduce((sum, p) => sum + p.amount, 0);
+    const nextPayment = paymentEntries
+      .filter(p => new Date(p.date) >= new Date())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ backgroundColor: theme.card, borderColor: theme.border }}
+        className="border rounded-xl p-6"
+      >
+        <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
+          <Briefcase size={28} style={{ color: theme.gold }} />
+          Payment Projection
+        </h3>
+
+        <div className="space-y-6">
+          {/* Summary */}
+          <div className="grid grid-cols-2 gap-4">
+            <div style={{ backgroundColor: theme.bg, borderColor: theme.gold }} className="border-2 rounded-lg p-4">
+              <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-1">Total Expected</p>
+              <p style={{ color: theme.gold }} className="text-2xl font-bold">{fmt(totalPayments)}</p>
+            </div>
+            <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
+              <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-1">Next Payment</p>
+              <p style={{ color: theme.text }} className="text-2xl font-bold">
+                {nextPayment ? fmt(nextPayment.amount) : '$0.00'}
+              </p>
+              {nextPayment && (
+                <p style={{ color: theme.textM }} className="text-xs mt-1">
+                  {new Date(nextPayment.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Add Payment Form */}
+          <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4 space-y-3">
+            <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">Add Incoming Payment</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="relative">
+                <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2">$</span>
+                <input
+                  type="number"
+                  value={newPaymentAmount}
+                  onChange={(e) => setNewPaymentAmount(e.target.value)}
+                  placeholder="Amount"
+                  style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
+                  className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm"
+                />
+              </div>
+              <input
+                type="date"
+                value={newPaymentDate}
+                onChange={(e) => setNewPaymentDate(e.target.value)}
+                style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <input
+              type="text"
+              value={newPaymentDesc}
+              onChange={(e) => setNewPaymentDesc(e.target.value)}
+              placeholder="Description (e.g., Client invoice, Freelance work)"
+              style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={addPayment}
+              disabled={!newPaymentAmount || !newPaymentDate}
+              style={{
+                backgroundColor: newPaymentAmount && newPaymentDate ? theme.gold : theme.border,
+                color: newPaymentAmount && newPaymentDate ? theme.bgS : theme.textM,
+              }}
+              className="w-full py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:cursor-not-allowed"
+            >
+              <Plus size={16} /> Add Payment
+            </motion.button>
+          </div>
+
+          {/* Payment Entries List */}
+          {paymentEntries.length > 0 && (
+            <div className="space-y-3">
+              <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">Upcoming Payments</p>
+              {paymentEntries
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .map((entry) => (
+                  <motion.div
+                    key={entry.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                    className="border rounded-lg p-4 flex items-center justify-between"
+                  >
+                    <div>
+                      <p style={{ color: theme.text }} className="font-semibold">{entry.description}</p>
+                      <p style={{ color: theme.textM }} className="text-xs">
+                        {new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p style={{ color: theme.gold }} className="font-bold">{fmt(entry.amount)}</p>
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => removePayment(entry.id)}
+                        style={{ color: theme.textM }}
+                        className="hover:opacity-70"
+                      >
+                        <Trash2 size={16} />
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                ))}
+            </div>
           )}
         </div>
       </motion.div>
@@ -489,19 +788,6 @@ export default function SmartStackPage() {
             <DollarSign size={28} style={{ color: theme.gold }} />
             Check Splitter
           </h3>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleBudgetLock}
-            style={{
-              backgroundColor: budgetLocked ? theme.gold : theme.border,
-              color: budgetLocked ? theme.bgS : theme.text,
-            }}
-            className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2"
-          >
-            {budgetLocked ? <Lock size={18} /> : <Edit3 size={18} />}
-            {budgetLocked ? 'Locked' : 'Lock In'}
-          </motion.button>
         </div>
 
         <div className="space-y-6">
@@ -670,6 +956,36 @@ export default function SmartStackPage() {
 
   // ============== TAB: BUDGET ==============
   const renderBudgetTab = () => {
+    // Toggle between Check Projection and Payment Projection
+    const renderProjectionToggle = () => (
+      <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-3 mb-8">
+        <div className="flex rounded-lg overflow-hidden" style={{ backgroundColor: theme.bg }}>
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setProjectionMode('check')}
+            style={{
+              backgroundColor: projectionMode === 'check' ? theme.gold : 'transparent',
+              color: projectionMode === 'check' ? theme.bgS : theme.textM,
+            }}
+            className="flex-1 py-3 font-semibold text-sm flex items-center justify-center gap-2 rounded-lg transition-all"
+          >
+            <DollarSign size={16} /> Check Projection
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setProjectionMode('payment')}
+            style={{
+              backgroundColor: projectionMode === 'payment' ? theme.gold : 'transparent',
+              color: projectionMode === 'payment' ? theme.bgS : theme.textM,
+            }}
+            className="flex-1 py-3 font-semibold text-sm flex items-center justify-center gap-2 rounded-lg transition-all"
+          >
+            <Briefcase size={16} /> Payment Projection
+          </motion.button>
+        </div>
+      </div>
+    );
+
     if (isSelfEmployed) {
       return (
         <motion.div
@@ -677,6 +993,14 @@ export default function SmartStackPage() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-8"
         >
+          {renderProjectionToggle()}
+
+          {projectionMode === 'payment' ? (
+            renderPaymentProjection()
+          ) : (
+            renderCheckProjectionWithCalendar()
+          )}
+
           {/* Self-Employed Income Allocator */}
           <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
             <div className="flex items-center justify-between mb-6">
@@ -860,11 +1184,19 @@ export default function SmartStackPage() {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-8"
       >
-        {/* Check Projection with Calendar */}
-        {renderCheckProjectionWithCalendar()}
+        {renderProjectionToggle()}
 
-        {/* Check Splitter */}
-        {renderCheckSplitter()}
+        {projectionMode === 'payment' ? (
+          renderPaymentProjection()
+        ) : (
+          <>
+            {/* Check Projection with Calendar */}
+            {renderCheckProjectionWithCalendar()}
+
+            {/* Check Splitter */}
+            {renderCheckSplitter()}
+          </>
+        )}
 
         {/* Paycheck History */}
         {renderPaycheckHistory()}
@@ -913,7 +1245,29 @@ export default function SmartStackPage() {
                 <input
                   type="number"
                   value={currentSavingsAmount}
-                  onChange={(e) => setCurrentSavingsAmount(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCurrentSavingsAmount(val);
+                    // Sync to Dashboard via OrcaData goals
+                    const numVal = parseFloat(val || '0');
+                    const updatedGoals = [...(data.goals || [])];
+                    const savingsIdx = updatedGoals.findIndex(g => g.id === 'current-savings');
+                    if (savingsIdx >= 0) {
+                      updatedGoals[savingsIdx] = { ...updatedGoals[savingsIdx], current: numVal };
+                    } else {
+                      updatedGoals.push({
+                        id: 'current-savings',
+                        name: 'Current Savings',
+                        target: 0,
+                        current: numVal,
+                        date: '',
+                        cType: 'fixed',
+                        cVal: 0,
+                        active: true,
+                      });
+                    }
+                    setData(prev => ({ ...prev, goals: updatedGoals }));
+                  }}
                   style={{
                     backgroundColor: theme.bg,
                     borderColor: theme.border,

@@ -3,6 +3,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createBrowserClient } from '@supabase/ssr'
+import { useTheme } from '@/context/ThemeContext'
+import type { AdminThemeOverrides } from '@/context/ThemeContext'
 import {
   Shield,
   Users,
@@ -69,6 +71,21 @@ const createSupabaseClient = () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
   )
+}
+
+// Helpers
+function getRelativeTime(dateStr: string): string {
+  const now = new Date()
+  const date = new Date(dateStr)
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins} minutes ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours} hours ago`
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 30) return `${diffDays} days ago`
+  return `${Math.floor(diffDays / 30)} months ago`
 }
 
 // Types
@@ -380,6 +397,7 @@ const SUB_TABS: Record<string, { id: string; label: string }[]> = {
 }
 
 export default function AdminPage() {
+  const { applyAdminTheme, resetTheme } = useTheme()
   // Admin auth state
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
@@ -418,7 +436,7 @@ export default function AdminPage() {
         // Fetch users from Supabase profiles table
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, email, full_name, created_at, user_metadata')
+          .select('*')
           .limit(1000)
 
         if (error) {
@@ -437,14 +455,14 @@ export default function AdminPage() {
           // Convert Supabase data to AdminUser format
           const liveUsers: AdminUser[] = data.map((profile: any, idx: number) => ({
             id: profile.id || `user-${idx}`,
-            name: profile.full_name || 'User',
+            name: profile.name || profile.full_name || 'User',
             email: profile.email || 'unknown@example.com',
-            status: 'active' as const,
+            status: profile.onboarded ? 'active' as const : 'trial' as const,
             twoFA: false,
-            lastActive: 'Recently',
+            lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Recently',
             joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-            plan: 'Active',
-            creditScore: 750,
+            plan: profile.onboarded ? 'Active' : 'Trial',
+            creditScore: profile.credit_score || 0,
             activityLog: [{ action: 'Account created', date: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : '', detail: 'User registration' }],
           }))
           setUsers(liveUsers)
@@ -452,21 +470,34 @@ export default function AdminPage() {
           setIsLiveMode(true)
           setLastSyncTime(new Date().toLocaleTimeString())
 
-          // Set up real-time subscription
+          // Set up real-time subscriptions for all key tables
           if (supabaseRef.current) {
             const channel = supabaseRef.current
-              .channel('admin-users')
+              .channel('admin-all-changes')
               .on(
                 'postgres_changes',
-                {
-                  event: '*',
-                  schema: 'public',
-                  table: 'profiles',
-                },
-                (payload) => {
-                  // Refresh user list on any change
-                  refetchUsers()
-                }
+                { event: '*', schema: 'public', table: 'profiles' },
+                () => { refetchUsers(); setLastSyncTime(new Date().toLocaleTimeString()); }
+              )
+              .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'bills' },
+                () => { setLastSyncTime(new Date().toLocaleTimeString()); }
+              )
+              .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'expenses' },
+                () => { setLastSyncTime(new Date().toLocaleTimeString()); }
+              )
+              .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'savings_goals' },
+                () => { setLastSyncTime(new Date().toLocaleTimeString()); }
+              )
+              .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'income_sources' },
+                () => { setLastSyncTime(new Date().toLocaleTimeString()); }
               )
               .subscribe()
 
@@ -511,7 +542,7 @@ export default function AdminPage() {
     try {
       const { data, error } = await supabaseRef.current
         .from('profiles')
-        .select('id, email, full_name, created_at, user_metadata')
+        .select('*')
         .limit(1000)
 
       if (error) {
@@ -522,14 +553,14 @@ export default function AdminPage() {
       if (data && data.length > 0) {
         const liveUsers: AdminUser[] = data.map((profile: any, idx: number) => ({
           id: profile.id || `user-${idx}`,
-          name: profile.full_name || 'User',
+          name: profile.name || profile.full_name || 'User',
           email: profile.email || 'unknown@example.com',
-          status: 'active' as const,
+          status: profile.onboarded ? 'active' as const : 'trial' as const,
           twoFA: false,
-          lastActive: 'Recently',
+          lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Recently',
           joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          plan: 'Active',
-          creditScore: 750,
+          plan: profile.onboarded ? 'Active' : 'Trial',
+          creditScore: profile.credit_score || 0,
           activityLog: [{ action: 'Account created', date: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : '', detail: 'User registration' }],
         }))
         setUsers(liveUsers)
@@ -612,6 +643,8 @@ export default function AdminPage() {
   const [userLoadError, setUserLoadError] = useState<string>('')
   const [useDemoData, setUseDemoData] = useState(false)
   const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null)
+  // Platform-wide metrics
+  const [platformMetrics, setPlatformMetrics] = useState({ totalBills: 0, totalExpenses: 0, totalGoals: 0, totalIncome: 0 })
   const [moduleSettings, setModuleSettings] = useState<Record<string, any>>({})
 
   // Navigation states
@@ -935,6 +968,28 @@ export default function AdminPage() {
       textSecondary: '#a1a1aa',
       textMuted: '#71717a',
     })
+  }
+
+  const [themeSaved, setThemeSaved] = useState(false)
+  const handleSaveTheme = () => {
+    const overrides: AdminThemeOverrides = {
+      primaryColor: themeConfig.primaryColor,
+      bgDark: themeConfig.bgDark,
+      bgCard: themeConfig.bgCard,
+      borderColor: themeConfig.borderColor,
+      textPrimary: themeConfig.textPrimary,
+      textSecondary: themeConfig.textSecondary,
+      textMuted: themeConfig.textMuted,
+    }
+    applyAdminTheme(overrides)
+    setThemeSaved(true)
+    setTimeout(() => setThemeSaved(false), 3000)
+  }
+
+  const handleResetTheme = () => {
+    resetTheme()
+    setThemeConfig(DEFAULT_THEME)
+    setThemeSaved(false)
   }
 
   const getComplementary = (hex: string) => {
@@ -2612,6 +2667,28 @@ export default function AdminPage() {
                     </div>
                     <motion.button style={{ backgroundColor: themeConfig.primaryColor, color: themeConfig.bgDark }} className="w-full py-2 rounded-lg font-bold text-sm">Sample Button</motion.button>
                   </div>
+                </motion.div>
+
+                {/* Save / Reset Theme Buttons */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }} className="flex gap-4">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleSaveTheme}
+                    style={{ backgroundColor: themeSaved ? '#10b981' : GOLD, color: BG_DARK }}
+                    className="flex-1 py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2"
+                  >
+                    {themeSaved ? <><CheckCircle size={18} /> Theme Saved &amp; Applied!</> : <><Save size={18} /> Save Changes</>}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleResetTheme}
+                    style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }}
+                    className="px-6 py-3 rounded-lg font-bold text-sm border flex items-center gap-2"
+                  >
+                    <RefreshCw size={16} /> Reset to Default
+                  </motion.button>
                 </motion.div>
 
                 {/* ─── Branding: Logo Management ─── */}
