@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
-  ChevronRight, Users, Copy, ChevronLeft,
+  ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
   DollarSign, Receipt, Palmtree, Calendar,
-  GripVertical,
+  GripVertical, Settings,
 } from 'lucide-react'
 
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -241,28 +241,67 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
   )
 }
 
-function DraggableSection({ id, children, index, onDragStart, onDragOver, onDrop, theme }: {
+function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, isLast, isReordering, theme }: {
   id: string
   children: React.ReactNode
   index: number
-  onDragStart: (e: React.DragEvent, index: number) => void
-  onDragOver: (e: React.DragEvent) => void
-  onDrop: (e: React.DragEvent, index: number) => void
+  onMoveUp: (index: number) => void
+  onMoveDown: (index: number) => void
+  isFirst: boolean
+  isLast: boolean
+  isReordering: boolean
   theme: any
 }) {
+  const sectionLabels: Record<string, string> = {
+    'financial-cards': 'Financial Overview',
+    'spend-paycheck': 'Next Payment',
+    'calendar': 'Calendar',
+    'credit-score': 'Credit Score',
+    'upcoming-bills': 'Upcoming Bills',
+    'stack-circle': 'Stack Circle',
+    'savings-goals': 'Savings Goals',
+  }
+
   return (
-    <motion.div
-      variants={fadeUp}
-      draggable
-      onDragStart={(e) => onDragStart(e as any, index)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e as any, index)}
-      className="relative group"
-    >
-      <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" style={{ color: theme.textM }}>
-        <GripVertical size={16} />
+    <motion.div variants={fadeUp} className="relative">
+      {isReordering && (
+        <motion.div
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex items-center gap-2 mb-2"
+        >
+          <div className="flex items-center gap-1">
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              onClick={() => onMoveUp(index)}
+              disabled={isFirst}
+              style={{
+                backgroundColor: isFirst ? theme.border : theme.gold,
+                color: isFirst ? theme.textM : theme.bgS,
+              }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
+            >
+              <ChevronUp size={16} />
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              onClick={() => onMoveDown(index)}
+              disabled={isLast}
+              style={{
+                backgroundColor: isLast ? theme.border : theme.gold,
+                color: isLast ? theme.textM : theme.bgS,
+              }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
+            >
+              <ChevronDown size={16} />
+            </motion.button>
+          </div>
+          <span style={{ color: theme.textS }} className="text-sm font-medium">{sectionLabels[id] || id}</span>
+        </motion.div>
+      )}
+      <div style={isReordering ? { borderColor: `${theme.gold}40`, borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, padding: 4 } : {}}>
+        {children}
       </div>
-      {children}
     </motion.div>
   )
 }
@@ -403,26 +442,20 @@ export default function DashboardPage() {
   }, [calendarEvents])
 
   // Drag and drop handlers
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', index.toString())
-  }
+  const [isReordering, setIsReordering] = useState(false)
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
-
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault()
-    const dragIndex = parseInt(e.dataTransfer.getData('text/plain'), 10)
-
-    if (dragIndex === dropIndex) return
-
+  const handleMoveUp = (index: number) => {
+    if (index === 0) return
     const newOrder = [...sectionOrder]
-    const [draggedItem] = newOrder.splice(dragIndex, 1)
-    newOrder.splice(dropIndex, 0, draggedItem)
+    ;[newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]]
+    setSectionOrder(newOrder)
+    localStorage.setItem('orca-dashboard-order', JSON.stringify(newOrder))
+  }
 
+  const handleMoveDown = (index: number) => {
+    if (index >= sectionOrder.length - 1) return
+    const newOrder = [...sectionOrder]
+    ;[newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]]
     setSectionOrder(newOrder)
     localStorage.setItem('orca-dashboard-order', JSON.stringify(newOrder))
   }
@@ -431,7 +464,7 @@ export default function DashboardPage() {
     switch (sectionId) {
       case 'financial-cards':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {/* Bills Card */}
               <div className="rounded-2xl p-6 glass-hover" style={{
@@ -470,7 +503,7 @@ export default function DashboardPage() {
 
       case 'spend-paycheck':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {/* Safe to Spend Card */}
               <div className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold" style={{ backgroundColor: theme.card }}>
@@ -517,13 +550,9 @@ export default function DashboardPage() {
                 <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: theme.gold }}>
                   {fmt(paycheckAmt)}
                 </p>
-                {user.nextPay ? (
+                {user.nextPay && (
                   <p className="text-sm" style={{ color: theme.textM }}>
                     {fmtD(user.nextPay)} · {daysTo(user.nextPay)}d
-                  </p>
-                ) : (
-                  <p className="text-sm" style={{ color: theme.textM }}>
-                    Set up in Settings
                   </p>
                 )}
               </div>
@@ -533,7 +562,7 @@ export default function DashboardPage() {
 
       case 'calendar':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
             <motion.div variants={fadeUp}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold">Calendar</h2>
@@ -601,7 +630,7 @@ export default function DashboardPage() {
 
       case 'credit-score':
         return user.creditScore > 0 ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
             <motion.div
               variants={fadeUp}
               className="glass rounded-2xl p-6 cursor-pointer glass-hover depth-1"
@@ -626,7 +655,7 @@ export default function DashboardPage() {
 
       case 'upcoming-bills':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
             <motion.div variants={fadeUp}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold">Upcoming Bills</h2>
@@ -669,7 +698,7 @@ export default function DashboardPage() {
 
       case 'stack-circle':
         return group ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
             <motion.div
               variants={fadeUp}
               className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold"
@@ -709,7 +738,7 @@ export default function DashboardPage() {
 
       case 'savings-goals':
         return topGoals.length > 0 ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
             <motion.div variants={fadeUp}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold">Savings Goals</h2>
@@ -773,13 +802,29 @@ export default function DashboardPage() {
         className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-4xl"
       >
         {/* Welcome Message */}
-        <motion.div variants={fadeUp} className="space-y-1">
-          <h1 className="text-3xl sm:text-5xl font-bold" style={{ color: theme.gold }}>
-            Welcome back, {firstName}
-          </h1>
-          <p className="text-lg" style={{ color: theme.textS }}>
-            Here's your financial snapshot
-          </p>
+        <motion.div variants={fadeUp} className="flex items-start justify-between">
+          <div className="space-y-1">
+            <h1 className="text-3xl sm:text-5xl font-bold" style={{ color: theme.gold }}>
+              {new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, {firstName}
+            </h1>
+            <p className="text-lg" style={{ color: theme.textS }}>
+              Here's your financial snapshot
+            </p>
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsReordering(!isReordering)}
+            style={{
+              backgroundColor: isReordering ? theme.gold : theme.card,
+              color: isReordering ? theme.bgS : theme.textM,
+              borderColor: isReordering ? theme.gold : theme.border,
+            }}
+            className="border rounded-lg px-3 py-2 text-sm font-medium flex items-center gap-2 mt-2 shrink-0"
+          >
+            <GripVertical size={14} />
+            {isReordering ? 'Done' : 'Reorder'}
+          </motion.button>
         </motion.div>
 
         {/* Render sections in order */}

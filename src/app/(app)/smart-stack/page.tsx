@@ -11,7 +11,7 @@ import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
 
-type Tab = 'budget' | 'savings' | 'credit';
+type Tab = 'budget' | 'savings';
 
 interface Obligation {
   id: string;
@@ -41,6 +41,14 @@ interface PaycheckEntry {
 interface DayOff {
   date: string;
   hoursPerDay?: number;
+}
+
+interface SavingsAccount {
+  id: string;
+  name: string;
+  amount: number;
+  goal: number;
+  saved: boolean;
 }
 
 interface PaymentEntry {
@@ -194,6 +202,16 @@ export default function SmartStackPage() {
   const [forecastedIncome, setForecastedIncome] = useState<any[]>([]);
   const [currentSavingsAmount, setCurrentSavingsAmount] = useState('');
   const [savingsGoal, setSavingsGoal] = useState('');
+  const [savingsAccounts, setSavingsAccounts] = useState<SavingsAccount[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('orca-savings-accounts');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
+  const [newAccountName, setNewAccountName] = useState('');
   const [projectionMode, setProjectionMode] = useState<'check' | 'payment'>('check');
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
   const [newPaymentAmount, setNewPaymentAmount] = useState('');
@@ -886,7 +904,7 @@ export default function SmartStackPage() {
       >
         <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
           <LineChart size={28} style={{ color: theme.ok }} />
-          Paycheck History
+          Paycheck
         </h3>
 
         {paycheckHistory.length === 0 ? (
@@ -1168,7 +1186,7 @@ export default function SmartStackPage() {
             )}
           </div>
 
-          {/* Paycheck History */}
+          {/* Paycheck */}
           {renderPaycheckHistory()}
 
           {/* Projection Calculator */}
@@ -1198,7 +1216,7 @@ export default function SmartStackPage() {
           </>
         )}
 
-        {/* Paycheck History */}
+        {/* Paycheck */}
         {renderPaycheckHistory()}
 
         {/* Projection Calculator */}
@@ -1208,183 +1226,225 @@ export default function SmartStackPage() {
   };
 
   // ============== TAB: SAVINGS ==============
+  const syncSavingsToDashboard = (accounts: SavingsAccount[]) => {
+    const totalSavings = accounts.reduce((sum, a) => sum + a.amount, 0);
+    const updatedGoals = [...(data.goals || [])].filter(g => !g.id?.startsWith('savings-acct-'));
+    accounts.forEach((acct) => {
+      updatedGoals.push({
+        id: `savings-acct-${acct.id}`,
+        name: acct.name,
+        target: acct.goal || 0,
+        current: acct.amount,
+        date: '',
+        cType: 'fixed',
+        cVal: 0,
+        active: true,
+      });
+    });
+    setData(prev => ({ ...prev, goals: updatedGoals }));
+  };
+
+  const addSavingsAccount = () => {
+    if (!newAccountName.trim()) return;
+    const newAcct: SavingsAccount = {
+      id: `sa-${Date.now()}`,
+      name: newAccountName.trim(),
+      amount: 0,
+      goal: 0,
+      saved: false,
+    };
+    const updated = [...savingsAccounts, newAcct];
+    setSavingsAccounts(updated);
+    localStorage.setItem('orca-savings-accounts', JSON.stringify(updated));
+    setNewAccountName('');
+  };
+
+  const updateSavingsAccount = (id: string, field: 'amount' | 'goal', value: number) => {
+    setSavingsAccounts(prev => prev.map(a => a.id === id ? { ...a, [field]: value, saved: false } : a));
+  };
+
+  const saveSavingsAccount = (id: string) => {
+    const updated = savingsAccounts.map(a => a.id === id ? { ...a, saved: true } : a);
+    setSavingsAccounts(updated);
+    localStorage.setItem('orca-savings-accounts', JSON.stringify(updated));
+    syncSavingsToDashboard(updated);
+    setTimeout(() => {
+      setSavingsAccounts(prev => prev.map(a => a.id === id ? { ...a, saved: false } : a));
+    }, 2000);
+  };
+
+  const removeSavingsAccount = (id: string) => {
+    const updated = savingsAccounts.filter(a => a.id !== id);
+    setSavingsAccounts(updated);
+    localStorage.setItem('orca-savings-accounts', JSON.stringify(updated));
+    syncSavingsToDashboard(updated);
+  };
+
   const renderSavingsTab = () => {
-    const goals = data.goals || [];
-    const totalCurrentSavings = parseFloat(currentSavingsAmount || '0');
-    const totalGoal = parseFloat(savingsGoal || '0');
-    const progressPercent = totalGoal > 0 ? (totalCurrentSavings / totalGoal) * 100 : 0;
+    const totalSavings = savingsAccounts.reduce((sum, a) => sum + a.amount, 0);
+    const totalGoalAmount = savingsAccounts.reduce((sum, a) => sum + (a.goal || 0), 0);
+    const overallProgress = totalGoalAmount > 0 ? (totalSavings / totalGoalAmount) * 100 : 0;
 
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="space-y-8"
+        className="space-y-6"
       >
-        {/* Current Savings Amount Input */}
+        {/* Total Savings Summary */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           style={{ backgroundColor: theme.card, borderColor: theme.border }}
           className="border rounded-xl p-6"
         >
-          <h3 style={{ color: theme.text }} className="text-xl font-bold mb-6 flex items-center gap-3">
+          <h3 style={{ color: theme.text }} className="text-xl font-bold mb-4 flex items-center gap-3">
             <DollarSign size={24} style={{ color: theme.gold }} />
-            Savings Overview
+            Total Savings
           </h3>
-
-          <div className="space-y-5">
-            {/* Current Savings */}
+          <p style={{ color: theme.gold }} className="text-4xl font-bold mb-2">{fmt(totalSavings)}</p>
+          {totalGoalAmount > 0 && (
             <div>
-              <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">
-                Current Savings Amount
-              </label>
-              <div className="relative">
-                <span style={{ color: theme.textM }} className="absolute left-4 top-1/2 transform -translate-y-1/2">
-                  $
-                </span>
-                <input
-                  type="number"
-                  value={currentSavingsAmount}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCurrentSavingsAmount(val);
-                    // Sync to Dashboard via OrcaData goals
-                    const numVal = parseFloat(val || '0');
-                    const updatedGoals = [...(data.goals || [])];
-                    const savingsIdx = updatedGoals.findIndex(g => g.id === 'current-savings');
-                    if (savingsIdx >= 0) {
-                      updatedGoals[savingsIdx] = { ...updatedGoals[savingsIdx], current: numVal };
-                    } else {
-                      updatedGoals.push({
-                        id: 'current-savings',
-                        name: 'Current Savings',
-                        target: 0,
-                        current: numVal,
-                        date: '',
-                        cType: 'fixed',
-                        cVal: 0,
-                        active: true,
-                      });
-                    }
-                    setData(prev => ({ ...prev, goals: updatedGoals }));
-                  }}
-                  style={{
-                    backgroundColor: theme.bg,
-                    borderColor: theme.border,
-                    color: theme.text,
-                  }}
-                  className="w-full border rounded-lg pl-8 pr-4 py-3 font-semibold text-lg"
-                  placeholder="0.00"
-                />
+              <div className="flex justify-between mb-1">
+                <span style={{ color: theme.textM }} className="text-xs">Overall Progress</span>
+                <span style={{ color: theme.text }} className="text-xs font-bold">{overallProgress.toFixed(1)}%</span>
               </div>
-            </div>
-
-            {/* Savings Goal */}
-            <div>
-              <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">
-                Savings Goal (Optional)
-              </label>
-              <div className="relative">
-                <span style={{ color: theme.textM }} className="absolute left-4 top-1/2 transform -translate-y-1/2">
-                  $
-                </span>
-                <input
-                  type="number"
-                  value={savingsGoal}
-                  onChange={(e) => setSavingsGoal(e.target.value)}
-                  style={{
-                    backgroundColor: theme.bg,
-                    borderColor: theme.border,
-                    color: theme.text,
-                  }}
-                  className="w-full border rounded-lg pl-8 pr-4 py-3 font-semibold text-lg"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            {totalGoal > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                <div className="flex justify-between mb-2">
-                  <span style={{ color: theme.textM }} className="text-sm font-semibold">
-                    Progress to Goal
-                  </span>
-                  <span style={{ color: theme.text }} className="text-sm font-bold">
-                    {progressPercent.toFixed(1)}%
-                  </span>
-                </div>
-                <div style={{ backgroundColor: theme.bg }} className="h-3 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, progressPercent)}%` }}
-                    style={{ backgroundColor: progressPercent >= 100 ? theme.ok : theme.gold }}
-                    className="h-full transition-all"
-                  />
-                </div>
-                <div className="flex justify-between mt-2 text-xs" style={{ color: theme.textM }}>
-                  <span>{fmt(totalCurrentSavings)}</span>
-                  <span>{fmt(totalGoal)}</span>
-                </div>
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Individual Goals */}
-        {goals.length === 0 ? (
-          <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-8 text-center">
-            <Heart size={40} style={{ color: theme.gold }} className="mx-auto mb-4" />
-            <h3 style={{ color: theme.text }} className="text-xl font-bold mb-2">
-              No Savings Goals Yet
-            </h3>
-            <p style={{ color: theme.textM }} className="mb-4">
-              Create a savings goal in Settings to get started
-            </p>
-          </div>
-        ) : (
-          goals.map((goal: any, idx: number) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="border rounded-xl p-6"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 style={{ color: theme.text }} className="text-xl font-bold">
-                    {goal.name}
-                  </h3>
-                  <p style={{ color: theme.textM }} className="text-sm">
-                    Target: {fmt(goal.target)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p style={{ color: theme.text }} className="text-2xl font-bold">
-                    {fmt(goal.current || 0)}
-                  </p>
-                  <p style={{ color: theme.textM }} className="text-xs">
-                    {Math.round(((goal.current || 0) / goal.target) * 100)}% complete
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ backgroundColor: theme.bg }} className="h-3 rounded-full overflow-hidden">
+              <div style={{ backgroundColor: theme.bg }} className="h-2 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, ((goal.current || 0) / goal.target) * 100)}%` }}
-                  style={{ backgroundColor: theme.ok }}
-                  className="h-full transition-all"
+                  animate={{ width: `${Math.min(100, overallProgress)}%` }}
+                  style={{ backgroundColor: overallProgress >= 100 ? theme.ok : theme.gold }}
+                  className="h-full"
                 />
               </div>
+              <p style={{ color: theme.textM }} className="text-xs mt-1 text-right">Goal: {fmt(totalGoalAmount)}</p>
+            </div>
+          )}
+          <p style={{ color: theme.textM }} className="text-sm mt-3">{savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}</p>
+        </motion.div>
+
+        {/* Savings Accounts */}
+        {savingsAccounts.map((acct, idx) => {
+          const acctProgress = acct.goal > 0 ? (acct.amount / acct.goal) * 100 : 0;
+          return (
+            <motion.div
+              key={acct.id}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              style={{ backgroundColor: theme.card, borderColor: theme.border }}
+              className="border rounded-xl p-5"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h4 style={{ color: theme.text }} className="text-lg font-bold">{acct.name}</h4>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => removeSavingsAccount(acct.id)}
+                  style={{ color: theme.textM }}
+                  className="hover:opacity-70"
+                >
+                  <Trash2 size={16} />
+                </motion.button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label style={{ color: theme.textS }} className="block text-xs font-semibold mb-1">Amount</label>
+                  <div className="relative">
+                    <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
+                    <input
+                      type="number"
+                      value={acct.amount || ''}
+                      onChange={(e) => updateSavingsAccount(acct.id, 'amount', parseFloat(e.target.value) || 0)}
+                      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                      className="w-full border rounded-lg pl-7 pr-3 py-2.5 font-semibold"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ color: theme.textS }} className="block text-xs font-semibold mb-1">Savings Goal (Optional)</label>
+                  <div className="relative">
+                    <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
+                    <input
+                      type="number"
+                      value={acct.goal || ''}
+                      onChange={(e) => updateSavingsAccount(acct.id, 'goal', parseFloat(e.target.value) || 0)}
+                      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                      className="w-full border rounded-lg pl-7 pr-3 py-2.5 font-semibold"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                {acct.goal > 0 && (
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span style={{ color: theme.textM }} className="text-xs">Progress</span>
+                      <span style={{ color: theme.text }} className="text-xs font-bold">{acctProgress.toFixed(1)}%</span>
+                    </div>
+                    <div style={{ backgroundColor: theme.bg }} className="h-2 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, acctProgress)}%` }}
+                        style={{ backgroundColor: acctProgress >= 100 ? theme.ok : theme.gold }}
+                        className="h-full"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => saveSavingsAccount(acct.id)}
+                  style={{
+                    backgroundColor: acct.saved ? theme.ok : theme.gold,
+                    color: theme.bgS,
+                  }}
+                  className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                >
+                  {acct.saved ? <><Check size={16} /> Saved!</> : <><Target size={16} /> Save</>}
+                </motion.button>
+              </div>
             </motion.div>
-          ))
-        )}
+          );
+        })}
+
+        {/* Add New Account */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          className="border rounded-xl p-5 border-dashed"
+        >
+          <p style={{ color: theme.textS }} className="text-sm font-semibold mb-3">Add Savings Account</p>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newAccountName}
+              onChange={(e) => setNewAccountName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addSavingsAccount()}
+              placeholder="Account name (e.g., Emergency Fund)"
+              style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+              className="flex-1 border rounded-lg px-3 py-2.5 text-sm"
+            />
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={addSavingsAccount}
+              disabled={!newAccountName.trim()}
+              style={{
+                backgroundColor: newAccountName.trim() ? theme.gold : theme.border,
+                color: newAccountName.trim() ? theme.bgS : theme.textM,
+              }}
+              className="px-4 py-2.5 rounded-lg font-semibold text-sm disabled:cursor-not-allowed"
+            >
+              <Plus size={18} />
+            </motion.button>
+          </div>
+        </motion.div>
       </motion.div>
     );
   };
@@ -1575,7 +1635,7 @@ export default function SmartStackPage() {
           style={{ backgroundColor: theme.card, borderColor: theme.border }}
           className="border rounded-xl p-2 mb-8 flex gap-2"
         >
-          {(['budget', 'savings', 'credit'] as Tab[]).map((tab) => (
+          {(['budget', 'savings'] as Tab[]).map((tab) => (
             <motion.button
               key={tab}
               whileHover={{ scale: 1.05 }}
@@ -1595,7 +1655,6 @@ export default function SmartStackPage() {
         {/* Tab Content */}
         {activeTab === 'budget' && renderBudgetTab()}
         {activeTab === 'savings' && renderSavingsTab()}
-        {activeTab === 'credit' && renderCreditTab()}
       </div>
     </div>
   );
