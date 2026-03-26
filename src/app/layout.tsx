@@ -4,7 +4,7 @@ import { ThemeProvider } from '@/context/ThemeContext'
 
 export const metadata: Metadata = {
   title: 'ORCA - Financial Command Center',
-  description: 'Premium paycheck-based financial command center. Split income, manage bills, build savings, and boost your credit score.',
+  description: 'Premium income-based financial command center. Split income, manage bills, build savings, and boost your credit score.',
   icons: { icon: '/logo-sm.png' },
 }
 

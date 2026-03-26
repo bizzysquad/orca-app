@@ -86,7 +86,7 @@ export default function LandingPage() {
           transition={{ delay: 0.35, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="text-sm text-text-muted text-center max-w-[280px] mb-16 leading-relaxed"
         >
-          Split your paycheck. Crush your bills.{'\n'}Build real savings. All powered by AI.
+          Split your income. Crush your bills.{'\n'}Build real savings. All powered by AI.
         </motion.p>
 
         {/* Feature Grid */}

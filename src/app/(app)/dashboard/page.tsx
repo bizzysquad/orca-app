@@ -258,9 +258,7 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
     'spend-paycheck': 'Next Payment',
     'calendar': 'Calendar',
     'credit-score': 'Credit Score',
-    'upcoming-bills': 'Upcoming Bills',
     'stack-circle': 'Stack Circle',
-    'savings-goals': 'Savings Goals',
   }
 
   return (
@@ -325,25 +323,30 @@ export default function DashboardPage() {
     return []
   }, [data.bills])
 
-  // Fetch real user name from Supabase
+  // Fetch real user name from Supabase auth, with fallback chain
   const [realUserName, setRealUserName] = useState<string | null>(null)
   useEffect(() => {
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    supabase.auth.getUser().then(({ data }) => {
-      const name = data.user?.user_metadata?.full_name
-        || data.user?.user_metadata?.display_name
-        || data.user?.email?.split('@')[0]
+    supabase.auth.getUser().then(({ data: authData }) => {
+      const name = authData.user?.user_metadata?.full_name
+        || authData.user?.user_metadata?.display_name
+        || authData.user?.email?.split('@')[0]
         || null
       setRealUserName(name)
     })
   }, [])
 
-  const firstName = realUserName
-    ? realUserName.split(' ')[0]
-    : user.name.split(' ')[0]
+  // Priority: OrcaData user.name (persisted / editable in Settings) > Supabase auth name > fallback
+  const displayName = useMemo(() => {
+    if (user.name && user.name.trim() && user.name !== '') return user.name
+    if (realUserName) return realUserName
+    return ''
+  }, [user.name, realUserName])
+
+  const firstName = displayName ? displayName.split(' ')[0] : ''
 
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
@@ -354,9 +357,7 @@ export default function DashboardPage() {
     'spend-paycheck',
     'calendar',
     'credit-score',
-    'upcoming-bills',
     'stack-circle',
-    'savings-goals',
   ])
 
   // Load section order from localStorage
@@ -414,10 +415,15 @@ export default function DashboardPage() {
     [bills]
   )
 
-  const topGoals = useMemo(
-    () => goals.filter(g => g.active).sort((a, b) => pct(b.current, b.target) - pct(a.current, a.target)).slice(0, 2),
-    [goals]
-  )
+  // Next upcoming bill for preview on dashboard
+  const nextBill = useMemo(() => allUpcomingBills[0] || null, [allUpcomingBills])
+
+  // Also check all bills sorted by due date for the next one coming up
+  const nextBillAny = useMemo(() => {
+    if (nextBill) return nextBill
+    const sorted = [...bills].sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
+    return sorted[0] || null
+  }, [nextBill, bills])
 
   // Build calendar events for the selected month
   const calendarEvents = useMemo(() => {
@@ -441,37 +447,30 @@ export default function DashboardPage() {
       }
     })
 
-    // Add tasks from localStorage
+    // Add tasks from localStorage (deduplicated)
     if (typeof window !== 'undefined') {
+      const seenTasks = new Set<string>()
+      const allTasks: any[] = []
       try {
         const savedTasks = localStorage.getItem('orca-tasks')
-        if (savedTasks) {
-          const tasks = JSON.parse(savedTasks)
-          tasks.forEach((task: any) => {
-            if (task.dueDate) {
-              const taskDate = new Date(task.dueDate + 'T00:00:00')
-              if (taskDate.getMonth() === calMonth && taskDate.getFullYear() === calYear) {
-                events.push({ date: taskDate.getDate(), type: 'task', label: task.title || task.name || task.text || 'Task' })
-              }
-            }
-          })
-        }
+        if (savedTasks) allTasks.push(...JSON.parse(savedTasks))
       } catch {}
-      // Also check window.__ORCA_TASKS as fallback
       if ((window as any).__ORCA_TASKS) {
-        const tasks = (window as any).__ORCA_TASKS
-        tasks.forEach((task: any) => {
-          if (task.dueDate) {
-            const taskDate = new Date(task.dueDate + 'T00:00:00')
-            if (taskDate.getMonth() === calMonth && taskDate.getFullYear() === calYear) {
-              // Don't add duplicates
-              if (!events.some(e => e.type === 'task' && e.date === taskDate.getDate() && e.label === (task.title || task.name || 'Task'))) {
-                events.push({ date: taskDate.getDate(), type: 'task', label: task.title || task.name || task.text || 'Task' })
-              }
+        allTasks.push(...(window as any).__ORCA_TASKS)
+      }
+      allTasks.forEach((task: any) => {
+        if (task.dueDate) {
+          const taskDate = new Date(task.dueDate + 'T00:00:00')
+          if (taskDate.getMonth() === calMonth && taskDate.getFullYear() === calYear) {
+            const label = task.title || task.name || task.text || 'Task'
+            const key = `${taskDate.getDate()}-${label}`
+            if (!seenTasks.has(key)) {
+              seenTasks.add(key)
+              events.push({ date: taskDate.getDate(), type: 'task', label })
             }
           }
-        })
-      }
+        }
+      })
     }
 
     // Add group dates from all groups in localStorage
@@ -554,18 +553,24 @@ export default function DashboardPage() {
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {/* Bills Card */}
               <div className="rounded-2xl p-6 glass-hover" style={{
-                background: `rgba(212, 168, 67, 0.06)`,
+                background: `rgba(239, 68, 68, 0.06)`,
                 backdropFilter: 'blur(16px) saturate(180%)',
                 WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-                border: `1px solid ${theme.gold}20`,
+                border: `1px solid rgba(239, 68, 68, 0.2)`,
               }}>
                 <p className="text-sm mb-3" style={{ color: theme.textS }}>Bills</p>
-                <p className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: theme.gold }}>
-                  {fmt(allocation.br)}
+                <p className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: '#ef4444' }}>
+                  –{fmt(allocation.br)}
                 </p>
-                <p className="text-sm" style={{ color: theme.textM }}>
-                  Bill reserve
-                </p>
+                {nextBill ? (
+                  <p className="text-sm" style={{ color: theme.textM }}>
+                    Next: {nextBill.name} · {fmtD(nextBill.due)} · –{fmt(nextBill.amount)}
+                  </p>
+                ) : (
+                  <p className="text-sm" style={{ color: theme.textM }}>
+                    No upcoming bills
+                  </p>
+                )}
               </div>
 
               {/* Savings Card */}
@@ -633,12 +638,16 @@ export default function DashboardPage() {
                 <p className="text-sm mb-2" style={{ color: theme.textS }}>
                   Next Payment
                 </p>
-                <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: theme.gold }}>
-                  {fmt(paycheckAmt)}
+                <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
+                  +{fmt(paycheckAmt)}
                 </p>
-                {user.nextPay && (
+                {user.nextPay ? (
                   <p className="text-sm" style={{ color: theme.textM }}>
-                    {fmtD(user.nextPay)} · {daysTo(user.nextPay)}d
+                    {fmtD(user.nextPay)} · {daysTo(user.nextPay)}d · {user.payFreq === 'weekly' ? 'Weekly' : user.payFreq === 'biweekly' ? 'Bi-Weekly' : 'Semi-Monthly'}
+                  </p>
+                ) : (
+                  <p className="text-sm" style={{ color: theme.textM }}>
+                    Set pay date in Settings
                   </p>
                 )}
               </div>
@@ -739,49 +748,6 @@ export default function DashboardPage() {
           </DraggableSection>
         ) : null
 
-      case 'upcoming-bills':
-        return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
-            <motion.div variants={fadeUp}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Upcoming Bills</h2>
-                <Link
-                  href="/bill-boss"
-                  className="text-sm font-semibold flex items-center gap-1 hover:opacity-80 transition-opacity"
-                  style={{ color: theme.gold }}
-                >
-                  See All <ChevronRight size={16} />
-                </Link>
-              </div>
-              <div className="space-y-3">
-                {allUpcomingBills.map((bill, i) => {
-                  const days = daysTo(bill.due)
-                  return (
-                    <motion.div
-                      key={bill.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.06 }}
-                      className="glass rounded-xl p-4 flex items-center justify-between glass-hover depth-1"
-                      style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                    >
-                      <div>
-                        <p className="font-semibold" style={{ color: theme.text }}>{bill.name}</p>
-                        <p className="text-sm" style={{ color: theme.textM }}>
-                          {bill.cat} · {fmtD(bill.due)} · {days}d
-                        </p>
-                      </div>
-                      <p className="font-bold" style={{ color: theme.gold }}>
-                        {fmt(bill.amount)}
-                      </p>
-                    </motion.div>
-                  )
-                })}
-              </div>
-            </motion.div>
-          </DraggableSection>
-        )
-
       case 'stack-circle':
         return group ? (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
@@ -822,50 +788,6 @@ export default function DashboardPage() {
           </DraggableSection>
         ) : null
 
-      case 'savings-goals':
-        return topGoals.length > 0 ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
-            <motion.div variants={fadeUp}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Savings Goals</h2>
-                <Link
-                  href="/smart-stack"
-                  className="text-sm font-semibold flex items-center gap-1 hover:opacity-80 transition-opacity"
-                  style={{ color: theme.gold }}
-                >
-                  See All <ChevronRight size={16} />
-                </Link>
-              </div>
-              <div className="space-y-4">
-                {topGoals.map((goal, i) => {
-                  const percentage = pct(goal.current, goal.target)
-                  return (
-                    <motion.div
-                      key={goal.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.06 }}
-                      className="glass rounded-xl p-4 glass-hover depth-1"
-                      style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="font-semibold" style={{ color: theme.text }}>{goal.name}</p>
-                        <p className="text-sm font-semibold" style={{ color: theme.gold }}>
-                          {percentage}%
-                        </p>
-                      </div>
-                      <ProgressBar current={goal.current} target={goal.target} color={theme.gold} theme={theme} />
-                      <p className="text-xs mt-2" style={{ color: theme.textM }}>
-                        {fmt(goal.current)} / {fmt(goal.target)}
-                      </p>
-                    </motion.div>
-                  )
-                })}
-              </div>
-            </motion.div>
-          </DraggableSection>
-        ) : null
-
       default:
         return null
     }
@@ -891,7 +813,9 @@ export default function DashboardPage() {
         <motion.div variants={fadeUp} className="flex items-start justify-between">
           <div className="space-y-1">
             <h1 className="text-3xl sm:text-5xl font-bold" style={{ color: theme.gold }}>
-              {new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, {firstName}
+              {firstName
+                ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName}`
+                : 'Welcome back'}
             </h1>
             <p className="text-lg" style={{ color: theme.textS }}>
               Here's your financial snapshot

@@ -20,6 +20,7 @@ import {
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, pct, gid } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
+import CalendarPicker from '@/components/CalendarPicker';
 
 interface Utility {
   id: string;
@@ -1240,18 +1241,12 @@ export default function StackCirclePage() {
                         >
                           Target Date
                         </label>
-                        <input
-                          type="date"
+                        <CalendarPicker
                           value={newGroupDate}
-                          onChange={(e) =>
-                            setNewGroupDate(e.target.value)
-                          }
-                          className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
-                          style={{
-                            backgroundColor: theme.bg,
-                            borderColor: theme.border,
-                            color: theme.text,
-                          }}
+                          onChange={setNewGroupDate}
+                          placeholder="Target Date"
+                          theme={theme}
+                          showQuickSelect={false}
                         />
                       </div>
                     </div>

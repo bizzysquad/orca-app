@@ -28,7 +28,7 @@ export default function WeeklySplitPage() {
       <motion.div initial="hidden" animate="show" className="px-5 py-6 space-y-5 max-w-5xl mx-auto">
         <motion.div variants={statCard} className="rounded-2xl border border-[#27272a] bg-[#121214] p-6">
           <h1 className="text-3xl font-bold text-[#d4a843]">Weekly Income Split</h1>
-          <p className="text-sm text-[#a1a1aa] mt-1">A paycheck-focused breakdown for your money survival plan.</p>
+          <p className="text-sm text-[#a1a1aa] mt-1">An income-focused breakdown for your money survival plan.</p>
         </motion.div>
 
         <motion.div variants={statCard} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -55,8 +55,8 @@ export default function WeeklySplitPage() {
 
         <motion.div variants={statCard} className="rounded-2xl border border-[#27272a] bg-[#18181b] p-5">
           <h2 className="text-xl font-bold">Current Week Health</h2>
-          <p className="text-sm text-[#a1a1aa] mt-1">Next paycheck: {fmtD(summary.nextPaycheckDate)} ({daysTo(summary.nextPaycheckDate)} days)</p>
-          <p className="mt-3 text-base text-[#fafafa]">Urgent due-before-next-paycheck reserve: {fmt(summary.urgentBillAmount)}</p>
+          <p className="text-sm text-[#a1a1aa] mt-1">Next payment: {fmtD(summary.nextPaycheckDate)} ({daysTo(summary.nextPaycheckDate)} days)</p>
+          <p className="mt-3 text-base text-[#fafafa]">Urgent due-before-next-payment reserve: {fmt(summary.urgentBillAmount)}</p>
           {summary.shortfall > 0 ? (
             <p className="mt-2 text-sm text-[#ef4444]">Shortfall warning: {fmt(summary.shortfall)}. Needs action now.</p>
           ) : (

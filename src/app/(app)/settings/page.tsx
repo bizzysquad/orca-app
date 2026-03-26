@@ -62,8 +62,18 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
 
   // Handlers
-  const handleSaveName = () => setEditingName(false)
-  const handleSaveEmail = () => setEditingEmail(false)
+  const handleSaveName = () => {
+    const updatedUser = { ...user, name: editName }
+    setData(prev => ({ ...prev, user: updatedUser }))
+    try { localStorage.setItem('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
+    setEditingName(false)
+  }
+  const handleSaveEmail = () => {
+    const updatedUser = { ...user, email: editEmail }
+    setData(prev => ({ ...prev, user: updatedUser }))
+    try { localStorage.setItem('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
+    setEditingEmail(false)
+  }
 
   const handleSaveIncome = () => {
     const updatedUser = {
@@ -185,7 +195,7 @@ export default function SettingsPage() {
             </div>
             <p className="text-xs mt-3" style={{ color: textM }}>
               {employmentType === 'employed'
-                ? 'Standard paycheck-based income with hourly rate and pay frequency.'
+                ? 'Standard income with hourly rate and pay frequency.'
                 : 'Flexible income entry — daily, weekly, or manual cash flow tracking.'}
             </p>
           </div>
@@ -253,7 +263,6 @@ export default function SettingsPage() {
                     <option value="weekly">Weekly</option>
                     <option value="biweekly">Bi-Weekly</option>
                     <option value="semimonthly">Semi-Monthly</option>
-                    <option value="monthly">Monthly</option>
                   </select>
                 </div>
 

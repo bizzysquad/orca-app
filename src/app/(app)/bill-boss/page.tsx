@@ -819,7 +819,9 @@ export default function BillBossPage() {
                         {bill.cat} · {fmtD(bill.due)}
                       </p>
                     </div>
-                    <p className="text-2xl font-bold" style={{ color: theme.gold }}>{fmt(bill.amount)}</p>
+                    <p className="text-2xl font-bold" style={{ color: bill.status === 'upcoming' ? '#ef4444' : theme.gold }}>
+                      {bill.status === 'upcoming' ? '–' : ''}{fmt(bill.amount)}
+                    </p>
                   </div>
 
                   {/* Split Payment Schedule (if split) */}
@@ -926,7 +928,7 @@ export default function BillBossPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <p style={{ color: theme.gold }} className="font-bold">{fmt(bill.amount)}</p>
+                    <p style={{ color: '#ef4444' }} className="font-bold">–{fmt(bill.amount)}</p>
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}

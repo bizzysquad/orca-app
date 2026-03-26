@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
+import { useOrcaData } from '@/context/OrcaDataContext'
 
 interface NavItem {
   name: string
@@ -32,6 +33,10 @@ interface SidebarProps {
 export default function Sidebar({ userName = 'User', open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { theme, isDark } = useTheme()
+  const { data } = useOrcaData()
+
+  // Use OrcaData name (most up-to-date, editable in Settings) > server-passed userName > fallback
+  const resolvedName = (data.user?.name && data.user.name.trim()) ? data.user.name : userName
 
   const navItems: NavItem[] = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', emoji: '🏠' },
@@ -47,7 +52,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
     return pathname.startsWith(href)
   }
 
-  const initials = userName.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2)
+  const initials = resolvedName.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2) || 'U'
 
   return (
     <>
@@ -148,7 +153,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
               <span className="font-bold text-xs" style={{ color: isDark ? '#0A0A0A' : '#ffffff' }}>{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate" style={{ color: theme.text }}>{userName}</p>
+              <p className="text-sm font-medium truncate" style={{ color: theme.text }}>{resolvedName}</p>
               <p className="text-[10px] truncate" style={{ color: theme.textM }}>Active</p>
             </div>
           </div>

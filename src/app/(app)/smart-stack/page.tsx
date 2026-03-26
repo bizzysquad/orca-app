@@ -10,6 +10,7 @@ import {
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
+import CalendarPicker from '@/components/CalendarPicker';
 
 type Tab = 'budget' | 'savings';
 
@@ -232,41 +233,7 @@ export default function SmartStackPage() {
   const payFreq = data.user?.payFreq || 'biweekly';
   const hasSettingsInput = basePayRate > 0 && baseHoursPerDay > 0;
 
-  // Calculate projected check dynamically from calendar
-  const projectedCheckAmount = useMemo(() => {
-    if (isSelfEmployed || !hasSettingsInput) return 0;
-
-    const today = new Date();
-    const month = today.getMonth();
-    const year = today.getFullYear();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    // Count work days (weekdays minus days off)
-    let totalHours = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
-      const date = new Date(year, month, d);
-      const dayOfWeek = date.getDay();
-      const dateStr = date.toISOString().split('T')[0];
-
-      // Skip weekends
-      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-      // Skip days off
-      if (daysOff.some((off) => off.date === dateStr)) continue;
-
-      // Use custom hours if set, otherwise default
-      const hours = customHours[dateStr] ?? baseHoursPerDay;
-      totalHours += hours;
-    }
-
-    // Scale to pay period
-    const monthlyGross = totalHours * basePayRate;
-    if (payFreq === 'weekly') return monthlyGross / 4.33;
-    if (payFreq === 'biweekly') return monthlyGross / 2.167;
-    return monthlyGross; // fallback
-  }, [isSelfEmployed, hasSettingsInput, basePayRate, baseHoursPerDay, payFreq, daysOff, customHours]);
-
-  // For backward compat in other functions
-  const checkAmount = projectedCheckAmount;
+  // projectedCheckAmount is defined after pay period state below
 
   // ============== BUDGET LOCK LOGIC ==============
   const handleBudgetLock = () => {
@@ -359,21 +326,87 @@ export default function SmartStackPage() {
     };
   }, [selectedObligations, obligations, isSelfEmployed]);
 
+  // ============== PAY PERIOD STATE ==============
+  const [projFreq, setProjFreq] = useState<'weekly' | 'biweekly'>(payFreq === 'weekly' ? 'weekly' : 'biweekly');
+  const [projPeriodIndex, setProjPeriodIndex] = useState(0); // 0 = current period
+
+  // Calculate pay periods based on frequency
+  const payPeriods = useMemo(() => {
+    const today = new Date();
+    const periods: { start: Date; end: Date; label: string }[] = [];
+    const periodDays = projFreq === 'weekly' ? 7 : 14;
+
+    // Find current period start (assume periods start on Monday of current/recent week)
+    const dayOfWeek = today.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const currentMonday = new Date(today);
+    currentMonday.setDate(today.getDate() + mondayOffset);
+
+    // Generate periods: 2 past, current, 2 future
+    for (let i = -2; i <= 2; i++) {
+      const start = new Date(currentMonday);
+      start.setDate(currentMonday.getDate() + i * periodDays);
+      const end = new Date(start);
+      end.setDate(start.getDate() + periodDays - 1);
+
+      const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      periods.push({ start, end, label: `${startStr} – ${endStr}` });
+    }
+    return periods;
+  }, [projFreq]);
+
+  const currentPeriod = payPeriods[projPeriodIndex + 2] || payPeriods[2]; // offset by 2 since we start at -2
+
+  // Calculate projected check dynamically from selected pay period
+  const projectedCheckAmount = useMemo(() => {
+    if (isSelfEmployed || !hasSettingsInput) return 0;
+    if (!currentPeriod) return 0;
+
+    let totalHours = 0;
+    const d = new Date(currentPeriod.start);
+    while (d <= currentPeriod.end) {
+      const dateStr = d.toISOString().split('T')[0];
+      const dayOfWeek = d.getDay();
+      const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+
+      // Skip days off
+      if (daysOff.some((off) => off.date === dateStr)) {
+        d.setDate(d.getDate() + 1);
+        continue;
+      }
+
+      // Use custom hours if set; weekends default to 0 unless custom hours set
+      const defaultHrs = isWknd ? 0 : baseHoursPerDay;
+      const hours = customHours[dateStr] ?? defaultHrs;
+      totalHours += hours;
+      d.setDate(d.getDate() + 1);
+    }
+
+    return totalHours * basePayRate;
+  }, [isSelfEmployed, hasSettingsInput, basePayRate, baseHoursPerDay, currentPeriod, daysOff, customHours]);
+
+  // For backward compat in other functions
+  const checkAmount = projectedCheckAmount;
+
   // ============== CALENDAR WITH PROJECTION ==============
   const renderCheckProjectionWithCalendar = () => {
-    const today = new Date();
-    const month = today.getMonth();
-    const year = today.getFullYear();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const period = currentPeriod;
+    if (!period) return null;
 
-    const days: (Date | null)[] = [];
-    for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push(null);
+    // Build array of days in this pay period
+    const days: Date[] = [];
+    const d = new Date(period.start);
+    while (d <= period.end) {
+      days.push(new Date(d));
+      d.setDate(d.getDate() + 1);
     }
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push(new Date(year, month, i));
-    }
+
+    // Pad the beginning to align with week grid
+    const paddedDays: (Date | null)[] = [];
+    const firstDay = days[0].getDay();
+    for (let i = 0; i < firstDay; i++) paddedDays.push(null);
+    days.forEach(day => paddedDays.push(day));
 
     const toggleDayOff = (date: Date) => {
       const dateStr = date.toISOString().split('T')[0];
@@ -401,7 +434,7 @@ export default function SmartStackPage() {
 
     const startEditHours = (date: Date) => {
       const dateStr = date.toISOString().split('T')[0];
-      const currentHours = customHours[dateStr] ?? baseHoursPerDay;
+      const currentHours = customHours[dateStr] ?? (isWeekend(date) ? 0 : baseHoursPerDay);
       setEditingHoursDay(dateStr);
       setEditingHoursValue(String(currentHours));
     };
@@ -417,11 +450,19 @@ export default function SmartStackPage() {
       }
     };
 
-    // Calculate income reduction from days off
-    const incomeReduction = daysOff.reduce((sum, day) => {
-      const hrs = customHours[day.date] ?? baseHoursPerDay;
-      return sum + (hrs * basePayRate);
-    }, 0);
+    // Calculate income reduction from days off in this period
+    const incomeReduction = daysOff
+      .filter(day => {
+        const dd = new Date(day.date + 'T00:00:00');
+        return dd >= period.start && dd <= period.end;
+      })
+      .reduce((sum, day) => {
+        const hrs = customHours[day.date] ?? baseHoursPerDay;
+        return sum + (hrs * basePayRate);
+      }, 0);
+
+    // Count days in this period for daysInMonth ref (used in days off bar)
+    const periodDayCount = days.length;
 
     return (
       <motion.div
@@ -436,11 +477,62 @@ export default function SmartStackPage() {
         </h3>
 
         <div className="space-y-6">
+          {/* Pay Frequency Selector */}
+          <div className="flex items-center gap-3">
+            <p style={{ color: theme.textS }} className="text-sm font-semibold">Frequency:</p>
+            <div className="flex rounded-lg overflow-hidden" style={{ backgroundColor: theme.bg }}>
+              <button
+                onClick={() => { setProjFreq('weekly'); setProjPeriodIndex(0); }}
+                className="px-4 py-2 text-sm font-semibold transition-all"
+                style={{
+                  backgroundColor: projFreq === 'weekly' ? theme.gold : 'transparent',
+                  color: projFreq === 'weekly' ? theme.bgS : theme.textM,
+                }}
+              >
+                Weekly
+              </button>
+              <button
+                onClick={() => { setProjFreq('biweekly'); setProjPeriodIndex(0); }}
+                className="px-4 py-2 text-sm font-semibold transition-all"
+                style={{
+                  backgroundColor: projFreq === 'biweekly' ? theme.gold : 'transparent',
+                  color: projFreq === 'biweekly' ? theme.bgS : theme.textM,
+                }}
+              >
+                Bi-Weekly
+              </button>
+            </div>
+          </div>
+
+          {/* Pay Period Picker */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setProjPeriodIndex(Math.max(-2, projPeriodIndex - 1))}
+              disabled={projPeriodIndex <= -2}
+              className="p-2 rounded-lg transition-colors disabled:opacity-30"
+              style={{ color: theme.textS }}
+            >
+              <Calendar size={16} />
+            </button>
+            <p style={{ color: theme.text }} className="text-sm font-semibold">
+              {period.label}
+              {projPeriodIndex === 0 && <span style={{ color: theme.gold }} className="ml-2 text-xs">(Current)</span>}
+            </p>
+            <button
+              onClick={() => setProjPeriodIndex(Math.min(2, projPeriodIndex + 1))}
+              disabled={projPeriodIndex >= 2}
+              className="p-2 rounded-lg transition-colors disabled:opacity-30"
+              style={{ color: theme.textS }}
+            >
+              <Calendar size={16} />
+            </button>
+          </div>
+
           {/* Calendar */}
           <div>
             <div className="flex items-center justify-between mb-4">
               <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">
-                {new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                Pay Period
               </p>
               <p style={{ color: theme.textM }} className="text-xs">
                 Click a day to mark it off · Double-click to edit hours
@@ -448,13 +540,13 @@ export default function SmartStackPage() {
             </div>
 
             <div className="grid grid-cols-7 gap-2 mb-6">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div key={d} style={{ color: theme.textM }} className="text-center text-xs font-semibold py-2">
-                  {d}
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dd) => (
+                <div key={dd} style={{ color: theme.textM }} className="text-center text-xs font-semibold py-2">
+                  {dd}
                 </div>
               ))}
 
-              {days.map((date, idx) => {
+              {paddedDays.map((date, idx) => {
                 const dateStr = date?.toISOString().split('T')[0] || '';
                 const isOff = isDayOff(date);
                 const isWknd = isWeekend(date);
@@ -463,23 +555,26 @@ export default function SmartStackPage() {
                 return (
                   <motion.button
                     key={idx}
-                    whileHover={date && !isWknd ? { scale: 1.1 } : {}}
-                    onClick={() => date && !isWknd && toggleDayOff(date)}
+                    whileHover={date ? { scale: 1.1 } : {}}
+                    onClick={() => date && toggleDayOff(date)}
                     onDoubleClick={(e) => {
                       e.preventDefault();
-                      if (date && !isWknd && !isOff) startEditHours(date);
+                      if (date && !isOff) startEditHours(date);
                     }}
                     style={{
                       backgroundColor: isOff ? theme.gold : isWknd ? `${theme.border}40` : hasCustom ? `${theme.gold}15` : theme.bgS,
                       borderColor: isOff ? theme.gold : hasCustom ? `${theme.gold}60` : theme.border,
                       color: isOff ? theme.bgS : isWknd ? theme.textM : theme.text,
-                      opacity: isWknd ? 0.5 : 1,
+                      opacity: !date ? 0 : 1,
                     }}
-                    className={`aspect-square rounded-lg border flex flex-col items-center justify-center text-sm font-semibold ${date && !isWknd ? 'cursor-pointer' : 'cursor-default'}`}
+                    className={`aspect-square rounded-lg border flex flex-col items-center justify-center text-sm font-semibold ${date ? 'cursor-pointer' : 'cursor-default'}`}
                   >
                     <span>{date?.getDate()}</span>
                     {hasCustom && !isOff && (
                       <span className="text-[8px]" style={{ color: theme.gold }}>{customHours[dateStr]}h</span>
+                    )}
+                    {isWknd && date && !isOff && !hasCustom && (
+                      <span className="text-[7px]" style={{ color: theme.textM }}>off</span>
                     )}
                   </motion.button>
                 );
@@ -553,7 +648,7 @@ export default function SmartStackPage() {
               <div style={{ backgroundColor: theme.bg }} className="h-2 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${(daysOff.length / daysInMonth) * 100}%` }}
+                  animate={{ width: `${(daysOff.length / periodDayCount) * 100}%` }}
                   style={{ backgroundColor: theme.warn }}
                   className="h-full"
                 />
@@ -707,12 +802,12 @@ export default function SmartStackPage() {
                   className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm"
                 />
               </div>
-              <input
-                type="date"
+              <CalendarPicker
                 value={newPaymentDate}
-                onChange={(e) => setNewPaymentDate(e.target.value)}
-                style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                onChange={setNewPaymentDate}
+                placeholder="Date"
+                theme={theme}
+                showQuickSelect={false}
               />
             </div>
             <input
@@ -896,7 +991,7 @@ export default function SmartStackPage() {
     );
   };
 
-  // ============== PAYCHECK HISTORY ==============
+  // ============== INCOME HISTORY ==============
   const renderPaycheckHistory = () => {
     return (
       <motion.div
@@ -907,13 +1002,13 @@ export default function SmartStackPage() {
       >
         <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
           <LineChart size={28} style={{ color: theme.ok }} />
-          Paycheck
+          Income History
         </h3>
 
         {paycheckHistory.length === 0 ? (
           <div style={{ backgroundColor: theme.bg }} className="rounded-lg p-6 text-center">
             <p style={{ color: theme.textM }} className="text-sm">
-              No locked paychecks yet. Lock in a budget to save it to history.
+              No locked entries yet. Lock in a budget to save it to history.
             </p>
           </div>
         ) : (
@@ -931,7 +1026,7 @@ export default function SmartStackPage() {
                       {new Date(entry.date).toLocaleDateString()}
                     </p>
                     <p style={{ color: theme.textM }} className="text-sm capitalize">
-                      {entry.frequency} paycheck
+                      {entry.frequency} income
                     </p>
                   </div>
                   <p style={{ color: theme.text }} className="font-bold text-lg">
@@ -1189,7 +1284,7 @@ export default function SmartStackPage() {
             )}
           </div>
 
-          {/* Paycheck */}
+          {/* Income History */}
           {renderPaycheckHistory()}
 
           {/* Projection Calculator */}

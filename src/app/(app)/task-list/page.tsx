@@ -8,6 +8,7 @@ declare global {
 
 import { useState, useEffect } from 'react'
 import { useTheme } from '@/context/ThemeContext'
+import CalendarPicker from '@/components/CalendarPicker'
 import {
   Plus,
   Trash2,
@@ -419,16 +420,15 @@ export default function TaskListPage() {
                 ))}
               </div>
               {activeCategory !== 'groceries' && (
-                <input
-                  type="date"
-                  value={newTaskDue}
-                  onChange={e => setNewTaskDue(e.target.value)}
-                  style={{
-                    backgroundColor: 'transparent',
-                    color: theme.textM,
-                  }}
-                  className="text-[10px] focus:outline-none cursor-pointer"
-                />
+                <div className="w-40">
+                  <CalendarPicker
+                    value={newTaskDue}
+                    onChange={setNewTaskDue}
+                    placeholder="Due Date"
+                    theme={theme}
+                    showQuickSelect={false}
+                  />
+                </div>
               )}
             </div>
           </div>
