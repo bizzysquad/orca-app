@@ -260,6 +260,9 @@ export default function SmartStackPage() {
   const [customPeriodStart, setCustomPeriodStart] = useState('');
   const [customPeriodEnd, setCustomPeriodEnd] = useState('');
 
+  // Weekend work days — weekends the user has opted to count as work days
+  const [weekendWorkDays, setWeekendWorkDays] = useState<string[]>([]);
+
   // projectedCheckAmount is defined after pay period state below
 
   // ============== BUDGET LOCK LOGIC ==============
@@ -404,17 +407,18 @@ export default function SmartStackPage() {
     if (!effectiveNetIncome || effectiveNetIncome <= 0) return 0;
     if (!effectivePeriod) return effectiveNetIncome;
 
-    // Count total weekdays and work days in the period
-    let totalWeekdays = 0;
+    // Count total schedulable days (weekdays + weekend work days) and actual work days
+    let totalScheduledDays = 0;
     let workDays = 0;
     const d = new Date(effectivePeriod.start);
     while (d <= effectivePeriod.end) {
       const dateStr = d.toISOString().split('T')[0];
       const dayOfWeek = d.getDay();
       const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+      const isWeekendWork = isWknd && weekendWorkDays.includes(dateStr);
 
-      if (!isWknd) {
-        totalWeekdays++;
+      if (!isWknd || isWeekendWork) {
+        totalScheduledDays++;
         if (!daysOff.some((off) => off.date === dateStr)) {
           workDays++;
         }
@@ -422,10 +426,10 @@ export default function SmartStackPage() {
       d.setDate(d.getDate() + 1);
     }
 
-    // Projected = netIncome * (workDays / totalWeekdays)
-    if (totalWeekdays === 0) return effectiveNetIncome;
-    return effectiveNetIncome * (workDays / totalWeekdays);
-  }, [effectiveNetIncome, effectivePeriod, daysOff]);
+    // Projected = netIncome * (workDays / totalScheduledDays)
+    if (totalScheduledDays === 0) return effectiveNetIncome;
+    return effectiveNetIncome * (workDays / totalScheduledDays);
+  }, [effectiveNetIncome, effectivePeriod, daysOff, weekendWorkDays]);
 
   // For backward compat in other functions
   const checkAmount = projectedCheckAmount;
@@ -451,14 +455,32 @@ export default function SmartStackPage() {
 
     const toggleDayOff = (date: Date) => {
       const dateStr = date.toISOString().split('T')[0];
-      setDaysOff((prev) => {
-        const exists = prev.find((d) => d.date === dateStr);
-        if (exists) {
-          return prev.filter((d) => d.date !== dateStr);
-        } else {
-          return [...prev, { date: dateStr }];
+      const dayOfWeek = date.getDay();
+      const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+
+      if (isWknd) {
+        // For weekends: toggle between off (default) → working → day-off-from-working
+        const isMarkedWorking = weekendWorkDays.includes(dateStr);
+        const isMarkedOff = daysOff.some((d) => d.date === dateStr);
+
+        if (!isMarkedWorking && !isMarkedOff) {
+          // Default weekend off → mark as working
+          setWeekendWorkDays(prev => [...prev, dateStr]);
+        } else if (isMarkedWorking && !isMarkedOff) {
+          // Working weekend → remove from working (back to default off)
+          setWeekendWorkDays(prev => prev.filter(d => d !== dateStr));
         }
-      });
+      } else {
+        // For weekdays: toggle day off as before
+        setDaysOff((prev) => {
+          const exists = prev.find((d) => d.date === dateStr);
+          if (exists) {
+            return prev.filter((d) => d.date !== dateStr);
+          } else {
+            return [...prev, { date: dateStr }];
+          }
+        });
+      }
     };
 
     const isDayOff = (date: Date | null) => {
@@ -471,6 +493,12 @@ export default function SmartStackPage() {
       if (!date) return false;
       const day = date.getDay();
       return day === 0 || day === 6;
+    };
+
+    const isWeekendWorking = (date: Date | null) => {
+      if (!date) return false;
+      const dateStr = date.toISOString().split('T')[0];
+      return weekendWorkDays.includes(dateStr);
     };
 
     // Count days off in this period for the progress bar
@@ -612,7 +640,7 @@ export default function SmartStackPage() {
                 Pay Period
               </p>
               <p style={{ color: theme.textM }} className="text-xs">
-                Click a day to mark it off
+                Click weekdays to mark off · Click weekends to add work days
               </p>
             </div>
 
@@ -626,6 +654,7 @@ export default function SmartStackPage() {
               {paddedDays.map((date, idx) => {
                 const isOff = isDayOff(date);
                 const isWknd = isWeekend(date);
+                const isWkndWork = isWeekendWorking(date);
 
                 return (
                   <motion.button
@@ -633,16 +662,35 @@ export default function SmartStackPage() {
                     whileHover={date ? { scale: 1.1 } : {}}
                     onClick={() => date && toggleDayOff(date)}
                     style={{
-                      backgroundColor: isOff ? theme.gold : isWknd ? `${theme.border}40` : theme.bgS,
-                      borderColor: isOff ? theme.gold : theme.border,
-                      color: isOff ? theme.bgS : isWknd ? theme.textM : theme.text,
+                      backgroundColor: isOff
+                        ? theme.gold
+                        : isWkndWork
+                        ? `${theme.ok}20`
+                        : isWknd
+                        ? `${theme.border}40`
+                        : theme.bgS,
+                      borderColor: isOff
+                        ? theme.gold
+                        : isWkndWork
+                        ? theme.ok
+                        : theme.border,
+                      color: isOff
+                        ? theme.bgS
+                        : isWkndWork
+                        ? theme.ok
+                        : isWknd
+                        ? theme.textM
+                        : theme.text,
                       opacity: !date ? 0 : 1,
                     }}
                     className={`aspect-square rounded-lg border flex flex-col items-center justify-center text-sm font-semibold ${date ? 'cursor-pointer' : 'cursor-default'}`}
                   >
                     <span>{date?.getDate()}</span>
-                    {isWknd && date && !isOff && (
+                    {isWknd && date && !isOff && !isWkndWork && (
                       <span className="text-[7px]" style={{ color: theme.textM }}>off</span>
+                    )}
+                    {isWkndWork && date && (
+                      <span className="text-[7px]" style={{ color: theme.ok }}>work</span>
                     )}
                   </motion.button>
                 );
@@ -912,31 +960,15 @@ export default function SmartStackPage() {
 
   // ============== PAY SPLITTER ==============
   const renderCheckSplitter = () => {
-    const billsTotal = (data.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
-    const savingsAmt = parseFloat(customSavingsAmount) || 0;
-    const spendingCashAmt = parseFloat(customSpendingCash) || 0;
-    const stackCircleTotal = (data.groups || []).reduce((sum: number, group: any) => sum + (group.current || 0), 0);
-    // Safe to Spend = what's left after bills, savings, spending cash, stack circle
-    const safeToSpend = Math.max(0, checkAmount - billsTotal - savingsAmt - spendingCashAmt - stackCircleTotal);
+    const billsList = (data.bills || []) as any[];
+    const billsTotal = billsList.reduce((sum: number, bill: any) => sum + bill.amount, 0);
+    const remaining = Math.max(0, checkAmount - billsTotal);
 
     const total = checkAmount || 1;
     const items = [
-      { name: 'Bills', amount: billsTotal, color: '#ef4444', icon: Home },
-      { name: 'Savings', amount: savingsAmt, color: '#22c55e', icon: Target, editable: true, key: 'savings' as const },
-      { name: 'Spending Cash', amount: spendingCashAmt, color: '#f59e0b', icon: DollarSign, editable: true, key: 'spending' as const },
-      ...(stackCircleTotal > 0 ? [{ name: 'Stack Circle', amount: stackCircleTotal, color: '#a855f7', icon: Heart }] : []),
-      { name: 'Safe to Spend', amount: safeToSpend, color: '#3b82f6', icon: DollarSign },
+      { name: 'Set Aside for Bills', amount: billsTotal, color: '#ef4444' },
+      { name: 'Remaining', amount: remaining, color: '#3b82f6' },
     ];
-
-    const handleSaveSplitter = (key: 'savings' | 'spending', val: string) => {
-      if (key === 'savings') {
-        setCustomSavingsAmount(val);
-        try { localStorage.setItem('orca-splitter-savings', val); } catch {}
-      } else {
-        setCustomSpendingCash(val);
-        try { localStorage.setItem('orca-splitter-spending', val); } catch {}
-      }
-    };
 
     return (
       <motion.div
@@ -995,9 +1027,9 @@ export default function SmartStackPage() {
             </div>
           </div>
 
-          {/* Allocation Items */}
+          {/* Bills Allocation Summary */}
           <div className="space-y-4">
-            {items.map((item: any, idx: number) => {
+            {items.map((item, idx) => {
               const pctVal = (item.amount / total) * 100;
               return (
                 <motion.div
@@ -1024,24 +1056,6 @@ export default function SmartStackPage() {
                       </p>
                     </div>
                   </div>
-
-                  {/* Editable input for Savings and Spending Cash */}
-                  {item.editable && (
-                    <div className="mt-2 mb-2">
-                      <div className="relative">
-                        <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
-                        <input
-                          type="number"
-                          value={item.key === 'savings' ? customSavingsAmount : customSpendingCash}
-                          onChange={(e) => handleSaveSplitter(item.key, e.target.value)}
-                          placeholder="0.00"
-                          style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
-                          className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm"
-                        />
-                      </div>
-                    </div>
-                  )}
-
                   <div style={{ backgroundColor: theme.bgS }} className="h-2 rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
@@ -1054,12 +1068,51 @@ export default function SmartStackPage() {
               );
             })}
           </div>
+
+          {/* Individual Bill Breakdown */}
+          {billsList.length > 0 && (
+            <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
+              <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase mb-3">Bill Breakdown</p>
+              <div className="space-y-2">
+                {billsList.map((bill: any) => (
+                  <div key={bill.id} className="flex items-center justify-between py-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bill.status === 'paid' ? theme.ok : '#ef4444' }} />
+                      <span style={{ color: theme.text }} className="text-sm">{bill.name}</span>
+                    </div>
+                    <span style={{ color: theme.text }} className="text-sm font-semibold">{fmt(bill.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Set Aside Message */}
+          <div style={{ backgroundColor: `${theme.gold}10`, borderColor: `${theme.gold}30` }} className="border rounded-lg p-4 text-center">
+            <p style={{ color: theme.gold }} className="font-bold text-lg">{fmt(billsTotal)}</p>
+            <p style={{ color: theme.textM }} className="text-sm mt-1">needs to be set aside for bills this period</p>
+          </div>
         </div>
       </motion.div>
     );
   };
 
   // ============== INCOME HISTORY ==============
+  const [editingActualId, setEditingActualId] = useState<string | null>(null);
+  const [editingActualValue, setEditingActualValue] = useState('');
+
+  const handleSaveActualAmount = (entryId: string) => {
+    const val = parseFloat(editingActualValue) || 0;
+    if (val <= 0) return;
+    const updated = paycheckHistory.map(e =>
+      e.id === entryId ? { ...e, actualAmount: val } as any : e
+    );
+    setPaycheckHistory(updated);
+    try { localStorage.setItem('orca-paycheck-history', JSON.stringify(updated)); } catch {}
+    setEditingActualId(null);
+    setEditingActualValue('');
+  };
+
   const renderPaycheckHistory = () => {
     return (
       <motion.div
@@ -1081,57 +1134,112 @@ export default function SmartStackPage() {
           </div>
         ) : (
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {paycheckHistory.map((entry) => (
-              <motion.div
-                key={entry.id}
-                whileHover={{ scale: 1.02 }}
-                style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-                className="border rounded-lg p-4"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <p style={{ color: theme.text }} className="font-semibold">
-                      {new Date(entry.date).toLocaleDateString()}
-                    </p>
-                    <p style={{ color: theme.textM }} className="text-sm capitalize">
-                      {entry.frequency} income
-                    </p>
-                  </div>
-                  <p style={{ color: theme.text }} className="font-bold text-lg">
-                    {fmt(entry.grossAmount)}
-                  </p>
-                </div>
+            {paycheckHistory.map((entry: any) => {
+              const hasActual = typeof entry.actualAmount === 'number' && entry.actualAmount > 0;
+              const diff = hasActual ? entry.actualAmount - entry.grossAmount : 0;
+              const isEditing = editingActualId === entry.id;
 
-                <div className="grid grid-cols-4 gap-3">
-                  <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
-                    <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Bills</p>
-                    <p style={{ color: '#ef4444' }} className="font-bold">
-                      {fmt(entry.billsAllocation)}
-                    </p>
-                  </div>
-                  <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
-                    <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Savings</p>
-                    <p style={{ color: '#22c55e' }} className="font-bold">
-                      {fmt(entry.savingsAllocation)}
-                    </p>
-                  </div>
-                  {entry.stackCircleAllocation > 0 && (
-                    <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
-                      <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Stack</p>
-                      <p style={{ color: '#f59e0b' }} className="font-bold">
-                        {fmt(entry.stackCircleAllocation)}
+              return (
+                <motion.div
+                  key={entry.id}
+                  whileHover={{ scale: 1.02 }}
+                  style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                  className="border rounded-lg p-4"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <p style={{ color: theme.text }} className="font-semibold">
+                        {new Date(entry.date).toLocaleDateString()}
+                      </p>
+                      <p style={{ color: theme.textM }} className="text-sm capitalize">
+                        {entry.frequency} income
                       </p>
                     </div>
-                  )}
-                  <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
-                    <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Spending</p>
-                    <p style={{ color: '#3b82f6' }} className="font-bold">
-                      {fmt(entry.spendingAllocation)}
-                    </p>
+                    <div className="text-right">
+                      {hasActual ? (
+                        <>
+                          <p style={{ color: theme.ok }} className="font-bold text-lg">
+                            {fmt(entry.actualAmount)}
+                          </p>
+                          <p style={{ color: theme.textM }} className="text-xs line-through">
+                            {fmt(entry.grossAmount)} projected
+                          </p>
+                          {diff !== 0 && (
+                            <p style={{ color: diff > 0 ? theme.ok : theme.bad }} className="text-xs font-semibold">
+                              {diff > 0 ? '+' : ''}{fmt(diff)}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p style={{ color: theme.text }} className="font-bold text-lg">
+                          {fmt(entry.grossAmount)}
+                          <span style={{ color: theme.textM }} className="text-xs font-normal ml-1">projected</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+
+                  {/* Actual Amount Input */}
+                  {isEditing ? (
+                    <div className="flex gap-2 mb-3">
+                      <div className="relative flex-1">
+                        <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
+                        <input
+                          type="number"
+                          value={editingActualValue}
+                          onChange={(e) => setEditingActualValue(e.target.value)}
+                          placeholder="Actual amount received"
+                          style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
+                          className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm"
+                          autoFocus
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleSaveActualAmount(entry.id)}
+                        style={{ backgroundColor: theme.ok, color: '#fff' }}
+                        className="px-3 py-2 rounded-lg text-sm font-semibold"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => { setEditingActualId(null); setEditingActualValue(''); }}
+                        style={{ color: theme.textM }}
+                        className="px-2 text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setEditingActualId(entry.id);
+                        setEditingActualValue(hasActual ? String(entry.actualAmount) : '');
+                      }}
+                      style={{ color: theme.gold }}
+                      className="text-xs font-semibold mb-3 hover:underline flex items-center gap-1"
+                    >
+                      <Edit3 size={12} />
+                      {hasActual ? 'Update actual amount' : 'Enter actual amount received'}
+                    </button>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
+                      <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Bills</p>
+                      <p style={{ color: '#ef4444' }} className="font-bold">
+                        {fmt(entry.billsAllocation)}
+                      </p>
+                    </div>
+                    <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
+                      <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Remaining</p>
+                      <p style={{ color: '#3b82f6' }} className="font-bold">
+                        {fmt((hasActual ? entry.actualAmount : entry.grossAmount) - entry.billsAllocation)}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </motion.div>

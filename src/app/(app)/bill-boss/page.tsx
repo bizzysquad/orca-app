@@ -2,9 +2,9 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, Calendar, Upload, Bell, BellRing } from 'lucide-react'
+import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Bell, BellRing } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
-import { fmt, fmtD, daysTo, gid, calcAlloc, calcIncome } from '@/lib/utils'
+import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
 import type { Bill, BillAlloc, RentEntry, BillRecurrence } from '@/lib/types'
@@ -41,15 +41,24 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   // Get all events for a day including split payments
+  // Paid bills show on their actual paid date; unpaid bills show on due date with red indicator
   const getEventsForDay = (day: number) => {
     const events: { label: string; amount: number; type: 'bill' | 'split'; paid: boolean }[] = []
 
     bills.forEach(b => {
-      // Check main due date
-      const d = new Date(b.due + 'T00:00:00')
-      if (d.getDate() === day && d.getMonth() === month && d.getFullYear() === year) {
-        if (b.alloc.length === 0) {
-          events.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
+      if (b.alloc.length === 0) {
+        if (b.status === 'paid' && (b as any).paidDate) {
+          // Show paid bill on the actual paid date
+          const pd = new Date((b as any).paidDate + 'T00:00:00')
+          if (pd.getDate() === day && pd.getMonth() === month && pd.getFullYear() === year) {
+            events.push({ label: b.name, amount: b.amount, type: 'bill', paid: true })
+          }
+        } else {
+          // Show unpaid bill on due date (red indicator)
+          const d = new Date(b.due + 'T00:00:00')
+          if (d.getDate() === day && d.getMonth() === month && d.getFullYear() === year) {
+            events.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
+          }
         }
       }
 
@@ -79,17 +88,31 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
       <div
         key={d}
         onClick={() => onDayClick?.(d)}
-        className={`aspect-square rounded-lg flex flex-col items-center justify-center relative text-xs sm:text-sm transition-all cursor-pointer ${
-          isToday ? `bg-[${theme.gold}]/20 border border-[${theme.gold}]` : ''
-        } ${selectedDay === d ? `bg-[${theme.gold}]/10 border border-[${theme.gold}]/50` : ''} ${hasBill && !allPaid && selectedDay !== d ? `bg-[${theme.bad}]/10` : ''} ${allPaid && selectedDay !== d ? `bg-[${theme.ok}]/10` : ''}`}
+        className="aspect-square rounded-lg flex flex-col items-center justify-center relative text-xs sm:text-sm transition-all cursor-pointer"
+        style={{
+          backgroundColor: isToday
+            ? `${theme.gold}33`
+            : selectedDay === d
+            ? `${theme.gold}1a`
+            : hasBill && !allPaid && selectedDay !== d
+            ? `${theme.bad}1a`
+            : allPaid && selectedDay !== d
+            ? `${theme.ok}1a`
+            : 'transparent',
+          border: isToday
+            ? `1px solid ${theme.gold}`
+            : selectedDay === d
+            ? `1px solid ${theme.gold}80`
+            : 'none',
+        }}
       >
-        <span className={`font-medium ${isToday ? `text-[${theme.gold}]` : hasBill ? `text-[${theme.text}]` : `text-[${theme.textM}]`}`}>
+        <span className="font-medium" style={{ color: isToday ? theme.gold : hasBill ? theme.text : theme.textM }}>
           {d}
         </span>
         {hasBill && (
           <div className="flex gap-0.5 mt-0.5">
             {dayEvents.slice(0, 3).map((ev, i) => (
-              <div key={i} className={`w-1.5 h-1.5 rounded-full ${ev.paid ? `bg-[${theme.ok}]` : ev.type === 'split' ? `bg-[#f59e0b]` : `bg-[${theme.bad}]`}`} />
+              <div key={i} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ev.paid ? theme.ok : ev.type === 'split' ? '#f59e0b' : theme.bad }} />
             ))}
           </div>
         )}
@@ -194,6 +217,7 @@ export default function BillBossPage() {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth())
   const [datePickerYear, setDatePickerYear] = useState(new Date().getFullYear())
+  const [collapsedSplits, setCollapsedSplits] = useState<Record<string, boolean>>({})
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -241,7 +265,8 @@ export default function BillBossPage() {
 
   // Quick-pay from notification
   const handleNotifPay = (billId: string) => {
-    persistBills(bills.map(b => b.id === billId ? { ...b, status: 'paid' as const } : b))
+    const today = new Date().toISOString().split('T')[0]
+    persistBills(bills.map(b => b.id === billId ? { ...b, status: 'paid' as const, paidDate: today } : b))
     setNotifications(prev => prev.map(n => n.billId === billId ? { ...n, dismissed: true } : n))
   }
 
@@ -276,18 +301,22 @@ export default function BillBossPage() {
     .filter(b => b.status === 'paid')
     .reduce((sum, b) => sum + b.amount, 0)
 
-  // Calculate weekly income and bills
-  const weeklyIncome = calcIncome(data.income)
-  const { br: weeklyBills } = calcAlloc(data.income, bills, data.goals)
-  const incomeToExpenseRatio = weeklyIncome > 0 ? (weeklyBills / weeklyIncome) * 100 : 0
-
-  const getHealthStatus = () => {
-    if (incomeToExpenseRatio <= 70) return { text: 'Healthy', color: theme.ok }
-    if (incomeToExpenseRatio <= 90) return { text: 'Tight', color: theme.warn }
-    return { text: 'Over Budget', color: theme.bad }
-  }
-
-  const healthStatus = getHealthStatus()
+  // Calculate monthly bill total for selected calendar month
+  const monthlyBillTotal = useMemo(() => {
+    return bills.reduce((sum, b) => {
+      const d = new Date(b.due + 'T00:00:00')
+      if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
+        return sum + b.amount
+      }
+      // Also count split allocs in this month
+      const allocInMonth = b.alloc.reduce((aSum, a) => {
+        const ad = new Date(a.date + 'T00:00:00')
+        if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) return aSum + a.amount
+        return aSum
+      }, 0)
+      return sum + allocInMonth
+    }, 0)
+  }, [bills, calMonth, calYear])
 
   // Filter bills based on view mode
   const getVisibleBills = () => {
@@ -346,11 +375,12 @@ export default function BillBossPage() {
     setShowAddForm(false)
   }
 
-  // Handler: Pay full bill
+  // Handler: Pay full bill — track actual paid date
   const handlePayFull = (billId: string) => {
+    const today = new Date().toISOString().split('T')[0]
     persistBills(bills.map(b =>
       b.id === billId
-        ? { ...b, status: 'paid' as const }
+        ? { ...b, status: 'paid' as const, paidDate: today }
         : b
     ))
   }
@@ -518,43 +548,6 @@ export default function BillBossPage() {
           </div>
         </motion.div>
 
-        {/* Income-to-Expense Ratio Display */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12 }}
-          style={{ backgroundColor: theme.card, borderColor: theme.border }}
-          className="border rounded-2xl p-6"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm font-semibold" style={{ color: theme.textM }}>Income vs Bills Ratio</p>
-              <p className="text-2xl font-bold mt-1" style={{ color: theme.text }}>{incomeToExpenseRatio.toFixed(1)}%</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm" style={{ color: theme.textM }}>Status</p>
-              <p className="text-lg font-bold mt-1" style={{ color: healthStatus.color }}>{healthStatus.text}</p>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: theme.textM + '20' }}>
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.min(incomeToExpenseRatio, 100)}%` }}
-              transition={{ duration: 0.8, ease: 'easeOut' }}
-              className="h-full rounded-full"
-              style={{
-                backgroundImage: `linear-gradient(to right, ${theme.ok}, ${theme.warn}, ${theme.bad})`,
-              }}
-            />
-          </div>
-
-          <p className="text-xs mt-3" style={{ color: theme.textM }}>
-            Weekly Income: {fmt(weeklyIncome)} • Weekly Bills: {fmt(weeklyBills)}
-          </p>
-        </motion.div>
-
         {/* Bill Calendar */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -562,7 +555,7 @@ export default function BillBossPage() {
           transition={{ delay: 0.15 }}
         >
           <BillCalendar
-            bills={visibleBills}
+            bills={bills}
             month={calMonth}
             year={calYear}
             onMonthChange={handleMonthChange}
@@ -570,6 +563,13 @@ export default function BillBossPage() {
             selectedDay={selectedDay}
             theme={theme}
           />
+          {/* Monthly Bill Total for selected month */}
+          <div className="mt-3 flex items-center justify-between px-2 py-2 rounded-lg" style={{ backgroundColor: `${theme.gold}10` }}>
+            <span className="text-sm font-medium" style={{ color: theme.textS }}>
+              {new Date(calYear, calMonth).toLocaleDateString('en-US', { month: 'long' })} Bills Total
+            </span>
+            <span className="text-lg font-bold" style={{ color: theme.gold }}>{fmt(monthlyBillTotal)}</span>
+          </div>
         </motion.div>
 
         {/* Weekly/Monthly Toggle */}
@@ -824,47 +824,65 @@ export default function BillBossPage() {
                     </p>
                   </div>
 
-                  {/* Split Payment Schedule (if split) */}
+                  {/* Split Payment Schedule (collapsible) */}
                   {bill.alloc.length > 0 && (
                     <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
-                      <p className="text-xs font-bold mb-3" style={{ color: theme.gold }}>BILLS SCHEDULE</p>
-                      <div className="space-y-2">
-                        {bill.alloc.map(alloc => (
-                          <div
-                            key={alloc.id}
-                            className={`flex justify-between items-center p-2 rounded ${
-                              alloc.paid ? 'opacity-50' : ''
-                            }`}
+                      <button
+                        onClick={() => setCollapsedSplits(prev => ({ ...prev, [bill.id]: !prev[bill.id] }))}
+                        className="w-full flex items-center justify-between"
+                      >
+                        <p className="text-xs font-bold" style={{ color: theme.gold }}>
+                          SPLIT SCHEDULE ({bill.alloc.filter(a => a.paid).length}/{bill.alloc.length} paid)
+                        </p>
+                        {collapsedSplits[bill.id]
+                          ? <ChevronDown className="w-4 h-4" style={{ color: theme.textM }} />
+                          : <ChevronUp className="w-4 h-4" style={{ color: theme.textM }} />
+                        }
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {!collapsedSplits[bill.id] && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
                           >
-                            <div className="flex items-center gap-2">
-                              {alloc.paid && (
-                                <Check className="w-4 h-4" style={{ color: theme.ok }} />
-                              )}
-                              <span className={`text-sm ${
-                                alloc.paid
-                                  ? 'line-through'
-                                  : ''
-                              }`} style={{ color: alloc.paid ? theme.textM : theme.textM }}>
-                                {fmtD(alloc.date)}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold" style={{ color: theme.text }}>
-                                {fmt(alloc.amount)}
-                              </span>
-                              {!alloc.paid && (
-                                <button
-                                  onClick={() => handlePayment(bill.id, alloc.id)}
-                                  style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
-                                  className="px-2 py-1 text-xs rounded hover:opacity-80 transition-colors"
+                            <div className="space-y-2 mt-3">
+                              {bill.alloc.map(alloc => (
+                                <div
+                                  key={alloc.id}
+                                  className={`flex justify-between items-center p-2 rounded ${
+                                    alloc.paid ? 'opacity-50' : ''
+                                  }`}
                                 >
-                                  Pay
-                                </button>
-                              )}
+                                  <div className="flex items-center gap-2">
+                                    {alloc.paid && (
+                                      <Check className="w-4 h-4" style={{ color: theme.ok }} />
+                                    )}
+                                    <span className={`text-sm ${alloc.paid ? 'line-through' : ''}`} style={{ color: theme.textM }}>
+                                      {fmtD(alloc.date)}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold" style={{ color: theme.text }}>
+                                      {fmt(alloc.amount)}
+                                    </span>
+                                    {!alloc.paid && (
+                                      <button
+                                        onClick={() => handlePayment(bill.id, alloc.id)}
+                                        style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
+                                        className="px-2 py-1 text-xs rounded hover:opacity-80 transition-colors"
+                                      >
+                                        Pay
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   )}
 
