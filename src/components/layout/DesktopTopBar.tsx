@@ -147,7 +147,7 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
           onClick={onMenuToggle}
           className={cn(
             'md:hidden p-2 rounded-lg transition-colors duration-200',
-            'hover:text-[#d4a843]'
+            'hover:opacity-80'
           )}
           style={{ color: theme.textM }}
         >
@@ -169,7 +169,7 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
             onClick={handleBellClick}
             className={cn(
               'relative p-2 sm:p-2.5 rounded-lg transition-colors duration-200',
-              'hover:text-[#d4a843]'
+              'hover:opacity-80'
             )}
             style={{ color: theme.textM }}
             aria-label="Notifications"
@@ -177,8 +177,8 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
             <Bell size={20} strokeWidth={1.5} />
             {unreadCount > 0 && (
               <span
-                className="absolute top-1 right-1 w-5 h-5 rounded-full text-[#0A0A0A] text-[10px] font-bold flex items-center justify-center"
-                style={{ backgroundColor: theme.gold }}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
+                style={{ backgroundColor: theme.gold, color: theme.bg }}
               >
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
@@ -210,7 +210,7 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
                 {unreadCount > 0 && (
                   <button
                     onClick={handleClearAll}
-                    className="text-xs font-medium transition-colors hover:text-[#d4a843]"
+                    className="text-xs font-medium transition-colors hover:opacity-80"
                     style={{ color: theme.textM }}
                   >
                     Mark all as read
@@ -315,7 +315,7 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
               >
                 <Link
                   href="/notifications"
-                  className="text-xs font-medium transition-colors hover:text-[#d4a843]"
+                  className="text-xs font-medium transition-colors hover:opacity-80"
                   style={{ color: theme.textM }}
                 >
                   View all notifications
@@ -330,7 +330,7 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
           href="/settings"
           className={cn(
             'p-2 sm:p-2.5 rounded-lg transition-colors duration-200',
-            'hover:text-[#d4a843]'
+            'hover:opacity-80'
           )}
           style={{ color: theme.textM }}
         >

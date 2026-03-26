@@ -386,15 +386,23 @@ export default function DashboardPage() {
     return user.netIncome && user.netIncome > 0 ? user.netIncome : 0
   }, [user])
 
-  // Safe to Spend: Net Income minus bills, savings, and Stack Circle allocations
+  // Safe to Spend: Net Income minus bills, pay splitter allocations, and Stack Circle
   const safeToSpend = useMemo(() => {
     if (!paycheckAmt) return { weekly: allocation.sts, daily: allocation.daily }
     const billsTotal = bills.reduce((sum, b) => sum + b.amount, 0)
-    const savingsTotal = goals.reduce((sum, g) => sum + (g.cType === 'fixed' ? (g.cVal || 0) : (paycheckAmt * (g.cVal || 0) / 100)), 0)
     const stackCircleTotal = groups.reduce((sum, g: any) => sum + (g.current || 0), 0)
-    const sts = Math.max(0, paycheckAmt - billsTotal - savingsTotal - stackCircleTotal)
+    // Pull custom savings/spending from Pay Splitter
+    let splitterSavings = 0
+    let splitterSpending = 0
+    if (typeof window !== 'undefined') {
+      try {
+        splitterSavings = parseFloat(localStorage.getItem('orca-splitter-savings') || '0') || 0
+        splitterSpending = parseFloat(localStorage.getItem('orca-splitter-spending') || '0') || 0
+      } catch {}
+    }
+    const sts = Math.max(0, paycheckAmt - billsTotal - splitterSavings - splitterSpending - stackCircleTotal)
     return { weekly: sts, daily: sts / 7 }
-  }, [paycheckAmt, bills, goals, groups, allocation])
+  }, [paycheckAmt, bills, groups, allocation])
 
   const totalSavings = useMemo(() => {
     // Include savings accounts from localStorage
@@ -498,7 +506,7 @@ export default function DashboardPage() {
     // Add group dates from all groups in localStorage
     if (typeof window !== 'undefined') {
       try {
-        const savedGroups = localStorage.getItem('orca-stack-groups')
+        const savedGroups = localStorage.getItem('orca-stack-circle-groups')
         if (savedGroups) {
           const allGroups = JSON.parse(savedGroups)
           allGroups.forEach((g: any) => {

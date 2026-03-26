@@ -16,6 +16,7 @@ import {
   Edit3,
   UserPlus,
   ChevronDown,
+  Calendar,
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, pct, gid } from '@/lib/utils';
@@ -741,6 +742,22 @@ export default function StackCirclePage() {
                         )}%
                       </span>
                     </p>
+                    {currentGroup.date && (
+                      <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg" style={{ backgroundColor: `${theme.gold}15`, border: `1px solid ${theme.gold}30` }}>
+                        <Calendar size={16} style={{ color: theme.gold }} />
+                        <p className="text-sm font-semibold" style={{ color: theme.gold }}>
+                          Trip Date: {new Date(currentGroup.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}
+                        </p>
+                        <span className="text-xs ml-auto" style={{ color: theme.textM }}>
+                          {(() => {
+                            const now = new Date();
+                            const target = new Date(currentGroup.date + 'T00:00:00');
+                            const diff = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                            return diff > 0 ? `${diff} days away` : diff === 0 ? 'Today!' : `${Math.abs(diff)} days ago`;
+                          })()}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Progress Bar */}

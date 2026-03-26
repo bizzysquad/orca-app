@@ -144,13 +144,13 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         <div className="pt-4 px-3 flex-shrink-0" style={{ borderTop: `1px solid ${theme.border}99` }}>
           <div
             className="flex items-center gap-3 px-4 py-3 rounded-xl"
-            style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)' }}
+            style={{ backgroundColor: `${theme.border}20` }}
           >
             <div
               className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
               style={{ background: `linear-gradient(135deg, ${theme.gold}, ${theme.goldD})` }}
             >
-              <span className="font-bold text-xs" style={{ color: isDark ? '#0A0A0A' : '#ffffff' }}>{initials}</span>
+              <span className="font-bold text-xs" style={{ color: theme.bg }}>{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate" style={{ color: theme.text }}>{resolvedName}</p>

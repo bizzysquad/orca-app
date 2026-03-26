@@ -39,7 +39,7 @@ const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
           >
             <Bell size={18} strokeWidth={1.5} />
             {notificationCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-gold text-[#0A0A0A] text-2xs font-bold flex items-center justify-center">
+              <span className="absolute top-1 right-1 w-4 h-4 rounded-full text-2xs font-bold flex items-center justify-center" style={{ backgroundColor: '#d4a843', color: '#09090b' }}>
                 {notificationCount > 9 ? '9+' : notificationCount}
               </span>
             )}

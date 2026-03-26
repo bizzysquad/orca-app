@@ -16,8 +16,8 @@
   }
 
   body {
-    background-color: #0A0A0A;
-    color: #F5F5F5;
+    background-color: var(--body-bg, #0A0A0A);
+    color: var(--body-text, #F5F5F5);
     overflow-x: hidden;
   }
 
@@ -51,22 +51,21 @@
 
   /* === CARD SYSTEM === */
   .card {
-    background-color: #181818;
-    border: 1px solid #2A2A2A;
+    background-color: var(--card-bg, #181818);
+    border: 1px solid var(--card-border, #2A2A2A);
     border-radius: 1rem;
   }
 
   .card-elevated {
-    background-color: #181818;
-    border: 1px solid #2A2A2A;
+    background-color: var(--card-bg, #181818);
+    border: 1px solid var(--card-border, #2A2A2A);
     border-radius: 1rem;
     background-image: linear-gradient(135deg, rgba(255,255,255,0.015) 0%, transparent 50%);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.02);
+    box-shadow: var(--depth-1, 0 1px 3px rgba(0,0,0,0.3));
   }
 
   .card-elevated:hover {
-    background-color: #202020;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03);
+    box-shadow: var(--depth-2, 0 4px 16px rgba(0,0,0,0.4));
   }
 
   .card-gold {
@@ -108,7 +107,7 @@
   /* === DIVIDERS === */
   .divider {
     height: 1px;
-    background-color: #2A2A2A;
+    background-color: var(--divider-color, #2A2A2A);
   }
 
   .divider-gold {
@@ -176,10 +175,10 @@
 
   /* === GLASSMORPHISM CARDS === */
   .glass {
-    background: rgba(24, 24, 27, 0.6);
+    background: var(--glass-bg, rgba(24, 24, 27, 0.6));
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.06));
   }
 
   .glass-gold {
@@ -190,17 +189,17 @@
   }
 
   .glass-strong {
-    background: rgba(24, 24, 27, 0.75);
+    background: var(--glass-strong-bg, rgba(24, 24, 27, 0.75));
     backdrop-filter: blur(24px) saturate(200%);
     -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
   }
 
   .glass-subtle {
-    background: rgba(24, 24, 27, 0.4);
+    background: var(--glass-subtle-bg, rgba(24, 24, 27, 0.4));
     backdrop-filter: blur(12px) saturate(160%);
     -webkit-backdrop-filter: blur(12px) saturate(160%);
-    border: 1px solid rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.04));
   }
 
   /* === GLASS HOVER STATES === */
@@ -208,9 +207,9 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .glass-hover:hover {
-    background: rgba(24, 24, 27, 0.75);
-    border-color: rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    background: var(--glass-hover-bg, rgba(24, 24, 27, 0.75));
+    border-color: var(--glass-border-hover, rgba(255, 255, 255, 0.1));
+    box-shadow: var(--glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.3));
     transform: translateY(-1px);
   }
 
@@ -226,13 +225,13 @@
 
   /* === DEPTH LAYERS === */
   .depth-1 {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.03);
+    box-shadow: var(--depth-1, 0 1px 2px rgba(0, 0, 0, 0.2));
   }
   .depth-2 {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    box-shadow: var(--depth-2, 0 4px 12px rgba(0, 0, 0, 0.25));
   }
   .depth-3 {
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    box-shadow: var(--depth-3, 0 8px 32px rgba(0, 0, 0, 0.35));
   }
 
   /* === NOISE TEXTURE === */
@@ -258,7 +257,7 @@
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #2A2A2A transparent;
+    scrollbar-color: var(--scrollbar-thumb, #2A2A2A) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
@@ -267,11 +266,11 @@
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #2A2A2A;
+    background: var(--scrollbar-thumb, #2A2A2A);
     border-radius: 4px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #3A3A3A;
+    background: var(--scrollbar-thumb-hover, #3A3A3A);
   }
 
   .text-balance {

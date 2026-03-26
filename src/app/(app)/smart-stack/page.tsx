@@ -214,6 +214,21 @@ export default function SmartStackPage() {
   });
   const [newAccountName, setNewAccountName] = useState('');
   const [projectionMode, setProjectionMode] = useState<'check' | 'payment'>('check');
+
+  // Pay Splitter adjustable settings (persisted)
+  const [customSavingsAmount, setCustomSavingsAmount] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try { return localStorage.getItem('orca-splitter-savings') || '' } catch {}
+    }
+    return '';
+  });
+  const [customSpendingCash, setCustomSpendingCash] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try { return localStorage.getItem('orca-splitter-spending') || '' } catch {}
+    }
+    return '';
+  });
+
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
   const [newPaymentAmount, setNewPaymentAmount] = useState('');
   const [newPaymentDate, setNewPaymentDate] = useState('');
@@ -229,6 +244,17 @@ export default function SmartStackPage() {
   const [inlineNetIncome, setInlineNetIncome] = useState(String(netIncome || ''));
   const [inlinePayDate, setInlinePayDate] = useState('');
   const hasNetIncome = (parseFloat(inlineNetIncome) || netIncome) > 0;
+
+  // Sync inline Net Income changes to OrcaData context + localStorage
+  const handleNetIncomeChange = (val: string) => {
+    setInlineNetIncome(val);
+    const parsed = parseFloat(val) || 0;
+    if (parsed > 0) {
+      const updatedUser = { ...data.user, netIncome: parsed };
+      setData(prev => ({ ...prev, user: updatedUser }));
+      try { localStorage.setItem('orca-user-settings', JSON.stringify(updatedUser)); } catch {}
+    }
+  };
 
   // Custom pay period dates (user-defined start/end)
   const [customPeriodStart, setCustomPeriodStart] = useState('');
@@ -483,7 +509,7 @@ export default function SmartStackPage() {
               <input
                 type="number"
                 value={inlineNetIncome}
-                onChange={(e) => setInlineNetIncome(e.target.value)}
+                onChange={(e) => handleNetIncomeChange(e.target.value)}
                 placeholder="e.g., 3820"
                 style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
                 className="w-full border rounded-lg pl-7 pr-3 py-2.5 text-sm font-semibold"
@@ -887,21 +913,30 @@ export default function SmartStackPage() {
   // ============== PAY SPLITTER ==============
   const renderCheckSplitter = () => {
     const billsTotal = (data.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
-    const savingsTotal = (data.goals || []).reduce((sum: number, goal: any) => sum + (goal.target / 52), 0);
-    const stackCircleTotal = (data.groups || []).reduce((sum: number, group: any) => sum + group.current, 0);
-    const spendingTotal = Math.max(0, checkAmount - billsTotal - savingsTotal - stackCircleTotal);
+    const savingsAmt = parseFloat(customSavingsAmount) || 0;
+    const spendingCashAmt = parseFloat(customSpendingCash) || 0;
+    const stackCircleTotal = (data.groups || []).reduce((sum: number, group: any) => sum + (group.current || 0), 0);
+    // Safe to Spend = what's left after bills, savings, spending cash, stack circle
+    const safeToSpend = Math.max(0, checkAmount - billsTotal - savingsAmt - spendingCashAmt - stackCircleTotal);
 
-    const billsPct = (billsTotal / checkAmount) * 100;
-    const savingsPct = (savingsTotal / checkAmount) * 100;
-    const stackCirclePct = (stackCircleTotal / checkAmount) * 100;
-    const spendingPct = (spendingTotal / checkAmount) * 100;
-
-    const allocItems = [
-      { name: 'Bills', amount: billsTotal, pct: billsPct, color: '#ef4444', icon: Home },
-      { name: 'Savings', amount: savingsTotal, pct: savingsPct, color: '#22c55e', icon: Target },
-      ...(stackCircleTotal > 0 ? [{ name: 'Stack Circle', amount: stackCircleTotal, pct: stackCirclePct, color: '#f59e0b', icon: Heart }] : []),
-      { name: 'Safe to Spend', amount: spendingTotal, pct: spendingPct, color: '#3b82f6', icon: DollarSign },
+    const total = checkAmount || 1;
+    const items = [
+      { name: 'Bills', amount: billsTotal, color: '#ef4444', icon: Home },
+      { name: 'Savings', amount: savingsAmt, color: '#22c55e', icon: Target, editable: true, key: 'savings' as const },
+      { name: 'Spending Cash', amount: spendingCashAmt, color: '#f59e0b', icon: DollarSign, editable: true, key: 'spending' as const },
+      ...(stackCircleTotal > 0 ? [{ name: 'Stack Circle', amount: stackCircleTotal, color: '#a855f7', icon: Heart }] : []),
+      { name: 'Safe to Spend', amount: safeToSpend, color: '#3b82f6', icon: DollarSign },
     ];
+
+    const handleSaveSplitter = (key: 'savings' | 'spending', val: string) => {
+      if (key === 'savings') {
+        setCustomSavingsAmount(val);
+        try { localStorage.setItem('orca-splitter-savings', val); } catch {}
+      } else {
+        setCustomSpendingCash(val);
+        try { localStorage.setItem('orca-splitter-spending', val); } catch {}
+      }
+    };
 
     return (
       <motion.div
@@ -924,11 +959,12 @@ export default function SmartStackPage() {
               <svg viewBox="0 0 120 120" className="w-full h-full">
                 {(() => {
                   let offset = 0;
-                  return allocItems.map((item, idx) => {
+                  return items.map((item, idx) => {
+                    const pctVal = (item.amount / total) * 100;
                     const circumference = 2 * Math.PI * 45;
-                    const strokeDashoffset = circumference - (item.pct / 100) * circumference;
+                    const strokeDashoffset = circumference - (pctVal / 100) * circumference;
                     const rotation = offset;
-                    offset += item.pct;
+                    offset += pctVal;
 
                     return (
                       <circle
@@ -961,41 +997,62 @@ export default function SmartStackPage() {
 
           {/* Allocation Items */}
           <div className="space-y-4">
-            {allocItems.map((item, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-                className="border rounded-lg p-4"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: item.color }} />
-                    <p style={{ color: theme.text }} className="font-semibold">
-                      {item.name}
-                    </p>
+            {items.map((item: any, idx: number) => {
+              const pctVal = (item.amount / total) * 100;
+              return (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                  className="border rounded-lg p-4"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 rounded" style={{ backgroundColor: item.color }} />
+                      <p style={{ color: theme.text }} className="font-semibold">
+                        {item.name}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p style={{ color: theme.text }} className="font-bold">
+                        {fmt(item.amount)}
+                      </p>
+                      <p style={{ color: theme.textM }} className="text-xs">
+                        {pctVal.toFixed(1)}%
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p style={{ color: theme.text }} className="font-bold">
-                      {fmt(item.amount)}
-                    </p>
-                    <p style={{ color: theme.textM }} className="text-xs">
-                      {item.pct.toFixed(1)}%
-                    </p>
+
+                  {/* Editable input for Savings and Spending Cash */}
+                  {item.editable && (
+                    <div className="mt-2 mb-2">
+                      <div className="relative">
+                        <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
+                        <input
+                          type="number"
+                          value={item.key === 'savings' ? customSavingsAmount : customSpendingCash}
+                          onChange={(e) => handleSaveSplitter(item.key, e.target.value)}
+                          placeholder="0.00"
+                          style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
+                          className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ backgroundColor: theme.bgS }} className="h-2 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min(100, pctVal)}%` }}
+                      style={{ backgroundColor: item.color }}
+                      className="h-full transition-all"
+                    />
                   </div>
-                </div>
-                <div style={{ backgroundColor: theme.bgS }} className="h-2 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${item.pct}%` }}
-                    style={{ backgroundColor: item.color }}
-                    className="h-full transition-all"
-                  />
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </motion.div>

@@ -140,6 +140,48 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const baseTheme = isDark ? THEMES.dark : THEMES.light
   const theme = adminOverrides ? applyOverrides(baseTheme, adminOverrides) : baseTheme
 
+  // Sync CSS custom properties for glass classes in globals.css
+  useEffect(() => {
+    const root = document.documentElement
+    if (isDark) {
+      root.style.setProperty('--glass-bg', 'rgba(24, 24, 27, 0.6)')
+      root.style.setProperty('--glass-strong-bg', 'rgba(24, 24, 27, 0.75)')
+      root.style.setProperty('--glass-subtle-bg', 'rgba(24, 24, 27, 0.4)')
+      root.style.setProperty('--glass-border', 'rgba(255, 255, 255, 0.06)')
+      root.style.setProperty('--glass-border-hover', 'rgba(255, 255, 255, 0.1)')
+      root.style.setProperty('--glass-hover-bg', 'rgba(24, 24, 27, 0.75)')
+      root.style.setProperty('--glass-shadow', '0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05)')
+      root.style.setProperty('--depth-1', '0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.03)')
+      root.style.setProperty('--depth-2', '0 4px 12px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.04)')
+      root.style.setProperty('--depth-3', '0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05)')
+      root.style.setProperty('--body-bg', '#0A0A0A')
+      root.style.setProperty('--body-text', '#F5F5F5')
+      root.style.setProperty('--scrollbar-thumb', '#2A2A2A')
+      root.style.setProperty('--scrollbar-thumb-hover', '#3A3A3A')
+      root.style.setProperty('--card-bg', '#181818')
+      root.style.setProperty('--card-border', '#2A2A2A')
+      root.style.setProperty('--divider-color', '#2A2A2A')
+    } else {
+      root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.7)')
+      root.style.setProperty('--glass-strong-bg', 'rgba(255, 255, 255, 0.85)')
+      root.style.setProperty('--glass-subtle-bg', 'rgba(255, 255, 255, 0.5)')
+      root.style.setProperty('--glass-border', 'rgba(0, 0, 0, 0.06)')
+      root.style.setProperty('--glass-border-hover', 'rgba(0, 0, 0, 0.1)')
+      root.style.setProperty('--glass-hover-bg', 'rgba(255, 255, 255, 0.85)')
+      root.style.setProperty('--glass-shadow', '0 8px 32px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)')
+      root.style.setProperty('--depth-1', '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.03)')
+      root.style.setProperty('--depth-2', '0 4px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)')
+      root.style.setProperty('--depth-3', '0 8px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05)')
+      root.style.setProperty('--body-bg', '#fafaf9')
+      root.style.setProperty('--body-text', '#18181b')
+      root.style.setProperty('--scrollbar-thumb', '#d4d4d0')
+      root.style.setProperty('--scrollbar-thumb-hover', '#c4c4c0')
+      root.style.setProperty('--card-bg', '#ffffff')
+      root.style.setProperty('--card-border', '#e4e4e0')
+      root.style.setProperty('--divider-color', '#e4e4e0')
+    }
+  }, [isDark])
+
   const applyAdminTheme = (overrides: AdminThemeOverrides) => {
     setAdminOverrides(overrides)
     try {
