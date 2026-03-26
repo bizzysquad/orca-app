@@ -153,192 +153,6 @@ interface AuditEntry {
   details: string
 }
 
-// Demo Users
-const DEMO_USERS: AdminUser[] = [
-  {
-    id: '1',
-    name: 'Sarah Chen',
-    email: 'sarah@example.com',
-    status: 'founding',
-    twoFA: true,
-    lastActive: '2 hours ago',
-    joinDate: '2025-01-15',
-    plan: 'Founding Member',
-    creditScore: 950,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Web app' },
-      { action: 'Created Stack', date: '2026-03-21', detail: 'Financial Goals' },
-    ],
-  },
-  {
-    id: '2',
-    name: 'Marcus Rodriguez',
-    email: 'marcus@example.com',
-    status: 'premium',
-    twoFA: true,
-    lastActive: '1 hour ago',
-    joinDate: '2025-02-20',
-    plan: 'Premium',
-    creditScore: 890,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Mobile app' },
-      { action: 'Updated Budget', date: '2026-03-20', detail: 'Monthly budget' },
-    ],
-  },
-  {
-    id: '3',
-    name: 'Emma Thompson',
-    email: 'emma@example.com',
-    status: 'trial',
-    twoFA: false,
-    lastActive: '5 hours ago',
-    joinDate: '2026-03-15',
-    plan: 'Trial',
-    trialDaysLeft: 18,
-    creditScore: 720,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Web app' },
-      { action: 'Added Expense', date: '2026-03-19', detail: 'Groceries' },
-    ],
-  },
-  {
-    id: '4',
-    name: 'James Wilson',
-    email: 'james@example.com',
-    status: 'active',
-    twoFA: true,
-    lastActive: '3 days ago',
-    joinDate: '2025-11-30',
-    plan: 'Free',
-    creditScore: 640,
-    activityLog: [
-      { action: 'Login', date: '2026-03-19', detail: 'Web app' },
-      { action: 'Viewed Dashboard', date: '2026-03-18', detail: '' },
-    ],
-  },
-  {
-    id: '5',
-    name: 'Priya Patel',
-    email: 'priya@example.com',
-    status: 'premium',
-    twoFA: true,
-    lastActive: '30 minutes ago',
-    joinDate: '2025-04-10',
-    plan: 'Premium',
-    creditScore: 920,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Mobile app' },
-      { action: 'Exported Report', date: '2026-03-22', detail: 'Monthly summary' },
-    ],
-  },
-  {
-    id: '6',
-    name: 'David Kim',
-    email: 'david@example.com',
-    status: 'trial',
-    twoFA: false,
-    lastActive: '12 hours ago',
-    joinDate: '2026-03-05',
-    plan: 'Trial',
-    trialDaysLeft: 32,
-    creditScore: 800,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Web app' },
-      { action: 'Created Smart Stack', date: '2026-03-20', detail: 'Savings Goals' },
-    ],
-  },
-  {
-    id: '7',
-    name: 'Sofia Garcia',
-    email: 'sofia@example.com',
-    status: 'founding',
-    twoFA: true,
-    lastActive: '4 hours ago',
-    joinDate: '2025-01-08',
-    plan: 'Founding Member',
-    creditScore: 985,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Web app' },
-      { action: 'Attended Webinar', date: '2026-03-21', detail: 'Q&A Session' },
-    ],
-  },
-  {
-    id: '8',
-    name: 'Ahmed Hassan',
-    email: 'ahmed@example.com',
-    status: 'suspended',
-    twoFA: false,
-    lastActive: '45 days ago',
-    joinDate: '2025-08-22',
-    plan: 'Free',
-    creditScore: 350,
-    activityLog: [
-      { action: 'Suspended', date: '2026-02-05', detail: 'Violation of terms' },
-      { action: 'Login', date: '2026-02-04', detail: 'Web app' },
-    ],
-  },
-  {
-    id: '9',
-    name: 'Lisa Anderson',
-    email: 'lisa@example.com',
-    status: 'premium',
-    twoFA: true,
-    lastActive: '2 hours ago',
-    joinDate: '2025-06-14',
-    plan: 'Premium',
-    creditScore: 875,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Mobile app' },
-      { action: 'Updated Profile', date: '2026-03-21', detail: 'Changed preferences' },
-    ],
-  },
-  {
-    id: '10',
-    name: 'Michael Chen',
-    email: 'mchen@example.com',
-    status: 'trial',
-    twoFA: false,
-    lastActive: '1 day ago',
-    joinDate: '2026-03-08',
-    plan: 'Trial',
-    trialDaysLeft: 25,
-    creditScore: 745,
-    activityLog: [
-      { action: 'Login', date: '2026-03-21', detail: 'Web app' },
-      { action: 'Added Expense', date: '2026-03-20', detail: 'Entertainment' },
-    ],
-  },
-  {
-    id: '11',
-    name: 'Jennifer Lopez',
-    email: 'jlopez@example.com',
-    status: 'active',
-    twoFA: true,
-    lastActive: '6 hours ago',
-    joinDate: '2025-12-01',
-    plan: 'Free',
-    creditScore: 810,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Web app' },
-      { action: 'Viewed Settings', date: '2026-03-21', detail: 'Security' },
-    ],
-  },
-  {
-    id: '12',
-    name: 'Robert Taylor',
-    email: 'rtaylor@example.com',
-    status: 'founding',
-    twoFA: true,
-    lastActive: '3 hours ago',
-    joinDate: '2025-01-22',
-    plan: 'Founding Member',
-    creditScore: 960,
-    activityLog: [
-      { action: 'Login', date: '2026-03-22', detail: 'Web app' },
-      { action: 'Provided Feedback', date: '2026-03-21', detail: 'Feature request' },
-    ],
-  },
-]
 
 // Subscription Plans
 const SUB_PLANS: SubPlan[] = [
@@ -444,10 +258,6 @@ export default function AdminPage() {
           setDbConnected(false)
           setIsLiveMode(false)
           setUserLoadError('Could not connect to database')
-          // Only fall back to demo users if explicitly enabled
-          if (useDemoData) {
-            setUsers(DEMO_USERS)
-          }
           return
         }
 
@@ -510,12 +320,7 @@ export default function AdminPage() {
         } else {
           setDbConnected(true)
           setIsLiveMode(true)
-          // No users yet - only use demo if explicitly enabled
-          if (useDemoData) {
-            setUsers(DEMO_USERS)
-          } else {
-            setUsers([])
-          }
+          setUsers([])
           setLastSyncTime(new Date().toLocaleTimeString())
         }
       } catch (err) {
@@ -523,10 +328,6 @@ export default function AdminPage() {
         setDbConnected(false)
         setIsLiveMode(false)
         setUserLoadError('Failed to initialize database connection')
-        // Only fall back to demo users if explicitly enabled
-        if (useDemoData) {
-          setUsers(DEMO_USERS)
-        }
       } finally {
         setIsLoadingUsers(false)
       }
@@ -643,7 +444,6 @@ export default function AdminPage() {
   const [lastSyncTime, setLastSyncTime] = useState<string>('')
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [userLoadError, setUserLoadError] = useState<string>('')
-  const [useDemoData, setUseDemoData] = useState(false)
   const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null)
   // Platform-wide metrics
   const [platformMetrics, setPlatformMetrics] = useState({ totalBills: 0, totalExpenses: 0, totalGoals: 0, totalIncome: 0 })
@@ -1291,31 +1091,13 @@ export default function AdminPage() {
                       }}
                     />
                     <span style={{ color: TEXT_PRIMARY }} className="font-semibold">
-                      {useDemoData ? 'DEMO MODE' : isLiveMode ? 'LIVE MODE' : 'OFFLINE MODE'}
+                      {isLiveMode ? 'LIVE MODE' : 'OFFLINE MODE'}
                     </span>
                     <span style={{ color: TEXT_SECONDARY }} className="text-sm">
-                      {useDemoData && '(Demo data loaded)'}
-                      {isLiveMode && !useDemoData && `(${users.length} users from database)`}
-                      {!isLiveMode && !useDemoData && '(Database connection failed)'}
+                      {isLiveMode && `(${users.length} users from database)`}
+                      {!isLiveMode && '(Database connection failed)'}
                     </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      setUseDemoData(!useDemoData)
-                      if (!useDemoData) {
-                        setUsers(DEMO_USERS)
-                      } else {
-                        setUsers([])
-                      }
-                    }}
-                    style={{
-                      backgroundColor: useDemoData ? '#ef4444' : GOLD,
-                      color: useDemoData ? '#fff' : BG_DARK,
-                    }}
-                    className="px-4 py-2 rounded-lg font-medium text-sm transition-opacity hover:opacity-80"
-                  >
-                    {useDemoData ? 'Unload Demo Data' : 'Load Demo Data'}
-                  </button>
                 </motion.div>
 
                 {/* Stats Cards */}

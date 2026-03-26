@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, Calendar, Upload } from 'lucide-react'
+import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, Calendar, Upload, Bell, BellRing } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, gid, calcAlloc, calcIncome } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
@@ -177,7 +177,7 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
 }
 
 export default function BillBossPage() {
-  const { data, loading } = useOrcaData()
+  const { data, setData, loading } = useOrcaData()
   const { theme } = useTheme()
 
   const [bills, setBills] = useState<Bill[]>([])
@@ -189,13 +189,63 @@ export default function BillBossPage() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [rentReceipts, setRentReceipts] = useState<Record<string, string>>({})
   const [viewMode, setViewMode] = useState<'monthly' | 'weekly'>('monthly')
+  const [notifications, setNotifications] = useState<Array<{ id: string; billId: string; billName: string; amount: number; dueDate: string; type: 'due-today' | 'upcoming'; dismissed: boolean }>>([])
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth())
+  const [datePickerYear, setDatePickerYear] = useState(new Date().getFullYear())
 
-  // Sync bills with context data on load or data change
+  // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
     if (data.bills && data.bills.length > 0) {
       setBills(data.bills)
+    } else {
+      try {
+        const saved = localStorage.getItem('orca-bills')
+        if (saved) setBills(JSON.parse(saved))
+      } catch {}
     }
   }, [data.bills])
+
+  // Persist bills to both context and localStorage whenever they change
+  const persistBills = (updatedBills: Bill[]) => {
+    setBills(updatedBills)
+    setData(prev => ({ ...prev, bills: updatedBills }))
+    try { localStorage.setItem('orca-bills', JSON.stringify(updatedBills)) } catch {}
+  }
+
+  // Generate notifications from bills
+  useEffect(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const newNotifs: typeof notifications = []
+
+    bills.forEach(b => {
+      if (b.status === 'paid') return
+      const due = new Date(b.due + 'T00:00:00')
+      due.setHours(0, 0, 0, 0)
+      const diffDays = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+      if (diffDays === 0) {
+        newNotifs.push({ id: `notif-${b.id}-today`, billId: b.id, billName: b.name, amount: b.amount, dueDate: b.due, type: 'due-today', dismissed: false })
+      } else if (diffDays > 0 && diffDays <= 3) {
+        newNotifs.push({ id: `notif-${b.id}-upcoming`, billId: b.id, billName: b.name, amount: b.amount, dueDate: b.due, type: 'upcoming', dismissed: false })
+      }
+    })
+
+    setNotifications(prev => {
+      const dismissed = new Set(prev.filter(n => n.dismissed).map(n => n.id))
+      return newNotifs.map(n => ({ ...n, dismissed: dismissed.has(n.id) }))
+    })
+  }, [bills])
+
+  // Quick-pay from notification
+  const handleNotifPay = (billId: string) => {
+    persistBills(bills.map(b => b.id === billId ? { ...b, status: 'paid' as const } : b))
+    setNotifications(prev => prev.map(n => n.billId === billId ? { ...n, dismissed: true } : n))
+  }
+
+  const activeNotifCount = notifications.filter(n => !n.dismissed).length
 
   const [formData, setFormData] = useState({
     name: '',
@@ -282,7 +332,7 @@ export default function BillBossPage() {
       alloc: [],
     }
 
-    setBills([...bills, newBill])
+    persistBills([...bills, newBill])
     setFormData({
       name: '',
       amount: '',
@@ -298,7 +348,7 @@ export default function BillBossPage() {
 
   // Handler: Pay full bill
   const handlePayFull = (billId: string) => {
-    setBills(bills.map(b =>
+    persistBills(bills.map(b =>
       b.id === billId
         ? { ...b, status: 'paid' as const }
         : b
@@ -307,12 +357,12 @@ export default function BillBossPage() {
 
   // Handler: Delete bill
   const handleDeleteBill = (billId: string) => {
-    setBills(bills.filter(b => b.id !== billId))
+    persistBills(bills.filter(b => b.id !== billId))
   }
 
   // Handler: Apply split
   const handleApplySplit = (billId: string, numPayments: number) => {
-    setBills(bills.map(b => {
+    persistBills(bills.map(b => {
       if (b.id !== billId) return b
 
       const baseAmount = b.amount / numPayments
@@ -338,7 +388,7 @@ export default function BillBossPage() {
 
   // Handler: Mark payment as paid
   const handlePayment = (billId: string, allocId: string) => {
-    setBills(bills.map(b => {
+    persistBills(bills.map(b => {
       if (b.id !== billId) return b
       return {
         ...b,
@@ -382,8 +432,70 @@ export default function BillBossPage() {
         className="sticky top-0 z-30 backdrop-blur-xl border-b p-4 sm:p-6"
         style={{ backgroundColor: `${theme.bg}95`, borderColor: theme.border }}
       >
-        <h1 className="text-3xl font-bold" style={{ color: theme.text }}>Bill Boss</h1>
-        <p className="text-sm mt-1" style={{ color: theme.textM }}>Manage your monthly bills</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold" style={{ color: theme.text }}>Bill Boss</h1>
+            <p className="text-sm mt-1" style={{ color: theme.textM }}>Manage your monthly bills</p>
+          </div>
+          {/* Notification Bell */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-2 rounded-xl transition-colors"
+              style={{ backgroundColor: activeNotifCount > 0 ? `${theme.gold}15` : theme.card }}
+            >
+              {activeNotifCount > 0 ? <BellRing size={22} style={{ color: theme.gold }} /> : <Bell size={22} style={{ color: theme.textM }} />}
+              {activeNotifCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: theme.bad, color: '#fff' }}>
+                  {activeNotifCount}
+                </span>
+              )}
+            </button>
+
+            {/* Notification Dropdown */}
+            <AnimatePresence>
+              {showNotifications && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  style={{ backgroundColor: theme.card, borderColor: theme.border }}
+                  className="absolute right-0 top-full mt-2 w-80 border rounded-xl shadow-2xl z-50 overflow-hidden"
+                >
+                  <div className="p-3 border-b" style={{ borderColor: theme.border }}>
+                    <p className="text-sm font-bold" style={{ color: theme.text }}>Bill Reminders</p>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {notifications.filter(n => !n.dismissed).length === 0 ? (
+                      <div className="p-4 text-center">
+                        <p className="text-sm" style={{ color: theme.textM }}>No upcoming reminders</p>
+                      </div>
+                    ) : (
+                      notifications.filter(n => !n.dismissed).map(notif => (
+                        <div key={notif.id} className="p-3 border-b last:border-b-0 flex items-center gap-3" style={{ borderColor: `${theme.border}60` }}>
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: notif.type === 'due-today' ? theme.bad : theme.warn }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{notif.billName}</p>
+                            <p className="text-xs" style={{ color: theme.textM }}>
+                              {notif.type === 'due-today' ? 'Due today' : `Due ${fmtD(notif.dueDate)}`} · {fmt(notif.amount)}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleNotifPay(notif.billId)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0 hover:opacity-80 transition-colors"
+                            style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
+                          >
+                            Pay
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
       </motion.div>
 
       <div className="p-4 sm:p-6 space-y-6">
@@ -535,15 +647,81 @@ export default function BillBossPage() {
                   onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
                   onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
                 />
-                <input
-                  type="date"
-                  value={formData.due}
-                  onChange={(e) => setFormData({ ...formData, due: e.target.value })}
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
-                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
-                />
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowDatePicker(!showDatePicker)}
+                    style={{ backgroundColor: theme.bg, borderColor: theme.border, color: formData.due ? theme.text : `${theme.textM}80` }}
+                    className="w-full px-4 py-2.5 border rounded-lg text-left flex items-center justify-between focus:outline-none"
+                  >
+                    <span>{formData.due ? fmtD(formData.due) : 'Due Date'}</span>
+                    <Calendar size={16} style={{ color: theme.textM }} />
+                  </button>
+
+                  {showDatePicker && (
+                    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-xl p-4 shadow-xl">
+                      {/* Quick Select Buttons */}
+                      <div className="flex gap-2 mb-3">
+                        {[
+                          { label: '1st', day: 1 },
+                          { label: '15th', day: 15 },
+                          { label: 'Last', day: new Date(datePickerYear, datePickerMonth + 1, 0).getDate() },
+                        ].map(opt => (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            onClick={() => {
+                              const m = String(datePickerMonth + 1).padStart(2, '0')
+                              const d = String(opt.day).padStart(2, '0')
+                              setFormData({ ...formData, due: `${datePickerYear}-${m}-${d}` })
+                              setShowDatePicker(false)
+                            }}
+                            style={{ backgroundColor: `${theme.gold}15`, color: theme.gold, borderColor: `${theme.gold}30` }}
+                            className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold border hover:opacity-80 transition-colors"
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Mini Calendar */}
+                      <div className="flex items-center justify-between mb-2">
+                        <button type="button" onClick={() => { let m = datePickerMonth - 1, y = datePickerYear; if (m < 0) { m = 11; y-- } setDatePickerMonth(m); setDatePickerYear(y) }} style={{ color: theme.textM }} className="p-1"><ChevronLeft size={14} /></button>
+                        <span className="text-xs font-semibold" style={{ color: theme.text }}>{new Date(datePickerYear, datePickerMonth).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                        <button type="button" onClick={() => { let m = datePickerMonth + 1, y = datePickerYear; if (m > 11) { m = 0; y++ } setDatePickerMonth(m); setDatePickerYear(y) }} style={{ color: theme.textM }} className="p-1"><ChevronRight size={14} /></button>
+                      </div>
+                      <div className="grid grid-cols-7 gap-0.5 mb-1">
+                        {['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="text-center text-[9px] font-semibold py-0.5" style={{ color: theme.textM }}>{d}</div>)}
+                      </div>
+                      <div className="grid grid-cols-7 gap-0.5">
+                        {Array.from({ length: new Date(datePickerYear, datePickerMonth, 1).getDay() }, (_, i) => <div key={`e-${i}`} />)}
+                        {Array.from({ length: new Date(datePickerYear, datePickerMonth + 1, 0).getDate() }, (_, i) => {
+                          const day = i + 1
+                          const m = String(datePickerMonth + 1).padStart(2, '0')
+                          const d = String(day).padStart(2, '0')
+                          const dateStr = `${datePickerYear}-${m}-${d}`
+                          const isSelected = formData.due === dateStr
+                          const isToday = new Date().getDate() === day && new Date().getMonth() === datePickerMonth && new Date().getFullYear() === datePickerYear
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => { setFormData({ ...formData, due: dateStr }); setShowDatePicker(false) }}
+                              className="aspect-square rounded-md flex items-center justify-center text-xs transition-all hover:opacity-80"
+                              style={{
+                                backgroundColor: isSelected ? theme.gold : isToday ? `${theme.gold}20` : 'transparent',
+                                color: isSelected ? theme.bg : isToday ? theme.gold : theme.text,
+                                fontWeight: isSelected || isToday ? 600 : 400,
+                              }}
+                            >
+                              {day}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <select
@@ -752,7 +930,7 @@ export default function BillBossPage() {
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => setBills(bills.map(b =>
+                      onClick={() => persistBills(bills.map(b =>
                         b.id === bill.id ? { ...b, status: 'upcoming' as const } : b
                       ))}
                       style={{ backgroundColor: theme.textS, color: theme.textM }}
@@ -785,14 +963,19 @@ export default function BillBossPage() {
               </div>
             </div>
 
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              style={{ backgroundColor: theme.gold, color: theme.bg }}
-              className="w-full px-4 py-2.5 rounded-lg font-semibold hover:opacity-90 transition-colors mb-4"
-            >
-              Report Current Month
-            </motion.button>
+            {/* Auto-tracked status */}
+            <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ backgroundColor: rentBill.status === 'paid' ? `${theme.ok}15` : `${theme.warn}15` }}>
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: rentBill.status === 'paid' ? theme.ok : theme.warn }} />
+              <div className="flex-1">
+                <p className="text-sm font-semibold" style={{ color: rentBill.status === 'paid' ? theme.ok : theme.warn }}>
+                  {rentBill.status === 'paid' ? 'Rent Paid This Month' : 'Rent Due'}
+                </p>
+                <p className="text-xs" style={{ color: theme.textM }}>
+                  {rentBill.status === 'paid' ? 'Automatically tracked from your payment' : `Due ${fmtD(rentBill.due)} — mark as paid in your bills list`}
+                </p>
+              </div>
+              {rentBill.status === 'paid' && <Check size={18} style={{ color: theme.ok }} />}
+            </div>
 
             {updatedRentEntries.length > 0 && (
               <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
