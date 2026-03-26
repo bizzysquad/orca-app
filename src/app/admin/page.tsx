@@ -426,8 +426,10 @@ export default function AdminPage() {
           setDbConnected(false)
           setIsLiveMode(false)
           setUserLoadError('Could not connect to database')
-          // Fall back to demo users
-          setUsers(DEMO_USERS)
+          // Only fall back to demo users if explicitly enabled
+          if (useDemoData) {
+            setUsers(DEMO_USERS)
+          }
           return
         }
 
@@ -477,8 +479,12 @@ export default function AdminPage() {
         } else {
           setDbConnected(true)
           setIsLiveMode(true)
-          // No users yet, use demo as fallback
-          setUsers(DEMO_USERS)
+          // No users yet - only use demo if explicitly enabled
+          if (useDemoData) {
+            setUsers(DEMO_USERS)
+          } else {
+            setUsers([])
+          }
           setLastSyncTime(new Date().toLocaleTimeString())
         }
       } catch (err) {
@@ -486,7 +492,10 @@ export default function AdminPage() {
         setDbConnected(false)
         setIsLiveMode(false)
         setUserLoadError('Failed to initialize database connection')
-        setUsers(DEMO_USERS)
+        // Only fall back to demo users if explicitly enabled
+        if (useDemoData) {
+          setUsers(DEMO_USERS)
+        }
       } finally {
         setIsLoadingUsers(false)
       }
@@ -561,7 +570,7 @@ export default function AdminPage() {
   const [activeSubTab, setActiveSubTab] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
-  const [users, setUsers] = useState<AdminUser[]>(DEMO_USERS)
+  const [users, setUsers] = useState<AdminUser[]>([])
   const [showDropdown, setShowDropdown] = useState<string | null>(null)
 
   // Subscription states
@@ -601,6 +610,7 @@ export default function AdminPage() {
   const [lastSyncTime, setLastSyncTime] = useState<string>('')
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [userLoadError, setUserLoadError] = useState<string>('')
+  const [useDemoData, setUseDemoData] = useState(false)
   const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null)
   const [moduleSettings, setModuleSettings] = useState<Record<string, any>>({})
 
@@ -1205,6 +1215,51 @@ export default function AdminPage() {
                     <span style={{ color: TEXT_SECONDARY }}>Loading live user data...</span>
                   </motion.div>
                 )}
+
+                {/* Mode Indicator and Demo Data Button */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
+                  className="rounded-lg border p-4 flex items-center justify-between flex-wrap gap-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: isLiveMode ? '#10b981' : '#ef4444',
+                        boxShadow: isLiveMode ? '0 0 8px #10b981' : '0 0 8px #ef4444',
+                      }}
+                    />
+                    <span style={{ color: TEXT_PRIMARY }} className="font-semibold">
+                      {useDemoData ? 'DEMO MODE' : isLiveMode ? 'LIVE MODE' : 'OFFLINE MODE'}
+                    </span>
+                    <span style={{ color: TEXT_SECONDARY }} className="text-sm">
+                      {useDemoData && '(Demo data loaded)'}
+                      {isLiveMode && !useDemoData && `(${users.length} users from database)`}
+                      {!isLiveMode && !useDemoData && '(Database connection failed)'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUseDemoData(!useDemoData)
+                      if (!useDemoData) {
+                        setUsers(DEMO_USERS)
+                      } else {
+                        setUsers([])
+                      }
+                    }}
+                    style={{
+                      backgroundColor: useDemoData ? '#ef4444' : GOLD,
+                      color: useDemoData ? '#fff' : BG_DARK,
+                    }}
+                    className="px-4 py-2 rounded-lg font-medium text-sm transition-opacity hover:opacity-80"
+                  >
+                    {useDemoData ? 'Unload Demo Data' : 'Load Demo Data'}
+                  </button>
+                </motion.div>
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

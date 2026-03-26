@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Target, Heart,
   Lock, Edit3, Plus, Trash2, Pause, Play, LineChart,
   AlertCircle, CheckCircle, Zap, Check, Calendar, Briefcase,
-  Home,
+  Home, ExternalLink,
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
@@ -33,8 +33,9 @@ interface PaycheckEntry {
   grossAmount: number;
   billsAllocation: number;
   savingsAllocation: number;
+  stackCircleAllocation: number;
   spendingAllocation: number;
-  frequency: 'weekly' | 'biweekly' | 'monthly';
+  frequency: 'weekly' | 'biweekly';
 }
 
 interface DayOff {
@@ -173,32 +174,48 @@ function ProjectionCalculator({ theme }: { theme: any }) {
 
 export default function SmartStackPage() {
   const { theme } = useTheme();
-  const { data, loading } = useOrcaData();
+  const { data, setData, loading } = useOrcaData();
   const [activeTab, setActiveTab] = useState<Tab>('budget');
   const [budgetLocked, setBudgetLocked] = useState(false);
   const [paycheckHistory, setPaycheckHistory] = useState<PaycheckEntry[]>([]);
-  const [checkAmount, setCheckAmount] = useState(1500);
-  const [frequency, setFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('biweekly');
+  const [frequency, setFrequency] = useState<'weekly' | 'biweekly'>('biweekly');
   const [creditScore, setCreditScore] = useState(720);
   const [creditScoreSim, setCreditScoreSim] = useState(720);
   const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
   const [selfEmployedIncome, setSelfEmployedIncome] = useState(0);
   const [daysOff, setDaysOff] = useState<DayOff[]>([]);
   const [forecastedIncome, setForecastedIncome] = useState<any[]>([]);
+  const [currentSavingsAmount, setCurrentSavingsAmount] = useState('');
+  const [savingsGoal, setSavingsGoal] = useState('');
 
   const isSelfEmployed = data.user?.employmentType === 'self-employed';
-  const rentAmount = data.user?.rentAmount || 1400;
+
+  // Auto-calculate check amount for employed users
+  const autoCalculatedCheckAmount = useMemo(() => {
+    if (isSelfEmployed) return 0;
+
+    const payRate = parseFloat(data.user?.payRate || '0');
+    const hoursPerDay = parseFloat(data.user?.hoursPerDay || '8');
+    const payFreq = data.user?.payFreq || 'biweekly';
+
+    if (!payRate || !hoursPerDay) return 0;
+
+    let workDaysPerPeriod = 10; // biweekly default
+    if (payFreq === 'weekly') workDaysPerPeriod = 5;
+
+    return payRate * hoursPerDay * workDaysPerPeriod;
+  }, [data.user, isSelfEmployed]);
+
+  // Use the calculated amount (or 0 for self-employed)
+  const checkAmount = isSelfEmployed ? 0 : autoCalculatedCheckAmount;
 
   // ============== BUDGET LOCK LOGIC ==============
   const handleBudgetLock = () => {
     if (!budgetLocked) {
-      // Lock in the budget - update paycheck history
       const billsTotal = (data.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
-      const savingsTotal = (data.goals || []).reduce(
-        (sum: number, goal: any) => sum + (goal.targetAmount / 52),
-        0
-      );
-      const spendingTotal = checkAmount - billsTotal - savingsTotal;
+      const savingsTotal = (data.goals || []).reduce((sum: number, goal: any) => sum + (goal.target / 52), 0);
+      const stackCircleTotal = (data.groups || []).reduce((sum: number, group: any) => sum + group.current, 0);
+      const spendingTotal = checkAmount - billsTotal - savingsTotal - stackCircleTotal;
 
       const newEntry: PaycheckEntry = {
         id: Date.now().toString(),
@@ -206,13 +223,13 @@ export default function SmartStackPage() {
         grossAmount: checkAmount,
         billsAllocation: billsTotal,
         savingsAllocation: savingsTotal,
+        stackCircleAllocation: stackCircleTotal,
         spendingAllocation: Math.max(0, spendingTotal),
         frequency,
       };
 
       setPaycheckHistory([newEntry, ...paycheckHistory.slice(0, 11)]);
 
-      // Generate 12-month forecast
       const forecasted = Array.from({ length: 12 }).map((_, i) => ({
         month: i,
         amount: checkAmount,
@@ -235,38 +252,26 @@ export default function SmartStackPage() {
           id: `bill-${idx}`,
           name: bill.name,
           amount: bill.amount,
-          dueDate: bill.dueDate || new Date().toISOString().split('T')[0],
+          dueDate: bill.due || new Date().toISOString().split('T')[0],
           source: 'bill',
         });
       });
     }
-
-    obs.push({
-      id: 'rent',
-      name: 'Rent',
-      amount: rentAmount,
-      dueDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
-        .toISOString()
-        .split('T')[0],
-      source: 'bill',
-    });
 
     if (data.goals) {
       data.goals.forEach((goal: any, idx: number) => {
         obs.push({
           id: `goal-${idx}`,
           name: goal.name,
-          amount: goal.targetAmount,
-          dueDate: goal.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
+          amount: goal.target,
+          dueDate: goal.date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           source: 'savings',
         });
       });
     }
 
     return obs;
-  }, [data, rentAmount]);
+  }, [data]);
 
   const incomeRequirements = useMemo<IncomeRequirement>(() => {
     if (!isSelfEmployed || selectedObligations.length === 0) {
@@ -296,7 +301,7 @@ export default function SmartStackPage() {
   }, [selectedObligations, obligations, isSelfEmployed]);
 
   // ============== CALENDAR WITH PROJECTION ==============
-  const renderCalendarWithProjection = () => {
+  const renderCheckProjectionWithCalendar = () => {
     const today = new Date();
     const month = today.getMonth();
     const year = today.getFullYear();
@@ -318,7 +323,8 @@ export default function SmartStackPage() {
         if (exists) {
           return prev.filter((d) => d.date !== dateStr);
         } else {
-          return [...prev, { date: dateStr, hoursPerDay: 8 }];
+          const hoursPerDay = parseFloat(data.user?.hoursPerDay || '8');
+          return [...prev, { date: dateStr, hoursPerDay }];
         }
       });
     };
@@ -329,10 +335,19 @@ export default function SmartStackPage() {
       return daysOff.some((d) => d.date === dateStr);
     };
 
+    const payRate = parseFloat(data.user?.payRate || '0');
+    const hoursPerDay = parseFloat(data.user?.hoursPerDay || '8');
+    const payFreq = data.user?.payFreq || 'biweekly';
+    let workDaysPerPeriod = 10;
+    if (payFreq === 'weekly') workDaysPerPeriod = 5;
+
+    const hoursPerPeriod = hoursPerDay * workDaysPerPeriod;
     const projectedIncomeReduction = daysOff.reduce((sum, day) => {
-      const hoursPerDay = day.hoursPerDay || 8;
-      return sum + (hoursPerDay * checkAmount / 40 / (frequency === 'weekly' ? 1 : frequency === 'biweekly' ? 2 : 4.33));
+      const hours = day.hoursPerDay || hoursPerDay;
+      return sum + (hours * payRate);
     }, 0);
+
+    const projectedCheckAmount = checkAmount - projectedIncomeReduction;
 
     return (
       <motion.div
@@ -342,18 +357,38 @@ export default function SmartStackPage() {
         className="border rounded-xl p-6"
       >
         <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
-          <Calendar size={28} style={{ color: theme.gold }} />
-          Income Calendar
+          <DollarSign size={28} style={{ color: theme.gold }} />
+          Check Projection
         </h3>
 
         <div className="space-y-6">
-          {/* Month Header */}
+          {/* Projected Check Amount */}
+          <div style={{ backgroundColor: theme.bg, borderColor: theme.gold }} className="border-2 rounded-lg p-4">
+            <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
+              Projected Check Amount
+            </p>
+            <p style={{ color: theme.gold }} className="text-3xl font-bold">
+              {fmt(projectedCheckAmount)}
+            </p>
+            {daysOff.length > 0 && (
+              <p style={{ color: theme.warn }} className="text-sm mt-2">
+                {fmt(projectedIncomeReduction)} reduction from {daysOff.length} day(s) off
+              </p>
+            )}
+            <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: theme.textM }}>
+              <Info size={14} />
+              <span>
+                Your check is calculated from your <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a>
+              </span>
+            </div>
+          </div>
+
+          {/* Calendar */}
           <div>
             <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase mb-4">
               {new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </p>
 
-            {/* Calendar Grid */}
             <div className="grid grid-cols-7 gap-2 mb-6">
               {/* Day headers */}
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
@@ -369,7 +404,7 @@ export default function SmartStackPage() {
                   whileHover={date ? { scale: 1.1 } : {}}
                   onClick={() => date && toggleDayOff(date)}
                   style={{
-                    backgroundColor: isDayOff(date) ? theme.gold : theme.bg,
+                    backgroundColor: isDayOff(date) ? theme.gold : theme.bgS,
                     borderColor: isDayOff(date) ? theme.gold : theme.border,
                     color: isDayOff(date) ? theme.bgS : theme.text,
                   }}
@@ -381,18 +416,18 @@ export default function SmartStackPage() {
             </div>
           </div>
 
-          {/* Day Off Summary */}
+          {/* Days Off Summary */}
           {daysOff.length > 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+              style={{ backgroundColor: theme.bgS, borderColor: theme.border }}
               className="border rounded-lg p-4 space-y-3"
             >
               <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase">
                 Days Off: {daysOff.length}
               </p>
-              <div style={{ backgroundColor: theme.bgS }} className="h-2 rounded-full overflow-hidden">
+              <div style={{ backgroundColor: theme.bg }} className="h-2 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${(daysOff.length / daysInMonth) * 100}%` }}
@@ -400,32 +435,45 @@ export default function SmartStackPage() {
                   className="h-full"
                 />
               </div>
-              <p style={{ color: theme.warn }} className="text-sm font-semibold">
-                Projected Income Reduction: {fmt(projectedIncomeReduction)}
-              </p>
             </motion.div>
+          )}
+
+          {!budgetLocked && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleBudgetLock}
+              style={{
+                backgroundColor: theme.gold,
+                color: theme.bgS,
+              }}
+              className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2"
+            >
+              <Lock size={18} />
+              Lock In Budget
+            </motion.button>
           )}
         </div>
       </motion.div>
     );
   };
 
-  // ============== INCOME ALLOCATOR ==============
-  const renderIncomeAllocator = () => {
+  // ============== CHECK SPLITTER ==============
+  const renderCheckSplitter = () => {
     const billsTotal = (data.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
-    const savingsTotal = (data.goals || []).reduce(
-      (sum: number, goal: any) => sum + (goal.targetAmount / 52),
-      0
-    );
-    const spendingTotal = Math.max(0, checkAmount - billsTotal - savingsTotal);
+    const savingsTotal = (data.goals || []).reduce((sum: number, goal: any) => sum + (goal.target / 52), 0);
+    const stackCircleTotal = (data.groups || []).reduce((sum: number, group: any) => sum + group.current, 0);
+    const spendingTotal = Math.max(0, checkAmount - billsTotal - savingsTotal - stackCircleTotal);
 
     const billsPct = (billsTotal / checkAmount) * 100;
     const savingsPct = (savingsTotal / checkAmount) * 100;
+    const stackCirclePct = (stackCircleTotal / checkAmount) * 100;
     const spendingPct = (spendingTotal / checkAmount) * 100;
 
     const allocItems = [
-      { name: 'Bills Reserve', amount: billsTotal, pct: billsPct, color: '#ef4444', icon: Home },
+      { name: 'Bills', amount: billsTotal, pct: billsPct, color: '#ef4444', icon: Home },
       { name: 'Savings', amount: savingsTotal, pct: savingsPct, color: '#22c55e', icon: Target },
+      ...(stackCircleTotal > 0 ? [{ name: 'Stack Circle', amount: stackCircleTotal, pct: stackCirclePct, color: '#f59e0b', icon: Heart }] : []),
       { name: 'Spending Money', amount: spendingTotal, pct: spendingPct, color: '#3b82f6', icon: DollarSign },
     ];
 
@@ -439,7 +487,7 @@ export default function SmartStackPage() {
         <div className="flex items-center justify-between mb-6">
           <h3 style={{ color: theme.text }} className="text-2xl font-bold flex items-center gap-3">
             <DollarSign size={28} style={{ color: theme.gold }} />
-            Income Allocator
+            Check Splitter
           </h3>
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -584,7 +632,7 @@ export default function SmartStackPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
                     <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Bills</p>
                     <p style={{ color: '#ef4444' }} className="font-bold">
@@ -597,6 +645,14 @@ export default function SmartStackPage() {
                       {fmt(entry.savingsAllocation)}
                     </p>
                   </div>
+                  {entry.stackCircleAllocation > 0 && (
+                    <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
+                      <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Stack</p>
+                      <p style={{ color: '#f59e0b' }} className="font-bold">
+                        {fmt(entry.stackCircleAllocation)}
+                      </p>
+                    </div>
+                  )}
                   <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
                     <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Spending</p>
                     <p style={{ color: '#3b82f6' }} className="font-bold">
@@ -626,7 +682,7 @@ export default function SmartStackPage() {
             <div className="flex items-center justify-between mb-6">
               <h3 style={{ color: theme.text }} className="text-2xl font-bold flex items-center gap-3">
                 <Briefcase size={28} style={{ color: theme.gold }} />
-                Income Allocator
+                Check Splitter
               </h3>
             </div>
 
@@ -649,7 +705,7 @@ export default function SmartStackPage() {
                         );
                       }}
                       style={{
-                        backgroundColor: isSelected ? theme.goldBg : theme.bg,
+                        backgroundColor: isSelected ? `${theme.gold}20` : theme.bg,
                         borderColor: isSelected ? theme.gold : theme.border,
                       }}
                       className="border rounded-lg p-4 cursor-pointer transition-all"
@@ -729,7 +785,7 @@ export default function SmartStackPage() {
                           {fmt(selfEmployedIncome)}
                         </span>
                       </div>
-                      <div style={{ backgroundColor: theme.bg }} className="h-2 rounded-full overflow-hidden">
+                      <div style={{ backgroundColor: theme.bgS }} className="h-2 rounded-full overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{
@@ -797,143 +853,18 @@ export default function SmartStackPage() {
       );
     }
 
-    // Employed users - Check Projection & Budget
+    // Employed users - Check Projection & Check Splitter
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-8"
       >
-        {/* Check Projection */}
-        <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 style={{ color: theme.text }} className="text-2xl font-bold flex items-center gap-3">
-              <DollarSign size={28} style={{ color: theme.gold }} />
-              Check Projection
-            </h3>
-          </div>
+        {/* Check Projection with Calendar */}
+        {renderCheckProjectionWithCalendar()}
 
-          {!budgetLocked ? (
-            <div className="space-y-6">
-              <div>
-                <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">
-                  Check Amount
-                </label>
-                <input
-                  type="number"
-                  value={checkAmount}
-                  onChange={(e) => setCheckAmount(parseFloat(e.target.value) || 0)}
-                  style={{
-                    backgroundColor: theme.bg,
-                    borderColor: theme.border,
-                    color: theme.text,
-                  }}
-                  className="w-full border rounded-lg px-4 py-2 font-bold text-lg"
-                  placeholder="Enter check amount"
-                />
-              </div>
-
-              <div>
-                <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">
-                  Frequency
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['weekly', 'biweekly', 'monthly'] as const).map((freq) => (
-                    <motion.button
-                      key={freq}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setFrequency(freq)}
-                      style={{
-                        backgroundColor: frequency === freq ? theme.gold : theme.bg,
-                        color: frequency === freq ? theme.bgS : theme.text,
-                        borderColor: theme.border,
-                      }}
-                      className="border rounded-lg py-2 font-semibold capitalize transition-all"
-                    >
-                      {freq}
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleBudgetLock}
-                style={{
-                  backgroundColor: theme.gold,
-                  color: theme.bgS,
-                }}
-                className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2"
-              >
-                <Lock size={18} />
-                Lock In Budget
-              </motion.button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div
-                style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
-                className="border-2 rounded-lg p-4"
-              >
-                <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
-                  Locked Check
-                </p>
-                <p style={{ color: theme.gold }} className="text-3xl font-bold">
-                  {fmt(checkAmount)}
-                </p>
-                <p style={{ color: theme.textM }} className="text-sm mt-2 capitalize">
-                  {frequency}
-                </p>
-              </div>
-
-              {forecastedIncome.length > 0 && (
-                <div className="space-y-3">
-                  <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">
-                    12-Month Forecast
-                  </p>
-                  <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
-                    {forecastedIncome.map((forecast, idx) => (
-                      <div
-                        key={idx}
-                        style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-                        className="border rounded p-2 text-center"
-                      >
-                        <p style={{ color: theme.textM }} className="text-xs">
-                          M{idx + 1}
-                        </p>
-                        <p style={{ color: theme.text }} className="text-sm font-bold">
-                          {fmt(forecast.amount)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleBudgetLock}
-                style={{
-                  backgroundColor: theme.border,
-                  color: theme.text,
-                }}
-                className="w-full py-2 rounded-lg font-semibold flex items-center justify-center gap-2"
-              >
-                <Edit3 size={18} />
-                Edit Budget
-              </motion.button>
-            </div>
-          )}
-        </div>
-
-        {/* Calendar with Projection */}
-        {renderCalendarWithProjection()}
-
-        {/* Income Allocator */}
-        {renderIncomeAllocator()}
+        {/* Check Splitter */}
+        {renderCheckSplitter()}
 
         {/* Paycheck History */}
         {renderPaycheckHistory()}
@@ -947,6 +878,9 @@ export default function SmartStackPage() {
   // ============== TAB: SAVINGS ==============
   const renderSavingsTab = () => {
     const goals = data.goals || [];
+    const totalCurrentSavings = parseFloat(currentSavingsAmount || '0');
+    const totalGoal = parseFloat(savingsGoal || '0');
+    const progressPercent = totalGoal > 0 ? (totalCurrentSavings / totalGoal) * 100 : 0;
 
     return (
       <motion.div
@@ -954,6 +888,99 @@ export default function SmartStackPage() {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-8"
       >
+        {/* Current Savings Amount Input */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          className="border rounded-xl p-6"
+        >
+          <h3 style={{ color: theme.text }} className="text-xl font-bold mb-6 flex items-center gap-3">
+            <DollarSign size={24} style={{ color: theme.gold }} />
+            Savings Overview
+          </h3>
+
+          <div className="space-y-5">
+            {/* Current Savings */}
+            <div>
+              <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">
+                Current Savings Amount
+              </label>
+              <div className="relative">
+                <span style={{ color: theme.textM }} className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                  $
+                </span>
+                <input
+                  type="number"
+                  value={currentSavingsAmount}
+                  onChange={(e) => setCurrentSavingsAmount(e.target.value)}
+                  style={{
+                    backgroundColor: theme.bg,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  }}
+                  className="w-full border rounded-lg pl-8 pr-4 py-3 font-semibold text-lg"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            {/* Savings Goal */}
+            <div>
+              <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">
+                Savings Goal (Optional)
+              </label>
+              <div className="relative">
+                <span style={{ color: theme.textM }} className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                  $
+                </span>
+                <input
+                  type="number"
+                  value={savingsGoal}
+                  onChange={(e) => setSavingsGoal(e.target.value)}
+                  style={{
+                    backgroundColor: theme.bg,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  }}
+                  className="w-full border rounded-lg pl-8 pr-4 py-3 font-semibold text-lg"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            {totalGoal > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                <div className="flex justify-between mb-2">
+                  <span style={{ color: theme.textM }} className="text-sm font-semibold">
+                    Progress to Goal
+                  </span>
+                  <span style={{ color: theme.text }} className="text-sm font-bold">
+                    {progressPercent.toFixed(1)}%
+                  </span>
+                </div>
+                <div style={{ backgroundColor: theme.bg }} className="h-3 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, progressPercent)}%` }}
+                    style={{ backgroundColor: progressPercent >= 100 ? theme.ok : theme.gold }}
+                    className="h-full transition-all"
+                  />
+                </div>
+                <div className="flex justify-between mt-2 text-xs" style={{ color: theme.textM }}>
+                  <span>{fmt(totalCurrentSavings)}</span>
+                  <span>{fmt(totalGoal)}</span>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Individual Goals */}
         {goals.length === 0 ? (
           <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-8 text-center">
             <Heart size={40} style={{ color: theme.gold }} className="mx-auto mb-4" />
@@ -980,15 +1007,15 @@ export default function SmartStackPage() {
                     {goal.name}
                   </h3>
                   <p style={{ color: theme.textM }} className="text-sm">
-                    Target: {fmt(goal.targetAmount)}
+                    Target: {fmt(goal.target)}
                   </p>
                 </div>
                 <div className="text-right">
                   <p style={{ color: theme.text }} className="text-2xl font-bold">
-                    {fmt(goal.currentAmount || 0)}
+                    {fmt(goal.current || 0)}
                   </p>
                   <p style={{ color: theme.textM }} className="text-xs">
-                    {Math.round(((goal.currentAmount || 0) / goal.targetAmount) * 100)}% complete
+                    {Math.round(((goal.current || 0) / goal.target) * 100)}% complete
                   </p>
                 </div>
               </div>
@@ -996,7 +1023,7 @@ export default function SmartStackPage() {
               <div style={{ backgroundColor: theme.bg }} className="h-3 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, ((goal.currentAmount || 0) / goal.targetAmount) * 100)}%` }}
+                  animate={{ width: `${Math.min(100, ((goal.current || 0) / goal.target) * 100)}%` }}
                   style={{ backgroundColor: theme.ok }}
                   className="h-full transition-all"
                 />
@@ -1217,5 +1244,25 @@ export default function SmartStackPage() {
         {activeTab === 'credit' && renderCreditTab()}
       </div>
     </div>
+  );
+}
+
+// Helper icon component (Info icon placeholder)
+function Info({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="16" x2="12" y2="12"></line>
+      <line x1="12" y1="8" x2="12.01" y2="8"></line>
+    </svg>
   );
 }
