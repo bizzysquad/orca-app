@@ -58,9 +58,27 @@ const priorityConfig: Record<TaskPriority, { label: string }> = {
   high: { label: 'High' },
 }
 
-const initialTasks: Task[] = []
+// Load tasks from localStorage or return empty array
+const loadInitialTasks = (): Task[] => {
+  if (typeof window === 'undefined') return []
+  try {
+    const stored = localStorage.getItem('orca-tasks')
+    return stored ? JSON.parse(stored) : []
+  } catch (e) {
+    return []
+  }
+}
 
-const initialNotes: Note[] = []
+// Load notes from localStorage or return empty array
+const loadInitialNotes = (): Note[] => {
+  if (typeof window === 'undefined') return []
+  try {
+    const stored = localStorage.getItem('orca-notes')
+    return stored ? JSON.parse(stored) : []
+  } catch (e) {
+    return []
+  }
+}
 
 const noteColors = ['bg-[#d4a843]/20', 'bg-purple-500/20', 'bg-blue-500/20', 'bg-emerald-500/20', 'bg-pink-500/20']
 
@@ -75,8 +93,8 @@ const syncTasksToCalendars = (tasks: Task[]) => {
 export default function TaskListPage() {
   const { theme } = useTheme()
   const [activeCategory, setActiveCategory] = useState<TaskCategory>('todo')
-  const [tasks, setTasks] = useState<Task[]>(initialTasks)
-  const [notes, setNotes] = useState<Note[]>(initialNotes)
+  const [tasks, setTasks] = useState<Task[]>(loadInitialTasks)
+  const [notes, setNotes] = useState<Note[]>(loadInitialNotes)
   const [newTaskText, setNewTaskText] = useState('')
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium')
   const [newTaskDue, setNewTaskDue] = useState('')
@@ -85,10 +103,24 @@ export default function TaskListPage() {
   const [newNoteContent, setNewNoteContent] = useState('')
   const [showAddNote, setShowAddNote] = useState(false)
 
-  // Initialize global task store on mount
+  // Load tasks and notes from localStorage on mount, initialize global task store
   useEffect(() => {
     syncTasksToCalendars(tasks)
-  }, [])
+  }, [tasks])
+
+  // Save tasks to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('orca-tasks', JSON.stringify(tasks))
+    }
+  }, [tasks])
+
+  // Save notes to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('orca-notes', JSON.stringify(notes))
+    }
+  }, [notes])
 
   const filteredTasks = tasks.filter(t => t.category === activeCategory)
   const activeTasks = filteredTasks.filter(t => !t.completed)

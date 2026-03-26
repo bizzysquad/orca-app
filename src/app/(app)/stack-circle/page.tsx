@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Edit3,
   UserPlus,
+  ChevronDown,
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, pct, gid } from '@/lib/utils';
@@ -103,10 +104,14 @@ const toSlug = (name: string): string => {
     .replace(/-+/g, '-');
 };
 
+// Helper: Generate invite code
+const generateInviteCode = (): string => {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+};
+
 export default function StackCirclePage() {
   const { theme } = useTheme();
   const { data: orcaData, loading } = useOrcaData();
-  const group = orcaData.groups[0] || null;
 
   const initialRoommates: RoommateData = {
     enabled: true,
@@ -135,7 +140,19 @@ export default function StackCirclePage() {
     history: [],
   };
 
-  // State
+  // State for groups (stored in localStorage)
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
+  const [showCreateGroupForm, setShowCreateGroupForm] = useState(false);
+  const [showGroupSelector, setShowGroupSelector] = useState(false);
+
+  // New group form state
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupGoal, setNewGroupGoal] = useState('');
+  const [newGroupTarget, setNewGroupTarget] = useState('');
+  const [newGroupDate, setNewGroupDate] = useState('');
+
+  // Other state
   const [activeTab, setActiveTab] = useState<'group' | 'roommates'>('group');
   const [addMoneyAmount, setAddMoneyAmount] = useState('');
   const [roommates, setRoommates] = useState<RoommateData>(initialRoommates);
@@ -148,11 +165,44 @@ export default function StackCirclePage() {
   const [memberName, setMemberName] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [currentGroup, setCurrentGroup] = useState<Group | null>(group);
   const [editingGroupName, setEditingGroupName] = useState(false);
-  const [groupNameInput, setGroupNameInput] = useState(
-    group?.customName || group?.name || ''
-  );
+  const [groupNameInput, setGroupNameInput] = useState('');
+
+  // Load groups from localStorage on mount
+  useEffect(() => {
+    const savedGroups = localStorage.getItem('orca-stack-circle-groups');
+    if (savedGroups) {
+      try {
+        const parsed = JSON.parse(savedGroups);
+        setGroups(parsed);
+        if (parsed.length > 0 && !currentGroupId) {
+          setCurrentGroupId(parsed[0].id);
+        }
+      } catch (e) {
+        // Invalid JSON in localStorage
+        setGroups([]);
+      }
+    }
+  }, []);
+
+  // Save groups to localStorage whenever they change
+  useEffect(() => {
+    if (groups.length > 0) {
+      localStorage.setItem('orca-stack-circle-groups', JSON.stringify(groups));
+    }
+  }, [groups]);
+
+  // Get current group
+  const currentGroup = currentGroupId
+    ? groups.find((g) => g.id === currentGroupId) || null
+    : null;
+
+  // Update group name input when current group changes
+  useEffect(() => {
+    if (currentGroup) {
+      setGroupNameInput(currentGroup.customName || currentGroup.name || '');
+    }
+  }, [currentGroup]);
 
   // Calculations
   const totalUtilities = roommates.utilities.reduce((sum, u) => sum + u.amount, 0);
@@ -162,10 +212,76 @@ export default function StackCirclePage() {
   const allPaid = allPaidRent && allPaidUtils;
 
   // Invite link - using orcafin.app/invite/{group-name-slug}
-  const groupNameSlug = toSlug(currentGroup?.customName || currentGroup?.name || '');
+  const groupNameSlug = toSlug(
+    currentGroup?.customName || currentGroup?.name || ''
+  );
   const inviteLink = currentGroup
     ? `https://orcafin.app/invite/${groupNameSlug}`
     : '';
+
+  // Handlers for groups
+  const handleCreateGroup = () => {
+    if (
+      newGroupName &&
+      newGroupGoal &&
+      newGroupTarget &&
+      newGroupDate &&
+      !isNaN(Number(newGroupTarget))
+    ) {
+      const newGroup: Group = {
+        id: gid(),
+        name: newGroupName,
+        goal: newGroupGoal,
+        target: Number(newGroupTarget),
+        current: 0,
+        date: newGroupDate,
+        code: generateInviteCode(),
+        members: [
+          {
+            id: gid(),
+            name: 'You',
+            role: 'coordinator',
+            target: Number(newGroupTarget),
+            contrib: 0,
+            balance: 0,
+          },
+        ],
+        activity: [
+          {
+            id: gid(),
+            user: 'You',
+            msg: `Created group "${newGroupName}"`,
+            date: new Date().toLocaleDateString(),
+          },
+        ],
+      };
+
+      setGroups([...groups, newGroup]);
+      setCurrentGroupId(newGroup.id);
+
+      // Reset form
+      setNewGroupName('');
+      setNewGroupGoal('');
+      setNewGroupTarget('');
+      setNewGroupDate('');
+      setShowCreateGroupForm(false);
+    }
+  };
+
+  const handleDeleteGroup = (groupId: string) => {
+    const updatedGroups = groups.filter((g) => g.id !== groupId);
+    setGroups(updatedGroups);
+
+    // If deleted current group, switch to another
+    if (currentGroupId === groupId) {
+      setCurrentGroupId(updatedGroups.length > 0 ? updatedGroups[0].id : null);
+    }
+  };
+
+  const handleSelectGroup = (groupId: string) => {
+    setCurrentGroupId(groupId);
+    setShowGroupSelector(false);
+  };
 
   const handleCopyLink = () => {
     if (inviteLink) {
@@ -185,32 +301,40 @@ export default function StackCirclePage() {
 
   const handleSaveGroupName = () => {
     if (groupNameInput && currentGroup) {
-      setCurrentGroup({
-        ...currentGroup,
-        customName: groupNameInput,
-      });
+      const updatedGroups = groups.map((g) =>
+        g.id === currentGroup.id
+          ? {
+              ...g,
+              customName: groupNameInput,
+            }
+          : g
+      );
+      setGroups(updatedGroups);
       setEditingGroupName(false);
     }
   };
 
   const handleAddMoney = () => {
-    if (addMoneyAmount && !isNaN(Number(addMoneyAmount))) {
-      if (currentGroup) {
-        const newCurrent = currentGroup.current + Number(addMoneyAmount);
-        setCurrentGroup({
-          ...currentGroup,
-          current: newCurrent,
-          activity: [
-            {
-              id: gid(),
-              user: 'You',
-              msg: `Added ${fmt(Number(addMoneyAmount))} to the group`,
-              date: new Date().toLocaleDateString(),
-            },
-            ...currentGroup.activity,
-          ],
-        });
-      }
+    if (addMoneyAmount && !isNaN(Number(addMoneyAmount)) && currentGroup) {
+      const newCurrent = currentGroup.current + Number(addMoneyAmount);
+      const updatedGroups = groups.map((g) =>
+        g.id === currentGroup.id
+          ? {
+              ...g,
+              current: newCurrent,
+              activity: [
+                {
+                  id: gid(),
+                  user: 'You',
+                  msg: `Added ${fmt(Number(addMoneyAmount))} to the group`,
+                  date: new Date().toLocaleDateString(),
+                },
+                ...g.activity,
+              ],
+            }
+          : g
+      );
+      setGroups(updatedGroups);
       setAddMoneyAmount('');
     }
   };
@@ -320,10 +444,13 @@ export default function StackCirclePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: theme.bg, color: theme.text }}>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ backgroundColor: theme.bg, color: theme.text }}
+      >
         <div>Loading...</div>
       </div>
-    )
+    );
   }
 
   return (
@@ -361,12 +488,11 @@ export default function StackCirclePage() {
           <button
             onClick={() => setActiveTab('group')}
             className={`py-4 px-0 font-semibold text-sm border-b-2 transition-colors ${
-              activeTab === 'group'
-                ? 'border-b-2'
-                : 'border-transparent'
+              activeTab === 'group' ? 'border-b-2' : 'border-transparent'
             }`}
             style={{
-              borderColor: activeTab === 'group' ? theme.gold : 'transparent',
+              borderColor:
+                activeTab === 'group' ? theme.gold : 'transparent',
               color: activeTab === 'group' ? theme.gold : theme.textS,
             }}
           >
@@ -375,12 +501,13 @@ export default function StackCirclePage() {
           <button
             onClick={() => setActiveTab('roommates')}
             className={`py-4 px-0 font-semibold text-sm border-b-2 transition-colors ${
-              activeTab === 'roommates'
-                ? 'border-b-2'
-                : 'border-transparent'
+              activeTab === 'roommates' ? 'border-b-2' : 'border-transparent'
             }`}
             style={{
-              borderColor: activeTab === 'roommates' ? theme.gold : 'transparent',
+              borderColor:
+                activeTab === 'roommates'
+                  ? theme.gold
+                  : 'transparent',
               color: activeTab === 'roommates' ? theme.gold : theme.textS,
             }}
           >
@@ -399,6 +526,119 @@ export default function StackCirclePage() {
         {/* GROUP SAVINGS TAB */}
         {activeTab === 'group' && (
           <>
+            {/* Group Selector */}
+            {groups.length > 0 && (
+              <motion.div
+                variants={itemVariants}
+                className="relative"
+              >
+                <button
+                  onClick={() => setShowGroupSelector(!showGroupSelector)}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors"
+                  style={{
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5" style={{ color: theme.gold }} />
+                    <div className="text-left">
+                      <p className="text-xs" style={{ color: theme.textS }}>
+                        Active Group
+                      </p>
+                      <p
+                        className="font-semibold"
+                        style={{ color: theme.text }}
+                      >
+                        {displayGroupName}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className="w-5 h-5"
+                    style={{
+                      color: theme.textM,
+                      transform: showGroupSelector
+                        ? 'rotate(180deg)'
+                        : 'rotate(0deg)',
+                    }}
+                  />
+                </button>
+
+                {/* Group Dropdown Menu */}
+                <AnimatePresence>
+                  {showGroupSelector && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute top-full mt-2 w-full z-40 rounded-lg border shadow-lg"
+                      style={{
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      }}
+                    >
+                      <div className="max-h-64 overflow-y-auto">
+                        {groups.map((group) => (
+                          <div key={group.id}>
+                            <button
+                              onClick={() => handleSelectGroup(group.id)}
+                              className="w-full text-left px-4 py-3 border-b hover:opacity-80 transition-opacity flex items-center justify-between group"
+                              style={{
+                                borderColor: theme.border,
+                                backgroundColor:
+                                  currentGroupId === group.id
+                                    ? theme.border
+                                    : 'transparent',
+                              }}
+                            >
+                              <div>
+                                <p
+                                  className="font-semibold"
+                                  style={{ color: theme.text }}
+                                >
+                                  {group.customName || group.name}
+                                </p>
+                                <p
+                                  className="text-xs"
+                                  style={{ color: theme.textS }}
+                                >
+                                  {fmt(group.current)} / {fmt(group.target)}
+                                </p>
+                              </div>
+                              {currentGroupId === group.id && (
+                                <Check
+                                  className="w-4 h-4"
+                                  style={{ color: theme.gold }}
+                                />
+                              )}
+                            </button>
+
+                            {/* Delete button for each group */}
+                            {currentGroupId === group.id && (
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleDeleteGroup(group.id)}
+                                className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors hover:opacity-80 border-b"
+                                style={{
+                                  color: theme.bad,
+                                  borderColor: theme.border,
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete Group
+                              </motion.button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+
             {currentGroup ? (
               <>
                 {/* Group Overview Card */}
@@ -424,7 +664,8 @@ export default function StackCirclePage() {
                           onClick={() => {
                             setEditingGroupName(true);
                             setGroupNameInput(
-                              currentGroup.customName || currentGroup.name
+                              currentGroup.customName ||
+                                currentGroup.name
                             );
                           }}
                           className="p-1.5 rounded-lg transition-colors hover:opacity-80"
@@ -441,7 +682,9 @@ export default function StackCirclePage() {
                         <input
                           type="text"
                           value={groupNameInput}
-                          onChange={(e) => setGroupNameInput(e.target.value)}
+                          onChange={(e) =>
+                            setGroupNameInput(e.target.value)
+                          }
                           placeholder="Group name (e.g., Vacation Fund)"
                           className="flex-1 px-3 py-2 rounded-lg text-sm focus:outline-none transition-colors"
                           style={{
@@ -491,7 +734,10 @@ export default function StackCirclePage() {
                         className="font-bold"
                         style={{ color: theme.gold }}
                       >
-                        {pct(currentGroup.current, currentGroup.target)}%
+                        {pct(
+                          currentGroup.current,
+                          currentGroup.target
+                        )}%
                       </span>
                     </p>
                   </div>
@@ -507,7 +753,9 @@ export default function StackCirclePage() {
                       initial={{ width: 0 }}
                       animate={{
                         width: `${Math.min(
-                          (currentGroup.current / currentGroup.target) * 100,
+                          (currentGroup.current /
+                            currentGroup.target) *
+                            100,
                           100
                         )}%`,
                       }}
@@ -582,12 +830,14 @@ export default function StackCirclePage() {
                     }}
                   >
                     <p style={{ color: theme.text }}>
-                      <span className="font-semibold">New users:</span> Will see
-                      a sign-up flow
+                      <span className="font-semibold">New users:</span> Will
+                      see a sign-up flow
                     </p>
                     <p style={{ color: theme.text }}>
-                      <span className="font-semibold">Existing users:</span> Will
-                      be prompted to log in and auto-join
+                      <span className="font-semibold">
+                        Existing users:
+                      </span>{' '}
+                      Will be prompted to log in and auto-join
                     </p>
                   </div>
 
@@ -733,7 +983,9 @@ export default function StackCirclePage() {
                       type="number"
                       placeholder="$0.00"
                       value={addMoneyAmount}
-                      onChange={(e) => setAddMoneyAmount(e.target.value)}
+                      onChange={(e) =>
+                        setAddMoneyAmount(e.target.value)
+                      }
                       className="flex-1 border rounded-lg px-4 py-3 focus:outline-none transition-colors"
                       style={{
                         backgroundColor: theme.bg,
@@ -822,84 +1074,356 @@ export default function StackCirclePage() {
                 </motion.div>
 
                 {/* Activity Feed */}
-                {currentGroup.activity && currentGroup.activity.length > 0 && (
-                  <motion.div
-                    variants={itemVariants}
-                    className="space-y-3"
-                  >
-                    <h3
-                      className="font-bold text-lg"
-                      style={{ color: theme.text }}
+                {currentGroup.activity &&
+                  currentGroup.activity.length > 0 && (
+                    <motion.div
+                      variants={itemVariants}
+                      className="space-y-3"
                     >
-                      Activity Feed
-                    </h3>
-                    {currentGroup.activity.slice(0, 5).map((act) => (
-                      <div
-                        key={act.id}
-                        className="rounded-lg border p-4 flex gap-3 transition-colors"
-                        style={{
-                          backgroundColor: theme.card,
-                          borderColor: theme.border,
-                        }}
+                      <h3
+                        className="font-bold text-lg"
+                        style={{ color: theme.text }}
                       >
-                        <MapPin
-                          className="w-4 h-4 flex-shrink-0 mt-1"
-                          style={{ color: theme.gold }}
-                        />
-                        <div className="flex-1">
-                          <p
-                            className="text-sm"
-                            style={{ color: theme.text }}
+                        Activity Feed
+                      </h3>
+                      {currentGroup.activity
+                        .slice(0, 5)
+                        .map((act) => (
+                          <div
+                            key={act.id}
+                            className="rounded-lg border p-4 flex gap-3 transition-colors"
+                            style={{
+                              backgroundColor: theme.card,
+                              borderColor: theme.border,
+                            }}
                           >
-                            {act.msg}
-                          </p>
-                          <p
-                            className="text-xs mt-1"
-                            style={{ color: theme.textS }}
-                          >
-                            {act.date}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </motion.div>
-                )}
+                            <MapPin
+                              className="w-4 h-4 flex-shrink-0 mt-1"
+                              style={{ color: theme.gold }}
+                            />
+                            <div className="flex-1">
+                              <p
+                                className="text-sm"
+                                style={{ color: theme.text }}
+                              >
+                                {act.msg}
+                              </p>
+                              <p
+                                className="text-xs mt-1"
+                                style={{ color: theme.textS }}
+                              >
+                                {act.date}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                    </motion.div>
+                  )}
               </>
             ) : (
-              <motion.div
-                variants={itemVariants}
-                className="text-center py-16 px-6 rounded-2xl border-2 border-dashed transition-colors"
-                style={{
-                  borderColor: theme.border,
-                }}
-              >
-                <Users
-                  className="w-12 h-12 mx-auto mb-4"
-                  style={{ color: theme.textS }}
-                />
-                <h3
-                  className="text-lg font-bold mb-2"
-                  style={{ color: theme.textM }}
-                >
-                  No Groups Yet
-                </h3>
-                <p
-                  className="text-sm mb-6"
-                  style={{ color: theme.textS }}
-                >
-                  Create a group to start saving together
-                </p>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="font-bold px-6 py-3 rounded-lg transition-shadow"
+              <>
+                {/* No Groups Empty State */}
+                <motion.div
+                  variants={itemVariants}
+                  className="text-center py-16 px-6 rounded-2xl border-2 border-dashed transition-colors mb-6"
                   style={{
-                    backgroundColor: theme.gold,
-                    color: theme.bg,
+                    borderColor: theme.border,
                   }}
                 >
-                  Create Group
+                  <Users
+                    className="w-12 h-12 mx-auto mb-4"
+                    style={{ color: theme.textS }}
+                  />
+                  <h3
+                    className="text-lg font-bold mb-2"
+                    style={{ color: theme.textM }}
+                  >
+                    No Groups Yet
+                  </h3>
+                  <p
+                    className="text-sm mb-6"
+                    style={{ color: theme.textS }}
+                  >
+                    Create a group to start saving together
+                  </p>
+                </motion.div>
+
+                {/* Create Group Form */}
+                <motion.div
+                  variants={itemVariants}
+                  className="rounded-2xl border p-6 transition-colors"
+                  style={{
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <h3
+                    className="font-bold text-lg mb-6"
+                    style={{ color: theme.text }}
+                  >
+                    Create Your First Group
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: theme.text }}
+                      >
+                        Group Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Vacation Fund"
+                        value={newGroupName}
+                        onChange={(e) =>
+                          setNewGroupName(e.target.value)
+                        }
+                        className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                        style={{
+                          backgroundColor: theme.bg,
+                          borderColor: theme.border,
+                          color: theme.text,
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: theme.text }}
+                      >
+                        Goal Description
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Beach trip next summer"
+                        value={newGroupGoal}
+                        onChange={(e) =>
+                          setNewGroupGoal(e.target.value)
+                        }
+                        className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                        style={{
+                          backgroundColor: theme.bg,
+                          borderColor: theme.border,
+                          color: theme.text,
+                        }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label
+                          className="block text-sm font-medium mb-2"
+                          style={{ color: theme.text }}
+                        >
+                          Target Amount
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="$0.00"
+                          value={newGroupTarget}
+                          onChange={(e) =>
+                            setNewGroupTarget(e.target.value)
+                          }
+                          className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                          style={{
+                            backgroundColor: theme.bg,
+                            borderColor: theme.border,
+                            color: theme.text,
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label
+                          className="block text-sm font-medium mb-2"
+                          style={{ color: theme.text }}
+                        >
+                          Target Date
+                        </label>
+                        <input
+                          type="date"
+                          value={newGroupDate}
+                          onChange={(e) =>
+                            setNewGroupDate(e.target.value)
+                          }
+                          className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                          style={{
+                            backgroundColor: theme.bg,
+                            borderColor: theme.border,
+                            color: theme.text,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleCreateGroup}
+                      className="w-full font-bold px-6 py-3 rounded-lg transition-shadow"
+                      style={{
+                        backgroundColor: theme.gold,
+                        color: theme.bg,
+                      }}
+                    >
+                      <Plus className="w-5 h-5 inline mr-2" />
+                      Create Group
+                    </motion.button>
+                  </div>
+                </motion.div>
+              </>
+            )}
+
+            {/* Create Another Group Button (when groups exist) */}
+            {groups.length > 0 && (
+              <motion.div
+                variants={itemVariants}
+              >
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowCreateGroupForm(!showCreateGroupForm)}
+                  className="w-full font-semibold px-6 py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  style={{
+                    backgroundColor: theme.border,
+                    color: theme.text,
+                  }}
+                >
+                  <Plus className="w-5 h-5" />
+                  {showCreateGroupForm
+                    ? 'Cancel'
+                    : 'Create Another Group'}
                 </motion.button>
+
+                {/* Create Group Form - Only show if explicitly opened */}
+                <AnimatePresence>
+                  {showCreateGroupForm && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="rounded-2xl border p-6 transition-colors mt-4"
+                      style={{
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      }}
+                    >
+                      <h3
+                        className="font-bold text-lg mb-6"
+                        style={{ color: theme.text }}
+                      >
+                        Create New Group
+                      </h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label
+                            className="block text-sm font-medium mb-2"
+                            style={{ color: theme.text }}
+                          >
+                            Group Name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Home Renovation"
+                            value={newGroupName}
+                            onChange={(e) =>
+                              setNewGroupName(e.target.value)
+                            }
+                            className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                            style={{
+                              backgroundColor: theme.bg,
+                              borderColor: theme.border,
+                              color: theme.text,
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label
+                            className="block text-sm font-medium mb-2"
+                            style={{ color: theme.text }}
+                          >
+                            Goal Description
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Save for kitchen remodel"
+                            value={newGroupGoal}
+                            onChange={(e) =>
+                              setNewGroupGoal(e.target.value)
+                            }
+                            className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                            style={{
+                              backgroundColor: theme.bg,
+                              borderColor: theme.border,
+                              color: theme.text,
+                            }}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label
+                              className="block text-sm font-medium mb-2"
+                              style={{ color: theme.text }}
+                            >
+                              Target Amount
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="$0.00"
+                              value={newGroupTarget}
+                              onChange={(e) =>
+                                setNewGroupTarget(e.target.value)
+                              }
+                              className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                              style={{
+                                backgroundColor: theme.bg,
+                                borderColor: theme.border,
+                                color: theme.text,
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label
+                              className="block text-sm font-medium mb-2"
+                              style={{ color: theme.text }}
+                            >
+                              Target Date
+                            </label>
+                            <input
+                              type="date"
+                              value={newGroupDate}
+                              onChange={(e) =>
+                                setNewGroupDate(e.target.value)
+                              }
+                              className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
+                              style={{
+                                backgroundColor: theme.bg,
+                                borderColor: theme.border,
+                                color: theme.text,
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={handleCreateGroup}
+                          className="w-full font-bold px-6 py-3 rounded-lg transition-shadow"
+                          style={{
+                            backgroundColor: theme.gold,
+                            color: theme.bg,
+                          }}
+                        >
+                          <Plus className="w-5 h-5 inline mr-2" />
+                          Create Group
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             )}
           </>
@@ -1078,7 +1602,9 @@ export default function StackCirclePage() {
                       type="text"
                       placeholder="Utility name"
                       value={utilityName}
-                      onChange={(e) => setUtilityName(e.target.value)}
+                      onChange={(e) =>
+                        setUtilityName(e.target.value)
+                      }
                       className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
                       style={{
                         backgroundColor: theme.bg,
@@ -1091,7 +1617,9 @@ export default function StackCirclePage() {
                         type="number"
                         placeholder="$0.00"
                         value={utilityAmount}
-                        onChange={(e) => setUtilityAmount(e.target.value)}
+                        onChange={(e) =>
+                          setUtilityAmount(e.target.value)
+                        }
                         className="flex-1 border rounded-lg px-4 py-3 focus:outline-none transition-colors"
                         style={{
                           backgroundColor: theme.bg,
@@ -1141,7 +1669,9 @@ export default function StackCirclePage() {
                       </p>
                     </div>
                     <button
-                      onClick={() => handleRemoveUtility(utility.id)}
+                      onClick={() =>
+                        handleRemoveUtility(utility.id)
+                      }
                       className="hover:opacity-80 transition-opacity"
                       style={{ color: theme.bad }}
                     >
@@ -1191,7 +1721,9 @@ export default function StackCirclePage() {
                       type="text"
                       placeholder="Name"
                       value={memberName}
-                      onChange={(e) => setMemberName(e.target.value)}
+                      onChange={(e) =>
+                        setMemberName(e.target.value)
+                      }
                       className="flex-1 border rounded-lg px-4 py-3 focus:outline-none transition-colors"
                       style={{
                         backgroundColor: theme.bg,
@@ -1217,10 +1749,14 @@ export default function StackCirclePage() {
 
               <div className="space-y-4">
                 {roommates.members.map((member) => {
-                  const rentShare = getMemberRentShare(member.share);
-                  const utilsShare = getMemberUtilsShare(member.share);
+                  const rentShare = getMemberRentShare(
+                    member.share
+                  );
+                  const utilsShare =
+                    getMemberUtilsShare(member.share);
                   const totalShare = rentShare + utilsShare;
-                  const isPaid = member.paidRent && member.paidUtilities;
+                  const isPaid =
+                    member.paidRent && member.paidUtilities;
 
                   return (
                     <div
@@ -1228,7 +1764,9 @@ export default function StackCirclePage() {
                       className="rounded-lg p-4 transition-colors"
                       style={{
                         backgroundColor: theme.bg,
-                        borderColor: isPaid ? theme.ok : theme.border,
+                        borderColor: isPaid
+                          ? theme.ok
+                          : theme.border,
                         borderWidth: '2px',
                       }}
                     >
@@ -1244,7 +1782,8 @@ export default function StackCirclePage() {
                             className="text-sm"
                             style={{ color: theme.textS }}
                           >
-                            Share: {member.share}% · Owes {fmt(totalShare)}/mo
+                            Share: {member.share}% · Owes{' '}
+                            {fmt(totalShare)}/mo
                           </p>
                         </div>
                         <span
@@ -1272,7 +1811,9 @@ export default function StackCirclePage() {
                         <motion.button
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          onClick={() => handleToggleRentPaid(member.id)}
+                          onClick={() =>
+                            handleToggleRentPaid(member.id)
+                          }
                           className="flex-1 py-2 rounded-lg font-semibold text-sm transition-colors"
                           style={{
                             backgroundColor: member.paidRent
@@ -1283,12 +1824,16 @@ export default function StackCirclePage() {
                               : theme.text,
                           }}
                         >
-                          {member.paidRent ? '✓ Rent Paid' : 'Mark Rent Paid'}
+                          {member.paidRent
+                            ? '✓ Rent Paid'
+                            : 'Mark Rent Paid'}
                         </motion.button>
                         <motion.button
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          onClick={() => handleToggleUtilsPaid(member.id)}
+                          onClick={() =>
+                            handleToggleUtilsPaid(member.id)
+                          }
                           className="flex-1 py-2 rounded-lg font-semibold text-sm transition-colors"
                           style={{
                             backgroundColor: member.paidUtilities
@@ -1315,7 +1860,13 @@ export default function StackCirclePage() {
                             onChange={(e) =>
                               handleToggleMemberShare(
                                 member.id,
-                                Math.min(100, Math.max(0, Number(e.target.value)))
+                                Math.min(
+                                  100,
+                                  Math.max(
+                                    0,
+                                    Number(e.target.value)
+                                  )
+                                )
                               )
                             }
                             className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none transition-colors"
@@ -1326,7 +1877,9 @@ export default function StackCirclePage() {
                             }}
                           />
                           <button
-                            onClick={() => handleRemoveMember(member.id)}
+                            onClick={() =>
+                              handleRemoveMember(member.id)
+                            }
                             className="p-2 hover:opacity-80 transition-opacity"
                             style={{ color: theme.bad }}
                           >
@@ -1361,7 +1914,8 @@ export default function StackCirclePage() {
                     const totalShare =
                       getMemberRentShare(member.share) +
                       getMemberUtilsShare(member.share);
-                    const isPaid = member.paidRent && member.paidUtilities;
+                    const isPaid =
+                      member.paidRent && member.paidUtilities;
                     return (
                       <div
                         key={member.id}
@@ -1371,11 +1925,15 @@ export default function StackCirclePage() {
                           borderColor: theme.border,
                         }}
                       >
-                        <p style={{ color: theme.text }}>{member.name}</p>
+                        <p style={{ color: theme.text }}>
+                          {member.name}
+                        </p>
                         <p
                           className="font-bold"
                           style={{
-                            color: isPaid ? theme.ok : theme.text,
+                            color: isPaid
+                              ? theme.ok
+                              : theme.text,
                           }}
                         >
                           {isPaid && '✓ '} {fmt(totalShare)}
@@ -1466,7 +2024,9 @@ export default function StackCirclePage() {
                     style={{ color: theme.gold }}
                   />
                   <div className="text-left">
-                    <p className="font-semibold text-sm">Copy Link</p>
+                    <p className="font-semibold text-sm">
+                      Copy Link
+                    </p>
                     <p
                       className="text-xs"
                       style={{ color: theme.textS }}
@@ -1497,7 +2057,9 @@ export default function StackCirclePage() {
                     style={{ color: theme.ok }}
                   />
                   <div className="text-left">
-                    <p className="font-semibold text-sm">Text Message</p>
+                    <p className="font-semibold text-sm">
+                      Text Message
+                    </p>
                     <p
                       className="text-xs"
                       style={{ color: theme.textS }}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, Calendar, Upload } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -180,7 +180,7 @@ export default function BillBossPage() {
   const { data, loading } = useOrcaData()
   const { theme } = useTheme()
 
-  const [bills, setBills] = useState(data.bills || [] as Bill[])
+  const [bills, setBills] = useState<Bill[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
   const [splitModalBillId, setSplitModalBillId] = useState<string | null>(null)
   const [customCategory, setCustomCategory] = useState('')
@@ -189,6 +189,13 @@ export default function BillBossPage() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [rentReceipts, setRentReceipts] = useState<Record<string, string>>({})
   const [viewMode, setViewMode] = useState<'monthly' | 'weekly'>('monthly')
+
+  // Sync bills with context data on load or data change
+  useEffect(() => {
+    if (data.bills && data.bills.length > 0) {
+      setBills(data.bills)
+    }
+  }, [data.bills])
 
   const [formData, setFormData] = useState({
     name: '',
@@ -220,8 +227,8 @@ export default function BillBossPage() {
     .reduce((sum, b) => sum + b.amount, 0)
 
   // Calculate weekly income and bills
-  const weeklyIncome = calcIncome(demoData.income)
-  const { br: weeklyBills } = calcAlloc(demoData.income, bills, demoData.goals)
+  const weeklyIncome = calcIncome(data.income)
+  const { br: weeklyBills } = calcAlloc(data.income, bills, data.goals)
   const incomeToExpenseRatio = weeklyIncome > 0 ? (weeklyBills / weeklyIncome) * 100 : 0
 
   const getHealthStatus = () => {
@@ -248,7 +255,7 @@ export default function BillBossPage() {
 
   // Get rent bill if exists
   const rentBill = bills.find(b => b.cat.toLowerCase() === 'housing' && b.name.toLowerCase().includes('rent'))
-  const rentEntries: RentEntry[] = demoData.rent || []
+  const rentEntries: RentEntry[] = data.rent || []
 
   // Auto-update rent tracker (filter entries that match paid bills)
   const updatedRentEntries = rentEntries.map(entry => {

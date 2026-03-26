@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createBrowserClient } from '@supabase/ssr'
 import {
   Shield,
   Users,
@@ -61,6 +62,14 @@ const BORDER_COLOR = '#27272a'
 const TEXT_PRIMARY = '#fafafa'
 const TEXT_SECONDARY = '#a1a1aa'
 const TEXT_MUTED = '#71717a'
+
+// Supabase Client
+const createSupabaseClient = () => {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  )
+}
 
 // Types
 interface AdminUser {
@@ -387,6 +396,141 @@ export default function AdminPage() {
       .finally(() => setAuthLoading(false))
   }, [])
 
+  // Initialize Supabase and fetch live users
+  useEffect(() => {
+    if (!adminAuthenticated) return
+
+    const initSupabase = async () => {
+      try {
+        const supabase = createSupabaseClient()
+        supabaseRef.current = supabase
+
+        // Check if Supabase is configured
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+          setDbConnected(false)
+          setIsLiveMode(false)
+          return
+        }
+
+        setIsLoadingUsers(true)
+        setUserLoadError('')
+
+        // Fetch users from Supabase profiles table
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, created_at, user_metadata')
+          .limit(1000)
+
+        if (error) {
+          console.error('Supabase fetch error:', error)
+          setDbConnected(false)
+          setIsLiveMode(false)
+          setUserLoadError('Could not connect to database')
+          // Fall back to demo users
+          setUsers(DEMO_USERS)
+          return
+        }
+
+        if (data && data.length > 0) {
+          // Convert Supabase data to AdminUser format
+          const liveUsers: AdminUser[] = data.map((profile: any, idx: number) => ({
+            id: profile.id || `user-${idx}`,
+            name: profile.full_name || 'User',
+            email: profile.email || 'unknown@example.com',
+            status: 'active' as const,
+            twoFA: false,
+            lastActive: 'Recently',
+            joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            plan: 'Active',
+            creditScore: 750,
+            activityLog: [{ action: 'Account created', date: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : '', detail: 'User registration' }],
+          }))
+          setUsers(liveUsers)
+          setDbConnected(true)
+          setIsLiveMode(true)
+          setLastSyncTime(new Date().toLocaleTimeString())
+
+          // Set up real-time subscription
+          if (supabaseRef.current) {
+            const channel = supabaseRef.current
+              .channel('admin-users')
+              .on(
+                'postgres_changes',
+                {
+                  event: '*',
+                  schema: 'public',
+                  table: 'profiles',
+                },
+                (payload) => {
+                  // Refresh user list on any change
+                  refetchUsers()
+                }
+              )
+              .subscribe()
+
+            return () => {
+              if (supabaseRef.current && channel) {
+                supabaseRef.current.removeChannel(channel)
+              }
+            }
+          }
+        } else {
+          setDbConnected(true)
+          setIsLiveMode(true)
+          // No users yet, use demo as fallback
+          setUsers(DEMO_USERS)
+          setLastSyncTime(new Date().toLocaleTimeString())
+        }
+      } catch (err) {
+        console.error('Supabase initialization error:', err)
+        setDbConnected(false)
+        setIsLiveMode(false)
+        setUserLoadError('Failed to initialize database connection')
+        setUsers(DEMO_USERS)
+      } finally {
+        setIsLoadingUsers(false)
+      }
+    }
+
+    initSupabase()
+  }, [adminAuthenticated])
+
+  // Refetch users function for real-time updates
+  const refetchUsers = async () => {
+    if (!supabaseRef.current) return
+
+    try {
+      const { data, error } = await supabaseRef.current
+        .from('profiles')
+        .select('id, email, full_name, created_at, user_metadata')
+        .limit(1000)
+
+      if (error) {
+        console.error('Refetch error:', error)
+        return
+      }
+
+      if (data && data.length > 0) {
+        const liveUsers: AdminUser[] = data.map((profile: any, idx: number) => ({
+          id: profile.id || `user-${idx}`,
+          name: profile.full_name || 'User',
+          email: profile.email || 'unknown@example.com',
+          status: 'active' as const,
+          twoFA: false,
+          lastActive: 'Recently',
+          joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          plan: 'Active',
+          creditScore: 750,
+          activityLog: [{ action: 'Account created', date: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : '', detail: 'User registration' }],
+        }))
+        setUsers(liveUsers)
+        setLastSyncTime(new Date().toLocaleTimeString())
+      }
+    } catch (err) {
+      console.error('Refetch error:', err)
+    }
+  }
+
   const handleAdminLogin = async () => {
     try {
       const res = await fetch('/api/admin/auth', {
@@ -450,6 +594,14 @@ export default function AdminPage() {
     { id: 'stack-circle', name: 'Stack Circle', enabled: true },
     { id: 'task-lists', name: 'Task Lists', enabled: true },
   ])
+
+  // Connection states
+  const [dbConnected, setDbConnected] = useState(false)
+  const [isLiveMode, setIsLiveMode] = useState(false)
+  const [lastSyncTime, setLastSyncTime] = useState<string>('')
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false)
+  const [userLoadError, setUserLoadError] = useState<string>('')
+  const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null)
   const [moduleSettings, setModuleSettings] = useState<Record<string, any>>({})
 
   // Navigation states
@@ -526,6 +678,12 @@ export default function AdminPage() {
     calendarSync: true,
     inviteSystem: true,
     savingsModule: true,
+    projectionCalculator: true,
+    checkSplitter: true,
+    paycheckHistory: true,
+    taskPersistence: true,
+    liveDataSync: true,
+    multipleStackCircleGroups: true,
   })
   const [onboardingText, setOnboardingText] = useState(
     'Welcome to ORCA! Let\'s set up your financial dashboard and start building smart money habits.'
@@ -551,10 +709,51 @@ export default function AdminPage() {
 
   // Module settings extras
   const [moduleConfigs, setModuleConfigs] = useState<Record<string, Record<string, any>>>({
-    'smart-stack': { defaultAllocBR: 50, defaultAllocSR: 20, defaultAllocSP: 30, maxCategories: 10, autoLockBudget: true, selfEmployedAllocator: true, incomeAllocationEnabled: true },
-    'bill-boss': { reminderDays: 3, lateFeeAlert: true, receiptUploadEnabled: true, splitPayments: true, rentTrackerEnabled: true, recurrenceOptions: true, weeklyMonthlyToggle: true, incomeExpenseRatio: true },
-    'stack-circle': { maxGroupSize: 50, maxGroups: 5, moderationEnabled: true, inviteOnly: false, anonymousMode: false, customGroupNames: true, inviteSystem: true, inviteDomain: 'orcafin.app' },
-    'task-lists': { maxTodoItems: 100, maxGroceryLists: 20, meetingReminders: true, quickNotes: true, taskSharing: false, calendarSync: true },
+    'smart-stack': {
+      defaultAllocBR: 50,
+      defaultAllocSR: 20,
+      defaultAllocSP: 30,
+      maxCategories: 10,
+      autoLockBudget: true,
+      selfEmployedAllocator: true,
+      incomeAllocationEnabled: true,
+      projectionCalculatorEnabled: true,
+      calendarIntegration: true,
+      allocatorEnabled: true,
+      checkSplitterEnabled: true,
+      paycheckHistoryEnabled: true,
+    },
+    'bill-boss': {
+      reminderDays: 3,
+      lateFeeAlert: true,
+      receiptUploadEnabled: true,
+      splitPayments: true,
+      rentTrackerEnabled: true,
+      recurrenceOptions: true,
+      weeklyMonthlyToggle: true,
+      incomeExpenseRatio: true,
+      liveDataSyncEnabled: true,
+    },
+    'stack-circle': {
+      maxGroupSize: 50,
+      maxGroups: 5,
+      moderationEnabled: true,
+      inviteOnly: false,
+      anonymousMode: false,
+      customGroupNames: true,
+      inviteSystem: true,
+      inviteDomain: 'orcafin.app',
+      multipleGroupsEnabled: true,
+    },
+    'task-lists': {
+      maxTodoItems: 100,
+      maxGroceryLists: 20,
+      meetingReminders: true,
+      quickNotes: true,
+      taskSharing: false,
+      calendarSync: true,
+      persistenceEnabled: true,
+    },
   })
 
   // Security extras
@@ -826,6 +1025,57 @@ export default function AdminPage() {
 
   return (
     <div style={{ backgroundColor: BG_DARK, color: TEXT_PRIMARY }} className="min-h-screen">
+      {/* Platform Status Banner */}
+      {isLiveMode && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{ backgroundColor: '#10b98122', borderBottomColor: '#10b981' }}
+          className="border-b"
+        >
+          <div className="max-w-7xl mx-auto px-6 py-3">
+            <div className="flex items-center justify-between flex-wrap gap-2 text-sm">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div
+                    style={{ backgroundColor: '#10b981' }}
+                    className="w-2 h-2 rounded-full animate-pulse"
+                  />
+                  <span style={{ color: '#10b981' }} className="font-medium">
+                    {isLiveMode ? 'Live' : 'Demo Mode'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Database size={14} style={{ color: TEXT_MUTED }} />
+                  <span style={{ color: TEXT_SECONDARY }}>
+                    {dbConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users size={14} style={{ color: TEXT_MUTED }} />
+                  <span style={{ color: TEXT_SECONDARY }}>
+                    {userStats.total} users
+                  </span>
+                </div>
+                {lastSyncTime && (
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} style={{ color: TEXT_MUTED }} />
+                    <span style={{ color: TEXT_SECONDARY }}>
+                      Last sync: {lastSyncTime}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {userLoadError && (
+                <span style={{ color: '#f59e0b' }} className="text-xs">
+                  {userLoadError}
+                </span>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -842,7 +1092,7 @@ export default function AdminPage() {
                   Admin Console
                 </h1>
                 <p style={{ color: TEXT_MUTED }} className="text-sm">
-                  System & User Management
+                  {isLiveMode ? 'Live Database Management' : 'Demo Mode - System & User Management'}
                 </p>
               </div>
             </div>
@@ -850,6 +1100,18 @@ export default function AdminPage() {
               <a href="/dashboard" style={{ color: TEXT_SECONDARY, borderColor: BORDER_COLOR }} className="px-4 py-2 rounded-lg border text-sm hover:opacity-80 transition-opacity">
                 ← Back to App
               </a>
+              {isLiveMode && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={refetchUsers}
+                  disabled={isLoadingUsers}
+                  style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD, opacity: isLoadingUsers ? 0.5 : 1 }}
+                  className="px-4 py-2 rounded-lg border text-sm font-medium flex items-center gap-2"
+                >
+                  <RefreshCw size={14} className={isLoadingUsers ? 'animate-spin' : ''} /> Sync
+                </motion.button>
+              )}
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -932,6 +1194,18 @@ export default function AdminPage() {
           >
             {activeTab === 'users' && (
               <div className="space-y-6">
+                {isLoadingUsers && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
+                    className="rounded-lg border p-4 flex items-center gap-3"
+                  >
+                    <div style={{ borderColor: `${GOLD}44`, borderTopColor: GOLD }} className="w-4 h-4 border-2 rounded-full animate-spin" />
+                    <span style={{ color: TEXT_SECONDARY }}>Loading live user data...</span>
+                  </motion.div>
+                )}
+
                 {/* Stats Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   {[
