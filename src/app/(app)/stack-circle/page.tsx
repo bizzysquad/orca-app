@@ -321,7 +321,7 @@ export default function StackCirclePage() {
               ...g,
               current: newCurrent,
               members: g.members.map((m) =>
-                m.name === 'You' ? { ...m, contrib: (m.contrib || 0) + amount } : m
+                m.name === 'You' ? { ...m, contrib: (m.contrib || 0) + amount, balance: (m.balance || 0) + amount } : m
               ),
               activity: [
                 {
@@ -1386,18 +1386,12 @@ export default function StackCirclePage() {
                             >
                               Target Date
                             </label>
-                            <input
-                              type="date"
+                            <CalendarPicker
                               value={newGroupDate}
-                              onChange={(e) =>
-                                setNewGroupDate(e.target.value)
-                              }
-                              className="w-full border rounded-lg px-4 py-3 focus:outline-none transition-colors"
-                              style={{
-                                backgroundColor: theme.bg,
-                                borderColor: theme.border,
-                                color: theme.text,
-                              }}
+                              onChange={setNewGroupDate}
+                              placeholder="Select target date"
+                              theme={theme}
+                              showQuickSelect={false}
                             />
                           </div>
                         </div>

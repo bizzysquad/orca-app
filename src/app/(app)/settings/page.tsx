@@ -5,22 +5,15 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User,
-  Mail,
   Shield,
   Moon,
   Sun,
   LogOut,
-  Trash2,
   Save,
   DollarSign,
-  Briefcase,
-  Home,
-  Building2,
 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
-import { fmt } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
-import type { EmploymentType } from '@/lib/types'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -34,25 +27,8 @@ export default function SettingsPage() {
   const [editName, setEditName] = useState(user.name)
   const [editEmail, setEditEmail] = useState(user.email)
 
-  // Employment type
-  const [employmentType, setEmploymentType] = useState<EmploymentType>(user.employmentType || 'employed')
-
-  // Employed income state
+  // Core financial input
   const [netIncome, setNetIncome] = useState(String(user.netIncome || ''))
-  const [payRate, setPayRate] = useState(user.payRate)
-  const [hoursPerDay, setHoursPerDay] = useState(user.hoursPerDay)
-  const [payFreq, setPayFreq] = useState(user.payFreq)
-
-  // Self-employed income state
-  const [dailyIncome, setDailyIncome] = useState(String(user.dailyIncome || ''))
-  const [weeklyIncome, setWeeklyIncome] = useState(String(user.weeklyIncome || ''))
-  const [manualCash, setManualCash] = useState(String(user.manualCashInput || ''))
-  const [selfEmployedMethod, setSelfEmployedMethod] = useState<'daily' | 'weekly' | 'manual'>(
-    user.selfEmployedInputMethod || 'weekly'
-  )
-
-  // Rent config
-  const [rentAmount, setRentAmount] = useState(String(user.rentAmount || ''))
 
   // Credit score
   const [creditScore, setCreditScore] = useState(String(user.creditScore || ''))
@@ -79,15 +55,6 @@ export default function SettingsPage() {
     const updatedUser = {
       ...user,
       netIncome: parseFloat(netIncome) || 0,
-      payRate: payRate,
-      hoursPerDay: hoursPerDay,
-      payFreq: payFreq,
-      employmentType: employmentType,
-      dailyIncome: parseFloat(dailyIncome) || 0,
-      weeklyIncome: parseFloat(weeklyIncome) || 0,
-      manualCashInput: parseFloat(manualCash) || 0,
-      selfEmployedInputMethod: selfEmployedMethod,
-      rentAmount: parseFloat(rentAmount) || 0,
       creditScore: parseInt(creditScore) || 0,
     }
     setData(prev => ({ ...prev, user: updatedUser }))
@@ -156,305 +123,31 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* 2. Employment Type Selection */}
+        {/* 2. Income Settings (Simplified) */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.11 }}
         >
           <h2 className="text-lg font-semibold mb-4" style={{ color: text }}>
-            Employment Type
-          </h2>
-          <div
-            className="rounded-lg p-6"
-            style={{ backgroundColor: card, borderColor: border, borderWidth: '1px' }}
-          >
-            <div className="flex gap-3">
-              <button
-                onClick={() => setEmploymentType('employed')}
-                className="flex-1 py-4 rounded-lg font-semibold transition-all flex flex-col items-center gap-2"
-                style={{
-                  backgroundColor: employmentType === 'employed' ? gold : isDark ? '#27272a' : '#e4e4e0',
-                  color: employmentType === 'employed' ? (isDark ? '#09090b' : '#ffffff') : textS,
-                }}
-              >
-                <Building2 className="w-5 h-5" />
-                Employed
-              </button>
-              <button
-                onClick={() => setEmploymentType('self-employed')}
-                className="flex-1 py-4 rounded-lg font-semibold transition-all flex flex-col items-center gap-2"
-                style={{
-                  backgroundColor: employmentType === 'self-employed' ? gold : isDark ? '#27272a' : '#e4e4e0',
-                  color: employmentType === 'self-employed' ? (isDark ? '#09090b' : '#ffffff') : textS,
-                }}
-              >
-                <Briefcase className="w-5 h-5" />
-                Self-Employed
-              </button>
-            </div>
-            <p className="text-xs mt-3" style={{ color: textM }}>
-              {employmentType === 'employed'
-                ? 'Standard income with hourly rate and pay frequency.'
-                : 'Flexible income entry — daily, weekly, or manual cash flow tracking.'}
-            </p>
-          </div>
-        </motion.div>
-
-        {/* 3. Income & Pay Settings */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12 }}
-        >
-          <h2 className="text-lg font-semibold mb-4" style={{ color: text }}>
-            {employmentType === 'self-employed' ? 'Cash Flow Settings' : 'Income & Pay'}
+            Income
           </h2>
           <div
             className="rounded-lg p-6 space-y-5"
             style={{ backgroundColor: card, borderColor: border, borderWidth: '1px' }}
           >
-            {employmentType === 'employed' ? (
-              <>
-                {/* Net Income */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                    Net Income (per pay period)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4" style={{ color: '#22c55e' }} />
-                    <input
-                      type="number"
-                      value={netIncome}
-                      onChange={e => setNetIncome(e.target.value)}
-                      placeholder="e.g., 3820"
-                      className="flex-1 px-3 py-2 rounded-lg"
-                      style={{
-                        backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                        borderColor: border,
-                        borderWidth: '1px',
-                        color: text,
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: textM }}>
-                    Your take-home pay after taxes — used for budgeting calculations
-                  </p>
-                </div>
-
-                <div style={{ borderTop: `1px solid ${border}`, marginTop: '8px', marginBottom: '8px' }} />
-
-                {/* Pay Frequency */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                    Pay Frequency
-                  </label>
-                  <select
-                    value={payFreq}
-                    onChange={e => setPayFreq(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg"
-                    style={{
-                      backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                      borderColor: border,
-                      borderWidth: '1px',
-                      color: text,
-                    }}
-                  >
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Bi-Weekly</option>
-                    <option value="semimonthly">Semi-Monthly</option>
-                  </select>
-                </div>
-
-                {/* Hourly Rate & Hours/Day */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                      Hourly Rate
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <span style={{ color: textM }}>$</span>
-                      <input
-                        type="number"
-                        value={payRate}
-                        onChange={e => setPayRate(e.target.value)}
-                        className="flex-1 px-3 py-2 rounded-lg"
-                        style={{
-                          backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                          borderColor: border,
-                          borderWidth: '1px',
-                          color: text,
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                      Hours/Day
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="24"
-                      value={hoursPerDay}
-                      onChange={e => setHoursPerDay(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg"
-                      style={{
-                        backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                        borderColor: border,
-                        borderWidth: '1px',
-                        color: text,
-                      }}
-                    />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Self-Employed Income Input Method */}
-                <div>
-                  <label className="text-sm font-medium mb-3 block" style={{ color: textS }}>
-                    Income Input Method
-                  </label>
-                  <div className="flex gap-2">
-                    {(['daily', 'weekly', 'manual'] as const).map(method => (
-                      <button
-                        key={method}
-                        onClick={() => setSelfEmployedMethod(method)}
-                        className="flex-1 py-2.5 rounded-lg font-medium text-sm transition-all"
-                        style={{
-                          backgroundColor: selfEmployedMethod === method ? gold : isDark ? '#27272a' : '#f4f4f2',
-                          color: selfEmployedMethod === method ? (isDark ? '#09090b' : '#ffffff') : textS,
-                        }}
-                      >
-                        {method === 'daily' ? 'Daily' : method === 'weekly' ? 'Weekly' : 'Cash'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {selfEmployedMethod === 'daily' && (
-                  <div>
-                    <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                      Average Daily Income
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4" style={{ color: '#22c55e' }} />
-                      <input
-                        type="number"
-                        value={dailyIncome}
-                        onChange={e => setDailyIncome(e.target.value)}
-                        placeholder="e.g., 250"
-                        className="flex-1 px-3 py-2 rounded-lg"
-                        style={{
-                          backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                          borderColor: border,
-                          borderWidth: '1px',
-                          color: text,
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs mt-1" style={{ color: textM }}>
-                      Your typical daily earnings — used to project weekly/monthly income
-                    </p>
-                  </div>
-                )}
-
-                {selfEmployedMethod === 'weekly' && (
-                  <div>
-                    <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                      Average Weekly Income
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4" style={{ color: '#22c55e' }} />
-                      <input
-                        type="number"
-                        value={weeklyIncome}
-                        onChange={e => setWeeklyIncome(e.target.value)}
-                        placeholder="e.g., 1500"
-                        className="flex-1 px-3 py-2 rounded-lg"
-                        style={{
-                          backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                          borderColor: border,
-                          borderWidth: '1px',
-                          color: text,
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs mt-1" style={{ color: textM }}>
-                      Your typical weekly earnings — used for all platform calculations
-                    </p>
-                  </div>
-                )}
-
-                {selfEmployedMethod === 'manual' && (
-                  <div>
-                    <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                      Manual Cash Flow
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4" style={{ color: '#d4a843' }} />
-                      <input
-                        type="number"
-                        value={manualCash}
-                        onChange={e => setManualCash(e.target.value)}
-                        placeholder="e.g., 5000"
-                        className="flex-1 px-3 py-2 rounded-lg"
-                        style={{
-                          backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                          borderColor: border,
-                          borderWidth: '1px',
-                          color: text,
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs mt-1" style={{ color: textM }}>
-                      Enter your current cash on hand — manually update as you earn
-                    </p>
-                  </div>
-                )}
-
-                <div style={{ borderTop: `1px solid ${border}`, marginTop: '8px', marginBottom: '8px' }} />
-
-                {/* Pay Frequency for self-employed (for projection purposes) */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                    Projection Period
-                  </label>
-                  <select
-                    value={payFreq}
-                    onChange={e => setPayFreq(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg"
-                    style={{
-                      backgroundColor: isDark ? '#27272a' : '#f4f4f2',
-                      borderColor: border,
-                      borderWidth: '1px',
-                      color: text,
-                    }}
-                  >
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Bi-Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-              </>
-            )}
-
-            <div style={{ borderTop: `1px solid ${border}`, marginTop: '8px', marginBottom: '8px' }} />
-
-            {/* Rent Amount Config */}
+            {/* Net Income */}
             <div>
               <label className="text-sm font-medium mb-2 block" style={{ color: textS }}>
-                <Home className="w-4 h-4 inline mr-1" />
-                Monthly Rent Amount
+                Net Income (per pay period)
               </label>
               <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4" style={{ color: textM }} />
+                <DollarSign className="w-4 h-4" style={{ color: '#22c55e' }} />
                 <input
                   type="number"
-                  value={rentAmount}
-                  onChange={e => setRentAmount(e.target.value)}
-                  placeholder="e.g., 1400"
+                  value={netIncome}
+                  onChange={e => setNetIncome(e.target.value)}
+                  placeholder="e.g., 3820"
                   className="flex-1 px-3 py-2 rounded-lg"
                   style={{
                     backgroundColor: isDark ? '#27272a' : '#f4f4f2',
@@ -465,9 +158,11 @@ export default function SettingsPage() {
                 />
               </div>
               <p className="text-xs mt-1" style={{ color: textM }}>
-                Used for Rent Tracker in Bill Boss and Smart Stack
+                Your take-home pay after taxes — used for all budgeting calculations across the platform
               </p>
             </div>
+
+            <div style={{ borderTop: `1px solid ${border}`, marginTop: '8px', marginBottom: '8px' }} />
 
             {/* Credit Score */}
             <div>

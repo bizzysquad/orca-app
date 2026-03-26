@@ -219,19 +219,20 @@ export default function SmartStackPage() {
   const [newPaymentDate, setNewPaymentDate] = useState('');
   const [newPaymentDesc, setNewPaymentDesc] = useState('');
 
-  const isSelfEmployed = data.user?.employmentType === 'self-employed';
-
   // Track which days have custom hours (key = date string, value = hours)
   const [customHours, setCustomHours] = useState<Record<string, number>>({});
   const [editingHoursDay, setEditingHoursDay] = useState<string | null>(null);
   const [editingHoursValue, setEditingHoursValue] = useState('');
 
-  // Check amount is always derived from calendar interaction + Settings
-  // Defaults to $0 until user has configured payRate in Settings
-  const basePayRate = parseFloat(data.user?.payRate || '0');
-  const baseHoursPerDay = parseFloat(data.user?.hoursPerDay || '0');
-  const payFreq = data.user?.payFreq || 'biweekly';
-  const hasSettingsInput = basePayRate > 0 && baseHoursPerDay > 0;
+  // Check Projector now uses Net Income as the base
+  const netIncome = data.user?.netIncome || 0;
+  const [inlineNetIncome, setInlineNetIncome] = useState(String(netIncome || ''));
+  const [inlinePayDate, setInlinePayDate] = useState('');
+  const hasNetIncome = (parseFloat(inlineNetIncome) || netIncome) > 0;
+
+  // Custom pay period dates (user-defined start/end)
+  const [customPeriodStart, setCustomPeriodStart] = useState('');
+  const [customPeriodEnd, setCustomPeriodEnd] = useState('');
 
   // projectedCheckAmount is defined after pay period state below
 
@@ -300,7 +301,7 @@ export default function SmartStackPage() {
   }, [data]);
 
   const incomeRequirements = useMemo<IncomeRequirement>(() => {
-    if (!isSelfEmployed || selectedObligations.length === 0) {
+    if (selectedObligations.length === 0) {
       return { daily: 0, weekly: 0, total: 0 };
     }
 
@@ -324,10 +325,10 @@ export default function SmartStackPage() {
       weekly: weeklyRequired,
       total: totalRequired,
     };
-  }, [selectedObligations, obligations, isSelfEmployed]);
+  }, [selectedObligations, obligations]);
 
   // ============== PAY PERIOD STATE ==============
-  const [projFreq, setProjFreq] = useState<'weekly' | 'biweekly'>(payFreq === 'weekly' ? 'weekly' : 'biweekly');
+  const [projFreq, setProjFreq] = useState<'weekly' | 'biweekly'>('biweekly');
   const [projPeriodIndex, setProjPeriodIndex] = useState(0); // 0 = current period
 
   // Calculate pay periods based on frequency
@@ -358,40 +359,54 @@ export default function SmartStackPage() {
 
   const currentPeriod = payPeriods[projPeriodIndex + 2] || payPeriods[2]; // offset by 2 since we start at -2
 
-  // Calculate projected check dynamically from selected pay period
-  const projectedCheckAmount = useMemo(() => {
-    if (isSelfEmployed || !hasSettingsInput) return 0;
-    if (!currentPeriod) return 0;
+  // Use custom pay period if user provided dates, otherwise use calculated period
+  const effectivePeriod = useMemo(() => {
+    if (customPeriodStart && customPeriodEnd) {
+      return {
+        start: new Date(customPeriodStart + 'T00:00:00'),
+        end: new Date(customPeriodEnd + 'T00:00:00'),
+        label: `${new Date(customPeriodStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(customPeriodEnd + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      };
+    }
+    return currentPeriod;
+  }, [customPeriodStart, customPeriodEnd, currentPeriod]);
 
-    let totalHours = 0;
-    const d = new Date(currentPeriod.start);
-    while (d <= currentPeriod.end) {
+  // The projected check amount = net income - deductions based on days off
+  const effectiveNetIncome = parseFloat(inlineNetIncome) || netIncome;
+
+  const projectedCheckAmount = useMemo(() => {
+    if (!effectiveNetIncome || effectiveNetIncome <= 0) return 0;
+    if (!effectivePeriod) return effectiveNetIncome;
+
+    // Count total weekdays and work days in the period
+    let totalWeekdays = 0;
+    let workDays = 0;
+    const d = new Date(effectivePeriod.start);
+    while (d <= effectivePeriod.end) {
       const dateStr = d.toISOString().split('T')[0];
       const dayOfWeek = d.getDay();
       const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
 
-      // Skip days off
-      if (daysOff.some((off) => off.date === dateStr)) {
-        d.setDate(d.getDate() + 1);
-        continue;
+      if (!isWknd) {
+        totalWeekdays++;
+        if (!daysOff.some((off) => off.date === dateStr)) {
+          workDays++;
+        }
       }
-
-      // Use custom hours if set; weekends default to 0 unless custom hours set
-      const defaultHrs = isWknd ? 0 : baseHoursPerDay;
-      const hours = customHours[dateStr] ?? defaultHrs;
-      totalHours += hours;
       d.setDate(d.getDate() + 1);
     }
 
-    return totalHours * basePayRate;
-  }, [isSelfEmployed, hasSettingsInput, basePayRate, baseHoursPerDay, currentPeriod, daysOff, customHours]);
+    // Projected = netIncome * (workDays / totalWeekdays)
+    if (totalWeekdays === 0) return effectiveNetIncome;
+    return effectiveNetIncome * (workDays / totalWeekdays);
+  }, [effectiveNetIncome, effectivePeriod, daysOff]);
 
   // For backward compat in other functions
   const checkAmount = projectedCheckAmount;
 
   // ============== CALENDAR WITH PROJECTION ==============
   const renderCheckProjectionWithCalendar = () => {
-    const period = currentPeriod;
+    const period = effectivePeriod;
     if (!period) return null;
 
     // Build array of days in this pay period
@@ -415,7 +430,7 @@ export default function SmartStackPage() {
         if (exists) {
           return prev.filter((d) => d.date !== dateStr);
         } else {
-          return [...prev, { date: dateStr, hoursPerDay: baseHoursPerDay }];
+          return [...prev, { date: dateStr }];
         }
       });
     };
@@ -432,37 +447,20 @@ export default function SmartStackPage() {
       return day === 0 || day === 6;
     };
 
-    const startEditHours = (date: Date) => {
-      const dateStr = date.toISOString().split('T')[0];
-      const currentHours = customHours[dateStr] ?? (isWeekend(date) ? 0 : baseHoursPerDay);
-      setEditingHoursDay(dateStr);
-      setEditingHoursValue(String(currentHours));
-    };
-
-    const saveEditHours = () => {
-      if (editingHoursDay) {
-        const hrs = parseFloat(editingHoursValue);
-        if (!isNaN(hrs) && hrs >= 0) {
-          setCustomHours((prev) => ({ ...prev, [editingHoursDay]: hrs }));
-        }
-        setEditingHoursDay(null);
-        setEditingHoursValue('');
-      }
-    };
-
-    // Calculate income reduction from days off in this period
-    const incomeReduction = daysOff
-      .filter(day => {
-        const dd = new Date(day.date + 'T00:00:00');
-        return dd >= period.start && dd <= period.end;
-      })
-      .reduce((sum, day) => {
-        const hrs = customHours[day.date] ?? baseHoursPerDay;
-        return sum + (hrs * basePayRate);
-      }, 0);
-
-    // Count days in this period for daysInMonth ref (used in days off bar)
+    // Count days off in this period for the progress bar
     const periodDayCount = days.length;
+    const daysOffInPeriod = daysOff.filter(day => {
+      const dd = new Date(day.date + 'T00:00:00');
+      return dd >= period.start && dd <= period.end;
+    });
+
+    // Bills deduction
+    const billsTotal = (data.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
+    const afterBills = projectedCheckAmount - billsTotal;
+
+    // Calculate income reduction from days off
+    const fullCheckIncome = effectiveNetIncome;
+    const incomeReduction = fullCheckIncome - projectedCheckAmount;
 
     return (
       <motion.div
@@ -477,6 +475,23 @@ export default function SmartStackPage() {
         </h3>
 
         <div className="space-y-6">
+          {/* Inline Net Income Input */}
+          <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4 space-y-3">
+            <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">Net Income</p>
+            <div className="relative">
+              <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2">$</span>
+              <input
+                type="number"
+                value={inlineNetIncome}
+                onChange={(e) => setInlineNetIncome(e.target.value)}
+                placeholder="e.g., 3820"
+                style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
+                className="w-full border rounded-lg pl-7 pr-3 py-2.5 text-sm font-semibold"
+              />
+            </div>
+            <p style={{ color: theme.textM }} className="text-xs">Your take-home pay per pay period</p>
+          </div>
+
           {/* Pay Frequency Selector */}
           <div className="flex items-center gap-3">
             <p style={{ color: theme.textS }} className="text-sm font-semibold">Frequency:</p>
@@ -516,7 +531,7 @@ export default function SmartStackPage() {
             </button>
             <p style={{ color: theme.text }} className="text-sm font-semibold">
               {period.label}
-              {projPeriodIndex === 0 && <span style={{ color: theme.gold }} className="ml-2 text-xs">(Current)</span>}
+              {projPeriodIndex === 0 && !customPeriodStart && <span style={{ color: theme.gold }} className="ml-2 text-xs">(Current)</span>}
             </p>
             <button
               onClick={() => setProjPeriodIndex(Math.min(2, projPeriodIndex + 1))}
@@ -528,6 +543,42 @@ export default function SmartStackPage() {
             </button>
           </div>
 
+          {/* Custom Pay Period Dates */}
+          <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4 space-y-3">
+            <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase">Custom Pay Period (optional)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={{ color: theme.textM }} className="text-xs mb-1 block">Start Date</label>
+                <CalendarPicker
+                  value={customPeriodStart}
+                  onChange={setCustomPeriodStart}
+                  placeholder="Start"
+                  theme={theme}
+                  showQuickSelect={false}
+                />
+              </div>
+              <div>
+                <label style={{ color: theme.textM }} className="text-xs mb-1 block">End Date</label>
+                <CalendarPicker
+                  value={customPeriodEnd}
+                  onChange={setCustomPeriodEnd}
+                  placeholder="End"
+                  theme={theme}
+                  showQuickSelect={false}
+                />
+              </div>
+            </div>
+            {customPeriodStart && customPeriodEnd && (
+              <button
+                onClick={() => { setCustomPeriodStart(''); setCustomPeriodEnd(''); }}
+                style={{ color: theme.textM }}
+                className="text-xs underline hover:no-underline"
+              >
+                Clear custom dates
+              </button>
+            )}
+          </div>
+
           {/* Calendar */}
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -535,7 +586,7 @@ export default function SmartStackPage() {
                 Pay Period
               </p>
               <p style={{ color: theme.textM }} className="text-xs">
-                Click a day to mark it off · Double-click to edit hours
+                Click a day to mark it off
               </p>
             </div>
 
@@ -547,33 +598,24 @@ export default function SmartStackPage() {
               ))}
 
               {paddedDays.map((date, idx) => {
-                const dateStr = date?.toISOString().split('T')[0] || '';
                 const isOff = isDayOff(date);
                 const isWknd = isWeekend(date);
-                const hasCustom = date && customHours[dateStr] !== undefined;
 
                 return (
                   <motion.button
                     key={idx}
                     whileHover={date ? { scale: 1.1 } : {}}
                     onClick={() => date && toggleDayOff(date)}
-                    onDoubleClick={(e) => {
-                      e.preventDefault();
-                      if (date && !isOff) startEditHours(date);
-                    }}
                     style={{
-                      backgroundColor: isOff ? theme.gold : isWknd ? `${theme.border}40` : hasCustom ? `${theme.gold}15` : theme.bgS,
-                      borderColor: isOff ? theme.gold : hasCustom ? `${theme.gold}60` : theme.border,
+                      backgroundColor: isOff ? theme.gold : isWknd ? `${theme.border}40` : theme.bgS,
+                      borderColor: isOff ? theme.gold : theme.border,
                       color: isOff ? theme.bgS : isWknd ? theme.textM : theme.text,
                       opacity: !date ? 0 : 1,
                     }}
                     className={`aspect-square rounded-lg border flex flex-col items-center justify-center text-sm font-semibold ${date ? 'cursor-pointer' : 'cursor-default'}`}
                   >
                     <span>{date?.getDate()}</span>
-                    {hasCustom && !isOff && (
-                      <span className="text-[8px]" style={{ color: theme.gold }}>{customHours[dateStr]}h</span>
-                    )}
-                    {isWknd && date && !isOff && !hasCustom && (
+                    {isWknd && date && !isOff && (
                       <span className="text-[7px]" style={{ color: theme.textM }}>off</span>
                     )}
                   </motion.button>
@@ -581,49 +623,6 @@ export default function SmartStackPage() {
               })}
             </div>
           </div>
-
-          {/* Edit Hours Modal */}
-          {editingHoursDay && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
-              className="border-2 rounded-lg p-4"
-            >
-              <p style={{ color: theme.text }} className="text-sm font-semibold mb-3">
-                Edit hours for {new Date(editingHoursDay + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </p>
-              <div className="flex gap-3">
-                <input
-                  type="number"
-                  value={editingHoursValue}
-                  onChange={(e) => setEditingHoursValue(e.target.value)}
-                  min="0"
-                  max="24"
-                  step="0.5"
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="flex-1 border rounded-lg px-3 py-2 text-sm"
-                  autoFocus
-                />
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={saveEditHours}
-                  style={{ backgroundColor: theme.gold, color: theme.bgS }}
-                  className="px-4 py-2 rounded-lg font-semibold text-sm"
-                >
-                  Save
-                </motion.button>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setEditingHoursDay(null)}
-                  style={{ backgroundColor: theme.border, color: theme.text }}
-                  className="px-4 py-2 rounded-lg font-semibold text-sm"
-                >
-                  Cancel
-                </motion.button>
-              </div>
-            </motion.div>
-          )}
 
           {/* Days Off Summary */}
           {daysOff.length > 0 && (
@@ -657,32 +656,44 @@ export default function SmartStackPage() {
           )}
 
           {/* Projected Check Amount */}
-          <div style={{ backgroundColor: theme.bg, borderColor: hasSettingsInput ? theme.gold : theme.border }} className="border-2 rounded-lg p-4">
+          <div style={{ backgroundColor: theme.bg, borderColor: hasNetIncome ? theme.gold : theme.border }} className="border-2 rounded-lg p-4">
             <p style={{ color: theme.textM }} className="text-sm font-semibold uppercase mb-2">
               Projected Check Amount
             </p>
             <p style={{ color: theme.gold }} className="text-3xl font-bold">
               {fmt(projectedCheckAmount)}
             </p>
-            {!hasSettingsInput && (
+            {!hasNetIncome && (
               <p style={{ color: theme.warn }} className="text-sm mt-2">
-                Set your pay rate and hours in{' '}
-                <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a>{' '}
-                to see your projected check.
+                Enter your Net Income above to see your projected check.
               </p>
             )}
-            {hasSettingsInput && daysOff.length > 0 && (
+            {hasNetIncome && daysOff.length > 0 && incomeReduction > 0 && (
               <p style={{ color: theme.warn }} className="text-sm mt-2">
                 {fmt(incomeReduction)} reduction from {daysOff.length} day(s) off
               </p>
             )}
-            <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: theme.textM }}>
-              <Info size={14} />
-              <span>
-                Based on your <a href="/settings" className="underline hover:no-underline" style={{ color: theme.gold }}>Settings</a> ({hasSettingsInput ? `$${basePayRate}/hr × ${baseHoursPerDay}hrs` : 'not configured'})
-              </span>
-            </div>
+            {hasNetIncome && (
+              <p className="text-xs mt-2" style={{ color: theme.textM }}>
+                Based on {fmt(effectiveNetIncome)} net income
+              </p>
+            )}
           </div>
+
+          {/* Bills Deduction */}
+          {hasNetIncome && billsTotal > 0 && (
+            <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">After Bills</p>
+                <p style={{ color: afterBills >= 0 ? '#22c55e' : '#ef4444' }} className="text-xl font-bold">
+                  {fmt(afterBills)}
+                </p>
+              </div>
+              <p style={{ color: theme.textM }} className="text-xs">
+                {fmt(projectedCheckAmount)} projected – {fmt(billsTotal)} bills = {fmt(afterBills)}
+              </p>
+            </div>
+          )}
 
           {!budgetLocked ? (
             <motion.button
@@ -764,7 +775,7 @@ export default function SmartStackPage() {
       >
         <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
           <Briefcase size={28} style={{ color: theme.gold }} />
-          Payment Projection
+          Incoming Payments
         </h3>
 
         <div className="space-y-6">
@@ -873,7 +884,7 @@ export default function SmartStackPage() {
     );
   };
 
-  // ============== CHECK SPLITTER ==============
+  // ============== PAY SPLITTER ==============
   const renderCheckSplitter = () => {
     const billsTotal = (data.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
     const savingsTotal = (data.goals || []).reduce((sum: number, goal: any) => sum + (goal.target / 52), 0);
@@ -889,7 +900,7 @@ export default function SmartStackPage() {
       { name: 'Bills', amount: billsTotal, pct: billsPct, color: '#ef4444', icon: Home },
       { name: 'Savings', amount: savingsTotal, pct: savingsPct, color: '#22c55e', icon: Target },
       ...(stackCircleTotal > 0 ? [{ name: 'Stack Circle', amount: stackCircleTotal, pct: stackCirclePct, color: '#f59e0b', icon: Heart }] : []),
-      { name: 'Spending Money', amount: spendingTotal, pct: spendingPct, color: '#3b82f6', icon: DollarSign },
+      { name: 'Safe to Spend', amount: spendingTotal, pct: spendingPct, color: '#3b82f6', icon: DollarSign },
     ];
 
     return (
@@ -902,7 +913,7 @@ export default function SmartStackPage() {
         <div className="flex items-center justify-between mb-6">
           <h3 style={{ color: theme.text }} className="text-2xl font-bold flex items-center gap-3">
             <DollarSign size={28} style={{ color: theme.gold }} />
-            Check Splitter
+            Pay Splitter
           </h3>
         </div>
 
@@ -1072,7 +1083,7 @@ export default function SmartStackPage() {
 
   // ============== TAB: BUDGET ==============
   const renderBudgetTab = () => {
-    // Toggle between Check Projection and Payment Projection
+    // Toggle between Check Projection and Incoming Payments
     const renderProjectionToggle = () => (
       <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-3 mb-8">
         <div className="flex rounded-lg overflow-hidden" style={{ backgroundColor: theme.bg }}>
@@ -1096,204 +1107,12 @@ export default function SmartStackPage() {
             }}
             className="flex-1 py-3 font-semibold text-sm flex items-center justify-center gap-2 rounded-lg transition-all"
           >
-            <Briefcase size={16} /> Payment Projection
+            <Briefcase size={16} /> Incoming Payments
           </motion.button>
         </div>
       </div>
     );
 
-    if (isSelfEmployed) {
-      return (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-8"
-        >
-          {renderProjectionToggle()}
-
-          {projectionMode === 'payment' ? (
-            renderPaymentProjection()
-          ) : (
-            renderCheckProjectionWithCalendar()
-          )}
-
-          {/* Self-Employed Income Allocator */}
-          <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 style={{ color: theme.text }} className="text-2xl font-bold flex items-center gap-3">
-                <Briefcase size={28} style={{ color: theme.gold }} />
-                Check Splitter
-              </h3>
-            </div>
-
-            {/* Obligations List */}
-            <div className="mb-8">
-              <h4 style={{ color: theme.textS }} className="text-sm font-semibold uppercase mb-4">
-                Financial Obligations
-              </h4>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {obligations.map((obl) => {
-                  const daysRemaining = daysTo(obl.dueDate);
-                  const isSelected = selectedObligations.includes(obl.id);
-                  return (
-                    <motion.div
-                      key={obl.id}
-                      whileHover={{ scale: 1.02 }}
-                      onClick={() => {
-                        setSelectedObligations((prev) =>
-                          prev.includes(obl.id) ? prev.filter((id) => id !== obl.id) : [...prev, obl.id]
-                        );
-                      }}
-                      style={{
-                        backgroundColor: isSelected ? `${theme.gold}20` : theme.bg,
-                        borderColor: isSelected ? theme.gold : theme.border,
-                      }}
-                      className="border rounded-lg p-4 cursor-pointer transition-all"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p style={{ color: theme.text }} className="font-semibold">
-                            {obl.name}
-                          </p>
-                          <p style={{ color: theme.textM }} className="text-sm">
-                            Due in {daysRemaining} days
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p style={{ color: theme.text }} className="font-bold">
-                            {fmt(obl.amount)}
-                          </p>
-                          {isSelected && <CheckCircle size={20} style={{ color: theme.gold }} className="ml-auto mt-2" />}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Income Requirements */}
-            {selectedObligations.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-                className="border rounded-lg p-6 space-y-6"
-              >
-                <h4 style={{ color: theme.textS }} className="text-sm font-semibold uppercase">
-                  Required Income Target
-                </h4>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div
-                    style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
-                    className="border-2 rounded-lg p-4"
-                  >
-                    <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-2">
-                      Daily Target
-                    </p>
-                    <p style={{ color: theme.gold }} className="text-2xl font-bold">
-                      {fmt(incomeRequirements.daily)}
-                    </p>
-                  </div>
-
-                  <div
-                    style={{ backgroundColor: theme.bgS, borderColor: theme.gold }}
-                    className="border-2 rounded-lg p-4"
-                  >
-                    <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-2">
-                      Weekly Target
-                    </p>
-                    <p style={{ color: theme.gold }} className="text-2xl font-bold">
-                      {fmt(incomeRequirements.weekly)}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Current Income vs Required */}
-                <div className="space-y-3">
-                  <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase">
-                    Your Current Pace
-                  </p>
-                  <div className="space-y-2">
-                    <div>
-                      <div className="flex justify-between mb-1">
-                        <span style={{ color: theme.textM }} className="text-sm">
-                          Daily Income
-                        </span>
-                        <span style={{ color: theme.text }} className="text-sm font-semibold">
-                          {fmt(selfEmployedIncome)}
-                        </span>
-                      </div>
-                      <div style={{ backgroundColor: theme.bgS }} className="h-2 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{
-                            width: Math.min(
-                              100,
-                              (selfEmployedIncome / Math.max(1, incomeRequirements.daily)) * 100
-                            ),
-                          }}
-                          style={{
-                            backgroundColor:
-                              selfEmployedIncome >= incomeRequirements.daily ? theme.ok : theme.warn,
-                          }}
-                          className="h-full transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 p-3 rounded-lg" style={{ backgroundColor: theme.bgS }}>
-                      <p style={{ color: theme.textM }} className="text-xs mb-2">
-                        Status:
-                      </p>
-                      {selfEmployedIncome >= incomeRequirements.daily ? (
-                        <p style={{ color: theme.ok }} className="font-semibold flex items-center gap-2">
-                          <CheckCircle size={16} />
-                          On track to meet all obligations
-                        </p>
-                      ) : (
-                        <p style={{ color: theme.warn }} className="font-semibold flex items-center gap-2">
-                          <AlertCircle size={16} />
-                          Need {fmt(incomeRequirements.daily - selfEmployedIncome)}/day to stay on track
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Income Input */}
-                <div className="space-y-3 pt-4 border-t" style={{ borderColor: theme.border }}>
-                  <p style={{ color: theme.textS }} className="text-xs font-semibold uppercase">
-                    Daily Income
-                  </p>
-                  <input
-                    type="number"
-                    value={selfEmployedIncome}
-                    onChange={(e) => setSelfEmployedIncome(parseFloat(e.target.value) || 0)}
-                    style={{
-                      backgroundColor: theme.bg,
-                      borderColor: theme.border,
-                      color: theme.text,
-                    }}
-                    className="w-full border rounded-lg px-4 py-2 font-semibold"
-                    placeholder="Enter daily income"
-                  />
-                </div>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Income History */}
-          {renderPaycheckHistory()}
-
-          {/* Projection Calculator */}
-          <ProjectionCalculator theme={theme} />
-        </motion.div>
-      );
-    }
-
-    // Employed users - Check Projection & Check Splitter
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -1306,18 +1125,12 @@ export default function SmartStackPage() {
           renderPaymentProjection()
         ) : (
           <>
-            {/* Check Projection with Calendar */}
             {renderCheckProjectionWithCalendar()}
-
-            {/* Check Splitter */}
             {renderCheckSplitter()}
           </>
         )}
 
-        {/* Paycheck */}
         {renderPaycheckHistory()}
-
-        {/* Projection Calculator */}
         <ProjectionCalculator theme={theme} />
       </motion.div>
     );

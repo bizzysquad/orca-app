@@ -383,13 +383,18 @@ export default function DashboardPage() {
 
   const allocation = useMemo(() => calcAlloc(income, bills, goals), [income, bills, goals])
   const paycheckAmt = useMemo(() => {
-    // Use netIncome from Settings if available
-    if (user.netIncome && user.netIncome > 0) return user.netIncome
-    const rate = parseFloat(user.payRate) || 0
-    const hrs = parseFloat(user.hoursPerDay) || 8
-    const mult: Record<string, number> = { weekly: 5, biweekly: 10, semimonthly: 10.83, monthly: 21.67 }
-    return rate * hrs * (mult[user.payFreq] || 10)
+    return user.netIncome && user.netIncome > 0 ? user.netIncome : 0
   }, [user])
+
+  // Safe to Spend: Net Income minus bills, savings, and Stack Circle allocations
+  const safeToSpend = useMemo(() => {
+    if (!paycheckAmt) return { weekly: allocation.sts, daily: allocation.daily }
+    const billsTotal = bills.reduce((sum, b) => sum + b.amount, 0)
+    const savingsTotal = goals.reduce((sum, g) => sum + (g.cType === 'fixed' ? (g.cVal || 0) : (paycheckAmt * (g.cVal || 0) / 100)), 0)
+    const stackCircleTotal = groups.reduce((sum, g: any) => sum + (g.current || 0), 0)
+    const sts = Math.max(0, paycheckAmt - billsTotal - savingsTotal - stackCircleTotal)
+    return { weekly: sts, daily: sts / 7 }
+  }, [paycheckAmt, bills, goals, groups, allocation])
 
   const totalSavings = useMemo(() => {
     // Include savings accounts from localStorage
@@ -424,6 +429,23 @@ export default function DashboardPage() {
     const sorted = [...bills].sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
     return sorted[0] || null
   }, [nextBill, bills])
+
+  // Next incoming payment from payment entries
+  const nextIncomingPayment = useMemo(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('orca-payment-entries')
+        if (stored) {
+          const entries = JSON.parse(stored)
+          const upcoming = entries
+            .filter((p: any) => new Date(p.date) >= new Date())
+            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          return upcoming[0] || null
+        }
+      }
+    } catch {}
+    return null
+  }, [])
 
   // Build calendar events for the selected month
   const calendarEvents = useMemo(() => {
@@ -624,31 +646,47 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <p className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: theme.gold }}>
-                  {spendView === 'weekly' ? fmt(allocation.sts) : fmt(allocation.daily)}
+                  {spendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.daily)}
                 </p>
                 <p className="text-sm" style={{ color: theme.textM }}>
                   {spendView === 'weekly'
-                    ? `~${fmt(allocation.daily)}/day`
-                    : `~${fmt(allocation.sts)}/week`}
+                    ? `~${fmt(safeToSpend.daily)}/day`
+                    : `~${fmt(safeToSpend.weekly)}/week`}
                 </p>
               </div>
 
-              {/* Next Payment Card */}
+              {/* Next Incoming Payment Card */}
               <div className="glass rounded-2xl p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
                 <p className="text-sm mb-2" style={{ color: theme.textS }}>
-                  Next Payment
+                  Next Incoming Payment
                 </p>
-                <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
-                  +{fmt(paycheckAmt)}
-                </p>
-                {user.nextPay ? (
-                  <p className="text-sm" style={{ color: theme.textM }}>
-                    {fmtD(user.nextPay)} · {daysTo(user.nextPay)}d · {user.payFreq === 'weekly' ? 'Weekly' : user.payFreq === 'biweekly' ? 'Bi-Weekly' : 'Semi-Monthly'}
-                  </p>
+                {nextIncomingPayment ? (
+                  <>
+                    <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
+                      +{fmt(nextIncomingPayment.amount)}
+                    </p>
+                    <p className="text-sm" style={{ color: theme.textM }}>
+                      {nextIncomingPayment.description} · {fmtD(nextIncomingPayment.date)} · {daysTo(nextIncomingPayment.date)}d
+                    </p>
+                  </>
+                ) : paycheckAmt > 0 ? (
+                  <>
+                    <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
+                      +{fmt(paycheckAmt)}
+                    </p>
+                    <p className="text-sm" style={{ color: theme.textM }}>
+                      {user.nextPay ? `${fmtD(user.nextPay)} · ${daysTo(user.nextPay)}d` : 'Net Income per pay period'}
+                    </p>
+                  </>
                 ) : (
-                  <p className="text-sm" style={{ color: theme.textM }}>
-                    Set pay date in Settings
-                  </p>
+                  <>
+                    <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: theme.textM }}>
+                      $0.00
+                    </p>
+                    <p className="text-sm" style={{ color: theme.textM }}>
+                      Set Net Income in Settings
+                    </p>
+                  </>
                 )}
               </div>
             </motion.div>

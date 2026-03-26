@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useTheme } from '@/context/ThemeContext'
 
 interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
   label?: string
@@ -9,21 +10,30 @@ interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, '
 }
 
 export default function Input({ label, error, prefix, className = '', ...props }: InputProps) {
+  const { theme } = useTheme()
+
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-xs font-medium text-[#a1a1aa] uppercase tracking-wider mb-2">
+        <label className="block text-xs font-medium uppercase tracking-wider mb-2" style={{ color: theme.textM }}>
           {label}
         </label>
       )}
       <div className="relative">
         {prefix && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717a]">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: theme.textS }}>
             {prefix}
           </div>
         )}
         <input
-          className={`w-full bg-[#18181b] border border-[#27272a] rounded-xl px-4 py-3 text-[#fafafa] placeholder-[#71717a] focus:outline-none focus:ring-2 focus:ring-[#d4a843]/50 focus:border-[#d4a843] transition-all ${prefix ? 'pl-11' : ''} ${className}`}
+          className={`w-full rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#d4a843]/50 transition-all ${prefix ? 'pl-11' : ''} ${className}`}
+          style={{
+            backgroundColor: theme.card,
+            borderColor: theme.border,
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            color: theme.text,
+          }}
           {...props}
         />
       </div>

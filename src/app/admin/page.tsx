@@ -435,7 +435,7 @@ export default function AdminPage() {
     { id: 'stack-circle', name: 'Stack Circle', enabled: true },
     { id: 'task-lists', name: 'Task Lists', enabled: true },
     { id: 'savings-accounts', name: 'Savings Accounts', enabled: true },
-    { id: 'payment-projection', name: 'Payment Projection', enabled: true },
+    { id: 'payment-projection', name: 'Incoming Payments', enabled: true },
   ])
 
   // Connection states
