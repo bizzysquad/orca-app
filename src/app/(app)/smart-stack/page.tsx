@@ -526,7 +526,7 @@ export default function SmartStackPage() {
       >
         <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
           <DollarSign size={28} style={{ color: theme.gold }} />
-          Check Projection
+          Income Planner
         </h3>
 
         <div className="space-y-6">
@@ -1115,6 +1115,8 @@ export default function SmartStackPage() {
   };
 
   const renderPaycheckHistory = () => {
+    // Only show dates of payments that were actually paid
+    const paidEntries = paycheckHistory.filter((e: any) => e.actualAmount > 0 || e.date)
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -1127,120 +1129,32 @@ export default function SmartStackPage() {
           Income History
         </h3>
 
-        {paycheckHistory.length === 0 ? (
+        {paidEntries.length === 0 ? (
           <div style={{ backgroundColor: theme.bg }} className="rounded-lg p-6 text-center">
             <p style={{ color: theme.textM }} className="text-sm">
-              No locked entries yet. Lock in a budget to save it to history.
+              No paid income recorded yet.
             </p>
           </div>
         ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {paycheckHistory.map((entry: any) => {
-              const hasActual = typeof entry.actualAmount === 'number' && entry.actualAmount > 0;
-              const diff = hasActual ? entry.actualAmount - entry.grossAmount : 0;
-              const isEditing = editingActualId === entry.id;
-
-              return (
-                <motion.div
-                  key={entry.id}
-                  whileHover={{ scale: 1.02 }}
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-                  className="border rounded-lg p-4"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p style={{ color: theme.text }} className="font-semibold">
-                        {new Date(entry.date).toLocaleDateString()}
-                      </p>
-                      <p style={{ color: theme.textM }} className="text-sm capitalize">
-                        {entry.frequency} income
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      {hasActual ? (
-                        <>
-                          <p style={{ color: theme.ok }} className="font-bold text-lg">
-                            {fmt(entry.actualAmount)}
-                          </p>
-                          <p style={{ color: theme.textM }} className="text-xs line-through">
-                            {fmt(entry.grossAmount)} projected
-                          </p>
-                          {diff !== 0 && (
-                            <p style={{ color: diff > 0 ? theme.ok : theme.bad }} className="text-xs font-semibold">
-                              {diff > 0 ? '+' : ''}{fmt(diff)}
-                            </p>
-                          )}
-                        </>
-                      ) : (
-                        <p style={{ color: theme.text }} className="font-bold text-lg">
-                          {fmt(entry.grossAmount)}
-                          <span style={{ color: theme.textM }} className="text-xs font-normal ml-1">projected</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actual Amount Input */}
-                  {isEditing ? (
-                    <div className="flex gap-2 mb-3">
-                      <div className="relative flex-1">
-                        <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
-                        <input
-                          type="number"
-                          value={editingActualValue}
-                          onChange={(e) => setEditingActualValue(e.target.value)}
-                          placeholder="Actual amount received"
-                          style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
-                          className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm"
-                          autoFocus
-                        />
-                      </div>
-                      <button
-                        onClick={() => handleSaveActualAmount(entry.id)}
-                        style={{ backgroundColor: theme.ok, color: '#fff' }}
-                        className="px-3 py-2 rounded-lg text-sm font-semibold"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => { setEditingActualId(null); setEditingActualValue(''); }}
-                        style={{ color: theme.textM }}
-                        className="px-2 text-sm"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setEditingActualId(entry.id);
-                        setEditingActualValue(hasActual ? String(entry.actualAmount) : '');
-                      }}
-                      style={{ color: theme.gold }}
-                      className="text-xs font-semibold mb-3 hover:underline flex items-center gap-1"
-                    >
-                      <Edit3 size={12} />
-                      {hasActual ? 'Update actual amount' : 'Enter actual amount received'}
-                    </button>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
-                      <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Bills</p>
-                      <p style={{ color: '#ef4444' }} className="font-bold">
-                        {fmt(entry.billsAllocation)}
-                      </p>
-                    </div>
-                    <div style={{ backgroundColor: theme.bgS }} className="rounded p-2 text-center">
-                      <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Remaining</p>
-                      <p style={{ color: '#3b82f6' }} className="font-bold">
-                        {fmt((hasActual ? entry.actualAmount : entry.grossAmount) - entry.billsAllocation)}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {paidEntries.map((entry: any) => (
+              <motion.div
+                key={entry.id}
+                whileHover={{ scale: 1.01 }}
+                style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                className="border rounded-lg p-3 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.ok }} />
+                  <p style={{ color: theme.text }} className="font-medium text-sm">
+                    {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+                <p style={{ color: theme.ok }} className="font-bold text-sm">
+                  {fmt(entry.actualAmount || entry.grossAmount)}
+                </p>
+              </motion.div>
+            ))}
           </div>
         )}
       </motion.div>
@@ -1249,7 +1163,7 @@ export default function SmartStackPage() {
 
   // ============== TAB: BUDGET ==============
   const renderBudgetTab = () => {
-    // Toggle between Check Projection and Incoming Payments
+    // Toggle between Income Planner and Incoming Payments
     const renderProjectionToggle = () => (
       <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-3 mb-8">
         <div className="flex rounded-lg overflow-hidden" style={{ backgroundColor: theme.bg }}>
@@ -1262,7 +1176,7 @@ export default function SmartStackPage() {
             }}
             className="flex-1 py-3 font-semibold text-sm flex items-center justify-center gap-2 rounded-lg transition-all"
           >
-            <DollarSign size={16} /> Check Projection
+            <DollarSign size={16} /> Income Planner
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.97 }}

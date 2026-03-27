@@ -2,9 +2,10 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Bell, BellRing } from 'lucide-react'
+import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Bell, BellRing, Edit3 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
+import { getRecurringBillDates } from '@/lib/income-engine'
 import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
 
@@ -42,7 +43,7 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   const todayDay = isCurrentMonth ? todayDate.getDate() : -1
   const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
-  // Get all events for a day including split payments
+  // Get all events for a day including split payments and recurring bill dates
   // Paid bills show on their actual paid date; unpaid bills show on due date with red indicator
   const getEventsForDay = (day: number) => {
     const events: { label: string; amount: number; type: 'bill' | 'split'; paid: boolean }[] = []
@@ -50,15 +51,28 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
     bills.forEach(b => {
       if (b.alloc.length === 0) {
         if (b.status === 'paid' && (b as any).paidDate) {
-          // Show paid bill on the actual paid date
           const pd = new Date((b as any).paidDate + 'T00:00:00')
           if (pd.getDate() === day && pd.getMonth() === month && pd.getFullYear() === year) {
             events.push({ label: b.name, amount: b.amount, type: 'bill', paid: true })
           }
+        } else if (b.recurrence && b.recurrence !== 'monthly') {
+          // For recurring bills, generate all dates in this month
+          const recurDates = getRecurringBillDates(b, 6)
+          recurDates.forEach(dateStr => {
+            const rd = new Date(dateStr + 'T00:00:00')
+            if (rd.getDate() === day && rd.getMonth() === month && rd.getFullYear() === year) {
+              events.push({ label: b.name, amount: b.amount, type: 'bill', paid: false })
+            }
+          })
         } else {
-          // Show unpaid bill on due date (red indicator)
+          // Standard: show on due date, and for monthly recurrence on same day-of-month
           const d = new Date(b.due + 'T00:00:00')
-          if (d.getDate() === day && d.getMonth() === month && d.getFullYear() === year) {
+          if (b.recurrence === 'monthly') {
+            // Monthly recurring: show on the same day every month
+            if (d.getDate() === day) {
+              events.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
+            }
+          } else if (d.getDate() === day && d.getMonth() === month && d.getFullYear() === year) {
             events.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
           }
         }
@@ -215,6 +229,7 @@ export default function BillBossPage() {
   const [rentReceipts, setRentReceipts] = useState<Record<string, string>>({})
   const [viewMode, setViewMode] = useState<'list' | 'compact'>('list')
   const [notifications, setNotifications] = useState<Array<{ id: string; billId: string; billName: string; amount: number; dueDate: string; type: 'due-today' | 'upcoming'; dismissed: boolean }>>([])
+  const [editingBillId, setEditingBillId] = useState<string | null>(null)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth())
@@ -379,6 +394,69 @@ export default function BillBossPage() {
       recurrenceEndType: 'ongoing',
       recurrenceEndDate: '',
       recurrenceEndAfter: '',
+    })
+    setCustomCategory('')
+    setShowAddForm(false)
+  }
+
+  // Handler: Start editing a bill
+  const handleStartEdit = (billId: string) => {
+    const bill = bills.find(b => b.id === billId)
+    if (!bill) return
+    setFormData({
+      name: bill.name,
+      amount: String(bill.amount),
+      due: bill.due,
+      cat: CATEGORIES.includes(bill.cat) ? bill.cat : 'Other',
+      freq: bill.freq,
+      recurrence: bill.recurrence,
+      customRecurrenceDays: bill.customRecurrenceDays ? String(bill.customRecurrenceDays) : '',
+      recurrenceEndType: bill.recurrenceEndType || 'ongoing',
+      recurrenceEndDate: bill.recurrenceEndDate || '',
+      recurrenceEndAfter: bill.recurrenceEndAfter ? String(bill.recurrenceEndAfter) : '',
+    })
+    if (!CATEGORIES.includes(bill.cat)) setCustomCategory(bill.cat)
+    setEditingBillId(billId)
+    setShowAddForm(true)
+  }
+
+  // Handler: Save edit
+  const handleSaveEdit = () => {
+    if (!editingBillId || !formData.name || !formData.amount || !formData.due) return
+    const updated = bills.map(b => {
+      if (b.id !== editingBillId) return b
+      return {
+        ...b,
+        name: formData.name,
+        amount: parseFloat(formData.amount),
+        cat: formData.cat === 'Other' ? customCategory : formData.cat,
+        due: formData.due,
+        freq: formData.freq,
+        recurrence: formData.recurrence,
+        customRecurrenceDays: formData.recurrence === 'custom' ? parseInt(formData.customRecurrenceDays) : undefined,
+        recurrenceEndType: formData.recurrenceEndType,
+        recurrenceEndDate: formData.recurrenceEndType === 'after-date' ? formData.recurrenceEndDate : undefined,
+        recurrenceEndAfter: formData.recurrenceEndType === 'after-count' ? parseInt(formData.recurrenceEndAfter) : undefined,
+      }
+    })
+    persistBills(updated)
+    setEditingBillId(null)
+    setFormData({
+      name: '', amount: '', due: '', cat: CATEGORIES[0], freq: 'monthly',
+      recurrence: 'monthly', customRecurrenceDays: '', recurrenceEndType: 'ongoing',
+      recurrenceEndDate: '', recurrenceEndAfter: '',
+    })
+    setCustomCategory('')
+    setShowAddForm(false)
+  }
+
+  // Handler: Cancel edit
+  const handleCancelEdit = () => {
+    setEditingBillId(null)
+    setFormData({
+      name: '', amount: '', due: '', cat: CATEGORIES[0], freq: 'monthly',
+      recurrence: 'monthly', customRecurrenceDays: '', recurrenceEndType: 'ongoing',
+      recurrenceEndDate: '', recurrenceEndAfter: '',
     })
     setCustomCategory('')
     setShowAddForm(false)
@@ -616,12 +694,12 @@ export default function BillBossPage() {
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => setShowAddForm(!showAddForm)}
+          onClick={() => { if (editingBillId) handleCancelEdit(); else setShowAddForm(!showAddForm) }}
           style={{ backgroundColor: theme.gold, color: theme.bg }}
           className="w-full px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-all"
         >
           <Plus className="w-5 h-5" />
-          Add Bill
+          {editingBillId ? 'Cancel Edit' : 'Add Bill'}
         </motion.button>
 
         {/* 3. Add Bill Form */}
@@ -860,14 +938,25 @@ export default function BillBossPage() {
                 />
               )}
 
-              <button
-                onClick={handleAddBill}
-                disabled={!formData.name || !formData.amount || !formData.due}
-                style={{ backgroundColor: theme.gold, color: theme.bg }}
-                className="w-full px-4 py-2.5 rounded-lg font-semibold disabled:opacity-50 hover:opacity-90 transition-colors"
-              >
-                Save Bill
-              </button>
+              <div className="flex gap-3">
+                {editingBillId && (
+                  <button
+                    onClick={handleCancelEdit}
+                    style={{ borderColor: theme.border, color: theme.textS }}
+                    className="flex-1 px-4 py-2.5 rounded-lg font-semibold border hover:opacity-80 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  onClick={editingBillId ? handleSaveEdit : handleAddBill}
+                  disabled={!formData.name || !formData.amount || !formData.due}
+                  style={{ backgroundColor: theme.gold, color: theme.bg }}
+                  className="flex-1 px-4 py-2.5 rounded-lg font-semibold disabled:opacity-50 hover:opacity-90 transition-colors"
+                >
+                  {editingBillId ? 'Update Bill' : 'Save Bill'}
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -983,6 +1072,15 @@ export default function BillBossPage() {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
+                        onClick={() => handleStartEdit(bill.id)}
+                        style={{ backgroundColor: `${theme.gold}20`, color: theme.gold }}
+                        className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                      >
+                        Edit
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => setSplitModalBillId(bill.id)}
                         style={{ backgroundColor: theme.textS, color: theme.textM }}
                         className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
@@ -1045,6 +1143,14 @@ export default function BillBossPage() {
                       title="Pay"
                     >
                       <Check size={14} style={{ color: theme.ok }} />
+                    </button>
+                    <button
+                      onClick={() => handleStartEdit(bill.id)}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ backgroundColor: `${theme.gold}15` }}
+                      title="Edit"
+                    >
+                      <Edit3 size={14} style={{ color: theme.gold }} />
                     </button>
                     <button
                       onClick={() => handleDeleteBill(bill.id)}

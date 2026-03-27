@@ -14,6 +14,11 @@ import {
   Check,
   Trash2,
   AlertTriangle,
+  Briefcase,
+  TrendingUp,
+  DollarSign,
+  Calendar,
+  Clock,
 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { useTheme } from '@/context/ThemeContext'
@@ -36,6 +41,31 @@ export default function SettingsPage() {
   const [scoreTransUnion, setScoreTransUnion] = useState(String(user.creditScoreTransUnion || ''))
   const [scoreEquifax, setScoreEquifax] = useState(String(user.creditScoreEquifax || ''))
   const [scoreExperian, setScoreExperian] = useState(String(user.creditScoreExperian || ''))
+
+  // Income Mode state
+  const [incomeMode, setIncomeMode] = useState(user.incomeMode || 'paycheck')
+  const [payFreq, setPayFreq] = useState(user.payFreq || 'biweekly')
+  const [payRate, setPayRate] = useState(user.payRate || '0')
+  const [nextPayDate, setNextPayDate] = useState(user.nextPay || '')
+  const [hoursPerDay, setHoursPerDay] = useState(user.hoursPerDay || '8')
+  const [stsBuffer, setStsBuffer] = useState(String(user.safeToSpendBuffer || '0'))
+  const [incomeSaved, setIncomeSaved] = useState(false)
+
+  const handleSaveIncome = () => {
+    const updatedUser = {
+      ...user,
+      incomeMode: incomeMode as 'paycheck' | 'flexible',
+      payFreq,
+      payRate,
+      nextPay: nextPayDate,
+      hoursPerDay,
+      safeToSpendBuffer: parseFloat(stsBuffer) || 0,
+    }
+    setData(prev => ({ ...prev, user: updatedUser }))
+    try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
+    setIncomeSaved(true)
+    setTimeout(() => setIncomeSaved(false), 2000)
+  }
 
   // Reset / Delete account state
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -230,7 +260,167 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* 2. Credit Scores */}
+        {/* 2. Income Mode */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+        >
+          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
+            Income Planner
+          </h2>
+          <div
+            className="rounded-lg p-6 space-y-5"
+            style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
+          >
+            {/* Mode Selector */}
+            <div>
+              <label className="text-sm font-medium mb-2 block" style={{ color: theme.textS }}>Income Mode</label>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIncomeMode('paycheck')}
+                  className="flex-1 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+                  style={{
+                    backgroundColor: incomeMode === 'paycheck' ? theme.gold : theme.bgS,
+                    color: incomeMode === 'paycheck' ? theme.bg : theme.textS,
+                    borderWidth: '1px',
+                    borderColor: incomeMode === 'paycheck' ? theme.gold : theme.border,
+                  }}
+                >
+                  <Briefcase className="w-4 h-4" /> Paycheck
+                </button>
+                <button
+                  onClick={() => setIncomeMode('flexible')}
+                  className="flex-1 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+                  style={{
+                    backgroundColor: incomeMode === 'flexible' ? theme.gold : theme.bgS,
+                    color: incomeMode === 'flexible' ? theme.bg : theme.textS,
+                    borderWidth: '1px',
+                    borderColor: incomeMode === 'flexible' ? theme.gold : theme.border,
+                  }}
+                >
+                  <TrendingUp className="w-4 h-4" /> Flexible Income
+                </button>
+              </div>
+              <p className="text-xs mt-2" style={{ color: theme.textM }}>
+                {incomeMode === 'paycheck'
+                  ? 'For regular paychecks — set your amount, frequency, and pay date.'
+                  : 'For freelance, gig, or irregular income — track incoming payments.'}
+              </p>
+            </div>
+
+            {/* Paycheck Mode Fields */}
+            {incomeMode === 'paycheck' && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
+                      Paycheck Amount
+                    </label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: theme.textM }} />
+                      <input
+                        type="number"
+                        value={payRate}
+                        onChange={e => setPayRate(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-8 pr-3 py-2.5 rounded-lg"
+                        style={{ backgroundColor: theme.input, borderColor: theme.border, borderWidth: '1px', color: theme.text }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
+                      Pay Frequency
+                    </label>
+                    <select
+                      value={payFreq}
+                      onChange={e => setPayFreq(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-lg"
+                      style={{ backgroundColor: theme.input, borderColor: theme.border, borderWidth: '1px', color: theme.text }}
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Bi-weekly</option>
+                      <option value="semimonthly">Semi-monthly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
+                      Next Pay Date
+                    </label>
+                    <input
+                      type="date"
+                      value={nextPayDate}
+                      onChange={e => setNextPayDate(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-lg"
+                      style={{ backgroundColor: theme.input, borderColor: theme.border, borderWidth: '1px', color: theme.text }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
+                      Hours / Day
+                    </label>
+                    <input
+                      type="number"
+                      value={hoursPerDay}
+                      onChange={e => setHoursPerDay(e.target.value)}
+                      placeholder="8"
+                      className="w-full px-3 py-2.5 rounded-lg"
+                      style={{ backgroundColor: theme.input, borderColor: theme.border, borderWidth: '1px', color: theme.text }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Flexible Mode Info */}
+            {incomeMode === 'flexible' && (
+              <div className="rounded-lg p-4" style={{ backgroundColor: `${theme.gold}08`, borderColor: `${theme.gold}20`, borderWidth: '1px' }}>
+                <p className="text-sm" style={{ color: theme.textS }}>
+                  In Flexible Income mode, your income comes from Incoming Payments. Add expected payments in Smart Stack to project your cash flow and allocate to bills.
+                </p>
+              </div>
+            )}
+
+            {/* Safe to Spend Buffer */}
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
+                Safe to Spend Buffer
+              </label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: theme.textM }} />
+                <input
+                  type="number"
+                  value={stsBuffer}
+                  onChange={e => setStsBuffer(e.target.value)}
+                  placeholder="0"
+                  className="w-full pl-8 pr-3 py-2.5 rounded-lg"
+                  style={{ backgroundColor: theme.input, borderColor: theme.border, borderWidth: '1px', color: theme.text }}
+                />
+              </div>
+              <p className="text-xs mt-1" style={{ color: theme.textM }}>
+                Extra cushion subtracted from your Safe to Spend amount
+              </p>
+            </div>
+
+            <button
+              onClick={handleSaveIncome}
+              className="w-full py-2.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+              style={{
+                backgroundColor: incomeSaved ? theme.ok : theme.gold,
+                color: theme.bg,
+              }}
+            >
+              <Save className="w-4 h-4" />
+              {incomeSaved ? 'Saved!' : 'Save Income Settings'}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* 3. Credit Scores */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

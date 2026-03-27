@@ -6,34 +6,34 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // === PRIMARY BACKGROUNDS ===
+        // === PRIMARY BACKGROUNDS (theme-aware via CSS vars) ===
         brand: {
-          black: '#0A0A0A',       // Deep Black — main bg
-          soft: '#121212',         // Soft Black — nav, sections
+          black: 'var(--brand-black, #0A0A0A)',
+          soft: 'var(--brand-soft, #121212)',
         },
-        // === SURFACES / DEPTH ===
+        // === SURFACES / DEPTH (theme-aware via CSS vars) ===
         surface: {
-          card: '#181818',         // Card background
-          elevated: '#202020',     // Hover / elevated card
-          border: '#2A2A2A',       // Borders, dividers
+          card: 'var(--surface-card, #181818)',
+          elevated: 'var(--surface-elevated, #202020)',
+          border: 'var(--surface-border, #2A2A2A)',
         },
-        // === SIGNATURE GOLD SYSTEM ===
+        // === SIGNATURE GOLD SYSTEM (theme-aware via CSS vars) ===
         gold: {
-          DEFAULT: '#D4AF37',      // Rich Metallic Gold — primary
-          highlight: '#F5D76E',    // Highlight Gold — hover, emphasis
-          deep: '#8C6A1A',         // Deep Gold — shadow, depth
-          liquid: '#CFAE4A',       // Liquid Gold — motion accents
-          bronze: '#6E5A1F',       // Muted Bronze — dividers, subtle
+          DEFAULT: 'var(--gold-primary, #D4AF37)',
+          highlight: 'var(--gold-highlight, #F5D76E)',
+          deep: 'var(--gold-deep, #8C6A1A)',
+          liquid: '#CFAE4A',
+          bronze: '#6E5A1F',
         },
-        // === TEXT SYSTEM ===
+        // === TEXT SYSTEM (theme-aware via CSS vars) ===
         text: {
-          primary: '#F5F5F5',
-          secondary: '#A1A1A1',
-          muted: '#6B7280',
+          primary: 'var(--text-primary, #F5F5F5)',
+          secondary: 'var(--text-secondary, #A1A1A1)',
+          muted: 'var(--text-muted, #6B7280)',
         },
-        // === FEEDBACK ===
-        success: '#22C55E',
-        danger: '#EF4444',
+        // === FEEDBACK (theme-aware via CSS vars) ===
+        success: 'var(--ok-color, #22C55E)',
+        danger: 'var(--bad-color, #EF4444)',
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],

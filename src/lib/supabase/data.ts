@@ -56,6 +56,7 @@ export async function loadUserData(): Promise<OrcaData | null> {
         email: profile.email || '',
         onboarded: profile.onboarded || false,
         employmentType: profile.employment_type || 'employed',
+        incomeMode: profile.income_mode || 'paycheck',
         payFreq: profile.pay_freq || 'biweekly',
         payCycle: profile.pay_cycle || 'standard',
         payRate: profile.pay_rate || '18',

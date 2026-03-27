@@ -137,12 +137,46 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [])
 
+  // Listen for cross-tab storage changes (admin theme + mode)
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === ADMIN_THEME_KEY) {
+        try {
+          setAdminOverrides(e.newValue ? JSON.parse(e.newValue) : null)
+        } catch {}
+      }
+      if (e.key === 'orca-theme-mode') {
+        setIsDarkState(e.newValue === 'dark' || e.newValue === null)
+      }
+    }
+    window.addEventListener('storage', handler)
+    return () => window.removeEventListener('storage', handler)
+  }, [])
+
   const baseTheme = isDark ? THEMES.dark : THEMES.light
   const theme = adminOverrides ? applyOverrides(baseTheme, adminOverrides) : baseTheme
 
-  // Sync CSS custom properties for glass classes in globals.css
+  // Sync CSS custom properties for glass classes, Tailwind colors, and globals.css
   useEffect(() => {
     const root = document.documentElement
+    // Theme-aware color tokens for Tailwind and CSS
+    root.style.setProperty('--brand-black', theme.bg)
+    root.style.setProperty('--brand-soft', theme.bgS)
+    root.style.setProperty('--surface-card', theme.card)
+    root.style.setProperty('--surface-elevated', isDark ? '#202020' : '#f0f0ee')
+    root.style.setProperty('--surface-border', theme.border)
+    root.style.setProperty('--gold-primary', theme.gold)
+    root.style.setProperty('--gold-highlight', theme.goldL)
+    root.style.setProperty('--gold-deep', theme.goldD)
+    root.style.setProperty('--text-primary', theme.text)
+    root.style.setProperty('--text-secondary', theme.textS)
+    root.style.setProperty('--text-muted', theme.textM)
+    root.style.setProperty('--nav-bg', theme.nav)
+    root.style.setProperty('--input-bg', theme.input)
+    root.style.setProperty('--ok-color', theme.ok)
+    root.style.setProperty('--bad-color', theme.bad)
+    root.style.setProperty('--warn-color', theme.warn)
+
     if (isDark) {
       root.style.setProperty('--glass-bg', 'rgba(24, 24, 27, 0.6)')
       root.style.setProperty('--glass-strong-bg', 'rgba(24, 24, 27, 0.75)')
@@ -154,13 +188,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.style.setProperty('--depth-1', '0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.03)')
       root.style.setProperty('--depth-2', '0 4px 12px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.04)')
       root.style.setProperty('--depth-3', '0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05)')
-      root.style.setProperty('--body-bg', '#0A0A0A')
-      root.style.setProperty('--body-text', '#F5F5F5')
       root.style.setProperty('--scrollbar-thumb', '#2A2A2A')
       root.style.setProperty('--scrollbar-thumb-hover', '#3A3A3A')
-      root.style.setProperty('--card-bg', '#181818')
-      root.style.setProperty('--card-border', '#2A2A2A')
-      root.style.setProperty('--divider-color', '#2A2A2A')
     } else {
       root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.7)')
       root.style.setProperty('--glass-strong-bg', 'rgba(255, 255, 255, 0.85)')
@@ -172,15 +201,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.style.setProperty('--depth-1', '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.03)')
       root.style.setProperty('--depth-2', '0 4px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)')
       root.style.setProperty('--depth-3', '0 8px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05)')
-      root.style.setProperty('--body-bg', '#fafaf9')
-      root.style.setProperty('--body-text', '#18181b')
       root.style.setProperty('--scrollbar-thumb', '#d4d4d0')
       root.style.setProperty('--scrollbar-thumb-hover', '#c4c4c0')
-      root.style.setProperty('--card-bg', '#ffffff')
-      root.style.setProperty('--card-border', '#e4e4e0')
-      root.style.setProperty('--divider-color', '#e4e4e0')
     }
-  }, [isDark])
+    // Legacy aliases
+    root.style.setProperty('--body-bg', theme.bg)
+    root.style.setProperty('--body-text', theme.text)
+    root.style.setProperty('--card-bg', theme.card)
+    root.style.setProperty('--card-border', theme.border)
+    root.style.setProperty('--divider-color', theme.border)
+  }, [isDark, theme])
 
   const applyAdminTheme = (overrides: AdminThemeOverrides) => {
     setAdminOverrides(overrides)

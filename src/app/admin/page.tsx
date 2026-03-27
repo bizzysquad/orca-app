@@ -214,7 +214,7 @@ const SUB_TABS: Record<string, { id: string; label: string }[]> = {
 }
 
 export default function AdminPage() {
-  const { theme, isDark, applyAdminTheme, resetTheme } = useTheme()
+  const { theme, isDark, setIsDark, applyAdminTheme, resetTheme } = useTheme()
 
   // Theme-aware color constants — these map to the active theme so the
   // entire admin panel automatically switches between light and dark mode.
@@ -405,6 +405,8 @@ export default function AdminPage() {
   const [maintenanceMode, setMaintenanceMode] = useState(false)
   const [signupsEnabled, setSignupsEnabled] = useState(true)
   const [maxUsers, setMaxUsers] = useState(10000)
+  const [defaultIncomeMode, setDefaultIncomeMode] = useState<'paycheck' | 'flexible'>('paycheck')
+  const [defaultSafeToSpendBuffer, setDefaultSafeToSpendBuffer] = useState(50)
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [budgetCategories, setBudgetCategories] = useState<string[]>([
     'Housing',
@@ -460,6 +462,8 @@ export default function AdminPage() {
     { id: 'user-mgmt', name: 'User Manager', permissions: ['users.view', 'users.edit'] },
   ])
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
+  const [deleteConfirm, setDeleteConfirm] = useState<{ userId: string; userName: string; userEmail: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Analytics states — computed from live user data
   const analyticsData = useMemo(() => {
@@ -682,8 +686,30 @@ export default function AdminPage() {
       case 'reactivate':
         setUsers(users.map((u) => (u.id === userId ? { ...u, status: 'active' as const } : u)))
         break
+      case 'delete-user':
+        setDeleteConfirm({ userId: user.id, userName: user.name, userEmail: user.email })
+        break
     }
     setShowDropdown(null)
+  }
+
+  const handleDeleteUser = async () => {
+    if (!deleteConfirm) return
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/users?userId=${deleteConfirm.userId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        console.error('Delete user error:', data.error)
+      } else {
+        setUsers(users.filter((u) => u.id !== deleteConfirm.userId))
+      }
+    } catch (err) {
+      console.error('Delete user error:', err)
+    } finally {
+      setIsDeleting(false)
+      setDeleteConfirm(null)
+    }
   }
 
   const handleSaveSettings = () => {
@@ -1352,6 +1378,15 @@ export default function AdminPage() {
                                             Suspend
                                           </button>
                                         )}
+                                        <div style={{ borderTopColor: BORDER_COLOR }} className="my-1 border-t" />
+                                        <button
+                                          onClick={() => handleUserAction(user.id, 'delete-user')}
+                                          style={{ color: '#ef4444' }}
+                                          className="w-full text-left px-3 py-2 rounded text-sm hover:bg-opacity-50 transition-colors flex items-center gap-2"
+                                        >
+                                          <Trash2 size={14} />
+                                          Delete User
+                                        </button>
                                       </div>
                                     </motion.div>
                                   )}
@@ -1704,6 +1739,34 @@ export default function AdminPage() {
                         <span style={{ color: TEXT_SECONDARY }} className="text-sm font-medium">New Signups</span>
                         <motion.button whileHover={{ scale: 1.05 }} onClick={() => setSignupsEnabled(!signupsEnabled)} style={{ backgroundColor: signupsEnabled ? '#10b98144' : `${BORDER_COLOR}`, borderColor: signupsEnabled ? '#10b981' : BORDER_COLOR, color: signupsEnabled ? '#10b981' : TEXT_MUTED }} className="px-3 py-1 rounded-full text-xs font-semibold border">{signupsEnabled ? 'Enabled' : 'Disabled'}</motion.button>
                       </div>
+                      <div className="flex items-center justify-between">
+                        <span style={{ color: TEXT_SECONDARY }} className="text-sm font-medium">Theme Mode</span>
+                        <div className="flex gap-2">
+                          <motion.button whileHover={{ scale: 1.05 }} onClick={() => { setIsDark(true); try { window.dispatchEvent(new StorageEvent('storage', { key: 'orca-theme-mode', newValue: 'dark' })); } catch {} }} style={{ backgroundColor: isDark ? `${GOLD}44` : BORDER_COLOR, borderColor: isDark ? GOLD : BORDER_COLOR, color: isDark ? GOLD : TEXT_MUTED }} className="px-3 py-1 rounded-full text-xs font-semibold border">Dark</motion.button>
+                          <motion.button whileHover={{ scale: 1.05 }} onClick={() => { setIsDark(false); try { window.dispatchEvent(new StorageEvent('storage', { key: 'orca-theme-mode', newValue: 'light' })); } catch {} }} style={{ backgroundColor: !isDark ? `${GOLD}44` : BORDER_COLOR, borderColor: !isDark ? GOLD : BORDER_COLOR, color: !isDark ? GOLD : TEXT_MUTED }} className="px-3 py-1 rounded-full text-xs font-semibold border">Light</motion.button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Income Planner Defaults */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.025 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Income Planner Defaults</h2>
+                  <p style={{ color: TEXT_MUTED }} className="text-xs mb-4">Default income settings applied to new user accounts</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Default Income Mode</label>
+                      <div className="flex gap-2">
+                        <motion.button whileHover={{ scale: 1.05 }} onClick={() => setDefaultIncomeMode('paycheck')} style={{ backgroundColor: defaultIncomeMode === 'paycheck' ? `${GOLD}44` : BG_DARK, borderColor: defaultIncomeMode === 'paycheck' ? GOLD : BORDER_COLOR, color: defaultIncomeMode === 'paycheck' ? GOLD : TEXT_MUTED }} className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold border">Paycheck</motion.button>
+                        <motion.button whileHover={{ scale: 1.05 }} onClick={() => setDefaultIncomeMode('flexible')} style={{ backgroundColor: defaultIncomeMode === 'flexible' ? `${GOLD}44` : BG_DARK, borderColor: defaultIncomeMode === 'flexible' ? GOLD : BORDER_COLOR, color: defaultIncomeMode === 'flexible' ? GOLD : TEXT_MUTED }} className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold border">Flexible</motion.button>
+                      </div>
+                      <p style={{ color: TEXT_MUTED }} className="text-xs mt-1">{defaultIncomeMode === 'paycheck' ? 'Users enter paycheck amount, frequency, and pay dates' : 'Users track incoming payments as primary income source'}</p>
+                    </div>
+                    <div>
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Default Safe-to-Spend Buffer ($)</label>
+                      <input type="number" value={defaultSafeToSpendBuffer} onChange={(e) => setDefaultSafeToSpendBuffer(parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <p style={{ color: TEXT_MUTED }} className="text-xs mt-1">Safety cushion subtracted from Safe to Spend calculation</p>
                     </div>
                   </div>
                 </motion.div>
@@ -2739,6 +2802,81 @@ export default function AdminPage() {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Delete User Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+            onClick={() => !isDeleting && setDeleteConfirm(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
+              className="rounded-xl border shadow-2xl p-6 max-w-md w-full mx-4"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-full" style={{ backgroundColor: '#ef444422' }}>
+                  <AlertTriangle size={24} style={{ color: '#ef4444' }} />
+                </div>
+                <h3 className="text-lg font-bold" style={{ color: TEXT_PRIMARY }}>
+                  Delete User
+                </h3>
+              </div>
+              <p style={{ color: TEXT_SECONDARY }} className="mb-2">
+                Are you sure you want to permanently delete this user?
+              </p>
+              <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-lg border p-3 mb-4">
+                <p className="font-medium" style={{ color: TEXT_PRIMARY }}>{deleteConfirm.userName}</p>
+                <p className="text-sm" style={{ color: TEXT_MUTED }}>{deleteConfirm.userEmail}</p>
+              </div>
+              <p style={{ color: '#ef4444' }} className="text-sm mb-6">
+                This action cannot be undone. All user data will be permanently removed.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  disabled={isDeleting}
+                  style={{ borderColor: BORDER_COLOR, color: TEXT_PRIMARY }}
+                  className="px-4 py-2 rounded-lg border text-sm font-medium hover:opacity-80 transition-opacity"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteUser}
+                  disabled={isDeleting}
+                  style={{ backgroundColor: '#ef4444' }}
+                  className="px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                      >
+                        <RefreshCw size={14} />
+                      </motion.div>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={14} />
+                      Delete User
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

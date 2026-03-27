@@ -7,6 +7,7 @@ export function seed(): OrcaData {
       email: 'demo@orca.app',
       onboarded: true,
       employmentType: 'employed',
+      incomeMode: 'paycheck',
       payFreq: 'biweekly',
       payCycle: 'standard',
       payRate: '18',

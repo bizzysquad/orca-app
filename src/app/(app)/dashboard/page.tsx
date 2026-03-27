@@ -14,6 +14,15 @@ import { fmt, fmtD, daysTo, calcAlloc, pct } from '@/lib/utils'
 import { createBrowserClient } from '@supabase/ssr'
 import { useTheme } from '@/context/ThemeContext'
 import type { Bill } from '@/lib/types'
+import {
+  calcSafeToSpend,
+  calcIncomeBillsRatio,
+  paycheckToEvents,
+  paymentsToEvents,
+  getNextCycleDate,
+  type PaycheckConfig,
+  type IncomingPayment,
+} from '@/lib/income-engine'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20, scale: 0.98 },
@@ -395,13 +404,68 @@ export default function DashboardPage() {
     return user.netIncome && user.netIncome > 0 ? user.netIncome : 0
   }, [user])
 
-  // Safe to Spend: Net Income minus bills (Pay Splitter now focuses on bills only)
-  const safeToSpend = useMemo(() => {
-    if (!paycheckAmt) return { weekly: allocation.sts, daily: allocation.daily }
-    const billsTotal = bills.reduce((sum, b) => sum + b.amount, 0)
-    const sts = Math.max(0, paycheckAmt - billsTotal)
-    return { weekly: sts, daily: sts / 7 }
-  }, [paycheckAmt, bills, allocation])
+  // Date-aware Safe to Spend using the income engine
+  const incomeMode = user.incomeMode || 'paycheck'
+
+  const safeToSpendResult = useMemo(() => {
+    const mode = user.incomeMode || 'paycheck'
+    const buffer = user.safeToSpendBuffer || 0
+    const savingsPerCycle = goals
+      .filter(g => g.active && g.current < g.target)
+      .reduce((sum, g) => sum + (g.cVal || 0), 0)
+
+    if (mode === 'paycheck' && user.nextPay && parseFloat(user.payRate) > 0) {
+      const config: PaycheckConfig = {
+        amount: user.netIncome || parseFloat(user.payRate) || 0,
+        frequency: (user.payFreq || 'biweekly') as any,
+        nextPayDate: user.nextPay,
+        hoursPerDay: parseInt(user.hoursPerDay) || 8,
+        daysPerWeek: 5,
+      }
+      const events = paycheckToEvents(config, 6)
+      const nextCycle = getNextCycleDate('paycheck', config)
+      return calcSafeToSpend(events, bills, savingsPerCycle, buffer, nextCycle)
+    }
+
+    // Flexible mode or fallback
+    let payments: IncomingPayment[] = data.incomingPayments || []
+    if (payments.length === 0 && typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('orca-payment-entries')
+        if (stored) payments = JSON.parse(stored)
+      } catch {}
+    }
+    const events = paymentsToEvents(payments)
+    const nextCycle = getNextCycleDate('flexible', undefined, payments)
+    return calcSafeToSpend(events, bills, savingsPerCycle, buffer, nextCycle)
+  }, [user, bills, goals, data.incomingPayments])
+
+  const safeToSpend = useMemo(() => ({
+    weekly: safeToSpendResult.weekly,
+    daily: safeToSpendResult.daily,
+  }), [safeToSpendResult])
+
+  // Income to Bills Ratio
+  const incomeRatio = useMemo(() => {
+    const mode = user.incomeMode || 'paycheck'
+    let monthlyIncome = 0
+    if (mode === 'paycheck') {
+      const amt = user.netIncome || parseFloat(user.payRate) || 0
+      const freq = user.payFreq || 'biweekly'
+      monthlyIncome = freq === 'weekly' ? amt * 4.33 : freq === 'biweekly' ? amt * 2.17 : freq === 'semimonthly' ? amt * 2 : amt
+    } else {
+      let payments: IncomingPayment[] = data.incomingPayments || []
+      if (payments.length === 0 && typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('orca-payment-entries')
+          if (stored) payments = JSON.parse(stored)
+        } catch {}
+      }
+      monthlyIncome = payments.reduce((sum, p) => sum + p.amount, 0)
+    }
+    const monthlyBills = bills.filter(b => b.status !== 'paid').reduce((sum, b) => sum + b.amount, 0)
+    return calcIncomeBillsRatio(monthlyIncome, monthlyBills, safeToSpendResult.incomeAvailable, safeToSpendResult.billsDueBefore)
+  }, [user, bills, data.incomingPayments, safeToSpendResult])
 
   const totalSavings = useMemo(() => {
     // Include savings accounts from localStorage
@@ -621,6 +685,22 @@ export default function DashboardPage() {
                 </p>
               </div>
             </motion.div>
+
+            {/* Income to Bills Ratio */}
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="rounded-xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+                <p className="text-xs font-medium mb-1" style={{ color: theme.textM }}>Monthly Ratio</p>
+                <p className="text-lg font-bold" style={{ color: incomeRatio.monthly >= 1 ? theme.ok : theme.bad }}>
+                  {incomeRatio.monthly === Infinity ? '—' : `${incomeRatio.monthly}x`}
+                </p>
+              </div>
+              <div className="rounded-xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+                <p className="text-xs font-medium mb-1" style={{ color: theme.textM }}>Next-Cycle Coverage</p>
+                <p className="text-lg font-bold" style={{ color: incomeRatio.nextCycle >= 1 ? theme.ok : theme.bad }}>
+                  {incomeRatio.nextCycle === Infinity ? '—' : `${incomeRatio.nextCycle}x`}
+                </p>
+              </div>
+            </div>
           </DraggableSection>
         )
 
@@ -665,10 +745,10 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              {/* Next Incoming Payment Card */}
+              {/* Next Income Card — mode-aware */}
               <div className="glass rounded-2xl p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
                 <p className="text-sm mb-2" style={{ color: theme.textS }}>
-                  Next Incoming Payment
+                  {user.incomeMode === 'flexible' ? 'Incoming Payments' : 'Next Check'}
                 </p>
                 {nextIncomingPayment ? (
                   <>

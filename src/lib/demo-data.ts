@@ -12,6 +12,7 @@ export function getNewUserData(name: string, email: string): OrcaData {
       email,
       onboarded: false,
       employmentType: 'employed',
+      incomeMode: 'paycheck',
       payFreq: 'biweekly',
       payCycle: 'standard',
       payRate: '0',
@@ -23,6 +24,7 @@ export function getNewUserData(name: string, email: string): OrcaData {
       weeklyIncome: 0,
       manualCashInput: 0,
       selfEmployedInputMethod: 'weekly',
+      safeToSpendBuffer: 0,
       rentAmount: 0,
       creditScore: 0,
       creditScoreTransUnion: 0,
@@ -52,5 +54,6 @@ export function getNewUserData(name: string, email: string): OrcaData {
       members: [],
       history: [],
     },
+    incomingPayments: [],
   }
 }

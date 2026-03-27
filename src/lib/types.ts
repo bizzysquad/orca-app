@@ -20,12 +20,16 @@ export interface BudgetHealth {
 // ── Employment Type ──
 export type EmploymentType = 'employed' | 'self-employed'
 
+// ── Income Mode ──
+export type IncomeMode = 'paycheck' | 'flexible'
+
 // ── User Profile ──
 export interface OrcaUser {
   name: string
   email: string
   onboarded: boolean
   employmentType: EmploymentType
+  incomeMode: IncomeMode
   payFreq: string
   payCycle: string
   payRate: string
@@ -38,6 +42,8 @@ export interface OrcaUser {
   weeklyIncome?: number
   manualCashInput?: number
   selfEmployedInputMethod?: 'daily' | 'weekly' | 'manual'
+  // Buffer for Safe to Spend
+  safeToSpendBuffer?: number
   // Rent config
   rentAmount?: number
   creditScore: number
@@ -229,6 +235,19 @@ export interface OrcaData {
   plaid: PlaidData | null
   roommates: RoommateData
   incomeAllocations?: IncomeAllocationTarget[]
+  incomingPayments?: IncomingPayment[]
+}
+
+// ── Incoming Payment (mirror of income-engine) ──
+export interface IncomingPayment {
+  id: string
+  amount: number
+  date: string
+  description: string
+  type: 'one-time' | 'recurring'
+  recurrence?: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly'
+  status: 'expected' | 'received' | 'overdue'
+  paidDate?: string
 }
 
 // ── Admin Config ──
