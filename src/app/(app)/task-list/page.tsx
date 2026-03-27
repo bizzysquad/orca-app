@@ -8,6 +8,7 @@ declare global {
 
 import { useState, useEffect } from 'react'
 import { useTheme } from '@/context/ThemeContext'
+import { setLocalSynced } from '@/lib/syncLocal'
 import CalendarPicker from '@/components/CalendarPicker'
 import {
   Plus,
@@ -112,14 +113,14 @@ export default function TaskListPage() {
   // Save tasks to localStorage whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('orca-tasks', JSON.stringify(tasks))
+      setLocalSynced('orca-tasks', JSON.stringify(tasks))
     }
   }, [tasks])
 
   // Save notes to localStorage whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('orca-notes', JSON.stringify(notes))
+      setLocalSynced('orca-notes', JSON.stringify(notes))
     }
   }, [notes])
 

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { useTheme } from '@/context/ThemeContext'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -39,13 +40,13 @@ export default function SettingsPage() {
   const handleSaveName = () => {
     const updatedUser = { ...user, name: editName }
     setData(prev => ({ ...prev, user: updatedUser }))
-    try { localStorage.setItem('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
+    try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
     setEditingName(false)
   }
   const handleSaveEmail = () => {
     const updatedUser = { ...user, email: editEmail }
     setData(prev => ({ ...prev, user: updatedUser }))
-    try { localStorage.setItem('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
+    try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
     setEditingEmail(false)
   }
 
@@ -55,7 +56,7 @@ export default function SettingsPage() {
       creditScore: parseInt(creditScore) || 0,
     }
     setData(prev => ({ ...prev, user: updatedUser }))
-    try { localStorage.setItem('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
+    try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }

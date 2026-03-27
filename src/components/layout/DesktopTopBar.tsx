@@ -190,8 +190,8 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
             <div
               ref={dropdownRef}
               className={cn(
-                'absolute right-0 mt-2 w-96 rounded-xl shadow-2xl',
-                'max-h-[600px] overflow-y-auto',
+                'absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-[384px] rounded-xl shadow-2xl',
+                'max-h-[70vh] sm:max-h-[600px] overflow-y-auto',
                 'border backdrop-blur-xl'
               )}
               style={{

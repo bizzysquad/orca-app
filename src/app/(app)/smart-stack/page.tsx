@@ -10,6 +10,7 @@ import {
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
+import { setLocalSynced } from '@/lib/syncLocal';
 import CalendarPicker from '@/components/CalendarPicker';
 
 type Tab = 'budget' | 'savings';
@@ -252,7 +253,7 @@ export default function SmartStackPage() {
     if (parsed > 0) {
       const updatedUser = { ...data.user, netIncome: parsed };
       setData(prev => ({ ...prev, user: updatedUser }));
-      try { localStorage.setItem('orca-user-settings', JSON.stringify(updatedUser)); } catch {}
+      try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)); } catch {}
     }
   };
 
@@ -817,7 +818,7 @@ export default function SmartStackPage() {
       };
       const updated = [...paymentEntries, entry];
       setPaymentEntries(updated);
-      try { localStorage.setItem('orca-payment-entries', JSON.stringify(updated)) } catch {}
+      try { setLocalSynced('orca-payment-entries', JSON.stringify(updated)) } catch {}
       // Sync payment dates to Dashboard calendar via data context
       const existingIncome = data.income || [];
       const newIncome = [...existingIncome, { id: entry.id, source: entry.description, amount: entry.amount, date: entry.date, frequency: 'once' as const }];
@@ -830,7 +831,7 @@ export default function SmartStackPage() {
     const removePayment = (id: string) => {
       const updated = paymentEntries.filter(p => p.id !== id);
       setPaymentEntries(updated);
-      try { localStorage.setItem('orca-payment-entries', JSON.stringify(updated)) } catch {}
+      try { setLocalSynced('orca-payment-entries', JSON.stringify(updated)) } catch {}
       const existingIncome = data.income || [];
       setData(prev => ({ ...prev, income: (existingIncome as any[]).filter((i: any) => i.id !== id) as any }));
     };
@@ -1108,7 +1109,7 @@ export default function SmartStackPage() {
       e.id === entryId ? { ...e, actualAmount: val } as any : e
     );
     setPaycheckHistory(updated);
-    try { localStorage.setItem('orca-paycheck-history', JSON.stringify(updated)); } catch {}
+    try { setLocalSynced('orca-paycheck-history', JSON.stringify(updated)); } catch {}
     setEditingActualId(null);
     setEditingActualValue('');
   };
@@ -1331,7 +1332,7 @@ export default function SmartStackPage() {
     };
     const updated = [...savingsAccounts, newAcct];
     setSavingsAccounts(updated);
-    localStorage.setItem('orca-savings-accounts', JSON.stringify(updated));
+    setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
     setNewAccountName('');
   };
 
@@ -1342,7 +1343,7 @@ export default function SmartStackPage() {
   const saveSavingsAccount = (id: string) => {
     const updated = savingsAccounts.map(a => a.id === id ? { ...a, saved: true } : a);
     setSavingsAccounts(updated);
-    localStorage.setItem('orca-savings-accounts', JSON.stringify(updated));
+    setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
     syncSavingsToDashboard(updated);
     setTimeout(() => {
       setSavingsAccounts(prev => prev.map(a => a.id === id ? { ...a, saved: false } : a));
@@ -1352,7 +1353,7 @@ export default function SmartStackPage() {
   const removeSavingsAccount = (id: string) => {
     const updated = savingsAccounts.filter(a => a.id !== id);
     setSavingsAccounts(updated);
-    localStorage.setItem('orca-savings-accounts', JSON.stringify(updated));
+    setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
     syncSavingsToDashboard(updated);
   };
 

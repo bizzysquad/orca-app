@@ -311,6 +311,14 @@ export default function DashboardPage() {
   const { user, income, goals, groups } = data
   const group = groups[0] || null
 
+  // Re-render trigger for when cloud data is hydrated into localStorage
+  const [syncReady, setSyncReady] = useState(0)
+  useEffect(() => {
+    const handler = () => setSyncReady(c => c + 1)
+    window.addEventListener('orca-sync-ready', handler)
+    return () => window.removeEventListener('orca-sync-ready', handler)
+  }, [])
+
   // Bills: use context data, fallback to localStorage
   const bills: Bill[] = useMemo(() => {
     if (data.bills && data.bills.length > 0) return data.bills
@@ -321,7 +329,8 @@ export default function DashboardPage() {
       } catch {}
     }
     return []
-  }, [data.bills])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.bills, syncReady])
 
   // Fetch real user name from Supabase auth, with fallback chain
   const [realUserName, setRealUserName] = useState<string | null>(null)
@@ -411,7 +420,8 @@ export default function DashboardPage() {
       } catch {}
     }
     return total
-  }, [goals])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goals, syncReady])
 
   const allUpcomingBills = useMemo(
     () => bills.filter(b => b.status === 'upcoming').sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime()),
@@ -443,7 +453,8 @@ export default function DashboardPage() {
       }
     } catch {}
     return null
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncReady])
 
   // Build calendar events for the selected month
   const calendarEvents = useMemo(() => {
@@ -538,7 +549,8 @@ export default function DashboardPage() {
     }
 
     return events
-  }, [calMonth, calYear, bills, user.nextPay, paycheckAmt, group])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calMonth, calYear, bills, user.nextPay, paycheckAmt, group, syncReady])
 
   const upcomingEvents = useMemo(() => {
     return calendarEvents

@@ -6,6 +6,7 @@ import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, Chevron
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 import type { Bill, BillAlloc, RentEntry, BillRecurrence } from '@/lib/types'
 
@@ -235,7 +236,7 @@ export default function BillBossPage() {
   const persistBills = (updatedBills: Bill[]) => {
     setBills(updatedBills)
     setData(prev => ({ ...prev, bills: updatedBills }))
-    try { localStorage.setItem('orca-bills', JSON.stringify(updatedBills)) } catch {}
+    try { setLocalSynced('orca-bills', JSON.stringify(updatedBills)) } catch {}
   }
 
   // Generate notifications from bills
@@ -490,7 +491,7 @@ export default function BillBossPage() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -10, scale: 0.95 }}
                   style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                  className="absolute right-0 top-full mt-2 w-80 border rounded-xl shadow-2xl z-50 overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-[320px] border rounded-xl shadow-2xl z-50 overflow-hidden"
                 >
                   <div className="p-3 border-b" style={{ borderColor: theme.border }}>
                     <p className="text-sm font-bold" style={{ color: theme.text }}>Bill Reminders</p>

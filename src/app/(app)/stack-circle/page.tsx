@@ -21,6 +21,7 @@ import {
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, pct, gid } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
+import { setLocalSynced } from '@/lib/syncLocal';
 import CalendarPicker from '@/components/CalendarPicker';
 
 interface Utility {
@@ -158,7 +159,7 @@ export default function StackCirclePage() {
   // Persist roommate changes to localStorage
   const persistRoommates = (updated: RoommateData) => {
     setRoommates(updated);
-    try { localStorage.setItem('orca-roommates', JSON.stringify(updated)); } catch {}
+    try { setLocalSynced('orca-roommates', JSON.stringify(updated)); } catch {}
   };
 
   const [copiedLink, setCopiedLink] = useState(false);
@@ -186,7 +187,7 @@ export default function StackCirclePage() {
   // Save groups to localStorage whenever they change
   useEffect(() => {
     if (groups.length > 0) {
-      localStorage.setItem('orca-stack-circle-groups', JSON.stringify(groups));
+      setLocalSynced('orca-stack-circle-groups', JSON.stringify(groups));
     }
   }, [groups]);
 
