@@ -56,14 +56,14 @@ import {
   Calendar,
 } from 'lucide-react'
 
-// Color constants
-const GOLD = '#d4a843'
-const BG_DARK = '#09090b'
-const BG_CARD = '#18181b'
-const BORDER_COLOR = '#27272a'
-const TEXT_PRIMARY = '#fafafa'
-const TEXT_SECONDARY = '#a1a1aa'
-const TEXT_MUTED = '#71717a'
+// Color constants (fallbacks only — component uses theme-aware values)
+const GOLD_FALLBACK = '#d4a843'
+const BG_DARK_FALLBACK = '#09090b'
+const BG_CARD_FALLBACK = '#18181b'
+const BORDER_FALLBACK = '#27272a'
+const TEXT_PRIMARY_FALLBACK = '#fafafa'
+const TEXT_SECONDARY_FALLBACK = '#a1a1aa'
+const TEXT_MUTED_FALLBACK = '#71717a'
 
 // Supabase Client
 const createSupabaseClient = () => {
@@ -100,6 +100,9 @@ interface AdminUser {
   plan: string
   trialDaysLeft?: number
   creditScore: number
+  creditScoreTransUnion?: number
+  creditScoreEquifax?: number
+  creditScoreExperian?: number
   activityLog: Array<{ action: string; date: string; detail: string }>
 }
 
@@ -172,13 +175,13 @@ const DEFAULT_NAV: NavItem[] = [
 
 // Default Theme
 const DEFAULT_THEME: ThemeConfig = {
-  primaryColor: GOLD,
-  bgDark: BG_DARK,
-  bgCard: BG_CARD,
-  borderColor: BORDER_COLOR,
-  textPrimary: TEXT_PRIMARY,
-  textSecondary: TEXT_SECONDARY,
-  textMuted: TEXT_MUTED,
+  primaryColor: GOLD_FALLBACK,
+  bgDark: BG_DARK_FALLBACK,
+  bgCard: BG_CARD_FALLBACK,
+  borderColor: BORDER_FALLBACK,
+  textPrimary: TEXT_PRIMARY_FALLBACK,
+  textSecondary: TEXT_SECONDARY_FALLBACK,
+  textMuted: TEXT_MUTED_FALLBACK,
 }
 
 // Tabs Configuration — grouped to fit without scrolling
@@ -211,7 +214,18 @@ const SUB_TABS: Record<string, { id: string; label: string }[]> = {
 }
 
 export default function AdminPage() {
-  const { applyAdminTheme, resetTheme } = useTheme()
+  const { theme, isDark, applyAdminTheme, resetTheme } = useTheme()
+
+  // Theme-aware color constants — these map to the active theme so the
+  // entire admin panel automatically switches between light and dark mode.
+  const GOLD = theme.gold
+  const BG_DARK = theme.bg
+  const BG_CARD = theme.card
+  const BORDER_COLOR = theme.border
+  const TEXT_PRIMARY = theme.text
+  const TEXT_SECONDARY = theme.textS
+  const TEXT_MUTED = theme.textM
+
   // Admin auth state
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
@@ -251,6 +265,7 @@ export default function AdminPage() {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
+          .order('created_at', { ascending: false })
           .limit(1000)
 
         if (error) {
@@ -261,18 +276,21 @@ export default function AdminPage() {
           return
         }
 
-        if (data && data.length > 0) {
-          // Convert Supabase data to AdminUser format
+        // Convert Supabase data to AdminUser format (show ALL users including new signups)
+        if (data) {
           const liveUsers: AdminUser[] = data.map((profile: any, idx: number) => ({
             id: profile.id || `user-${idx}`,
-            name: profile.name || profile.full_name || 'User',
+            name: profile.name || profile.full_name || profile.email?.split('@')[0] || 'New User',
             email: profile.email || 'unknown@example.com',
             status: profile.onboarded ? 'active' as const : 'trial' as const,
             twoFA: false,
-            lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Recently',
+            lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Just signed up',
             joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
             plan: profile.onboarded ? 'Active' : 'Trial',
             creditScore: profile.credit_score || 0,
+            creditScoreTransUnion: profile.credit_score_transunion || 0,
+            creditScoreEquifax: profile.credit_score_equifax || 0,
+            creditScoreExperian: profile.credit_score_experian || 0,
             activityLog: [{ action: 'Account created', date: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : '', detail: 'User registration' }],
           }))
           setUsers(liveUsers)
@@ -344,6 +362,7 @@ export default function AdminPage() {
       const { data, error } = await supabaseRef.current
         .from('profiles')
         .select('*')
+        .order('created_at', { ascending: false })
         .limit(1000)
 
       if (error) {
@@ -351,14 +370,14 @@ export default function AdminPage() {
         return
       }
 
-      if (data && data.length > 0) {
+      if (data) {
         const liveUsers: AdminUser[] = data.map((profile: any, idx: number) => ({
           id: profile.id || `user-${idx}`,
-          name: profile.name || profile.full_name || 'User',
+          name: profile.name || profile.full_name || profile.email?.split('@')[0] || 'New User',
           email: profile.email || 'unknown@example.com',
           status: profile.onboarded ? 'active' as const : 'trial' as const,
           twoFA: false,
-          lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Recently',
+          lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Just signed up',
           joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           plan: profile.onboarded ? 'Active' : 'Trial',
           creditScore: profile.credit_score || 0,
@@ -449,6 +468,29 @@ export default function AdminPage() {
   const [platformMetrics, setPlatformMetrics] = useState({ totalBills: 0, totalExpenses: 0, totalGoals: 0, totalIncome: 0 })
   const [moduleSettings, setModuleSettings] = useState<Record<string, any>>({})
 
+  // Fetch platform-wide metrics from Supabase
+  useEffect(() => {
+    if (!adminAuthenticated || !supabaseRef.current) return
+    async function fetchMetrics() {
+      const sb = supabaseRef.current!
+      try {
+        const [billsRes, expensesRes, goalsRes, incomeRes] = await Promise.all([
+          sb.from('bills').select('id', { count: 'exact', head: true }),
+          sb.from('expenses').select('id', { count: 'exact', head: true }),
+          sb.from('savings_goals').select('id', { count: 'exact', head: true }),
+          sb.from('income_sources').select('id', { count: 'exact', head: true }),
+        ])
+        setPlatformMetrics({
+          totalBills: billsRes.count || 0,
+          totalExpenses: expensesRes.count || 0,
+          totalGoals: goalsRes.count || 0,
+          totalIncome: incomeRes.count || 0,
+        })
+      } catch {}
+    }
+    fetchMetrics()
+  }, [adminAuthenticated, lastSyncTime])
+
   // Navigation states
   const [navItems, setNavItems] = useState<NavItem[]>(DEFAULT_NAV)
   const [editingNavItem, setEditingNavItem] = useState<string | null>(null)
@@ -457,18 +499,8 @@ export default function AdminPage() {
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(DEFAULT_THEME)
   const [customThemePreview, setCustomThemePreview] = useState(false)
 
-  // Notification states
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      type: 'email',
-      title: 'Welcome to ORCA',
-      body: 'Get started with your financial journey',
-      sentAt: '2026-03-22',
-      status: 'sent',
-      channel: 'email',
-    },
-  ])
+  // Notification states — empty until real notifications are sent
+  const [notifications, setNotifications] = useState<Notification[]>([])
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
 
   // Security states
@@ -476,30 +508,39 @@ export default function AdminPage() {
     { id: 'super', name: 'Super Admin', permissions: ['*'] },
     { id: 'user-mgmt', name: 'User Manager', permissions: ['users.view', 'users.edit'] },
   ])
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([
-    {
-      id: '1',
-      admin: 'John Admin',
-      action: 'suspended_user',
-      target: 'Ahmed Hassan',
-      timestamp: '2026-02-05 14:23:11',
-      details: 'Violation of terms',
-    },
-  ])
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
 
-  // Analytics states
-  const [analyticsData, setAnalyticsData] = useState({
-    mrrGrowth: 45.2,
-    arrGrowth: 52.1,
-    churnRate: 2.3,
-    ltv: 159.8,
-  })
+  // Analytics states — computed from live user data
+  const analyticsData = useMemo(() => {
+    const premiumCount = users.filter(u => u.status === 'premium').length
+    const mrrEstimate = premiumCount * monthlyPrice
+    return {
+      mrrGrowth: mrrEstimate > 0 ? mrrEstimate : 0,
+      arrGrowth: mrrEstimate * 12,
+      churnRate: users.length > 0 ? Math.round((users.filter(u => u.status === 'suspended').length / users.length) * 100 * 10) / 10 : 0,
+      ltv: premiumCount > 0 ? (mrrEstimate * 12) / Math.max(1, premiumCount * 0.023) : 0,
+    }
+  }, [users, monthlyPrice])
 
-  // Stack Circle groups (mock)
-  const [stackCircleGroups, setStackCircleGroups] = useState([
-    { id: '1', name: 'Finance Enthusiasts', members: 124, status: 'active' },
-    { id: '2', name: 'Founders Club', members: 8, status: 'active' },
-  ])
+  // Stack Circle groups — loaded from Supabase via localStorage sync
+  const [stackCircleGroups, setStackCircleGroups] = useState<Array<{ id: string; name: string; members: number; status: string }>>([])
+
+  // Load live stack circle groups
+  useEffect(() => {
+    if (!adminAuthenticated) return
+    try {
+      const saved = localStorage.getItem('orca-stack-circle-groups')
+      if (saved) {
+        const groups = JSON.parse(saved)
+        setStackCircleGroups(groups.map((g: any, i: number) => ({
+          id: g.id || `group-${i}`,
+          name: g.customName || g.name || `Group ${i + 1}`,
+          members: g.members?.length || 0,
+          status: 'active',
+        })))
+      }
+    } catch {}
+  }, [adminAuthenticated])
 
   // Settings extras
   const [newCategory, setNewCategory] = useState('')
@@ -618,14 +659,8 @@ export default function AdminPage() {
     { name: 'Sunset', primary: '#f97316', bg: '#0f0c0a', card: '#1f1814', border: '#2f261e' },
   ])
 
-  // Billing extras
-  const [invoices] = useState([
-    { id: 'INV-001', user: 'Marcus Rodriguez', amount: 4.99, date: '2026-03-01', status: 'paid' },
-    { id: 'INV-002', user: 'Priya Patel', amount: 4.99, date: '2026-03-01', status: 'paid' },
-    { id: 'INV-003', user: 'Lisa Anderson', amount: 4.99, date: '2026-03-01', status: 'paid' },
-    { id: 'INV-004', user: 'Emma Thompson', amount: 4.99, date: '2026-02-15', status: 'failed' },
-    { id: 'INV-005', user: 'Michael Chen', amount: 49.99, date: '2026-02-01', status: 'refunded' },
-  ])
+  // Billing extras — loaded from payment provider in production
+  const [invoices] = useState<Array<{ id: string; user: string; amount: number; date: string; status: string }>>([])
   const [refundReason, setRefundReason] = useState('')
 
   // Computed values
@@ -829,10 +864,10 @@ export default function AdminPage() {
 
   if (authLoading) {
     return (
-      <div style={{ backgroundColor: BG_DARK, color: TEXT_PRIMARY }} className="min-h-screen flex items-center justify-center">
+      <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen flex items-center justify-center">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
-          <div style={{ borderColor: `${GOLD}44`, borderTopColor: GOLD }} className="w-10 h-10 border-3 rounded-full animate-spin mx-auto mb-4" />
-          <p style={{ color: TEXT_MUTED }} className="text-sm">Verifying session...</p>
+          <div style={{ borderColor: `${theme.gold}44`, borderTopColor: theme.gold }} className="w-10 h-10 border-3 rounded-full animate-spin mx-auto mb-4" />
+          <p style={{ color: theme.textM }} className="text-sm">Verifying session...</p>
         </motion.div>
       </div>
     )
@@ -840,30 +875,30 @@ export default function AdminPage() {
 
   if (!adminAuthenticated) {
     return (
-      <div style={{ backgroundColor: BG_DARK, color: TEXT_PRIMARY }} className="min-h-screen flex items-center justify-center">
+      <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
           className="rounded-2xl border p-8 w-full max-w-md mx-4"
         >
           <div className="text-center mb-8">
-            <div style={{ backgroundColor: `${GOLD}22`, width: 64, height: 64 }} className="rounded-full flex items-center justify-center mx-auto mb-4">
-              <Shield size={32} style={{ color: GOLD }} />
+            <div style={{ backgroundColor: `${theme.gold}22`, width: 64, height: 64 }} className="rounded-full flex items-center justify-center mx-auto mb-4">
+              <Shield size={32} style={{ color: theme.gold }} />
             </div>
-            <h1 className="text-2xl font-bold" style={{ color: GOLD }}>Admin Console</h1>
-            <p style={{ color: TEXT_MUTED }} className="text-sm mt-1">Enter your admin password to continue</p>
+            <h1 className="text-2xl font-bold" style={{ color: theme.gold }}>Admin Console</h1>
+            <p style={{ color: theme.textM }} className="text-sm mt-1">Enter your admin password to continue</p>
           </div>
           <div className="space-y-4">
             <div>
-              <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Password</label>
+              <label style={{ color: theme.textS }} className="block text-sm font-medium mb-2">Password</label>
               <input
                 type="password"
                 value={adminPassword}
                 onChange={(e) => { setAdminPassword(e.target.value); setAdminError('') }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
                 placeholder="Enter admin password"
-                style={{ backgroundColor: BG_DARK, borderColor: adminError ? '#ef4444' : BORDER_COLOR, color: TEXT_PRIMARY }}
+                style={{ backgroundColor: theme.bg, borderColor: adminError ? '#ef4444' : theme.border, color: theme.text }}
                 className="w-full px-4 py-3 rounded-lg border focus:outline-none"
                 autoFocus
               />
@@ -879,7 +914,7 @@ export default function AdminPage() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleAdminLogin}
-              style={{ backgroundColor: GOLD, color: BG_DARK }}
+              style={{ backgroundColor: theme.gold, color: theme.bg }}
               className="w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2"
             >
               <Lock size={18} /> Authenticate

@@ -771,8 +771,15 @@ export default function DashboardPage() {
           </DraggableSection>
         )
 
-      case 'credit-score':
-        return user.creditScore > 0 ? (
+      case 'credit-score': {
+        const hasAnyScore = user.creditScore > 0 || (user.creditScoreTransUnion || 0) > 0 || (user.creditScoreEquifax || 0) > 0 || (user.creditScoreExperian || 0) > 0
+        const bureauScores = [
+          { name: 'TransUnion', score: user.creditScoreTransUnion || 0 },
+          { name: 'Equifax', score: user.creditScoreEquifax || 0 },
+          { name: 'Experian', score: user.creditScoreExperian || 0 },
+        ].filter(b => b.score > 0)
+        const primaryScore = user.creditScore || Math.max(...bureauScores.map(b => b.score), 0)
+        return hasAnyScore ? (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
             <motion.div
               variants={fadeUp}
@@ -784,17 +791,34 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm mb-2" style={{ color: theme.textS }}>Credit Score</p>
                   <p className="text-lg font-semibold" style={{ color: theme.textS }}>
-                    {user.creditScore >= 800 ? 'Excellent' : user.creditScore >= 740 ? 'Very Good' : user.creditScore >= 670 ? 'Good' : user.creditScore >= 580 ? 'Fair' : 'Poor'}
+                    {primaryScore >= 800 ? 'Excellent' : primaryScore >= 740 ? 'Very Good' : primaryScore >= 670 ? 'Good' : primaryScore >= 580 ? 'Fair' : 'Poor'}
                   </p>
                   <p className="text-xs mt-2" style={{ color: theme.textM }}>
                     {user.utilization}% utilization
                   </p>
                 </div>
-                <CreditScoreRing score={user.creditScore} limit={850} theme={theme} />
+                <CreditScoreRing score={primaryScore} limit={850} theme={theme} />
               </div>
+              {bureauScores.length > 0 && (
+                <div className="grid grid-cols-3 gap-3 mt-4 pt-4" style={{ borderTop: `1px solid ${theme.border}` }}>
+                  {[
+                    { name: 'TransUnion', score: user.creditScoreTransUnion || 0 },
+                    { name: 'Equifax', score: user.creditScoreEquifax || 0 },
+                    { name: 'Experian', score: user.creditScoreExperian || 0 },
+                  ].map(bureau => (
+                    <div key={bureau.name} className="text-center">
+                      <p className="text-[10px] font-medium uppercase tracking-wide" style={{ color: theme.textM }}>{bureau.name}</p>
+                      <p className="text-base font-bold mt-0.5" style={{ color: bureau.score > 0 ? theme.text : theme.textM }}>
+                        {bureau.score > 0 ? bureau.score : '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           </DraggableSection>
         ) : null
+      }
 
       case 'stack-circle':
         return group ? (

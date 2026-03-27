@@ -41,6 +41,9 @@ export interface OrcaUser {
   // Rent config
   rentAmount?: number
   creditScore: number
+  creditScoreTransUnion?: number
+  creditScoreEquifax?: number
+  creditScoreExperian?: number
   utilization: number
   onTime: number
   acctAge: number

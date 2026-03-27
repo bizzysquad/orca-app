@@ -29,8 +29,11 @@ export default function SettingsPage() {
   const [editName, setEditName] = useState(user.name)
   const [editEmail, setEditEmail] = useState(user.email)
 
-  // Credit score
+  // Credit scores — per-bureau
   const [creditScore, setCreditScore] = useState(String(user.creditScore || ''))
+  const [scoreTransUnion, setScoreTransUnion] = useState(String(user.creditScoreTransUnion || ''))
+  const [scoreEquifax, setScoreEquifax] = useState(String(user.creditScoreEquifax || ''))
+  const [scoreExperian, setScoreExperian] = useState(String(user.creditScoreExperian || ''))
 
   // Reset confirmation state
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -54,6 +57,9 @@ export default function SettingsPage() {
     const updatedUser = {
       ...user,
       creditScore: parseInt(creditScore) || 0,
+      creditScoreTransUnion: parseInt(scoreTransUnion) || 0,
+      creditScoreEquifax: parseInt(scoreEquifax) || 0,
+      creditScoreExperian: parseInt(scoreExperian) || 0,
     }
     setData(prev => ({ ...prev, user: updatedUser }))
     try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
@@ -196,20 +202,24 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* 2. Credit Score */}
+        {/* 2. Credit Scores */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
         >
           <h2 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
-            Credit Score
+            Credit Scores
           </h2>
           <div
-            className="rounded-lg p-6 space-y-4"
+            className="rounded-lg p-6 space-y-5"
             style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
           >
+            {/* Overall / Primary Score */}
             <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
+                Overall Score
+              </label>
               <input
                 type="number"
                 min="300"
@@ -226,8 +236,72 @@ export default function SettingsPage() {
                 }}
               />
               <p className="text-xs mt-1" style={{ color: theme.textM }}>
-                Your current credit score (300-850)
+                Your primary credit score (300-850)
               </p>
+            </div>
+
+            {/* Bureau-specific scores */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: theme.textM }}>
+                  TransUnion
+                </label>
+                <input
+                  type="number"
+                  min="300"
+                  max="850"
+                  value={scoreTransUnion}
+                  onChange={e => setScoreTransUnion(e.target.value)}
+                  placeholder="—"
+                  className="w-full px-3 py-2.5 rounded-lg"
+                  style={{
+                    backgroundColor: theme.input,
+                    borderColor: theme.border,
+                    borderWidth: '1px',
+                    color: theme.text,
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: theme.textM }}>
+                  Equifax
+                </label>
+                <input
+                  type="number"
+                  min="300"
+                  max="850"
+                  value={scoreEquifax}
+                  onChange={e => setScoreEquifax(e.target.value)}
+                  placeholder="—"
+                  className="w-full px-3 py-2.5 rounded-lg"
+                  style={{
+                    backgroundColor: theme.input,
+                    borderColor: theme.border,
+                    borderWidth: '1px',
+                    color: theme.text,
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: theme.textM }}>
+                  Experian
+                </label>
+                <input
+                  type="number"
+                  min="300"
+                  max="850"
+                  value={scoreExperian}
+                  onChange={e => setScoreExperian(e.target.value)}
+                  placeholder="—"
+                  className="w-full px-3 py-2.5 rounded-lg"
+                  style={{
+                    backgroundColor: theme.input,
+                    borderColor: theme.border,
+                    borderWidth: '1px',
+                    color: theme.text,
+                  }}
+                />
+              </div>
             </div>
 
             <button

@@ -487,7 +487,7 @@ export default function StackCirclePage() {
         className="border-b px-4 sm:px-6 transition-colors"
         style={{ borderColor: theme.border, backgroundColor: theme.bg }}
       >
-        <div className="flex gap-8">
+        <div className="flex gap-4 sm:gap-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('group')}
             className={`py-4 px-0 font-semibold text-sm border-b-2 transition-colors ${
@@ -1229,7 +1229,7 @@ export default function StackCirclePage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label
                           className="block text-sm font-medium mb-2"
@@ -1374,7 +1374,7 @@ export default function StackCirclePage() {
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label
                               className="block text-sm font-medium mb-2"
