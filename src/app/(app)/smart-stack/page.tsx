@@ -58,6 +58,8 @@ interface PaymentEntry {
   amount: number;
   date: string;
   description: string;
+  recurrence?: 'none' | 'weekly' | 'biweekly' | 'monthly';
+  status?: 'expected' | 'received';
 }
 
 // ============== PROJECTION CALCULATOR COMPONENT ==============
@@ -214,7 +216,7 @@ export default function SmartStackPage() {
     return [];
   });
   const [newAccountName, setNewAccountName] = useState('');
-  const [projectionMode, setProjectionMode] = useState<'check' | 'payment'>('check');
+  const [projectionMode, setProjectionMode] = useState<'check' | 'payment'>('payment');
 
   // Pay Splitter adjustable settings (persisted)
   const [customSavingsAmount, setCustomSavingsAmount] = useState<string>(() => {
@@ -230,10 +232,20 @@ export default function SmartStackPage() {
     return '';
   });
 
-  const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
+  const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('orca-payment-entries');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
   const [newPaymentAmount, setNewPaymentAmount] = useState('');
   const [newPaymentDate, setNewPaymentDate] = useState('');
   const [newPaymentDesc, setNewPaymentDesc] = useState('');
+  const [newPaymentRecurrence, setNewPaymentRecurrence] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none');
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
 
   // Track which days have custom hours (key = date string, value = hours)
   const [customHours, setCustomHours] = useState<Record<string, number>>({});
@@ -526,7 +538,7 @@ export default function SmartStackPage() {
       >
         <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
           <DollarSign size={28} style={{ color: theme.gold }} />
-          Income Planner
+          Check Projector
         </h3>
 
         <div className="space-y-6">
@@ -770,42 +782,30 @@ export default function SmartStackPage() {
             </div>
           )}
 
-          {!budgetLocked ? (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleBudgetLock}
-              disabled={projectedCheckAmount <= 0}
-              style={{
-                backgroundColor: projectedCheckAmount > 0 ? theme.gold : theme.border,
-                color: projectedCheckAmount > 0 ? theme.bgS : theme.textM,
-              }}
-              className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 disabled:cursor-not-allowed"
-            >
-              <Lock size={18} />
-              Lock In
-            </motion.button>
-          ) : (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleBudgetLock}
-              style={{
-                backgroundColor: theme.border,
-                color: theme.text,
-              }}
-              className="w-full py-2 rounded-lg font-semibold flex items-center justify-center gap-2"
-            >
-              <Edit3 size={18} />
-              Edit
-            </motion.button>
-          )}
         </div>
       </motion.div>
     );
   };
 
-  // ============== PAYMENT PROJECTION (Self-Employed) ==============
+  // ============== SYNC PAYMENTS TO DASHBOARD ==============
+  const syncPaymentsToDashboard = (entries: PaymentEntry[]) => {
+    try { setLocalSynced('orca-payment-entries', JSON.stringify(entries)) } catch {}
+    // Sync all payment dates (including recurring future dates) to Dashboard calendar
+    const incomeEvents: any[] = [];
+    entries.forEach(entry => {
+      const freq = entry.recurrence || 'none';
+      incomeEvents.push({
+        id: entry.id,
+        source: entry.description,
+        amount: entry.amount,
+        date: entry.date,
+        frequency: freq === 'none' ? 'once' : freq,
+      });
+    });
+    setData(prev => ({ ...prev, income: incomeEvents as any }));
+  };
+
+  // ============== PAYMENT PROJECTION (Incoming Payments) ==============
   const renderPaymentProjection = () => {
     const addPayment = () => {
       const amount = parseFloat(newPaymentAmount);
@@ -815,31 +815,78 @@ export default function SmartStackPage() {
         amount,
         date: newPaymentDate,
         description: newPaymentDesc || 'Payment',
+        recurrence: newPaymentRecurrence,
+        status: 'expected',
       };
       const updated = [...paymentEntries, entry];
       setPaymentEntries(updated);
-      try { setLocalSynced('orca-payment-entries', JSON.stringify(updated)) } catch {}
-      // Sync payment dates to Dashboard calendar via data context
-      const existingIncome = data.income || [];
-      const newIncome = [...existingIncome, { id: entry.id, source: entry.description, amount: entry.amount, date: entry.date, frequency: 'once' as const }];
-      setData(prev => ({ ...prev, income: newIncome as any }));
+      syncPaymentsToDashboard(updated);
       setNewPaymentAmount('');
       setNewPaymentDate('');
       setNewPaymentDesc('');
+      setNewPaymentRecurrence('none');
+    };
+
+    const startEditPayment = (entry: PaymentEntry) => {
+      setEditingPaymentId(entry.id);
+      setNewPaymentAmount(String(entry.amount));
+      setNewPaymentDate(entry.date);
+      setNewPaymentDesc(entry.description);
+      setNewPaymentRecurrence(entry.recurrence || 'none');
+    };
+
+    const saveEditPayment = () => {
+      if (!editingPaymentId) return;
+      const amount = parseFloat(newPaymentAmount);
+      if (!amount || !newPaymentDate) return;
+      const updated = paymentEntries.map(p =>
+        p.id === editingPaymentId
+          ? { ...p, amount, date: newPaymentDate, description: newPaymentDesc || 'Payment', recurrence: newPaymentRecurrence }
+          : p
+      );
+      setPaymentEntries(updated);
+      syncPaymentsToDashboard(updated);
+      setEditingPaymentId(null);
+      setNewPaymentAmount('');
+      setNewPaymentDate('');
+      setNewPaymentDesc('');
+      setNewPaymentRecurrence('none');
+    };
+
+    const cancelEdit = () => {
+      setEditingPaymentId(null);
+      setNewPaymentAmount('');
+      setNewPaymentDate('');
+      setNewPaymentDesc('');
+      setNewPaymentRecurrence('none');
     };
 
     const removePayment = (id: string) => {
       const updated = paymentEntries.filter(p => p.id !== id);
       setPaymentEntries(updated);
-      try { setLocalSynced('orca-payment-entries', JSON.stringify(updated)) } catch {}
-      const existingIncome = data.income || [];
-      setData(prev => ({ ...prev, income: (existingIncome as any[]).filter((i: any) => i.id !== id) as any }));
+      syncPaymentsToDashboard(updated);
+    };
+
+    const toggleStatus = (id: string) => {
+      const updated = paymentEntries.map(p =>
+        p.id === id ? { ...p, status: p.status === 'received' ? 'expected' as const : 'received' as const } : p
+      );
+      setPaymentEntries(updated);
+      syncPaymentsToDashboard(updated);
     };
 
     const totalPayments = paymentEntries.reduce((sum, p) => sum + p.amount, 0);
     const nextPayment = paymentEntries
-      .filter(p => new Date(p.date) >= new Date())
+      .filter(p => new Date(p.date) >= new Date() && p.status !== 'received')
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+
+    const recurrenceLabel = (r?: string) => {
+      if (!r || r === 'none') return '';
+      if (r === 'weekly') return 'Weekly';
+      if (r === 'biweekly') return 'Bi-weekly';
+      if (r === 'monthly') return 'Monthly';
+      return '';
+    };
 
     return (
       <motion.div
@@ -873,9 +920,11 @@ export default function SmartStackPage() {
             </div>
           </div>
 
-          {/* Add Payment Form */}
+          {/* Add / Edit Payment Form */}
           <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4 space-y-3">
-            <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">Add Incoming Payment</p>
+            <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">
+              {editingPaymentId ? 'Edit Payment' : 'Add Next Payment/Paycheck'}
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="relative">
                 <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2">$</span>
@@ -900,29 +949,61 @@ export default function SmartStackPage() {
               type="text"
               value={newPaymentDesc}
               onChange={(e) => setNewPaymentDesc(e.target.value)}
-              placeholder="Description (e.g., Client invoice, Freelance work)"
+              placeholder="Description (e.g., Paycheck, Client invoice)"
               style={{ backgroundColor: theme.bgS, borderColor: theme.border, color: theme.text }}
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={addPayment}
-              disabled={!newPaymentAmount || !newPaymentDate}
-              style={{
-                backgroundColor: newPaymentAmount && newPaymentDate ? theme.gold : theme.border,
-                color: newPaymentAmount && newPaymentDate ? theme.bgS : theme.textM,
-              }}
-              className="w-full py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:cursor-not-allowed"
-            >
-              <Plus size={16} /> Add Payment
-            </motion.button>
+            {/* Recurrence selector */}
+            <div>
+              <label style={{ color: theme.textM }} className="block text-xs font-semibold mb-1">Recurrence</label>
+              <div className="flex gap-2">
+                {(['none', 'weekly', 'biweekly', 'monthly'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => setNewPaymentRecurrence(opt)}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={{
+                      backgroundColor: newPaymentRecurrence === opt ? theme.gold : theme.bgS,
+                      color: newPaymentRecurrence === opt ? theme.bgS : theme.textM,
+                      border: `1px solid ${newPaymentRecurrence === opt ? theme.gold : theme.border}`,
+                    }}
+                  >
+                    {opt === 'none' ? 'One-time' : opt === 'biweekly' ? 'Bi-weekly' : opt.charAt(0).toUpperCase() + opt.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={editingPaymentId ? saveEditPayment : addPayment}
+                disabled={!newPaymentAmount || !newPaymentDate}
+                style={{
+                  backgroundColor: newPaymentAmount && newPaymentDate ? theme.gold : theme.border,
+                  color: newPaymentAmount && newPaymentDate ? theme.bgS : theme.textM,
+                }}
+                className="flex-1 py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:cursor-not-allowed"
+              >
+                <Plus size={16} /> {editingPaymentId ? 'Update Payment' : 'Add Payment'}
+              </motion.button>
+              {editingPaymentId && (
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={cancelEdit}
+                  style={{ backgroundColor: theme.border, color: theme.text }}
+                  className="px-4 py-2 rounded-lg font-semibold text-sm"
+                >
+                  Cancel
+                </motion.button>
+              )}
+            </div>
           </div>
 
           {/* Payment Entries List */}
           {paymentEntries.length > 0 && (
             <div className="space-y-3">
-              <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">Upcoming Payments</p>
+              <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">Scheduled Payments</p>
               {paymentEntries
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                 .map((entry) => (
@@ -931,24 +1012,39 @@ export default function SmartStackPage() {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-                    className="border rounded-lg p-4 flex items-center justify-between"
+                    className="border rounded-lg p-4"
                   >
-                    <div>
-                      <p style={{ color: theme.text }} className="font-semibold">{entry.description}</p>
-                      <p style={{ color: theme.textM }} className="text-xs">
-                        {new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <p style={{ color: '#22c55e' }} className="font-bold">+{fmt(entry.amount)}</p>
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => removePayment(entry.id)}
-                        style={{ color: theme.textM }}
-                        className="hover:opacity-70"
-                      >
-                        <Trash2 size={16} />
-                      </motion.button>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p style={{ color: theme.text }} className="font-semibold truncate">{entry.description}</p>
+                          {entry.status === 'received' && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}>RECEIVED</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p style={{ color: theme.textM }} className="text-xs">
+                            {new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                          </p>
+                          {entry.recurrence && entry.recurrence !== 'none' && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ backgroundColor: `${theme.gold}20`, color: theme.gold }}>
+                              {recurrenceLabel(entry.recurrence)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-3">
+                        <p style={{ color: entry.status === 'received' ? theme.ok : '#22c55e' }} className="font-bold">+{fmt(entry.amount)}</p>
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => toggleStatus(entry.id)} style={{ color: entry.status === 'received' ? theme.ok : theme.textM }} className="hover:opacity-70" title={entry.status === 'received' ? 'Mark as expected' : 'Mark as received'}>
+                          <Check size={16} />
+                        </motion.button>
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => startEditPayment(entry)} style={{ color: theme.textM }} className="hover:opacity-70">
+                          <Edit3 size={16} />
+                        </motion.button>
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => removePayment(entry.id)} style={{ color: theme.textM }} className="hover:opacity-70">
+                          <Trash2 size={16} />
+                        </motion.button>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
@@ -1115,8 +1211,12 @@ export default function SmartStackPage() {
   };
 
   const renderPaycheckHistory = () => {
-    // Only show dates of payments that were actually paid
-    const paidEntries = paycheckHistory.filter((e: any) => e.actualAmount > 0 || e.date)
+    // Income History tracks only incoming payments (past, current, and future)
+    const now = new Date();
+    const pastPayments = paymentEntries.filter(p => p.status === 'received');
+    const upcomingPayments = paymentEntries.filter(p => p.status !== 'received');
+    const allSorted = [...pastPayments, ...upcomingPayments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -1129,32 +1229,50 @@ export default function SmartStackPage() {
           Income History
         </h3>
 
-        {paidEntries.length === 0 ? (
+        {allSorted.length === 0 ? (
           <div style={{ backgroundColor: theme.bg }} className="rounded-lg p-6 text-center">
             <p style={{ color: theme.textM }} className="text-sm">
-              No paid income recorded yet.
+              No incoming payments recorded yet. Add payments above to start tracking.
             </p>
           </div>
         ) : (
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {paidEntries.map((entry: any) => (
-              <motion.div
-                key={entry.id}
-                whileHover={{ scale: 1.01 }}
-                style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-                className="border rounded-lg p-3 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.ok }} />
-                  <p style={{ color: theme.text }} className="font-medium text-sm">
-                    {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </p>
-                </div>
-                <p style={{ color: theme.ok }} className="font-bold text-sm">
-                  {fmt(entry.actualAmount || entry.grossAmount)}
-                </p>
-              </motion.div>
-            ))}
+            {allSorted.map((entry) => {
+              const isPast = entry.status === 'received';
+              const isFuture = new Date(entry.date + 'T00:00:00') > now && entry.status !== 'received';
+              return (
+                <motion.div
+                  key={entry.id}
+                  whileHover={{ scale: 1.01 }}
+                  style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                  className="border rounded-lg p-3 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isPast ? theme.ok : isFuture ? theme.warn : theme.gold }} />
+                    <div>
+                      <p style={{ color: theme.text }} className="font-medium text-sm">{entry.description}</p>
+                      <p style={{ color: theme.textM }} className="text-xs">
+                        {new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {entry.recurrence && entry.recurrence !== 'none' && (
+                          <span style={{ color: theme.gold }}> · {entry.recurrence === 'biweekly' ? 'Bi-weekly' : entry.recurrence.charAt(0).toUpperCase() + entry.recurrence.slice(1)}</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{
+                      backgroundColor: isPast ? `${theme.ok}20` : isFuture ? `${theme.warn}20` : `${theme.gold}20`,
+                      color: isPast ? theme.ok : isFuture ? theme.warn : theme.gold,
+                    }}>
+                      {isPast ? 'Received' : isFuture ? 'Upcoming' : 'Expected'}
+                    </span>
+                    <p style={{ color: isPast ? theme.ok : theme.text }} className="font-bold text-sm">
+                      {fmt(entry.amount)}
+                    </p>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </motion.div>
@@ -1163,7 +1281,7 @@ export default function SmartStackPage() {
 
   // ============== TAB: BUDGET ==============
   const renderBudgetTab = () => {
-    // Toggle between Income Planner and Incoming Payments
+    // Toggle between Incoming Payments and Check Projector
     const renderProjectionToggle = () => (
       <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-3 mb-8">
         <div className="flex rounded-lg overflow-hidden" style={{ backgroundColor: theme.bg }}>
@@ -1176,7 +1294,7 @@ export default function SmartStackPage() {
             }}
             className="flex-1 py-3 font-semibold text-sm flex items-center justify-center gap-2 rounded-lg transition-all"
           >
-            <DollarSign size={16} /> Income Planner
+            <DollarSign size={16} /> Check Projector
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.97 }}
@@ -1206,7 +1324,6 @@ export default function SmartStackPage() {
         ) : (
           <>
             {renderCheckProjectionWithCalendar()}
-            {renderCheckSplitter()}
           </>
         )}
 

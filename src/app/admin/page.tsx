@@ -405,7 +405,6 @@ export default function AdminPage() {
   const [maintenanceMode, setMaintenanceMode] = useState(false)
   const [signupsEnabled, setSignupsEnabled] = useState(true)
   const [maxUsers, setMaxUsers] = useState(10000)
-  const [defaultIncomeMode, setDefaultIncomeMode] = useState<'paycheck' | 'flexible'>('paycheck')
   const [defaultSafeToSpendBuffer, setDefaultSafeToSpendBuffer] = useState(50)
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [budgetCategories, setBudgetCategories] = useState<string[]>([
@@ -1750,23 +1749,22 @@ export default function AdminPage() {
                   </div>
                 </motion.div>
 
-                {/* Income Planner Defaults */}
+                {/* Income & Payments */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.025 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Income Planner Defaults</h2>
-                  <p style={{ color: TEXT_MUTED }} className="text-xs mb-4">Default income settings applied to new user accounts</p>
+                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Income & Payments</h2>
+                  <p style={{ color: TEXT_MUTED }} className="text-xs mb-4">Income settings and defaults for the platform</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Default Income Mode</label>
-                      <div className="flex gap-2">
-                        <motion.button whileHover={{ scale: 1.05 }} onClick={() => setDefaultIncomeMode('paycheck')} style={{ backgroundColor: defaultIncomeMode === 'paycheck' ? `${GOLD}44` : BG_DARK, borderColor: defaultIncomeMode === 'paycheck' ? GOLD : BORDER_COLOR, color: defaultIncomeMode === 'paycheck' ? GOLD : TEXT_MUTED }} className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold border">Paycheck</motion.button>
-                        <motion.button whileHover={{ scale: 1.05 }} onClick={() => setDefaultIncomeMode('flexible')} style={{ backgroundColor: defaultIncomeMode === 'flexible' ? `${GOLD}44` : BG_DARK, borderColor: defaultIncomeMode === 'flexible' ? GOLD : BORDER_COLOR, color: defaultIncomeMode === 'flexible' ? GOLD : TEXT_MUTED }} className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold border">Flexible</motion.button>
-                      </div>
-                      <p style={{ color: TEXT_MUTED }} className="text-xs mt-1">{defaultIncomeMode === 'paycheck' ? 'Users enter paycheck amount, frequency, and pay dates' : 'Users track incoming payments as primary income source'}</p>
-                    </div>
                     <div>
                       <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Default Safe-to-Spend Buffer ($)</label>
                       <input type="number" value={defaultSafeToSpendBuffer} onChange={(e) => setDefaultSafeToSpendBuffer(parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
                       <p style={{ color: TEXT_MUTED }} className="text-xs mt-1">Safety cushion subtracted from Safe to Spend calculation</p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span style={{ color: TEXT_SECONDARY }} className="text-sm font-medium">Primary Income Source</span>
+                        <span style={{ color: GOLD }} className="text-sm font-semibold">Incoming Payments</span>
+                      </div>
+                      <p style={{ color: TEXT_MUTED }} className="text-xs">All income is managed through Incoming Payments in Smart Stack. Check Projector is available as a standalone calculator.</p>
                     </div>
                   </div>
                 </motion.div>

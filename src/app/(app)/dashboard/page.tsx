@@ -16,7 +16,6 @@ import { useTheme } from '@/context/ThemeContext'
 import type { Bill } from '@/lib/types'
 import {
   calcSafeToSpend,
-  calcIncomeBillsRatio,
   paycheckToEvents,
   paymentsToEvents,
   getNextCycleDate,
@@ -445,28 +444,6 @@ export default function DashboardPage() {
     daily: safeToSpendResult.daily,
   }), [safeToSpendResult])
 
-  // Income to Bills Ratio
-  const incomeRatio = useMemo(() => {
-    const mode = user.incomeMode || 'paycheck'
-    let monthlyIncome = 0
-    if (mode === 'paycheck') {
-      const amt = user.netIncome || parseFloat(user.payRate) || 0
-      const freq = user.payFreq || 'biweekly'
-      monthlyIncome = freq === 'weekly' ? amt * 4.33 : freq === 'biweekly' ? amt * 2.17 : freq === 'semimonthly' ? amt * 2 : amt
-    } else {
-      let payments: IncomingPayment[] = data.incomingPayments || []
-      if (payments.length === 0 && typeof window !== 'undefined') {
-        try {
-          const stored = localStorage.getItem('orca-payment-entries')
-          if (stored) payments = JSON.parse(stored)
-        } catch {}
-      }
-      monthlyIncome = payments.reduce((sum, p) => sum + p.amount, 0)
-    }
-    const monthlyBills = bills.filter(b => b.status !== 'paid').reduce((sum, b) => sum + b.amount, 0)
-    return calcIncomeBillsRatio(monthlyIncome, monthlyBills, safeToSpendResult.incomeAvailable, safeToSpendResult.billsDueBefore)
-  }, [user, bills, data.incomingPayments, safeToSpendResult])
-
   const totalSavings = useMemo(() => {
     // Include savings accounts from localStorage
     let total = goals.reduce((sum, g) => sum + g.current, 0)
@@ -686,21 +663,6 @@ export default function DashboardPage() {
               </div>
             </motion.div>
 
-            {/* Income to Bills Ratio */}
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <div className="rounded-xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                <p className="text-xs font-medium mb-1" style={{ color: theme.textM }}>Monthly Ratio</p>
-                <p className="text-lg font-bold" style={{ color: incomeRatio.monthly >= 1 ? theme.ok : theme.bad }}>
-                  {incomeRatio.monthly === Infinity ? '—' : `${incomeRatio.monthly}x`}
-                </p>
-              </div>
-              <div className="rounded-xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                <p className="text-xs font-medium mb-1" style={{ color: theme.textM }}>Next-Cycle Coverage</p>
-                <p className="text-lg font-bold" style={{ color: incomeRatio.nextCycle >= 1 ? theme.ok : theme.bad }}>
-                  {incomeRatio.nextCycle === Infinity ? '—' : `${incomeRatio.nextCycle}x`}
-                </p>
-              </div>
-            </div>
           </DraggableSection>
         )
 
