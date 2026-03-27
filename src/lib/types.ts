@@ -75,6 +75,7 @@ export interface BillAlloc {
 }
 
 export type BillRecurrence = 'weekly' | 'monthly' | 'yearly' | 'custom'
+export type RecurrenceEndType = 'ongoing' | 'after-date' | 'after-count'
 
 export interface Bill {
   id: string
@@ -85,8 +86,12 @@ export interface Bill {
   freq: string
   recurrence: BillRecurrence
   customRecurrenceDays?: number
+  recurrenceEndType?: RecurrenceEndType
+  recurrenceEndDate?: string       // ISO date — stop recurring after this date
+  recurrenceEndAfter?: number      // stop after N occurrences
   status: string
   alloc: BillAlloc[]
+  paidDate?: string
 }
 
 // ── Expenses ──

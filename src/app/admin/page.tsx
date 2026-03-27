@@ -242,153 +242,121 @@ export default function AdminPage() {
       .finally(() => setAuthLoading(false))
   }, [])
 
-  // Initialize Supabase and fetch live users
+  // Helper: convert raw profile rows to AdminUser[]
+  const profilesToAdminUsers = (profiles: any[]): AdminUser[] =>
+    profiles.map((profile: any, idx: number) => ({
+      id: profile.id || `user-${idx}`,
+      name: profile.name || profile.full_name || profile.email?.split('@')[0] || 'New User',
+      email: profile.email || 'unknown@example.com',
+      status: profile.onboarded ? 'active' as const : 'trial' as const,
+      twoFA: false,
+      lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Just signed up',
+      joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      plan: profile.onboarded ? 'Active' : 'Trial',
+      creditScore: profile.credit_score || 0,
+      creditScoreTransUnion: profile.credit_score_transunion || 0,
+      creditScoreEquifax: profile.credit_score_equifax || 0,
+      creditScoreExperian: profile.credit_score_experian || 0,
+      activityLog: [{ action: 'Account created', date: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : '', detail: 'User registration' }],
+    }))
+
+  // Fetch users via server-side API (bypasses RLS using service role key)
   useEffect(() => {
     if (!adminAuthenticated) return
 
-    const initSupabase = async () => {
+    const fetchUsers = async () => {
       try {
-        const supabase = createSupabaseClient()
-        supabaseRef.current = supabase
-
-        // Check if Supabase is configured
-        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-          setDbConnected(false)
-          setIsLiveMode(false)
-          return
-        }
-
         setIsLoadingUsers(true)
         setUserLoadError('')
 
-        // Fetch users from Supabase profiles table
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(1000)
-
-        if (error) {
-          console.error('Supabase fetch error:', error)
+        const res = await fetch('/api/admin/users')
+        if (!res.ok) {
           setDbConnected(false)
           setIsLiveMode(false)
-          setUserLoadError('Could not connect to database')
+          setUserLoadError('Could not fetch users from server')
           return
         }
 
-        // Convert Supabase data to AdminUser format (show ALL users including new signups)
-        if (data) {
-          const liveUsers: AdminUser[] = data.map((profile: any, idx: number) => ({
-            id: profile.id || `user-${idx}`,
-            name: profile.name || profile.full_name || profile.email?.split('@')[0] || 'New User',
-            email: profile.email || 'unknown@example.com',
-            status: profile.onboarded ? 'active' as const : 'trial' as const,
-            twoFA: false,
-            lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Just signed up',
-            joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-            plan: profile.onboarded ? 'Active' : 'Trial',
-            creditScore: profile.credit_score || 0,
-            creditScoreTransUnion: profile.credit_score_transunion || 0,
-            creditScoreEquifax: profile.credit_score_equifax || 0,
-            creditScoreExperian: profile.credit_score_experian || 0,
-            activityLog: [{ action: 'Account created', date: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : '', detail: 'User registration' }],
-          }))
-          setUsers(liveUsers)
-          setDbConnected(true)
-          setIsLiveMode(true)
-          setLastSyncTime(new Date().toLocaleTimeString())
+        const { users: profiles } = await res.json()
+        setUsers(profilesToAdminUsers(profiles || []))
+        setDbConnected(true)
+        setIsLiveMode(true)
+        setLastSyncTime(new Date().toLocaleTimeString())
 
-          // Set up real-time subscriptions for all key tables
-          if (supabaseRef.current) {
-            const channel = supabaseRef.current
-              .channel('admin-all-changes')
-              .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'profiles' },
-                () => { refetchUsers(); setLastSyncTime(new Date().toLocaleTimeString()); }
-              )
-              .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'bills' },
-                () => { setLastSyncTime(new Date().toLocaleTimeString()); }
-              )
-              .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'expenses' },
-                () => { setLastSyncTime(new Date().toLocaleTimeString()); }
-              )
-              .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'savings_goals' },
-                () => { setLastSyncTime(new Date().toLocaleTimeString()); }
-              )
-              .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'income_sources' },
-                () => { setLastSyncTime(new Date().toLocaleTimeString()); }
-              )
-              .subscribe()
+        // Set up real-time subscriptions for live updates (uses anon key — only for change detection)
+        const supabase = createSupabaseClient()
+        supabaseRef.current = supabase
 
-            return () => {
-              if (supabaseRef.current && channel) {
-                supabaseRef.current.removeChannel(channel)
-              }
-            }
+        const channel = supabase
+          .channel('admin-all-changes')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'profiles' },
+            () => { refetchUsers(); setLastSyncTime(new Date().toLocaleTimeString()); }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'bills' },
+            () => { refetchMetrics(); setLastSyncTime(new Date().toLocaleTimeString()); }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'expenses' },
+            () => { refetchMetrics(); setLastSyncTime(new Date().toLocaleTimeString()); }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'savings_goals' },
+            () => { refetchMetrics(); setLastSyncTime(new Date().toLocaleTimeString()); }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'income_sources' },
+            () => { refetchMetrics(); setLastSyncTime(new Date().toLocaleTimeString()); }
+          )
+          .subscribe()
+
+        return () => {
+          if (supabaseRef.current && channel) {
+            supabaseRef.current.removeChannel(channel)
           }
-        } else {
-          setDbConnected(true)
-          setIsLiveMode(true)
-          setUsers([])
-          setLastSyncTime(new Date().toLocaleTimeString())
         }
       } catch (err) {
-        console.error('Supabase initialization error:', err)
+        console.error('Admin initialization error:', err)
         setDbConnected(false)
         setIsLiveMode(false)
-        setUserLoadError('Failed to initialize database connection')
+        setUserLoadError('Failed to initialize admin panel')
       } finally {
         setIsLoadingUsers(false)
       }
     }
 
-    initSupabase()
+    fetchUsers()
   }, [adminAuthenticated])
 
-  // Refetch users function for real-time updates
+  // Refetch users via server-side API (bypasses RLS)
   const refetchUsers = async () => {
-    if (!supabaseRef.current) return
-
     try {
-      const { data, error } = await supabaseRef.current
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1000)
-
-      if (error) {
-        console.error('Refetch error:', error)
-        return
-      }
-
-      if (data) {
-        const liveUsers: AdminUser[] = data.map((profile: any, idx: number) => ({
-          id: profile.id || `user-${idx}`,
-          name: profile.name || profile.full_name || profile.email?.split('@')[0] || 'New User',
-          email: profile.email || 'unknown@example.com',
-          status: profile.onboarded ? 'active' as const : 'trial' as const,
-          twoFA: false,
-          lastActive: profile.updated_at ? getRelativeTime(profile.updated_at) : 'Just signed up',
-          joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          plan: profile.onboarded ? 'Active' : 'Trial',
-          creditScore: profile.credit_score || 0,
-          activityLog: [{ action: 'Account created', date: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : '', detail: 'User registration' }],
-        }))
-        setUsers(liveUsers)
+      const res = await fetch('/api/admin/users')
+      if (!res.ok) return
+      const { users: profiles } = await res.json()
+      if (profiles) {
+        setUsers(profilesToAdminUsers(profiles))
         setLastSyncTime(new Date().toLocaleTimeString())
       }
     } catch (err) {
       console.error('Refetch error:', err)
     }
+  }
+
+  // Refetch platform metrics via server-side API
+  const refetchMetrics = async () => {
+    try {
+      const res = await fetch('/api/admin/metrics')
+      if (!res.ok) return
+      const data = await res.json()
+      setPlatformMetrics(data)
+    } catch {}
   }
 
   const handleAdminLogin = async () => {
@@ -468,28 +436,11 @@ export default function AdminPage() {
   const [platformMetrics, setPlatformMetrics] = useState({ totalBills: 0, totalExpenses: 0, totalGoals: 0, totalIncome: 0 })
   const [moduleSettings, setModuleSettings] = useState<Record<string, any>>({})
 
-  // Fetch platform-wide metrics from Supabase
+  // Fetch platform-wide metrics via server-side API (bypasses RLS)
   useEffect(() => {
-    if (!adminAuthenticated || !supabaseRef.current) return
-    async function fetchMetrics() {
-      const sb = supabaseRef.current!
-      try {
-        const [billsRes, expensesRes, goalsRes, incomeRes] = await Promise.all([
-          sb.from('bills').select('id', { count: 'exact', head: true }),
-          sb.from('expenses').select('id', { count: 'exact', head: true }),
-          sb.from('savings_goals').select('id', { count: 'exact', head: true }),
-          sb.from('income_sources').select('id', { count: 'exact', head: true }),
-        ])
-        setPlatformMetrics({
-          totalBills: billsRes.count || 0,
-          totalExpenses: expensesRes.count || 0,
-          totalGoals: goalsRes.count || 0,
-          totalIncome: incomeRes.count || 0,
-        })
-      } catch {}
-    }
-    fetchMetrics()
-  }, [adminAuthenticated, lastSyncTime])
+    if (!adminAuthenticated) return
+    refetchMetrics()
+  }, [adminAuthenticated])
 
   // Navigation states
   const [navItems, setNavItems] = useState<NavItem[]>(DEFAULT_NAV)

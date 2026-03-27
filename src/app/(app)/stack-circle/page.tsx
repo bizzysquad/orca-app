@@ -985,7 +985,7 @@ export default function StackCirclePage() {
                 {/* Add Money Card */}
                 <motion.div
                   variants={itemVariants}
-                  className="rounded-2xl border p-6 transition-colors"
+                  className="rounded-2xl border p-4 sm:p-6 transition-colors"
                   style={{
                     backgroundColor: theme.card,
                     borderColor: theme.border,
@@ -1144,7 +1144,7 @@ export default function StackCirclePage() {
                 {/* No Groups Empty State */}
                 <motion.div
                   variants={itemVariants}
-                  className="text-center py-16 px-6 rounded-2xl border-2 border-dashed transition-colors mb-6"
+                  className="text-center py-10 sm:py-16 px-4 sm:px-6 rounded-2xl border-2 border-dashed transition-colors mb-6"
                   style={{
                     borderColor: theme.border,
                   }}
@@ -1170,7 +1170,7 @@ export default function StackCirclePage() {
                 {/* Create Group Form */}
                 <motion.div
                   variants={itemVariants}
-                  className="rounded-2xl border p-6 transition-colors"
+                  className="rounded-2xl border p-4 sm:p-6 transition-colors"
                   style={{
                     backgroundColor: theme.card,
                     borderColor: theme.border,
@@ -1315,7 +1315,7 @@ export default function StackCirclePage() {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="rounded-2xl border p-6 transition-colors mt-4"
+                      className="rounded-2xl border p-4 sm:p-6 transition-colors mt-4"
                       style={{
                         backgroundColor: theme.card,
                         borderColor: theme.border,
@@ -1510,7 +1510,7 @@ export default function StackCirclePage() {
             {/* Rent Section */}
             <motion.div
               variants={itemVariants}
-              className="rounded-2xl border p-6 transition-colors"
+              className="rounded-2xl border p-4 sm:p-6 transition-colors"
               style={{
                 backgroundColor: theme.card,
                 borderColor: theme.border,
@@ -1573,7 +1573,7 @@ export default function StackCirclePage() {
             {/* Shared Utilities Section */}
             <motion.div
               variants={itemVariants}
-              className="rounded-2xl border p-6 transition-colors"
+              className="rounded-2xl border p-4 sm:p-6 transition-colors"
               style={{
                 backgroundColor: theme.card,
                 borderColor: theme.border,
@@ -1692,7 +1692,7 @@ export default function StackCirclePage() {
             {/* Roommates Section */}
             <motion.div
               variants={itemVariants}
-              className="rounded-2xl border p-6 transition-colors"
+              className="rounded-2xl border p-4 sm:p-6 transition-colors"
               style={{
                 backgroundColor: theme.card,
                 borderColor: theme.border,
@@ -1904,7 +1904,7 @@ export default function StackCirclePage() {
             {roommates.members.length >= 2 && (
               <motion.div
                 variants={itemVariants}
-                className="rounded-2xl border p-6 transition-colors"
+                className="rounded-2xl border p-4 sm:p-6 transition-colors"
                 style={{
                   backgroundColor: theme.card,
                   borderColor: theme.border,

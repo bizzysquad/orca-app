@@ -12,6 +12,8 @@ import {
   Save,
   Edit3,
   Check,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { useTheme } from '@/context/ThemeContext'
@@ -35,8 +37,12 @@ export default function SettingsPage() {
   const [scoreEquifax, setScoreEquifax] = useState(String(user.creditScoreEquifax || ''))
   const [scoreExperian, setScoreExperian] = useState(String(user.creditScoreExperian || ''))
 
-  // Reset confirmation state
+  // Reset / Delete account state
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [saved, setSaved] = useState(false)
 
   // Handlers
@@ -68,6 +74,28 @@ export default function SettingsPage() {
   }
 
   const handleResetData = () => setShowResetConfirm(false)
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') return
+    setIsDeleting(true)
+    setDeleteError('')
+    try {
+      const res = await fetch('/api/account/delete', { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        setDeleteError(data.error || 'Failed to delete account')
+        setIsDeleting(false)
+        return
+      }
+      // Clear all localStorage
+      try { localStorage.clear() } catch {}
+      // Redirect to login
+      router.push('/auth/login')
+    } catch (err) {
+      setDeleteError('Network error. Please try again.')
+      setIsDeleting(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -398,6 +426,39 @@ export default function SettingsPage() {
             Sign Out
           </button>
         </motion.div>
+
+        {/* 6. Delete Account — Danger Zone */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.bad }}>
+            Danger Zone
+          </h2>
+          <div
+            className="rounded-lg p-6 space-y-4"
+            style={{ backgroundColor: `${theme.bad}08`, borderColor: `${theme.bad}30`, borderWidth: '1px' }}
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: theme.bad }} />
+              <div>
+                <p className="text-sm font-semibold" style={{ color: theme.text }}>Permanently delete your account</p>
+                <p className="text-xs mt-1" style={{ color: theme.textM }}>
+                  This will permanently remove your account and all associated data (bills, income, goals, expenses, credit scores, and rent history) across all devices. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="w-full py-2.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+              style={{ backgroundColor: theme.bad, color: '#ffffff' }}
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete My Account
+            </button>
+          </div>
+        </motion.div>
       </div>
 
       {/* Reset Data Confirmation Modal */}
@@ -437,6 +498,88 @@ export default function SettingsPage() {
                   style={{ backgroundColor: theme.bad, color: '#ffffff' }}
                 >
                   Yes, Reset
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Account Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style={{ backgroundColor: theme.overlay }}
+            onClick={() => { if (!isDeleting) { setShowDeleteConfirm(false); setDeleteConfirmText(''); setDeleteError('') } }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="max-w-sm w-full rounded-2xl p-8"
+              style={{ backgroundColor: theme.card }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: `${theme.bad}20` }}>
+                  <AlertTriangle className="w-5 h-5" style={{ color: theme.bad }} />
+                </div>
+                <h2 className="text-xl font-bold" style={{ color: theme.text }}>Delete Account</h2>
+              </div>
+
+              <p style={{ color: theme.textS }} className="mb-4 text-sm">
+                This will permanently delete your entire account, including all bills, income sources, expenses, savings goals, credit scores, and rent history. This cannot be undone.
+              </p>
+
+              <p className="text-sm font-semibold mb-2" style={{ color: theme.text }}>
+                Type <span style={{ color: theme.bad }}>DELETE</span> to confirm:
+              </p>
+              <input
+                value={deleteConfirmText}
+                onChange={e => setDeleteConfirmText(e.target.value)}
+                placeholder="Type DELETE"
+                disabled={isDeleting}
+                className="w-full px-3 py-2.5 rounded-lg mb-4"
+                style={{
+                  backgroundColor: theme.input,
+                  borderColor: theme.border,
+                  borderWidth: '1px',
+                  color: theme.text,
+                }}
+                autoFocus
+              />
+
+              {deleteError && (
+                <p className="text-sm mb-3" style={{ color: theme.bad }}>{deleteError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); setDeleteError('') }}
+                  disabled={isDeleting}
+                  className="flex-1 py-2.5 rounded-lg font-semibold"
+                  style={{ backgroundColor: theme.bgS, color: theme.text }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+                  className="flex-1 py-2.5 rounded-lg font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: theme.bad, color: '#ffffff' }}
+                >
+                  {isDeleting ? (
+                    <span className="animate-pulse">Deleting...</span>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Delete Forever
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>

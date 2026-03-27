@@ -8,7 +8,8 @@ import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
 
-import type { Bill, BillAlloc, RentEntry, BillRecurrence } from '@/lib/types'
+import type { Bill, BillAlloc, RentEntry, BillRecurrence, RecurrenceEndType } from '@/lib/types'
+import WheelDatePicker from '@/components/WheelDatePicker'
 
 const CATEGORIES = [
   'Housing',
@@ -212,13 +213,22 @@ export default function BillBossPage() {
   const [calYear, setCalYear] = useState(2026)
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [rentReceipts, setRentReceipts] = useState<Record<string, string>>({})
-  const [viewMode, setViewMode] = useState<'monthly' | 'weekly'>('monthly')
+  const [viewMode, setViewMode] = useState<'list' | 'compact'>('list')
   const [notifications, setNotifications] = useState<Array<{ id: string; billId: string; billName: string; amount: number; dueDate: string; type: 'due-today' | 'upcoming'; dismissed: boolean }>>([])
   const [showNotifications, setShowNotifications] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth())
   const [datePickerYear, setDatePickerYear] = useState(new Date().getFullYear())
   const [collapsedSplits, setCollapsedSplits] = useState<Record<string, boolean>>({})
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -281,6 +291,9 @@ export default function BillBossPage() {
     freq: 'monthly',
     recurrence: 'monthly' as BillRecurrence,
     customRecurrenceDays: '',
+    recurrenceEndType: 'ongoing' as RecurrenceEndType,
+    recurrenceEndDate: '',
+    recurrenceEndAfter: '',
   })
 
   const handleMonthChange = (dir: number) => {
@@ -319,19 +332,8 @@ export default function BillBossPage() {
     }, 0)
   }, [bills, calMonth, calYear])
 
-  // Filter bills based on view mode
-  const getVisibleBills = () => {
-    if (viewMode === 'monthly') return bills
-
-    // Weekly view: bills due in the next 7 days from today
-    const today = new Date()
-    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-    return bills.filter(b => {
-      const dueDate = new Date(b.due)
-      return dueDate >= today && dueDate <= nextWeek
-    })
-  }
+  // Both views show all bills — view mode only changes layout
+  const getVisibleBills = () => bills
 
   // Get rent bill if exists
   const rentBill = bills.find(b => b.cat.toLowerCase() === 'housing' && b.name.toLowerCase().includes('rent'))
@@ -358,6 +360,9 @@ export default function BillBossPage() {
       freq: formData.freq,
       recurrence: formData.recurrence,
       customRecurrenceDays: formData.recurrence === 'custom' ? parseInt(formData.customRecurrenceDays) : undefined,
+      recurrenceEndType: formData.recurrenceEndType,
+      recurrenceEndDate: formData.recurrenceEndType === 'after-date' ? formData.recurrenceEndDate : undefined,
+      recurrenceEndAfter: formData.recurrenceEndType === 'after-count' ? parseInt(formData.recurrenceEndAfter) : undefined,
       status: 'upcoming',
       alloc: [],
     }
@@ -371,6 +376,9 @@ export default function BillBossPage() {
       freq: 'monthly',
       recurrence: 'monthly',
       customRecurrenceDays: '',
+      recurrenceEndType: 'ongoing',
+      recurrenceEndDate: '',
+      recurrenceEndAfter: '',
     })
     setCustomCategory('')
     setShowAddForm(false)
@@ -573,7 +581,7 @@ export default function BillBossPage() {
           </div>
         </motion.div>
 
-        {/* Weekly/Monthly Toggle */}
+        {/* List / Compact Toggle */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -581,26 +589,26 @@ export default function BillBossPage() {
           className="flex gap-2"
         >
           <button
-            onClick={() => setViewMode('weekly')}
+            onClick={() => setViewMode('list')}
             style={{
-              backgroundColor: viewMode === 'weekly' ? theme.gold : theme.card,
-              color: viewMode === 'weekly' ? theme.bg : theme.text,
+              backgroundColor: viewMode === 'list' ? theme.gold : theme.card,
+              color: viewMode === 'list' ? theme.bg : theme.text,
               borderColor: theme.border,
             }}
             className="flex-1 px-4 py-2.5 rounded-lg border font-semibold transition-all"
           >
-            Weekly View
+            List View
           </button>
           <button
-            onClick={() => setViewMode('monthly')}
+            onClick={() => setViewMode('compact')}
             style={{
-              backgroundColor: viewMode === 'monthly' ? theme.gold : theme.card,
-              color: viewMode === 'monthly' ? theme.bg : theme.text,
+              backgroundColor: viewMode === 'compact' ? theme.gold : theme.card,
+              color: viewMode === 'compact' ? theme.bg : theme.text,
               borderColor: theme.border,
             }}
             className="flex-1 px-4 py-2.5 rounded-lg border font-semibold transition-all"
           >
-            Monthly View
+            Compact View
           </button>
         </motion.div>
 
@@ -660,67 +668,82 @@ export default function BillBossPage() {
                   </button>
 
                   {showDatePicker && (
-                    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-xl p-4 shadow-xl">
-                      {/* Quick Select Buttons */}
-                      <div className="flex gap-2 mb-3">
-                        {[
-                          { label: '1st', day: 1 },
-                          { label: '15th', day: 15 },
-                          { label: 'Last', day: new Date(datePickerYear, datePickerMonth + 1, 0).getDate() },
-                        ].map(opt => (
-                          <button
-                            key={opt.label}
-                            type="button"
-                            onClick={() => {
-                              const m = String(datePickerMonth + 1).padStart(2, '0')
-                              const d = String(opt.day).padStart(2, '0')
-                              setFormData({ ...formData, due: `${datePickerYear}-${m}-${d}` })
-                              setShowDatePicker(false)
-                            }}
-                            style={{ backgroundColor: `${theme.gold}15`, color: theme.gold, borderColor: `${theme.gold}30` }}
-                            className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold border hover:opacity-80 transition-colors"
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
+                    <>
+                      {isMobile ? (
+                        /* iOS-style Wheel Date Picker for mobile */
+                        <div className="absolute z-50 top-full left-0 right-0 mt-1 shadow-xl">
+                          <WheelDatePicker
+                            value={formData.due || undefined}
+                            onChange={(date) => { setFormData({ ...formData, due: date }); setShowDatePicker(false) }}
+                            onClose={() => setShowDatePicker(false)}
+                            theme={theme}
+                          />
+                        </div>
+                      ) : (
+                        /* Desktop: mini calendar picker */
+                        <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-xl p-4 shadow-xl">
+                          {/* Quick Select Buttons */}
+                          <div className="flex gap-2 mb-3">
+                            {[
+                              { label: '1st', day: 1 },
+                              { label: '15th', day: 15 },
+                              { label: 'Last', day: new Date(datePickerYear, datePickerMonth + 1, 0).getDate() },
+                            ].map(opt => (
+                              <button
+                                key={opt.label}
+                                type="button"
+                                onClick={() => {
+                                  const m = String(datePickerMonth + 1).padStart(2, '0')
+                                  const d = String(opt.day).padStart(2, '0')
+                                  setFormData({ ...formData, due: `${datePickerYear}-${m}-${d}` })
+                                  setShowDatePicker(false)
+                                }}
+                                style={{ backgroundColor: `${theme.gold}15`, color: theme.gold, borderColor: `${theme.gold}30` }}
+                                className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold border hover:opacity-80 transition-colors"
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
 
-                      {/* Mini Calendar */}
-                      <div className="flex items-center justify-between mb-2">
-                        <button type="button" onClick={() => { let m = datePickerMonth - 1, y = datePickerYear; if (m < 0) { m = 11; y-- } setDatePickerMonth(m); setDatePickerYear(y) }} style={{ color: theme.textM }} className="p-1"><ChevronLeft size={14} /></button>
-                        <span className="text-xs font-semibold" style={{ color: theme.text }}>{new Date(datePickerYear, datePickerMonth).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
-                        <button type="button" onClick={() => { let m = datePickerMonth + 1, y = datePickerYear; if (m > 11) { m = 0; y++ } setDatePickerMonth(m); setDatePickerYear(y) }} style={{ color: theme.textM }} className="p-1"><ChevronRight size={14} /></button>
-                      </div>
-                      <div className="grid grid-cols-7 gap-0.5 mb-1">
-                        {['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="text-center text-[9px] font-semibold py-0.5" style={{ color: theme.textM }}>{d}</div>)}
-                      </div>
-                      <div className="grid grid-cols-7 gap-0.5">
-                        {Array.from({ length: new Date(datePickerYear, datePickerMonth, 1).getDay() }, (_, i) => <div key={`e-${i}`} />)}
-                        {Array.from({ length: new Date(datePickerYear, datePickerMonth + 1, 0).getDate() }, (_, i) => {
-                          const day = i + 1
-                          const m = String(datePickerMonth + 1).padStart(2, '0')
-                          const d = String(day).padStart(2, '0')
-                          const dateStr = `${datePickerYear}-${m}-${d}`
-                          const isSelected = formData.due === dateStr
-                          const isToday = new Date().getDate() === day && new Date().getMonth() === datePickerMonth && new Date().getFullYear() === datePickerYear
-                          return (
-                            <button
-                              key={day}
-                              type="button"
-                              onClick={() => { setFormData({ ...formData, due: dateStr }); setShowDatePicker(false) }}
-                              className="aspect-square rounded-md flex items-center justify-center text-xs transition-all hover:opacity-80"
-                              style={{
-                                backgroundColor: isSelected ? theme.gold : isToday ? `${theme.gold}20` : 'transparent',
-                                color: isSelected ? theme.bg : isToday ? theme.gold : theme.text,
-                                fontWeight: isSelected || isToday ? 600 : 400,
-                              }}
-                            >
-                              {day}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
+                          {/* Mini Calendar */}
+                          <div className="flex items-center justify-between mb-2">
+                            <button type="button" onClick={() => { let m = datePickerMonth - 1, y = datePickerYear; if (m < 0) { m = 11; y-- } setDatePickerMonth(m); setDatePickerYear(y) }} style={{ color: theme.textM }} className="p-1"><ChevronLeft size={14} /></button>
+                            <span className="text-xs font-semibold" style={{ color: theme.text }}>{new Date(datePickerYear, datePickerMonth).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                            <button type="button" onClick={() => { let m = datePickerMonth + 1, y = datePickerYear; if (m > 11) { m = 0; y++ } setDatePickerMonth(m); setDatePickerYear(y) }} style={{ color: theme.textM }} className="p-1"><ChevronRight size={14} /></button>
+                          </div>
+                          <div className="grid grid-cols-7 gap-0.5 mb-1">
+                            {['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="text-center text-[9px] font-semibold py-0.5" style={{ color: theme.textM }}>{d}</div>)}
+                          </div>
+                          <div className="grid grid-cols-7 gap-0.5">
+                            {Array.from({ length: new Date(datePickerYear, datePickerMonth, 1).getDay() }, (_, i) => <div key={`e-${i}`} />)}
+                            {Array.from({ length: new Date(datePickerYear, datePickerMonth + 1, 0).getDate() }, (_, i) => {
+                              const day = i + 1
+                              const m = String(datePickerMonth + 1).padStart(2, '0')
+                              const d = String(day).padStart(2, '0')
+                              const dateStr = `${datePickerYear}-${m}-${d}`
+                              const isSelected = formData.due === dateStr
+                              const isToday = new Date().getDate() === day && new Date().getMonth() === datePickerMonth && new Date().getFullYear() === datePickerYear
+                              return (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => { setFormData({ ...formData, due: dateStr }); setShowDatePicker(false) }}
+                                  className="aspect-square rounded-md flex items-center justify-center text-xs transition-all hover:opacity-80"
+                                  style={{
+                                    backgroundColor: isSelected ? theme.gold : isToday ? `${theme.gold}20` : 'transparent',
+                                    color: isSelected ? theme.bg : isToday ? theme.gold : theme.text,
+                                    fontWeight: isSelected || isToday ? 600 : 400,
+                                  }}
+                                >
+                                  {day}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -784,6 +807,59 @@ export default function BillBossPage() {
                 />
               )}
 
+              {/* Recurrence End Options */}
+              <div>
+                <label style={{ color: theme.textM }} className="text-sm font-medium block mb-2">Recurrence Duration</label>
+                <div className="flex gap-2">
+                  {([
+                    { value: 'ongoing', label: 'Ongoing' },
+                    { value: 'after-date', label: 'End Date' },
+                    { value: 'after-count', label: 'N Times' },
+                  ] as { value: RecurrenceEndType; label: string }[]).map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, recurrenceEndType: opt.value })}
+                      style={{
+                        backgroundColor: formData.recurrenceEndType === opt.value ? `${theme.gold}20` : theme.bg,
+                        borderColor: formData.recurrenceEndType === opt.value ? theme.gold : theme.border,
+                        color: formData.recurrenceEndType === opt.value ? theme.gold : theme.textM,
+                      }}
+                      className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold border transition-all"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {formData.recurrenceEndType === 'after-date' && (
+                <input
+                  type="date"
+                  placeholder="End Date"
+                  value={formData.recurrenceEndDate}
+                  onChange={(e) => setFormData({ ...formData, recurrenceEndDate: e.target.value })}
+                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                  className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2"
+                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
+                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
+                />
+              )}
+
+              {formData.recurrenceEndType === 'after-count' && (
+                <input
+                  type="number"
+                  placeholder="Number of occurrences"
+                  value={formData.recurrenceEndAfter}
+                  onChange={(e) => setFormData({ ...formData, recurrenceEndAfter: e.target.value })}
+                  min="1"
+                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                  className="w-full px-4 py-2.5 border rounded-lg placeholder:opacity-50 focus:outline-none focus:ring-2"
+                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
+                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
+                />
+              )}
+
               <button
                 onClick={handleAddBill}
                 disabled={!formData.name || !formData.amount || !formData.due}
@@ -796,131 +872,198 @@ export default function BillBossPage() {
           )}
         </AnimatePresence>
 
-        {/* 4. Bills List */}
-        <motion.div
-          variants={container}
-          initial="hidden"
-          animate="show"
-          className="space-y-3"
-        >
-          {visibleBills
-            .filter(b => b.status === 'upcoming')
-            .map((bill, idx) => (
-              <motion.div
-                key={bill.id}
-                variants={item}
-                transition={{ delay: idx * 0.05 }}
-              >
-                <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-5 space-y-3">
-                  {/* Bill Header */}
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 style={{ color: theme.text }} className="font-bold">{bill.name}</h3>
-                      <p className="text-sm" style={{ color: theme.textM }}>
-                        {bill.cat} · {fmtD(bill.due)}
+        {/* 4. Bills List — List View (detailed) */}
+        {viewMode === 'list' && (
+          <motion.div
+            variants={container}
+            initial="hidden"
+            animate="show"
+            className="space-y-3"
+          >
+            {visibleBills
+              .filter(b => b.status === 'upcoming')
+              .map((bill, idx) => (
+                <motion.div
+                  key={bill.id}
+                  variants={item}
+                  transition={{ delay: idx * 0.05 }}
+                >
+                  <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-5 space-y-3">
+                    {/* Bill Header */}
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 style={{ color: theme.text }} className="font-bold">{bill.name}</h3>
+                        <p className="text-sm" style={{ color: theme.textM }}>
+                          {bill.cat} · {fmtD(bill.due)}
+                          {bill.recurrence && bill.recurrence !== 'monthly' && (
+                            <span> · {bill.recurrence === 'custom' && bill.customRecurrenceDays ? `Every ${bill.customRecurrenceDays}d` : bill.recurrence}</span>
+                          )}
+                          {bill.recurrenceEndDate && <span> · Ends {fmtD(bill.recurrenceEndDate)}</span>}
+                          {bill.recurrenceEndAfter && <span> · {bill.recurrenceEndAfter}x left</span>}
+                        </p>
+                      </div>
+                      <p className="text-2xl font-bold" style={{ color: '#ef4444' }}>
+                        –{fmt(bill.amount)}
                       </p>
                     </div>
-                    <p className="text-2xl font-bold" style={{ color: bill.status === 'upcoming' ? '#ef4444' : theme.gold }}>
-                      {bill.status === 'upcoming' ? '–' : ''}{fmt(bill.amount)}
+
+                    {/* Split Payment Schedule (collapsible) */}
+                    {bill.alloc.length > 0 && (
+                      <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
+                        <button
+                          onClick={() => setCollapsedSplits(prev => ({ ...prev, [bill.id]: !prev[bill.id] }))}
+                          className="w-full flex items-center justify-between"
+                        >
+                          <p className="text-xs font-bold" style={{ color: theme.gold }}>
+                            SPLIT SCHEDULE ({bill.alloc.filter(a => a.paid).length}/{bill.alloc.length} paid)
+                          </p>
+                          {collapsedSplits[bill.id]
+                            ? <ChevronDown className="w-4 h-4" style={{ color: theme.textM }} />
+                            : <ChevronUp className="w-4 h-4" style={{ color: theme.textM }} />
+                          }
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {!collapsedSplits[bill.id] && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="space-y-2 mt-3">
+                                {bill.alloc.map(alloc => (
+                                  <div
+                                    key={alloc.id}
+                                    className={`flex justify-between items-center p-2 rounded ${
+                                      alloc.paid ? 'opacity-50' : ''
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {alloc.paid && (
+                                        <Check className="w-4 h-4" style={{ color: theme.ok }} />
+                                      )}
+                                      <span className={`text-sm ${alloc.paid ? 'line-through' : ''}`} style={{ color: theme.textM }}>
+                                        {fmtD(alloc.date)}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-semibold" style={{ color: theme.text }}>
+                                        {fmt(alloc.amount)}
+                                      </span>
+                                      {!alloc.paid && (
+                                        <button
+                                          onClick={() => handlePayment(bill.id, alloc.id)}
+                                          style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
+                                          className="px-2 py-1 text-xs rounded hover:opacity-80 transition-colors"
+                                        >
+                                          Pay
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-2">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handlePayFull(bill.id)}
+                        style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
+                        className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                      >
+                        Pay Full
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setSplitModalBillId(bill.id)}
+                        style={{ backgroundColor: theme.textS, color: theme.textM }}
+                        className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                      >
+                        Split
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleDeleteBill(bill.id)}
+                        style={{ backgroundColor: `${theme.bad}20`, color: theme.bad }}
+                        className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                      >
+                        Del
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+          </motion.div>
+        )}
+
+        {/* 4b. Bills — Compact View (condensed, easy-to-scan) */}
+        {viewMode === 'compact' && (
+          <motion.div
+            variants={container}
+            initial="hidden"
+            animate="show"
+            style={{ backgroundColor: theme.card, borderColor: theme.border }}
+            className="border rounded-xl overflow-hidden divide-y"
+          >
+            {visibleBills
+              .filter(b => b.status === 'upcoming')
+              .map((bill, idx) => (
+                <motion.div
+                  key={bill.id}
+                  variants={item}
+                  transition={{ delay: idx * 0.03 }}
+                  className="flex items-center gap-3 px-4 py-3"
+                  style={{ borderColor: theme.border }}
+                >
+                  {/* Status dot */}
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: daysTo(bill.due) <= 3 ? theme.bad : theme.warn }} />
+                  {/* Name + Category */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{bill.name}</p>
+                    <p className="text-[11px]" style={{ color: theme.textM }}>
+                      {bill.cat} · Due {fmtD(bill.due)}
+                      {bill.recurrenceEndDate && ` · Ends ${fmtD(bill.recurrenceEndDate)}`}
                     </p>
                   </div>
-
-                  {/* Split Payment Schedule (collapsible) */}
-                  {bill.alloc.length > 0 && (
-                    <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
-                      <button
-                        onClick={() => setCollapsedSplits(prev => ({ ...prev, [bill.id]: !prev[bill.id] }))}
-                        className="w-full flex items-center justify-between"
-                      >
-                        <p className="text-xs font-bold" style={{ color: theme.gold }}>
-                          SPLIT SCHEDULE ({bill.alloc.filter(a => a.paid).length}/{bill.alloc.length} paid)
-                        </p>
-                        {collapsedSplits[bill.id]
-                          ? <ChevronDown className="w-4 h-4" style={{ color: theme.textM }} />
-                          : <ChevronUp className="w-4 h-4" style={{ color: theme.textM }} />
-                        }
-                      </button>
-                      <AnimatePresence initial={false}>
-                        {!collapsedSplits[bill.id] && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="space-y-2 mt-3">
-                              {bill.alloc.map(alloc => (
-                                <div
-                                  key={alloc.id}
-                                  className={`flex justify-between items-center p-2 rounded ${
-                                    alloc.paid ? 'opacity-50' : ''
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    {alloc.paid && (
-                                      <Check className="w-4 h-4" style={{ color: theme.ok }} />
-                                    )}
-                                    <span className={`text-sm ${alloc.paid ? 'line-through' : ''}`} style={{ color: theme.textM }}>
-                                      {fmtD(alloc.date)}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-semibold" style={{ color: theme.text }}>
-                                      {fmt(alloc.amount)}
-                                    </span>
-                                    {!alloc.paid && (
-                                      <button
-                                        onClick={() => handlePayment(bill.id, alloc.id)}
-                                        style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
-                                        className="px-2 py-1 text-xs rounded hover:opacity-80 transition-colors"
-                                      >
-                                        Pay
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-2 pt-2">
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                  {/* Amount */}
+                  <p className="text-sm font-bold flex-shrink-0" style={{ color: '#ef4444' }}>–{fmt(bill.amount)}</p>
+                  {/* Quick actions */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
                       onClick={() => handlePayFull(bill.id)}
-                      style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
-                      className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ backgroundColor: `${theme.ok}15` }}
+                      title="Pay"
                     >
-                      Pay Full
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setSplitModalBillId(bill.id)}
-                      style={{ backgroundColor: theme.textS, color: theme.textM }}
-                      className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
-                    >
-                      Split
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                      <Check size={14} style={{ color: theme.ok }} />
+                    </button>
+                    <button
                       onClick={() => handleDeleteBill(bill.id)}
-                      style={{ backgroundColor: `${theme.bad}20`, color: theme.bad }}
-                      className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ backgroundColor: `${theme.bad}15` }}
+                      title="Delete"
                     >
-                      Del
-                    </motion.button>
+                      <Trash2 size={14} style={{ color: theme.bad }} />
+                    </button>
                   </div>
-                </div>
-              </motion.div>
-            ))}
-        </motion.div>
+                </motion.div>
+              ))}
+            {visibleBills.filter(b => b.status === 'upcoming').length === 0 && (
+              <div className="p-6 text-center">
+                <p className="text-sm" style={{ color: theme.textM }}>No upcoming bills</p>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* 5. Paid Bills Section */}
         {bills.filter(b => b.status === 'paid').length > 0 && (
@@ -931,37 +1074,56 @@ export default function BillBossPage() {
             className="space-y-3"
           >
             <h3 style={{ color: theme.text }} className="font-bold text-lg mt-6 mb-3">Paid Bills</h3>
-            {bills
-              .filter(b => b.status === 'paid')
-              .map(bill => (
-                <div
-                  key={bill.id}
-                  style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                  className="border rounded-xl p-5 opacity-50 flex justify-between items-center"
-                >
-                  <div className="flex items-center gap-3">
-                    <Check className="w-5 h-5" style={{ color: theme.ok }} />
-                    <div>
-                      <p style={{ color: theme.text }} className="font-bold">{bill.name}</p>
-                      <p className="text-sm" style={{ color: theme.textM }}>{bill.cat}</p>
+            {viewMode === 'list' ? (
+              bills
+                .filter(b => b.status === 'paid')
+                .map(bill => (
+                  <div
+                    key={bill.id}
+                    style={{ backgroundColor: theme.card, borderColor: theme.border }}
+                    className="border rounded-xl p-5 opacity-50 flex justify-between items-center"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Check className="w-5 h-5" style={{ color: theme.ok }} />
+                      <div>
+                        <p style={{ color: theme.text }} className="font-bold">{bill.name}</p>
+                        <p className="text-sm" style={{ color: theme.textM }}>{bill.cat}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <p style={{ color: '#ef4444' }} className="font-bold">–{fmt(bill.amount)}</p>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => persistBills(bills.map(b =>
+                          b.id === bill.id ? { ...b, status: 'upcoming' as const } : b
+                        ))}
+                        style={{ backgroundColor: theme.textS, color: theme.textM }}
+                        className="px-3 py-1 text-xs rounded hover:opacity-80 transition-colors"
+                      >
+                        Undo
+                      </motion.button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <p style={{ color: '#ef4444' }} className="font-bold">–{fmt(bill.amount)}</p>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => persistBills(bills.map(b =>
-                        b.id === bill.id ? { ...b, status: 'upcoming' as const } : b
-                      ))}
+                ))
+            ) : (
+              <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl overflow-hidden divide-y opacity-60">
+                {bills.filter(b => b.status === 'paid').map(bill => (
+                  <div key={bill.id} className="flex items-center gap-3 px-4 py-3" style={{ borderColor: theme.border }}>
+                    <Check size={14} style={{ color: theme.ok }} />
+                    <p className="text-sm flex-1 truncate" style={{ color: theme.text }}>{bill.name}</p>
+                    <p className="text-sm font-bold" style={{ color: theme.textM }}>–{fmt(bill.amount)}</p>
+                    <button
+                      onClick={() => persistBills(bills.map(b => b.id === bill.id ? { ...b, status: 'upcoming' as const } : b))}
+                      className="text-[10px] px-2 py-0.5 rounded hover:opacity-80 transition-colors"
                       style={{ backgroundColor: theme.textS, color: theme.textM }}
-                      className="px-3 py-1 text-xs rounded hover:opacity-80 transition-colors"
                     >
                       Undo
-                    </motion.button>
+                    </button>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
 
