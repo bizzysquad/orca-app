@@ -6,7 +6,7 @@ import { motion } from 'framer-motion'
 import {
   ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
   DollarSign, Receipt, Palmtree, Calendar,
-  GripVertical, Settings,
+  GripVertical, Settings, Pin, PinOff,
 } from 'lucide-react'
 
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -250,7 +250,7 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
   )
 }
 
-function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, isLast, isReordering, theme }: {
+function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, isLast, isReordering, isPinned, onTogglePin, theme }: {
   id: string
   children: React.ReactNode
   index: number
@@ -259,6 +259,8 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
   isFirst: boolean
   isLast: boolean
   isReordering: boolean
+  isPinned: boolean
+  onTogglePin: (id: string) => void
   theme: any
 }) {
   const sectionLabels: Record<string, string> = {
@@ -277,36 +279,54 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
           animate={{ opacity: 1, x: 0 }}
           className="flex items-center gap-2 mb-2"
         >
-          <div className="flex items-center gap-1">
-            <motion.button
-              whileTap={{ scale: 0.85 }}
-              onClick={() => onMoveUp(index)}
-              disabled={isFirst}
-              style={{
-                backgroundColor: isFirst ? theme.border : theme.gold,
-                color: isFirst ? theme.textM : theme.bgS,
-              }}
-              className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
-            >
-              <ChevronUp size={16} />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.85 }}
-              onClick={() => onMoveDown(index)}
-              disabled={isLast}
-              style={{
-                backgroundColor: isLast ? theme.border : theme.gold,
-                color: isLast ? theme.textM : theme.bgS,
-              }}
-              className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
-            >
-              <ChevronDown size={16} />
-            </motion.button>
-          </div>
-          <span style={{ color: theme.textS }} className="text-sm font-medium">{sectionLabels[id] || id}</span>
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            onClick={() => onTogglePin(id)}
+            style={{
+              backgroundColor: isPinned ? `${theme.gold}30` : theme.border,
+              color: isPinned ? theme.gold : theme.textM,
+              borderColor: isPinned ? theme.gold : theme.border,
+            }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center border"
+            title={isPinned ? 'Unpin from top' : 'Pin to top'}
+          >
+            {isPinned ? <Pin size={14} /> : <PinOff size={14} />}
+          </motion.button>
+          {!isPinned && (
+            <div className="flex items-center gap-1">
+              <motion.button
+                whileTap={{ scale: 0.85 }}
+                onClick={() => onMoveUp(index)}
+                disabled={isFirst}
+                style={{
+                  backgroundColor: isFirst ? theme.border : theme.gold,
+                  color: isFirst ? theme.textM : theme.bgS,
+                }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
+              >
+                <ChevronUp size={16} />
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.85 }}
+                onClick={() => onMoveDown(index)}
+                disabled={isLast}
+                style={{
+                  backgroundColor: isLast ? theme.border : theme.gold,
+                  color: isLast ? theme.textM : theme.bgS,
+                }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
+              >
+                <ChevronDown size={16} />
+              </motion.button>
+            </div>
+          )}
+          <span style={{ color: theme.textS }} className="text-sm font-medium">
+            {sectionLabels[id] || id}
+            {isPinned && <span style={{ color: theme.gold }} className="ml-2 text-xs font-bold">PINNED</span>}
+          </span>
         </motion.div>
       )}
-      <div style={isReordering ? { borderColor: `${theme.gold}40`, borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, padding: 4 } : {}}>
+      <div style={isReordering ? { borderColor: isPinned ? `${theme.gold}60` : `${theme.gold}40`, borderWidth: 1, borderStyle: isPinned ? 'solid' : 'dashed', borderRadius: 12, padding: 4 } : {}}>
         {children}
       </div>
     </motion.div>
@@ -601,19 +621,48 @@ export default function DashboardPage() {
 
   // Drag and drop handlers
   const [isReordering, setIsReordering] = useState(false)
+  const [pinnedSections, setPinnedSections] = useState<string[]>([])
+
+  // Load pinned sections from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('orca-dashboard-pinned')
+      if (saved) setPinnedSections(JSON.parse(saved))
+    } catch {}
+  }, [])
+
+  const handleTogglePin = (id: string) => {
+    setPinnedSections(prev => {
+      const next = prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+      localStorage.setItem('orca-dashboard-pinned', JSON.stringify(next))
+      return next
+    })
+  }
+
+  // Sort sections: pinned first (in their original order), then unpinned
+  const sortedSectionOrder = useMemo(() => {
+    const pinned = sectionOrder.filter(s => pinnedSections.includes(s))
+    const unpinned = sectionOrder.filter(s => !pinnedSections.includes(s))
+    return [...pinned, ...unpinned]
+  }, [sectionOrder, pinnedSections])
 
   const handleMoveUp = (index: number) => {
-    if (index === 0) return
-    const newOrder = [...sectionOrder]
-    ;[newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]]
+    // Find index in the unpinned portion only
+    const unpinned = sortedSectionOrder.filter(s => !pinnedSections.includes(s))
+    const unpinnedIndex = unpinned.indexOf(sortedSectionOrder[index])
+    if (unpinnedIndex <= 0) return
+    ;[unpinned[unpinnedIndex - 1], unpinned[unpinnedIndex]] = [unpinned[unpinnedIndex], unpinned[unpinnedIndex - 1]]
+    const newOrder = [...pinnedSections.filter(s => sectionOrder.includes(s)), ...unpinned]
     setSectionOrder(newOrder)
     localStorage.setItem('orca-dashboard-order', JSON.stringify(newOrder))
   }
 
   const handleMoveDown = (index: number) => {
-    if (index >= sectionOrder.length - 1) return
-    const newOrder = [...sectionOrder]
-    ;[newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]]
+    const unpinned = sortedSectionOrder.filter(s => !pinnedSections.includes(s))
+    const unpinnedIndex = unpinned.indexOf(sortedSectionOrder[index])
+    if (unpinnedIndex < 0 || unpinnedIndex >= unpinned.length - 1) return
+    ;[unpinned[unpinnedIndex], unpinned[unpinnedIndex + 1]] = [unpinned[unpinnedIndex + 1], unpinned[unpinnedIndex]]
+    const newOrder = [...pinnedSections.filter(s => sectionOrder.includes(s)), ...unpinned]
     setSectionOrder(newOrder)
     localStorage.setItem('orca-dashboard-order', JSON.stringify(newOrder))
   }
@@ -622,7 +671,7 @@ export default function DashboardPage() {
     switch (sectionId) {
       case 'financial-cards':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {/* Bills Card */}
               <div className="rounded-2xl p-6 glass-hover" style={{
@@ -668,7 +717,7 @@ export default function DashboardPage() {
 
       case 'spend-paycheck':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {/* Safe to Spend Card */}
               <div className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold" style={{ backgroundColor: theme.card }}>
@@ -747,7 +796,7 @@ export default function DashboardPage() {
 
       case 'calendar':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div variants={fadeUp}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold">Calendar</h2>
@@ -822,7 +871,7 @@ export default function DashboardPage() {
         ].filter(b => b.score > 0)
         const primaryScore = user.creditScore || Math.max(...bureauScores.map(b => b.score), 0)
         return hasAnyScore ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div
               variants={fadeUp}
               className="glass rounded-2xl p-6 cursor-pointer glass-hover depth-1"
@@ -864,7 +913,7 @@ export default function DashboardPage() {
 
       case 'stack-circle':
         return group ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sectionOrder.length - 1} isReordering={isReordering} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div
               variants={fadeUp}
               className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold"
@@ -951,8 +1000,8 @@ export default function DashboardPage() {
           </motion.button>
         </motion.div>
 
-        {/* Render sections in order */}
-        {sectionOrder.map((sectionId, index) => renderSection(sectionId, index))}
+        {/* Render sections in order — pinned first, then unpinned */}
+        {sortedSectionOrder.map((sectionId, index) => renderSection(sectionId, index))}
       </motion.div>
     </div>
   )

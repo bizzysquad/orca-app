@@ -116,10 +116,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDarkState] = useState(true)
   const [adminOverrides, setAdminOverrides] = useState<AdminThemeOverrides | null>(null)
 
-  // Persist dark/light preference
+  // Persist dark/light preference and notify other tabs
   const setIsDark = (v: boolean) => {
     setIsDarkState(v)
-    try { localStorage.setItem('orca-theme-mode', v ? 'dark' : 'light') } catch {}
+    const mode = v ? 'dark' : 'light'
+    try {
+      localStorage.setItem('orca-theme-mode', mode)
+      window.dispatchEvent(new StorageEvent('storage', { key: 'orca-theme-mode', newValue: mode }))
+    } catch {}
   }
 
   // Load persisted theme mode and admin overrides on mount
@@ -128,11 +132,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const mode = localStorage.getItem('orca-theme-mode')
       if (mode === 'light') setIsDarkState(false)
       else if (mode === 'dark') setIsDarkState(true)
+      if (typeof console !== 'undefined') console.log('[ORCA Theme] Loaded mode:', mode || 'dark (default)')
     } catch {}
     try {
       const saved = localStorage.getItem(ADMIN_THEME_KEY)
       if (saved) {
-        setAdminOverrides(JSON.parse(saved))
+        const parsed = JSON.parse(saved)
+        setAdminOverrides(parsed)
+        if (typeof console !== 'undefined') console.log('[ORCA Theme] Loaded admin overrides:', parsed)
       }
     } catch {}
   }, [])
@@ -210,20 +217,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty('--card-bg', theme.card)
     root.style.setProperty('--card-border', theme.border)
     root.style.setProperty('--divider-color', theme.border)
+
+    if (typeof console !== 'undefined') console.log('[ORCA Theme] CSS vars synced — mode:', isDark ? 'dark' : 'light', '| bg:', theme.bg, '| card:', theme.card)
   }, [isDark, theme])
 
   const applyAdminTheme = (overrides: AdminThemeOverrides) => {
     setAdminOverrides(overrides)
+    const json = JSON.stringify(overrides)
     try {
-      localStorage.setItem(ADMIN_THEME_KEY, JSON.stringify(overrides))
+      localStorage.setItem(ADMIN_THEME_KEY, json)
+      // Dispatch StorageEvent for cross-tab sync (same-tab state is already set above)
+      window.dispatchEvent(new StorageEvent('storage', { key: ADMIN_THEME_KEY, newValue: json }))
     } catch {}
+    if (typeof console !== 'undefined') console.log('[ORCA Theme] Admin overrides applied:', overrides)
   }
 
   const resetTheme = () => {
     setAdminOverrides(null)
     try {
       localStorage.removeItem(ADMIN_THEME_KEY)
+      window.dispatchEvent(new StorageEvent('storage', { key: ADMIN_THEME_KEY, newValue: null }))
     } catch {}
+    if (typeof console !== 'undefined') console.log('[ORCA Theme] Theme reset to defaults')
   }
 
   return (

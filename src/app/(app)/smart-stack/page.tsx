@@ -258,15 +258,9 @@ export default function SmartStackPage() {
   const [inlinePayDate, setInlinePayDate] = useState('');
   const hasNetIncome = (parseFloat(inlineNetIncome) || netIncome) > 0;
 
-  // Sync inline Net Income changes to OrcaData context + localStorage
+  // Net Income change — local to Check Projector only, no sync to Dashboard/metrics
   const handleNetIncomeChange = (val: string) => {
     setInlineNetIncome(val);
-    const parsed = parseFloat(val) || 0;
-    if (parsed > 0) {
-      const updatedUser = { ...data.user, netIncome: parsed };
-      setData(prev => ({ ...prev, user: updatedUser }));
-      try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)); } catch {}
-    }
   };
 
   // Custom pay period dates (user-defined start/end)
@@ -521,10 +515,6 @@ export default function SmartStackPage() {
       return dd >= period.start && dd <= period.end;
     });
 
-    // Bills deduction
-    const billsTotal = (data.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
-    const afterBills = projectedCheckAmount - billsTotal;
-
     // Calculate income reduction from days off
     const fullCheckIncome = effectiveNetIncome;
     const incomeReduction = fullCheckIncome - projectedCheckAmount;
@@ -766,21 +756,6 @@ export default function SmartStackPage() {
               </p>
             )}
           </div>
-
-          {/* Bills Deduction */}
-          {hasNetIncome && billsTotal > 0 && (
-            <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p style={{ color: theme.textS }} className="text-sm font-semibold uppercase">After Bills</p>
-                <p style={{ color: afterBills >= 0 ? '#22c55e' : '#ef4444' }} className="text-xl font-bold">
-                  {fmt(afterBills)}
-                </p>
-              </div>
-              <p style={{ color: theme.textM }} className="text-xs">
-                {fmt(projectedCheckAmount)} projected – {fmt(billsTotal)} bills = {fmt(afterBills)}
-              </p>
-            </div>
-          )}
 
         </div>
       </motion.div>
