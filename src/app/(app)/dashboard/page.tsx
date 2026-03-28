@@ -550,16 +550,51 @@ export default function DashboardPage() {
         }
       } catch {}
 
-      // Add payment projection entries
+      // Add Incoming Payment entries (expand recurring into visible month)
       try {
         const savedPayments = localStorage.getItem('orca-payment-entries')
         if (savedPayments) {
           const payments = JSON.parse(savedPayments)
           payments.forEach((p: any) => {
-            if (p.date) {
-              const pd = new Date(p.date + 'T00:00:00')
-              if (pd.getMonth() === calMonth && pd.getFullYear() === calYear) {
-                events.push({ date: pd.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
+            if (!p.date) return
+            const baseDate = new Date(p.date + 'T00:00:00')
+            const recurrence = p.recurrence || 'none'
+
+            if (recurrence === 'none') {
+              // One-time: show only if in viewed month
+              if (baseDate.getMonth() === calMonth && baseDate.getFullYear() === calYear) {
+                events.push({ date: baseDate.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
+              }
+            } else {
+              // Recurring: generate occurrences for the viewed month
+              const intervalDays = recurrence === 'weekly' ? 7 : recurrence === 'biweekly' ? 14 : 0
+              const monthStart = new Date(calYear, calMonth, 1)
+              const monthEnd = new Date(calYear, calMonth + 1, 0)
+
+              if (recurrence === 'monthly') {
+                // Monthly: same day each month (clamped to month length)
+                const day = Math.min(baseDate.getDate(), monthEnd.getDate())
+                const candidate = new Date(calYear, calMonth, day)
+                if (candidate >= baseDate) {
+                  events.push({ date: candidate.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
+                }
+              } else if (intervalDays > 0) {
+                // Weekly / biweekly: step from base date into the viewed month
+                const cursor = new Date(baseDate)
+                // Fast-forward to near the month start
+                if (cursor < monthStart) {
+                  const daysGap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
+                  cursor.setDate(cursor.getDate() + daysGap)
+                }
+                // Step backward once in case we overshot
+                while (cursor > monthEnd) cursor.setDate(cursor.getDate() - intervalDays)
+                // Walk forward and collect hits
+                while (cursor <= monthEnd) {
+                  if (cursor >= monthStart && cursor >= baseDate) {
+                    events.push({ date: cursor.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
+                  }
+                  cursor.setDate(cursor.getDate() + intervalDays)
+                }
               }
             }
           })

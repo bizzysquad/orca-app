@@ -11,6 +11,7 @@ import { setLocalSynced } from '@/lib/syncLocal'
 
 import type { Bill, BillAlloc, RentEntry, BillRecurrence, RecurrenceEndType } from '@/lib/types'
 import WheelDatePicker from '@/components/WheelDatePicker'
+import CalendarPicker from '@/components/CalendarPicker'
 
 const CATEGORIES = [
   'Housing',
@@ -912,15 +913,12 @@ export default function BillBossPage() {
               </div>
 
               {formData.recurrenceEndType === 'after-date' && (
-                <input
-                  type="date"
+                <CalendarPicker
+                  value={formData.recurrenceEndDate || ''}
+                  onChange={(date) => setFormData({ ...formData, recurrenceEndDate: date })}
                   placeholder="End Date"
-                  value={formData.recurrenceEndDate}
-                  onChange={(e) => setFormData({ ...formData, recurrenceEndDate: e.target.value })}
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
-                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
+                  theme={theme}
+                  showQuickSelect={false}
                 />
               )}
 
