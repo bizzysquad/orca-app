@@ -229,15 +229,15 @@ export default function TaskListPage() {
   }
 
   return (
-    <div style={{ color: theme.text }} className="space-y-6">
+    <div style={{ color: theme.text }} className="space-y-4 sm:space-y-6 max-w-full overflow-x-hidden">
       {/* Header */}
       <div>
-        <h1 style={{ color: theme.text }} className="text-2xl font-bold">Task List & Reminders</h1>
-        <p style={{ color: theme.textM }} className="text-sm mt-1">Stay organized with notes, tasks, groceries, and meetings</p>
+        <h1 style={{ color: theme.text }} className="text-xl sm:text-2xl font-bold">Task List & Reminders</h1>
+        <p style={{ color: theme.textM }} className="text-xs sm:text-sm mt-1">Stay organized with notes, tasks, groceries, and meetings</p>
       </div>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         {(Object.keys(categoryConfig) as TaskCategory[]).map(cat => {
           const config = categoryConfig[cat]
           const Icon = config.icon
@@ -252,14 +252,14 @@ export default function TaskListPage() {
                 borderColor: activeCategory === cat ? theme.gold : theme.border,
                 backgroundColor: activeCategory === cat ? theme.goldBg : theme.bgS,
               }}
-              className="flex items-center gap-3 p-3 rounded-xl border transition-all hover:opacity-80"
+              className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl border transition-all hover:opacity-80 min-w-0"
             >
-              <div style={{ backgroundColor: bgColor }} className="p-2 rounded-lg">
-                <Icon size={16} style={{ color }} />
+              <div style={{ backgroundColor: bgColor }} className="p-1.5 sm:p-2 rounded-lg flex-shrink-0">
+                <Icon size={14} className="sm:w-4 sm:h-4" style={{ color }} />
               </div>
-              <div className="text-left">
-                <p style={{ color: theme.text }} className="text-lg font-bold">{count}</p>
-                <p style={{ color: theme.textM }} className="text-[10px] uppercase tracking-wider">{config.label}</p>
+              <div className="text-left min-w-0">
+                <p style={{ color: theme.text }} className="text-base sm:text-lg font-bold">{count}</p>
+                <p style={{ color: theme.textM }} className="text-[9px] sm:text-[10px] uppercase tracking-wider truncate">{config.label}</p>
               </div>
             </button>
           )
@@ -347,7 +347,7 @@ export default function TaskListPage() {
           )}
 
           {/* Notes Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             {notes.map(note => (
               <div
                 key={note.id}
@@ -355,7 +355,7 @@ export default function TaskListPage() {
                   backgroundColor: note.color,
                   borderColor: theme.border,
                 }}
-                className="border rounded-xl p-4 group"
+                className="border rounded-xl p-3 sm:p-4 group"
               >
                 <div className="flex items-start justify-between mb-2">
                   <h3 style={{ color: theme.text }} className="text-sm font-bold">{note.title}</h3>
@@ -379,7 +379,7 @@ export default function TaskListPage() {
       {activeCategory !== 'notes' && (
         <div className="space-y-4">
           {/* Add Task Input */}
-          <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-3">
+          <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-2.5 sm:p-3">
             <div className="flex gap-2">
               <input
                 type="text"
@@ -391,20 +391,20 @@ export default function TaskListPage() {
                   backgroundColor: 'transparent',
                   color: theme.text,
                 }}
-                className="flex-1 placeholder-opacity-50 focus:outline-none text-sm"
+                className="flex-1 min-w-0 placeholder-opacity-50 focus:outline-none text-sm"
               />
               <button
                 onClick={addTask}
                 disabled={!newTaskText.trim()}
                 style={{ backgroundColor: theme.gold, color: theme.bg }}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 flex-shrink-0"
               >
                 <Plus size={14} /> Add
               </button>
             </div>
             {/* Options row */}
-            <div style={{ borderTopColor: theme.border }} className="flex items-center gap-3 mt-2 pt-2 border-t">
-              <div className="flex items-center gap-1.5">
+            <div style={{ borderTopColor: theme.border }} className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2 pt-2 border-t">
+              <div className="flex items-center gap-1">
                 <span style={{ color: theme.textM }} className="text-[10px]">Priority:</span>
                 {(['low', 'medium', 'high'] as TaskPriority[]).map(p => (
                   <button
@@ -421,7 +421,7 @@ export default function TaskListPage() {
                 ))}
               </div>
               {activeCategory !== 'groceries' && (
-                <div className="w-40">
+                <div className="w-32 sm:w-40">
                   <CalendarPicker
                     value={newTaskDue}
                     onChange={setNewTaskDue}
@@ -443,7 +443,7 @@ export default function TaskListPage() {
             }).map(task => {
               const due = formatDueDate(task.dueDate)
               return (
-                <div key={task.id} style={{ color: theme.text }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.02] group transition-all">
+                <div key={task.id} style={{ color: theme.text }} className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl hover:bg-white/[0.02] group transition-all">
                   <button
                     onClick={() => toggleTask(task.id)}
                     style={{
@@ -454,7 +454,7 @@ export default function TaskListPage() {
                     {task.completed && <Check size={12} style={{ color: theme.gold }} />}
                   </button>
                   <div style={{ backgroundColor: getPriorityColor(task.priority) }} className="w-1.5 h-1.5 rounded-full flex-shrink-0" />
-                  <span className="flex-1 text-sm truncate">{task.text}</span>
+                  <span className="flex-1 text-xs sm:text-sm truncate min-w-0">{task.text}</span>
                   {due && (
                     <span style={{ color: due.className.includes('bad') ? theme.bad : due.className.includes('gold') ? theme.gold : theme.textM }} className="text-[10px] flex items-center gap-1">
                       {due.text === 'Overdue' ? <AlertCircle size={10} /> : <Clock size={10} />}
@@ -503,7 +503,7 @@ export default function TaskListPage() {
               {showCompleted && (
                 <div style={{ color: theme.textM, opacity: 0.6 }} className="space-y-1">
                   {completedTasks.map(task => (
-                    <div key={task.id} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/[0.02] group transition-all">
+                    <div key={task.id} className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 rounded-xl hover:bg-white/[0.02] group transition-all">
                       <button
                         onClick={() => toggleTask(task.id)}
                         style={{
@@ -514,7 +514,7 @@ export default function TaskListPage() {
                       >
                         <Check size={12} style={{ color: theme.gold }} />
                       </button>
-                      <span className="flex-1 text-sm line-through truncate">{task.text}</span>
+                      <span className="flex-1 text-xs sm:text-sm line-through truncate min-w-0">{task.text}</span>
                       <button
                         onClick={() => deleteTask(task.id)}
                         style={{ color: theme.border }}

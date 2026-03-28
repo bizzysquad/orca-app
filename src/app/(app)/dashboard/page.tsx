@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
-  DollarSign, Receipt, Palmtree, Calendar, Home,
-  GripVertical, Settings, Pin, PinOff, PiggyBank, Wallet,
+  DollarSign, Receipt, Palmtree, Calendar,
+  GripVertical, Pin, PinOff, PiggyBank, Wallet,
 } from 'lucide-react'
 
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -403,10 +403,10 @@ export default function DashboardPage() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [spendView, setSpendView] = useState<'weekly' | 'daily'>('weekly')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [selectedWeekDay, setSelectedWeekDay] = useState<Date | null>(null)
   const [sectionOrder, setSectionOrder] = useState<string[]>([
     'financial-cards',
     'spend-paycheck',
-    'rent-tracker',
     'calendar',
     'credit-score',
     'stack-circle',
@@ -414,7 +414,7 @@ export default function DashboardPage() {
 
   // Load section order from localStorage — merge in any new sections that were added
   useEffect(() => {
-    const defaultSections = ['financial-cards', 'spend-paycheck', 'rent-tracker', 'calendar', 'credit-score', 'stack-circle']
+    const defaultSections = ['financial-cards', 'spend-paycheck', 'calendar', 'credit-score', 'stack-circle']
     const saved = localStorage.getItem('orca-dashboard-order')
     if (saved) {
       try {
@@ -638,36 +638,6 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals, syncReady])
 
-  // Rent tracker data
-  const rentTracker = useMemo(() => {
-    const rentAmount = user.rentAmount || 0
-    if (rentAmount <= 0) return null
-    // Check for rent-specific savings or payment entries marked for rent
-    let savedTowardRent = 0
-    try {
-      if (typeof window !== 'undefined') {
-        const savedAccounts = localStorage.getItem('orca-savings-accounts')
-        if (savedAccounts) {
-          const accounts = JSON.parse(savedAccounts)
-          const rentAcct = accounts.find((a: any) => a.name?.toLowerCase().includes('rent'))
-          if (rentAcct) savedTowardRent = rentAcct.amount || 0
-        }
-      }
-    } catch {}
-    // Also check rent entries for current month
-    const currentMonth = new Date().toISOString().slice(0, 7)
-    const currentRent = data.rent?.find(r => r.month === currentMonth)
-    const isPaid = currentRent?.status === 'paid'
-    return {
-      total: rentAmount,
-      saved: isPaid ? rentAmount : savedTowardRent,
-      remaining: isPaid ? 0 : Math.max(0, rentAmount - savedTowardRent),
-      isPaid,
-      dueDay: 1, // Typically 1st of month
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.rentAmount, data.rent, syncReady])
-
   // Stack Circle stats from localStorage (all groups)
   const stackCircleStats = useMemo(() => {
     const allGroups: any[] = []
@@ -825,6 +795,96 @@ export default function DashboardPage() {
       return d
     })
   }, [weekOffset])
+
+  // Build events scoped to the visible week (handles cross-month weeks)
+  const weeklyEvents = useMemo(() => {
+    if (!weekDates.length) return new Map<string, CalendarEvent[]>()
+    const weekStart = weekDates[0]
+    const weekEnd = weekDates[6]
+    const dateKey = (d: Date) => d.toISOString().slice(0, 10)
+    const inWeek = (d: Date) => d >= weekStart && d <= weekEnd
+    const map = new Map<string, CalendarEvent[]>()
+    weekDates.forEach(d => map.set(dateKey(d), []))
+
+    const pushEv = (d: Date, ev: CalendarEvent) => {
+      const k = dateKey(d)
+      if (map.has(k)) map.get(k)!.push(ev)
+    }
+
+    // Bills
+    bills.forEach(bill => {
+      const d = new Date(bill.due + 'T00:00:00')
+      if (inWeek(d)) pushEv(d, { date: d.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+    })
+
+    // Tasks
+    if (typeof window !== 'undefined') {
+      const seenTasks = new Set<string>()
+      const allTasks: any[] = []
+      try { const s = localStorage.getItem('orca-tasks'); if (s) allTasks.push(...JSON.parse(s)) } catch {}
+      if ((window as any).__ORCA_TASKS) allTasks.push(...(window as any).__ORCA_TASKS)
+      allTasks.forEach((task: any) => {
+        if (task.dueDate) {
+          const td = new Date(task.dueDate + 'T00:00:00')
+          if (inWeek(td)) {
+            const label = task.title || task.name || task.text || 'Task'
+            const key = `${dateKey(td)}-${label}`
+            if (!seenTasks.has(key)) { seenTasks.add(key); pushEv(td, { date: td.getDate(), type: 'task', label }) }
+          }
+        }
+      })
+
+      // Groups
+      try {
+        const sg = localStorage.getItem('orca-stack-circle-groups')
+        if (sg) JSON.parse(sg).forEach((g: any) => {
+          if (g.date) { const gd = new Date(g.date + 'T00:00:00'); if (inWeek(gd)) pushEv(gd, { date: gd.getDate(), type: 'group', label: g.customName || g.name || 'Stack Circle' }) }
+        })
+      } catch {}
+
+      // Payments
+      try {
+        const sp = localStorage.getItem('orca-payment-entries')
+        if (sp) JSON.parse(sp).forEach((p: any) => {
+          if (!p.date) return
+          const base = new Date(p.date + 'T00:00:00')
+          const rec = p.recurrence || 'none'
+          if (rec === 'none') { if (inWeek(base)) pushEv(base, { date: base.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount }) }
+          else if (rec === 'monthly') {
+            // Check if this month's occurrence falls in the week
+            weekDates.forEach(wd => {
+              const candidate = new Date(wd.getFullYear(), wd.getMonth(), Math.min(base.getDate(), new Date(wd.getFullYear(), wd.getMonth() + 1, 0).getDate()))
+              if (candidate >= base && dateKey(candidate) === dateKey(wd)) pushEv(candidate, { date: candidate.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
+            })
+          } else {
+            const interval = rec === 'weekly' ? 7 : rec === 'biweekly' ? 14 : 0
+            if (interval > 0) {
+              const cursor = new Date(base)
+              if (cursor < weekStart) {
+                const gap = Math.floor((weekStart.getTime() - cursor.getTime()) / (86400000 * interval)) * interval
+                cursor.setDate(cursor.getDate() + gap)
+              }
+              while (cursor <= weekEnd) {
+                if (cursor >= weekStart && cursor >= base) pushEv(new Date(cursor), { date: cursor.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
+                cursor.setDate(cursor.getDate() + interval)
+              }
+            }
+          }
+        })
+      } catch {}
+    }
+
+    if (group?.date) {
+      const gd = new Date(group.date + 'T00:00:00')
+      if (inWeek(gd)) {
+        const k = dateKey(gd)
+        if (map.has(k) && !map.get(k)!.some(e => e.type === 'group')) pushEv(gd, { date: gd.getDate(), type: 'group', label: `${group.name} Event` })
+      }
+    }
+
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekDates, bills, group, syncReady, localWriteTick])
 
   const upcomingEvents = useMemo(() => {
     return calendarEvents
@@ -1084,58 +1144,6 @@ export default function DashboardPage() {
           </DraggableSection>
         )
 
-      case 'rent-tracker':
-        return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <motion.div variants={fadeUp} className="glass rounded-2xl p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Home size={18} style={{ color: theme.gold }} />
-                  <p className="text-base font-semibold" style={{ color: theme.text }}>Rent Tracker</p>
-                </div>
-                {rentTracker?.isPaid && (
-                  <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>PAID</span>
-                )}
-              </div>
-              {rentTracker ? (
-                <>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: theme.textM }}>Saved Toward Rent</p>
-                      <p className="text-2xl font-bold" style={{ color: rentTracker.isPaid ? '#22c55e' : theme.gold }}>{fmt(rentTracker.saved)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: theme.textM }}>Remaining</p>
-                      <p className="text-2xl font-bold" style={{ color: rentTracker.remaining > 0 ? '#ef4444' : '#22c55e' }}>{fmt(rentTracker.remaining)}</p>
-                    </div>
-                  </div>
-                  <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: `${theme.border}60` }}>
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${Math.min((rentTracker.saved / rentTracker.total) * 100, 100)}%`,
-                        backgroundColor: rentTracker.isPaid ? '#22c55e' : theme.gold,
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs mt-2" style={{ color: theme.textM }}>
-                    {fmt(rentTracker.saved)} of {fmt(rentTracker.total)} rent
-                    {!rentTracker.isPaid && rentTracker.remaining > 0 && ` · ${fmt(rentTracker.remaining)} to go`}
-                  </p>
-                </>
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-sm mb-2" style={{ color: theme.textM }}>No rent amount configured yet</p>
-                  <Link href="/settings" className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg transition-all hover:opacity-80" style={{ backgroundColor: `${theme.gold}15`, color: theme.gold }}>
-                    <Settings size={14} />
-                    Set Up in Settings
-                  </Link>
-                </div>
-              )}
-            </motion.div>
-          </DraggableSection>
-        )
-
       case 'calendar':
         return (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
@@ -1169,29 +1177,39 @@ export default function DashboardPage() {
               {calendarView === 'weekly' ? (
                 <div className="glass rounded-2xl p-4 sm:p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
                   <div className="flex items-center justify-between mb-4">
-                    <button onClick={() => setWeekOffset(w => w - 1)} className="p-2 rounded-lg hover:opacity-70 transition-opacity" style={{ color: theme.textS }}>
+                    <button onClick={() => { setWeekOffset(w => w - 1); setSelectedWeekDay(null) }} className="p-2 rounded-lg hover:opacity-70 transition-opacity" style={{ color: theme.textS }}>
                       <ChevronLeft size={18} />
                     </button>
                     <p className="font-semibold text-sm" style={{ color: theme.text }}>
                       {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </p>
-                    <button onClick={() => setWeekOffset(w => w + 1)} className="p-2 rounded-lg hover:opacity-70 transition-opacity" style={{ color: theme.textS }}>
+                    <button onClick={() => { setWeekOffset(w => w + 1); setSelectedWeekDay(null) }} className="p-2 rounded-lg hover:opacity-70 transition-opacity" style={{ color: theme.textS }}>
                       <ChevronRight size={18} />
                     </button>
                   </div>
                   <div className="grid grid-cols-7 gap-1">
                     {weekDates.map((date, i) => {
                       const isToday = date.toDateString() === new Date().toDateString()
-                      const dayEvents = calendarEvents.filter(e => e.date === date.getDate() && date.getMonth() === calMonth && date.getFullYear() === calYear)
+                      const dateKey = date.toISOString().slice(0, 10)
+                      const dayEvents = weeklyEvents.get(dateKey) || []
+                      const isSelected = selectedWeekDay?.toISOString().slice(0, 10) === dateKey
                       return (
-                        <div key={i} className="text-center p-2 rounded-lg" style={{ backgroundColor: isToday ? `${theme.gold}20` : 'transparent', border: isToday ? `1px solid ${theme.gold}` : 'none' }}>
+                        <div
+                          key={i}
+                          onClick={() => setSelectedWeekDay(isSelected ? null : date)}
+                          className="text-center p-2 rounded-lg cursor-pointer transition-all"
+                          style={{
+                            backgroundColor: isToday ? `${theme.gold}20` : isSelected ? `${theme.gold}10` : 'transparent',
+                            border: isToday ? `1px solid ${theme.gold}` : isSelected ? `1px solid ${theme.gold}50` : '1px solid transparent',
+                          }}
+                        >
                           <p className="text-[10px] font-semibold mb-1" style={{ color: theme.textM }}>
                             {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]}
                           </p>
-                          <p className="text-sm font-bold mb-1" style={{ color: isToday ? theme.gold : theme.text }}>{date.getDate()}</p>
+                          <p className="text-sm font-bold mb-1" style={{ color: isToday ? theme.gold : isSelected ? theme.gold : theme.text }}>{date.getDate()}</p>
                           {dayEvents.length > 0 && (
                             <div className="flex justify-center gap-0.5">
-                              {dayEvents.slice(0, 2).map((ev, j) => {
+                              {dayEvents.slice(0, 3).map((ev, j) => {
                                 const eventColor = ev.type === 'paycheck' ? '#22c55e' : ev.type === 'bill' ? '#ef4444' : ev.type === 'dayoff' ? '#3b82f6' : ev.type === 'task' ? '#a855f7' : ev.type === 'group' ? '#f97316' : theme.textM
                                 return (
                                   <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: eventColor }} />
@@ -1203,6 +1221,61 @@ export default function DashboardPage() {
                       )
                     })}
                   </div>
+
+                  {/* Legend */}
+                  <div className="flex flex-wrap gap-3 sm:gap-4 mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
+                    {[
+                      { color: '#22c55e', label: 'Payment' },
+                      { color: '#ef4444', label: 'Bill Due' },
+                      { color: '#3b82f6', label: 'Day Off' },
+                      { color: '#a855f7', label: 'Task' },
+                      { color: '#f97316', label: 'Group' },
+                    ].map(l => (
+                      <div key={l.label} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: l.color }} />
+                        <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>{l.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Selected day detail panel */}
+                  {selectedWeekDay && (() => {
+                    const dk = selectedWeekDay.toISOString().slice(0, 10)
+                    const dayEvs = weeklyEvents.get(dk) || []
+                    const eventDot = (type: string) => type === 'paycheck' ? '#22c55e' : type === 'bill' ? '#ef4444' : type === 'dayoff' ? '#3b82f6' : type === 'task' ? '#a855f7' : type === 'group' ? '#f97316' : theme.textM
+                    return (
+                      <div className="mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-sm font-semibold" style={{ color: theme.text }}>
+                            {selectedWeekDay.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                          </p>
+                          <button onClick={() => setSelectedWeekDay(null)} className="text-xs" style={{ color: theme.textS }}>Close</button>
+                        </div>
+                        {dayEvs.length > 0 ? (
+                          <div className="space-y-2">
+                            {dayEvs.map((ev, i) => (
+                              <div key={i} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: `${theme.border}40` }}>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: eventDot(ev.type) }} />
+                                  <div>
+                                    <p className="text-sm font-medium" style={{ color: theme.text }}>{ev.label}</p>
+                                    <p className="text-xs capitalize" style={{ color: theme.textM }}>{ev.type}</p>
+                                  </div>
+                                </div>
+                                {ev.amount && (
+                                  <p className="text-sm font-bold" style={{ color: eventDot(ev.type) }}>
+                                    {ev.type === 'bill' ? '-' : '+'}{fmt(ev.amount)}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm" style={{ color: theme.textM }}>No events scheduled</p>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               ) : (
                 <MonthlyCalendar
