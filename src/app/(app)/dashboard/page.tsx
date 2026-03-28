@@ -16,10 +16,8 @@ import { useTheme } from '@/context/ThemeContext'
 import type { Bill } from '@/lib/types'
 import {
   calcSafeToSpend,
-  paycheckToEvents,
   paymentsToEvents,
   getNextCycleDate,
-  type PaycheckConfig,
   type IncomingPayment,
 } from '@/lib/income-engine'
 
@@ -419,34 +417,14 @@ export default function DashboardPage() {
   }
 
   const allocation = useMemo(() => calcAlloc(income, bills, goals), [income, bills, goals])
-  const paycheckAmt = useMemo(() => {
-    return user.netIncome && user.netIncome > 0 ? user.netIncome : 0
-  }, [user])
 
-  // Date-aware Safe to Spend using the income engine
-  const incomeMode = user.incomeMode || 'paycheck'
-
+  // Safe to Spend — single source of truth: Incoming Payments only
   const safeToSpendResult = useMemo(() => {
-    const mode = user.incomeMode || 'paycheck'
     const buffer = user.safeToSpendBuffer || 0
     const savingsPerCycle = goals
       .filter(g => g.active && g.current < g.target)
       .reduce((sum, g) => sum + (g.cVal || 0), 0)
 
-    if (mode === 'paycheck' && user.nextPay && parseFloat(user.payRate) > 0) {
-      const config: PaycheckConfig = {
-        amount: user.netIncome || parseFloat(user.payRate) || 0,
-        frequency: (user.payFreq || 'biweekly') as any,
-        nextPayDate: user.nextPay,
-        hoursPerDay: parseInt(user.hoursPerDay) || 8,
-        daysPerWeek: 5,
-      }
-      const events = paycheckToEvents(config, 6)
-      const nextCycle = getNextCycleDate('paycheck', config)
-      return calcSafeToSpend(events, bills, savingsPerCycle, buffer, nextCycle)
-    }
-
-    // Flexible mode or fallback
     let payments: IncomingPayment[] = data.incomingPayments || []
     if (payments.length === 0 && typeof window !== 'undefined') {
       try {
@@ -457,7 +435,8 @@ export default function DashboardPage() {
     const events = paymentsToEvents(payments)
     const nextCycle = getNextCycleDate('flexible', undefined, payments)
     return calcSafeToSpend(events, bills, savingsPerCycle, buffer, nextCycle)
-  }, [user, bills, goals, data.incomingPayments])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.safeToSpendBuffer, bills, goals, data.incomingPayments, syncReady])
 
   const safeToSpend = useMemo(() => ({
     weekly: safeToSpendResult.weekly,
@@ -517,20 +496,9 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncReady])
 
-  // Build calendar events for the selected month
+  // Build calendar events for the selected month — Incoming Payments are the only income source
   const calendarEvents = useMemo(() => {
     const events: CalendarEvent[] = []
-
-    if (user.nextPay) {
-      const nextPayDate = new Date(user.nextPay + 'T00:00:00')
-      for (let i = -8; i <= 8; i++) {
-        const d = new Date(nextPayDate)
-        d.setDate(d.getDate() + i * 14)
-        if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
-          events.push({ date: d.getDate(), type: 'paycheck', label: 'Payment', amount: paycheckAmt })
-        }
-      }
-    }
 
     bills.forEach(bill => {
       const d = new Date(bill.due + 'T00:00:00')
@@ -611,7 +579,7 @@ export default function DashboardPage() {
 
     return events
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calMonth, calYear, bills, user.nextPay, paycheckAmt, group, syncReady])
+  }, [calMonth, calYear, bills, group, syncReady])
 
   const upcomingEvents = useMemo(() => {
     return calendarEvents
@@ -756,11 +724,9 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              {/* Next Income Card — mode-aware */}
+              {/* Next Payment Card — sourced exclusively from Incoming Payments */}
               <div className="glass rounded-2xl p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
-                <p className="text-sm mb-2" style={{ color: theme.textS }}>
-                  {user.incomeMode === 'flexible' ? 'Incoming Payments' : 'Next Check'}
-                </p>
+                <p className="text-sm mb-2" style={{ color: theme.textS }}>Next Payment</p>
                 {nextIncomingPayment ? (
                   <>
                     <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
@@ -770,22 +736,13 @@ export default function DashboardPage() {
                       {nextIncomingPayment.description} · {fmtD(nextIncomingPayment.date)} · {daysTo(nextIncomingPayment.date)}d
                     </p>
                   </>
-                ) : paycheckAmt > 0 ? (
-                  <>
-                    <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
-                      +{fmt(paycheckAmt)}
-                    </p>
-                    <p className="text-sm" style={{ color: theme.textM }}>
-                      {user.nextPay ? `${fmtD(user.nextPay)} · ${daysTo(user.nextPay)}d` : 'Net Income per pay period'}
-                    </p>
-                  </>
                 ) : (
                   <>
                     <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: theme.textM }}>
                       $0.00
                     </p>
                     <p className="text-sm" style={{ color: theme.textM }}>
-                      Set Net Income in Settings
+                      Add a payment in Smart Stack
                     </p>
                   </>
                 )}
