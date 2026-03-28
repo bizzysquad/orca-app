@@ -465,22 +465,38 @@ export default function AdminPage() {
     refetchMetrics()
   }, [adminAuthenticated])
 
-  // Navigation states — load from localStorage, fall back to defaults
+  // Navigation states — load from localStorage, auto-merge missing items, fall back to defaults
   const [navItems, setNavItems] = useState<NavItem[]>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('orca-admin-nav')
-        if (saved) return JSON.parse(saved)
+        if (saved) {
+          const parsed: NavItem[] = JSON.parse(saved)
+          // Auto-merge any items from DEFAULT_NAV that are missing in saved config
+          let merged = [...parsed]
+          let changed = false
+          DEFAULT_NAV.forEach(def => {
+            if (!merged.some(n => n.id === def.id)) {
+              merged.push({ ...def, order: merged.length + 1 })
+              changed = true
+            }
+          })
+          if (changed) {
+            localStorage.setItem('orca-admin-nav', JSON.stringify(merged))
+          }
+          return merged
+        }
       } catch {}
     }
     return DEFAULT_NAV
   })
   const [editingNavItem, setEditingNavItem] = useState<string | null>(null)
 
-  // Persist nav changes to localStorage and broadcast
+  // Persist nav changes to localStorage and broadcast to all components in real time
   useEffect(() => {
     try {
       localStorage.setItem('orca-admin-nav', JSON.stringify(navItems))
+      // Dispatch both events for immediate same-tab sync + cloud sync
       window.dispatchEvent(new CustomEvent('orca-local-write', { detail: { key: 'orca-admin-nav' } }))
       window.dispatchEvent(new CustomEvent('orca-nav-updated', { detail: { navItems } }))
     } catch {}
