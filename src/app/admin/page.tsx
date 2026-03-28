@@ -164,6 +164,9 @@ const DEFAULT_NAV: NavItem[] = [
   { id: 'settings', label: 'Settings', order: 6, visible: true },
 ]
 
+// Admin settings localStorage key
+const ADMIN_SETTINGS_KEY = 'orca-admin-settings'
+
 // Tabs Configuration — grouped to fit without scrolling
 const TABS = [
   { id: 'users', label: 'Users', icon: Users },
@@ -438,6 +441,15 @@ export default function AdminPage() {
   ])
   const [alertThresholds, setAlertThresholds] = useState({ budget: 80, churn: 15 })
 
+  // Layout & UI controls
+  const [layoutStyle, setLayoutStyle] = useState<'sidebar' | 'topnav' | 'hybrid'>('sidebar')
+  const [buttonPlacements, setButtonPlacements] = useState({
+    settingsBtn: 'sidebar-bottom' as 'sidebar-bottom' | 'topbar-right' | 'hidden',
+    themeToggle: 'settings-page' as 'topbar-right' | 'sidebar-bottom' | 'settings-page' | 'hidden',
+    homeBtn: 'sidebar-top' as 'sidebar-top' | 'topbar-left' | 'hidden',
+  })
+  const [defaultUserTheme, setDefaultUserTheme] = useState<string>('ocean-blue')
+
   // Module states
   const [modules, setModules] = useState([
     { id: 'smart-stack', name: 'Smart Stack', enabled: true },
@@ -464,6 +476,41 @@ export default function AdminPage() {
     if (!adminAuthenticated) return
     refetchMetrics()
   }, [adminAuthenticated])
+
+  // Load persisted admin settings from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(ADMIN_SETTINGS_KEY)
+      if (!saved) return
+      const s = JSON.parse(saved)
+      if (s.trialDuration !== undefined) setTrialDuration(s.trialDuration)
+      if (s.trialSlots !== undefined) setTrialSlots(s.trialSlots)
+      if (s.monthlyPrice !== undefined) setMonthlyPrice(s.monthlyPrice)
+      if (s.yearlyPrice !== undefined) setYearlyPrice(s.yearlyPrice)
+      if (s.stripeLive !== undefined) setStripeLive(s.stripeLive)
+      if (s.appName !== undefined) setAppName(s.appName)
+      if (s.tagline !== undefined) setTagline(s.tagline)
+      if (s.maintenanceMode !== undefined) setMaintenanceMode(s.maintenanceMode)
+      if (s.signupsEnabled !== undefined) setSignupsEnabled(s.signupsEnabled)
+      if (s.maxUsers !== undefined) setMaxUsers(s.maxUsers)
+      if (s.defaultSafeToSpendBuffer !== undefined) setDefaultSafeToSpendBuffer(s.defaultSafeToSpendBuffer)
+      if (s.budgetCategories) setBudgetCategories(s.budgetCategories)
+      if (s.alertThresholds) setAlertThresholds(s.alertThresholds)
+      if (s.featureFlags) setFeatureFlags(s.featureFlags)
+      if (s.onboardingText !== undefined) setOnboardingText(s.onboardingText)
+      if (s.moduleConfigs) setModuleConfigs(s.moduleConfigs)
+      if (s.modules) setModules(s.modules)
+      if (s.twoFARequired !== undefined) setTwoFARequired(s.twoFARequired)
+      if (s.sessionTimeout !== undefined) setSessionTimeout(s.sessionTimeout)
+      if (s.ipWhitelist !== undefined) setIpWhitelist(s.ipWhitelist)
+      if (s.fraudMonitoring !== undefined) setFraudMonitoring(s.fraudMonitoring)
+      if (s.adminRoles) setAdminRoles(s.adminRoles)
+      if (s.notifTemplates) setNotifTemplates(s.notifTemplates)
+      if (s.layoutStyle) setLayoutStyle(s.layoutStyle)
+      if (s.buttonPlacements) setButtonPlacements(s.buttonPlacements)
+      if (s.defaultUserTheme) setDefaultUserTheme(s.defaultUserTheme)
+    } catch {}
+  }, [])
 
   // Navigation states — load from localStorage, auto-merge missing items, fall back to defaults
   const [navItems, setNavItems] = useState<NavItem[]>(() => {
@@ -752,7 +799,43 @@ export default function AdminPage() {
     }
   }
 
+  // Collect all admin settings into a single object for persistence
+  const collectAdminSettings = () => ({
+    trialDuration, trialSlots, monthlyPrice, yearlyPrice, stripeLive,
+    appName, tagline, maintenanceMode, signupsEnabled, maxUsers,
+    defaultSafeToSpendBuffer, budgetCategories, alertThresholds,
+    featureFlags, onboardingText, moduleConfigs, modules,
+    twoFARequired, sessionTimeout, ipWhitelist, fraudMonitoring,
+    adminRoles, notifTemplates, layoutStyle, buttonPlacements, defaultUserTheme,
+  })
+
+  const persistAdminSettings = () => {
+    try {
+      const settings = collectAdminSettings()
+      localStorage.setItem(ADMIN_SETTINGS_KEY, JSON.stringify(settings))
+      // Broadcast for cross-tab/device sync
+      window.dispatchEvent(new CustomEvent('orca-local-write', { detail: { key: ADMIN_SETTINGS_KEY } }))
+      // Broadcast specific events for components that listen
+      window.dispatchEvent(new CustomEvent('orca-admin-settings-updated', { detail: settings }))
+      // If default user theme changed, broadcast it
+      if (settings.defaultUserTheme) {
+        localStorage.setItem('orca-default-theme', settings.defaultUserTheme)
+        window.dispatchEvent(new CustomEvent('orca-default-theme-updated', { detail: { themeId: settings.defaultUserTheme } }))
+      }
+      // Persist layout and button placement settings
+      localStorage.setItem('orca-layout-style', settings.layoutStyle)
+      localStorage.setItem('orca-button-placements', JSON.stringify(settings.buttonPlacements))
+      // Persist feature flags for live app components
+      localStorage.setItem('orca-feature-flags', JSON.stringify(settings.featureFlags))
+      // Persist module configs for live app
+      localStorage.setItem('orca-module-configs', JSON.stringify(settings.moduleConfigs))
+    } catch (err) {
+      console.error('Failed to persist admin settings:', err)
+    }
+  }
+
   const handleSaveSettings = () => {
+    persistAdminSettings()
     setSettingsSaved(true)
     setTimeout(() => setSettingsSaved(false), 3000)
   }
@@ -853,7 +936,7 @@ export default function AdminPage() {
                 onChange={(e) => { setAdminPassword(e.target.value); setAdminError('') }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
                 placeholder="Enter admin password"
-                style={{ backgroundColor: adminTheme.bg, borderColor: adminError ? '#ef4444' : theme.border, color: adminTheme.text }}
+                style={{ backgroundColor: adminTheme.bg, borderColor: adminError ? '#ef4444' : adminTheme.border, color: adminTheme.text }}
                 className="w-full px-4 py-3 rounded-lg border focus:outline-none"
                 autoFocus
               />
@@ -949,7 +1032,7 @@ export default function AdminPage() {
                   Admin Console
                 </h1>
                 <p style={{ color: TEXT_MUTED }} className="text-sm">
-                  {isLiveMode ? 'Live Database Management' : 'Demo Mode - System & User Management'}
+                  {isLiveMode ? 'Live Database' : 'Local Mode'} {lastSyncTime ? `· Last sync: ${lastSyncTime}` : ''} {dbConnected ? '· Connected' : ''}
                 </p>
               </div>
             </div>
@@ -957,18 +1040,26 @@ export default function AdminPage() {
               <a href="/dashboard" style={{ color: TEXT_SECONDARY, borderColor: BORDER_COLOR }} className="px-4 py-2 rounded-lg border text-sm hover:opacity-80 transition-opacity">
                 ← Back to App
               </a>
-              {isLiveMode && (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={refetchUsers}
-                  disabled={isLoadingUsers}
-                  style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD, opacity: isLoadingUsers ? 0.5 : 1 }}
-                  className="px-4 py-2 rounded-lg border text-sm font-medium flex items-center gap-2"
-                >
-                  <RefreshCw size={14} className={isLoadingUsers ? 'animate-spin' : ''} /> Sync
-                </motion.button>
-              )}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  persistAdminSettings()
+                  if (isLiveMode) { refetchUsers(); refetchMetrics() }
+                  setSettingsSaved(true)
+                  setTimeout(() => setSettingsSaved(false), 2000)
+                }}
+                disabled={isLoadingUsers}
+                style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD, opacity: isLoadingUsers ? 0.5 : 1 }}
+                className="px-4 py-2 rounded-lg border text-sm font-medium flex items-center gap-2"
+              >
+                <RefreshCw size={14} className={isLoadingUsers ? 'animate-spin' : ''} /> Sync All
+              </motion.button>
+              <AnimatePresence>
+                {settingsSaved && (
+                  <motion.span initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} style={{ color: '#10b981' }} className="text-xs font-medium flex items-center gap-1"><CheckCircle size={12} /> Synced</motion.span>
+                )}
+              </AnimatePresence>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -1795,6 +1886,63 @@ export default function AdminPage() {
                   </div>
                 </motion.div>
 
+                {/* Layout Style */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Layout Style</h2>
+                  <p style={{ color: TEXT_MUTED }} className="text-xs mb-4">Choose the primary navigation layout for the app</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {([
+                      { id: 'sidebar' as const, label: 'Sidebar', desc: 'Classic left sidebar navigation' },
+                      { id: 'topnav' as const, label: 'Top Navigation', desc: 'Horizontal top bar navigation' },
+                      { id: 'hybrid' as const, label: 'Hybrid', desc: 'Top bar + collapsible sidebar' },
+                    ]).map((layout) => (
+                      <motion.button
+                        key={layout.id}
+                        whileHover={{ scale: 1.02 }}
+                        onClick={() => setLayoutStyle(layout.id)}
+                        style={{
+                          backgroundColor: layoutStyle === layout.id ? `${GOLD}22` : BG_DARK,
+                          borderColor: layoutStyle === layout.id ? GOLD : BORDER_COLOR,
+                        }}
+                        className="p-4 rounded-lg border text-left transition-all"
+                      >
+                        <p className="font-medium text-sm" style={{ color: layoutStyle === layout.id ? GOLD : TEXT_PRIMARY }}>{layout.label}</p>
+                        <p className="text-xs mt-1" style={{ color: TEXT_MUTED }}>{layout.desc}</p>
+                      </motion.button>
+                    ))}
+                  </div>
+                </motion.div>
+
+                {/* Button Placement Controls */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Button Placement</h2>
+                  <p style={{ color: TEXT_MUTED }} className="text-xs mb-4">Control where key UI buttons appear in the app</p>
+                  <div className="space-y-4">
+                    {([
+                      { key: 'settingsBtn' as const, label: 'Settings Button', options: ['sidebar-bottom', 'topbar-right', 'hidden'] },
+                      { key: 'themeToggle' as const, label: 'Theme Toggle', options: ['topbar-right', 'sidebar-bottom', 'settings-page', 'hidden'] },
+                      { key: 'homeBtn' as const, label: 'Home Button', options: ['sidebar-top', 'topbar-left', 'hidden'] },
+                    ]).map((control) => (
+                      <div key={control.key} className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, borderWidth: 1 }}>
+                        <div>
+                          <p className="font-medium text-sm" style={{ color: TEXT_PRIMARY }}>{control.label}</p>
+                          <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>Current: {buttonPlacements[control.key]}</p>
+                        </div>
+                        <select
+                          value={buttonPlacements[control.key]}
+                          onChange={(e) => setButtonPlacements({ ...buttonPlacements, [control.key]: e.target.value })}
+                          style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }}
+                          className="px-3 py-1.5 rounded-lg border text-sm focus:outline-none"
+                        >
+                          {control.options.map((opt) => (
+                            <option key={opt} value={opt}>{opt.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+
                 {/* Save Button */}
                 <div className="flex items-center gap-4">
                   <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSaveSettings} style={{ backgroundColor: GOLD, color: BG_DARK }} className="px-6 py-3 rounded-lg font-bold text-sm flex items-center gap-2"><Save size={18} /> Save All Settings</motion.button>
@@ -2373,6 +2521,37 @@ export default function AdminPage() {
                   </div>
                 </motion.div>
 
+                {/* Default User Theme — admin controls which theme new users get */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 }}
+                  className="rounded-xl p-6 border"
+                  style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
+                >
+                  <h3 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Default User Theme</h3>
+                  <p className="text-sm mb-4" style={{ color: TEXT_MUTED }}>Set the default theme for new users and the live site. Users can still change their own theme.</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {allThemes.map((t) => (
+                      <div
+                        key={t.id}
+                        onClick={() => setDefaultUserTheme(t.id)}
+                        className="cursor-pointer rounded-lg p-3 transition-all border-2"
+                        style={{
+                          borderColor: defaultUserTheme === t.id ? t.accent : BORDER_COLOR,
+                          backgroundColor: BG_DARK,
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full flex-shrink-0" style={{ backgroundColor: t.accent }} />
+                          <p className="text-sm font-medium" style={{ color: defaultUserTheme === t.id ? t.accent : TEXT_PRIMARY }}>{t.name}</p>
+                          {defaultUserTheme === t.id && <Check size={14} style={{ color: t.accent }} className="ml-auto" />}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+
                 {/* Brand Colors Overview */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -2385,10 +2564,10 @@ export default function AdminPage() {
                   <p className="text-sm mb-4" style={{ color: TEXT_MUTED }}>Current theme palette colors.</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
-                      { name: 'Accent', hex: theme.accent },
-                      { name: 'Background', hex: theme.bg },
-                      { name: 'Card', hex: theme.card },
-                      { name: 'Border', hex: theme.border },
+                      { name: 'Accent', hex: adminTheme.accent },
+                      { name: 'Background', hex: adminTheme.bg },
+                      { name: 'Card', hex: adminTheme.card },
+                      { name: 'Border', hex: adminTheme.border },
                     ].map((c) => (
                       <div key={c.name} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: BORDER_COLOR }}>
                         <div className="w-8 h-8 rounded-lg flex-shrink-0" style={{ backgroundColor: c.hex }} />
@@ -2464,13 +2643,13 @@ export default function AdminPage() {
                   <h2 className="text-xl font-bold mb-2" style={{ color: GOLD }}>Task List & Reminders</h2>
                   <p style={{ color: TEXT_MUTED }} className="text-sm mb-6">Manage the task list feature settings and view usage analytics</p>
 
-                  {/* Feature Stats */}
+                  {/* Feature Stats — live from user data */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     {[
-                      { label: 'Active Users', value: '8', icon: Users, color: GOLD },
-                      { label: 'Total Tasks', value: '47', icon: ListTodo, color: '#10b981' },
-                      { label: 'Notes Created', value: '23', icon: FileText, color: '#8b5cf6' },
-                      { label: 'Grocery Lists', value: '12', icon: ShoppingCart, color: '#3b82f6' },
+                      { label: 'Active Users', value: String(users.filter(u => u.status !== 'suspended').length), icon: Users, color: GOLD },
+                      { label: 'Total Tasks', value: String(platformMetrics.totalBills + platformMetrics.totalExpenses), icon: ListTodo, color: '#10b981' },
+                      { label: 'Active Modules', value: String(modules.filter(m => m.enabled).length), icon: FileText, color: '#8b5cf6' },
+                      { label: 'Feature Flags', value: String(Object.values(featureFlags).filter(Boolean).length), icon: ShoppingCart, color: '#3b82f6' },
                     ].map((stat) => {
                       const Icon = stat.icon
                       return (
@@ -2491,54 +2670,60 @@ export default function AdminPage() {
                   <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Feature Configuration</h2>
                   <div className="space-y-4">
                     {[
-                      { label: 'To-Do Lists', desc: 'Allow users to create and manage to-do items with priorities', enabled: true },
-                      { label: 'Grocery Lists', desc: 'Enable grocery list tracking with categories', enabled: true },
-                      { label: 'Meeting Reminders', desc: 'Meeting scheduling with date/time and reminders', enabled: true },
-                      { label: 'Quick Notes', desc: 'Color-coded sticky notes for quick thoughts', enabled: true },
-                      { label: 'Task Sharing', desc: 'Allow users to share task lists with Stack Circle members', enabled: false },
-                      { label: 'Calendar Sync', desc: 'Sync meetings with external calendar apps', enabled: false },
-                    ].map((feature) => (
-                      <div key={feature.label} className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, borderWidth: 1 }}>
-                        <div>
-                          <p className="font-medium text-sm" style={{ color: TEXT_PRIMARY }}>{feature.label}</p>
-                          <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>{feature.desc}</p>
-                        </div>
-                        <div className={`w-10 h-5 rounded-full relative cursor-pointer transition-all ${feature.enabled ? 'bg-[#10b981]' : 'bg-[#27272a]'}`}>
-                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${feature.enabled ? 'left-5' : 'left-0.5'}`} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-
-                {/* Recent Activity */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Recent Task Activity</h2>
-                  <div className="space-y-3">
-                    {[
-                      { user: 'Sarah Chen', action: 'created 3 grocery items', time: '2 minutes ago', icon: ShoppingCart },
-                      { user: 'Marcus Rodriguez', action: 'completed "Review budget report"', time: '15 minutes ago', icon: CheckCircle },
-                      { user: 'Emma Thompson', action: 'added a meeting reminder for Mar 25', time: '1 hour ago', icon: Calendar },
-                      { user: 'Alex Johnson', action: 'created a note "Investment Ideas"', time: '2 hours ago', icon: FileText },
-                      { user: 'James Wilson', action: 'completed 5 to-do items', time: '3 hours ago', icon: ListTodo },
-                    ].map((activity, i) => {
-                      const Icon = activity.icon
+                      { label: 'To-Do Lists', desc: 'Allow users to create and manage to-do items with priorities', key: 'taskLists' as const, configKey: null },
+                      { label: 'Grocery Lists', desc: 'Enable grocery list tracking with categories', key: null, configKey: 'maxGroceryLists' },
+                      { label: 'Meeting Reminders', desc: 'Meeting scheduling with date/time and reminders', key: null, configKey: 'meetingReminders' },
+                      { label: 'Quick Notes', desc: 'Color-coded sticky notes for quick thoughts', key: null, configKey: 'quickNotes' },
+                      { label: 'Task Sharing', desc: 'Allow users to share task lists with Stack Circle members', key: null, configKey: 'taskSharing' },
+                      { label: 'Calendar Sync', desc: 'Sync tasks and meetings with dashboard calendar', key: 'calendarSync' as const, configKey: 'calendarSync' },
+                    ].map((feature) => {
+                      const enabled = feature.key ? featureFlags[feature.key] : feature.configKey ? !!moduleConfigs['task-lists']?.[feature.configKey] : false
                       return (
-                        <div key={i} className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: BG_DARK }}>
-                          <div className="p-2 rounded-lg" style={{ backgroundColor: `${GOLD}15` }}>
-                            <Icon size={14} style={{ color: GOLD }} />
+                        <div key={feature.label} className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, borderWidth: 1 }}>
+                          <div>
+                            <p className="font-medium text-sm" style={{ color: TEXT_PRIMARY }}>{feature.label}</p>
+                            <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>{feature.desc}</p>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm" style={{ color: TEXT_PRIMARY }}>
-                              <span className="font-semibold">{activity.user}</span>{' '}
-                              <span style={{ color: TEXT_SECONDARY }}>{activity.action}</span>
-                            </p>
-                          </div>
-                          <span className="text-xs flex-shrink-0" style={{ color: TEXT_MUTED }}>{activity.time}</span>
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            onClick={() => {
+                              if (feature.key) handleFeatureToggle(feature.key)
+                              else if (feature.configKey) handleModuleConfigChange('task-lists', feature.configKey, !moduleConfigs['task-lists']?.[feature.configKey])
+                            }}
+                            style={{ backgroundColor: enabled ? '#10b98144' : BORDER_COLOR, borderColor: enabled ? '#10b981' : BORDER_COLOR, color: enabled ? '#10b981' : TEXT_MUTED }}
+                            className="px-2 py-0.5 rounded-full text-xs font-semibold border"
+                          >
+                            {enabled ? 'ON' : 'OFF'}
+                          </motion.button>
                         </div>
                       )
                     })}
                   </div>
+                </motion.div>
+
+                {/* Recent Activity — populated from audit log */}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                  <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Recent Task Activity</h2>
+                  {auditLog.length > 0 ? (
+                    <div className="space-y-3">
+                      {auditLog.slice(0, 5).map((entry, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: BG_DARK }}>
+                          <div className="p-2 rounded-lg" style={{ backgroundColor: `${GOLD}15` }}>
+                            <Activity size={14} style={{ color: GOLD }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm" style={{ color: TEXT_PRIMARY }}>
+                              <span className="font-semibold">{entry.admin}</span>{' '}
+                              <span style={{ color: TEXT_SECONDARY }}>{entry.action} — {entry.target}</span>
+                            </p>
+                          </div>
+                          <span className="text-xs flex-shrink-0" style={{ color: TEXT_MUTED }}>{entry.timestamp}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: TEXT_MUTED }} className="text-center py-6 text-sm">Activity will appear here as users interact with the platform</p>
+                  )}
                 </motion.div>
 
                 {/* Category Limits */}
