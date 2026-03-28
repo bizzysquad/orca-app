@@ -44,6 +44,8 @@ export interface OrcaUser {
   selfEmployedInputMethod?: 'daily' | 'weekly' | 'manual'
   // Buffer for Safe to Spend
   safeToSpendBuffer?: number
+  // Checking / Spending Account starting balance
+  checkingBalance?: number
   // Rent config
   rentAmount?: number
   creditScore: number

@@ -102,6 +102,7 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
           manualCashInput: profile.manual_cash_input || 0,
           selfEmployedInputMethod: profile.self_employed_input_method || 'weekly',
           safeToSpendBuffer: profile.safe_to_spend_buffer || 0,
+          checkingBalance: profile.checking_balance || 0,
           rentAmount: profile.rent_amount || 0,
           creditScore: profile.credit_score || 0,
           creditScoreTransUnion: profile.credit_score_transunion || 0,
@@ -237,6 +238,8 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     'orca-roommates',
     'orca-dashboard-order',
     'orca-dashboard-pinned',
+    'orca-theme-mode',
+    'orca-admin-theme',
   ], [])
 
   // Push current localStorage to Supabase profiles.local_data

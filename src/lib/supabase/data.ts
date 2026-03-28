@@ -192,6 +192,7 @@ export async function saveUserData(data: OrcaData): Promise<void> {
       total_debt: data.user.totalDebt,
       credit_limit: data.user.creditLimit,
       score_history: data.user.scoreHistory,
+      checking_balance: data.user.checkingBalance || 0,
       split_mode: data.splitMode,
     }
 

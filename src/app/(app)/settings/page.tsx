@@ -14,6 +14,8 @@ import {
   Check,
   Trash2,
   AlertTriangle,
+  Landmark,
+  Info,
 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { useTheme } from '@/context/ThemeContext'
@@ -30,6 +32,9 @@ export default function SettingsPage() {
   const [editingEmail, setEditingEmail] = useState(false)
   const [editName, setEditName] = useState(user.name)
   const [editEmail, setEditEmail] = useState(user.email)
+
+  // Checking / Spending account balance
+  const [checkingBalance, setCheckingBalance] = useState(String(user.checkingBalance || ''))
 
   // Credit scores — per-bureau
   const [creditScore, setCreditScore] = useState(String(user.creditScore || ''))
@@ -62,6 +67,7 @@ export default function SettingsPage() {
   const handleSaveSettings = () => {
     const updatedUser = {
       ...user,
+      checkingBalance: parseFloat(checkingBalance) || 0,
       creditScore: parseInt(creditScore) || 0,
       creditScoreTransUnion: parseInt(scoreTransUnion) || 0,
       creditScoreEquifax: parseInt(scoreEquifax) || 0,
@@ -230,7 +236,80 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* 2. Credit Scores */}
+        {/* 2. Checking / Spending Account */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+        >
+          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
+            Checking / Spending Account
+          </h2>
+          <div
+            className="rounded-lg p-6 space-y-4"
+            style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
+          >
+            <div className="flex items-start gap-3 pb-3" style={{ borderBottom: `1px solid ${theme.border}` }}>
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: `${theme.gold}15` }}
+              >
+                <Landmark size={18} style={{ color: theme.gold }} />
+              </div>
+              <div>
+                <p className="text-sm font-medium" style={{ color: theme.text }}>Starting Balance</p>
+                <p className="text-xs mt-0.5" style={{ color: theme.textM }}>
+                  Enter the current balance in your checking or spending account. This helps ORCA calculate how much you can safely spend after covering all your bills.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
+                Current Balance
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold" style={{ color: theme.textM }}>$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={checkingBalance}
+                  onChange={e => setCheckingBalance(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full pl-7 pr-3 py-2.5 rounded-lg"
+                  style={{
+                    backgroundColor: theme.input,
+                    borderColor: theme.border,
+                    borderWidth: '1px',
+                    color: theme.text,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 rounded-lg p-3" style={{ backgroundColor: `${theme.gold}08` }}>
+              <Info size={14} className="flex-shrink-0 mt-0.5" style={{ color: theme.gold }} />
+              <p className="text-xs" style={{ color: theme.textS }}>
+                This balance combines with your incoming payments. Bills are allocated first, and the remainder becomes your &ldquo;Safe to Spend&rdquo; on the Dashboard.
+              </p>
+            </div>
+
+            <button
+              onClick={handleSaveSettings}
+              className="w-full py-2.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+              style={{
+                backgroundColor: saved ? theme.ok : theme.gold,
+                color: theme.bg,
+              }}
+            >
+              <Save className="w-4 h-4" />
+              {saved ? 'Saved!' : 'Save'}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* 3. Credit Scores */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

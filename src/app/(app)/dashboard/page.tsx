@@ -433,30 +433,77 @@ export default function DashboardPage() {
 
   const allocation = useMemo(() => calcAlloc(income, bills, goals), [income, bills, goals])
 
-  // Safe to Spend — single source of truth: Incoming Payments only
-  const safeToSpendResult = useMemo(() => {
-    const buffer = user.safeToSpendBuffer || 0
-    const savingsPerCycle = goals
-      .filter(g => g.active && g.current < g.target)
-      .reduce((sum, g) => sum + (g.cVal || 0), 0)
+  // Checking / Spending Account balance (from Settings)
+  const checkingBalance = useMemo(() => {
+    // Primary: context data
+    if (user.checkingBalance && user.checkingBalance > 0) return user.checkingBalance
+    // Fallback: localStorage user-settings
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('orca-user-settings')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (parsed.checkingBalance && parsed.checkingBalance > 0) return parsed.checkingBalance
+        }
+      } catch {}
+    }
+    return 0
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.checkingBalance, syncReady, localWriteTick])
 
-    let payments: IncomingPayment[] = data.incomingPayments || []
+  // Safe to Spend — checking balance + upcoming income minus ALL upcoming unpaid bills
+  const safeToSpend = useMemo(() => {
+    // Get all upcoming income
+    let payments: any[] = []
+    if (data.incomingPayments && data.incomingPayments.length > 0) {
+      payments = data.incomingPayments
+    }
     if (payments.length === 0 && typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem('orca-payment-entries')
         if (stored) payments = JSON.parse(stored)
       } catch {}
     }
-    const events = paymentsToEvents(payments)
-    const nextCycle = getNextCycleDate('flexible', undefined, payments)
-    return calcSafeToSpend(events, bills, savingsPerCycle, buffer, nextCycle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.safeToSpendBuffer, bills, goals, data.incomingPayments, syncReady])
 
-  const safeToSpend = useMemo(() => ({
-    weekly: safeToSpendResult.weekly,
-    daily: safeToSpendResult.daily,
-  }), [safeToSpendResult])
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // Total income from all upcoming expected payments
+    const totalIncome = payments
+      .filter((p: any) => new Date(p.date + 'T23:59:59') >= today && p.status !== 'received')
+      .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
+
+    // Total of ALL upcoming unpaid bills
+    const totalBills = bills
+      .filter(b => b.status !== 'paid')
+      .reduce((sum, b) => sum + b.amount, 0)
+
+    // Savings allocation
+    const savingsPerCycle = goals
+      .filter(g => g.active && g.current < g.target)
+      .reduce((sum, g) => sum + (g.cVal || 0), 0)
+
+    const buffer = user.safeToSpendBuffer || 0
+
+    // Available funds = checking balance + upcoming income
+    const totalAvailable = checkingBalance + totalIncome
+    const totalObligations = totalBills + savingsPerCycle + buffer
+    const amount = Math.max(0, totalAvailable - totalObligations)
+
+    // Days until next 30-day window for daily/weekly rate
+    const daysInWindow = 30
+    return {
+      amount,
+      weekly: (amount / daysInWindow) * 7,
+      daily: amount / daysInWindow,
+      totalIncome,
+      totalBills,
+      totalAvailable,
+      totalObligations,
+      checkingBalance,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bills, goals, user.safeToSpendBuffer, data.incomingPayments, checkingBalance, syncReady, localWriteTick])
 
   const totalSavings = useMemo(() => {
     // Include savings accounts from localStorage
@@ -798,7 +845,10 @@ export default function DashboardPage() {
                 WebkitBackdropFilter: 'blur(16px) saturate(180%)',
                 border: `1px solid rgba(239, 68, 68, 0.2)`,
               }}>
-                <p className="text-sm mb-3" style={{ color: theme.textS }}>Bills</p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm" style={{ color: theme.textS }}>Bills</p>
+                  <Receipt size={16} style={{ color: '#ef4444' }} />
+                </div>
                 <p className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: '#ef4444' }}>
                   –{fmt(allocation.br)}
                 </p>
@@ -885,11 +935,36 @@ export default function DashboardPage() {
                 <p className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: theme.gold }}>
                   {spendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.daily)}
                 </p>
-                <p className="text-sm" style={{ color: theme.textM }}>
+                <p className="text-sm mb-2" style={{ color: theme.textM }}>
                   {spendView === 'weekly'
                     ? `~${fmt(safeToSpend.daily)}/day`
                     : `~${fmt(safeToSpend.weekly)}/week`}
                 </p>
+                {/* Breakdown */}
+                <div className="pt-2 space-y-1" style={{ borderTop: `1px solid ${theme.border}40` }}>
+                  {checkingBalance > 0 && (
+                    <div className="flex justify-between text-[11px]" style={{ color: theme.textM }}>
+                      <span>Checking</span>
+                      <span>{fmt(checkingBalance)}</span>
+                    </div>
+                  )}
+                  {safeToSpend.totalIncome > 0 && (
+                    <div className="flex justify-between text-[11px]" style={{ color: theme.textM }}>
+                      <span>Incoming</span>
+                      <span>+{fmt(safeToSpend.totalIncome)}</span>
+                    </div>
+                  )}
+                  {safeToSpend.totalBills > 0 && (
+                    <div className="flex justify-between text-[11px]" style={{ color: theme.textM }}>
+                      <span>Bills</span>
+                      <span style={{ color: '#ef4444' }}>–{fmt(safeToSpend.totalBills)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-[11px] font-semibold pt-1" style={{ color: theme.gold, borderTop: `1px solid ${theme.border}30` }}>
+                    <span>Remaining</span>
+                    <span>{fmt(safeToSpend.amount)}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Next Payment Card — sourced exclusively from Incoming Payments */}

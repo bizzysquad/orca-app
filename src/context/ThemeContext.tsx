@@ -116,13 +116,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDarkState] = useState(true)
   const [adminOverrides, setAdminOverrides] = useState<AdminThemeOverrides | null>(null)
 
-  // Persist dark/light preference and notify other tabs
+  // Persist dark/light preference and notify other tabs / components
   const setIsDark = (v: boolean) => {
     setIsDarkState(v)
     const mode = v ? 'dark' : 'light'
     try {
       localStorage.setItem('orca-theme-mode', mode)
+      // Notify all listeners: cross-tab via storage event, same-tab via custom event
       window.dispatchEvent(new StorageEvent('storage', { key: 'orca-theme-mode', newValue: mode }))
+      window.dispatchEvent(new CustomEvent('orca-theme-changed', { detail: { mode } }))
     } catch {}
   }
 
@@ -146,7 +148,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Listen for cross-tab storage changes (admin theme + mode)
   useEffect(() => {
-    const handler = (e: StorageEvent) => {
+    const storageHandler = (e: StorageEvent) => {
       if (e.key === ADMIN_THEME_KEY) {
         try {
           setAdminOverrides(e.newValue ? JSON.parse(e.newValue) : null)
@@ -156,8 +158,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         setIsDarkState(e.newValue === 'dark' || e.newValue === null)
       }
     }
-    window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
+    // Also listen for same-tab orca-local-write events (e.g. from admin or settings)
+    const localWriteHandler = (e: any) => {
+      const key = e?.detail?.key || ''
+      if (key === 'orca-theme-mode') {
+        try {
+          const mode = localStorage.getItem('orca-theme-mode')
+          setIsDarkState(mode === 'dark' || mode === null)
+        } catch {}
+      }
+      if (key === ADMIN_THEME_KEY) {
+        try {
+          const saved = localStorage.getItem(ADMIN_THEME_KEY)
+          setAdminOverrides(saved ? JSON.parse(saved) : null)
+        } catch {}
+      }
+    }
+    window.addEventListener('storage', storageHandler)
+    window.addEventListener('orca-local-write', localWriteHandler)
+    return () => {
+      window.removeEventListener('storage', storageHandler)
+      window.removeEventListener('orca-local-write', localWriteHandler)
+    }
   }, [])
 
   const baseTheme = isDark ? THEMES.dark : THEMES.light
@@ -218,7 +240,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty('--card-border', theme.border)
     root.style.setProperty('--divider-color', theme.border)
 
-    if (typeof console !== 'undefined') console.log('[ORCA Theme] CSS vars synced — mode:', isDark ? 'dark' : 'light', '| bg:', theme.bg, '| card:', theme.card)
+    // CRITICAL: Set body and html background/color directly so all pages inherit
+    document.body.style.backgroundColor = theme.bg
+    document.body.style.color = theme.text
+    root.style.backgroundColor = theme.bg
+    root.style.color = theme.text
+
+    // Update meta theme-color for mobile browser chrome
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]')
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute('content', theme.bg)
+    }
+
+    // Toggle a data attribute for CSS selectors
+    root.setAttribute('data-theme', isDark ? 'dark' : 'light')
   }, [isDark, theme])
 
   const applyAdminTheme = (overrides: AdminThemeOverrides) => {

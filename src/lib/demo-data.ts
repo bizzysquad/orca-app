@@ -25,6 +25,7 @@ export function getNewUserData(name: string, email: string): OrcaData {
       manualCashInput: 0,
       selfEmployedInputMethod: 'weekly',
       safeToSpendBuffer: 0,
+      checkingBalance: 0,
       rentAmount: 0,
       creditScore: 0,
       creditScoreTransUnion: 0,
