@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Settings, Sun, Moon } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -14,7 +14,7 @@ interface TopBarProps {
 
 const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
   ({ title = 'ORCA', notificationCount = 0 }, ref) => {
-    const { theme, isDark, setIsDark } = useTheme()
+    const { theme } = useTheme()
 
     const [customLogo, setCustomLogo] = useState<string | null>(null)
     useEffect(() => {
@@ -52,19 +52,6 @@ const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
         </h1>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Light / Dark Mode Toggle */}
-          <button
-            onClick={() => setIsDark(!isDark)}
-            className="p-2.5 rounded-lg transition-all duration-300"
-            style={{
-              color: theme.gold,
-              backgroundColor: `${theme.gold}15`,
-            }}
-            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {isDark ? <Sun size={18} strokeWidth={1.5} /> : <Moon size={18} strokeWidth={1.5} />}
-          </button>
-
           <Link
             href="/settings"
             className="p-2.5 rounded-lg transition-colors duration-200"

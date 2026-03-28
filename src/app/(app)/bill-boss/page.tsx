@@ -384,7 +384,7 @@ export default function BillBossPage() {
   }, [bills, calMonth, calYear])
 
   // Both views show all bills — view mode only changes layout
-  const getVisibleBills = () => bills
+  const getVisibleBills = () => [...bills].sort((a, b) => new Date(a.due + 'T00:00:00').getTime() - new Date(b.due + 'T00:00:00').getTime())
 
   // Get rent bill if exists
   const rentBill = bills.find(b => b.cat.toLowerCase() === 'housing' && b.name.toLowerCase().includes('rent'))

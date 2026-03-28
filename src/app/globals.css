@@ -16,16 +16,16 @@
   }
 
   body, html {
-    background-color: var(--body-bg, #0A0A0A);
-    color: var(--body-text, #F5F5F5);
+    background-color: var(--body-bg, #EAF3FF);
+    color: var(--body-text, #0F172A);
     overflow-x: hidden;
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  /* Gold selection */
+  /* Theme accent selection */
   ::selection {
-    background: rgba(212, 175, 55, 0.25);
-    color: #F5F5F5;
+    background: var(--accent-color, rgba(37, 99, 235, 0.25));
+    color: var(--body-text, #0F172A);
   }
 
   /* Remove number spinners */
@@ -38,9 +38,9 @@
     -moz-appearance: textfield;
   }
 
-  /* Gold focus ring — refined, not harsh */
+  /* Theme-aware focus ring */
   *:focus-visible {
-    outline: 1px solid rgba(212, 175, 55, 0.4);
+    outline: 1px solid var(--accent-color, rgba(37, 99, 235, 0.4));
     outline-offset: 2px;
   }
 }
@@ -52,71 +52,70 @@
 
   /* === CARD SYSTEM === */
   .card {
-    background-color: var(--card-bg, #181818);
-    border: 1px solid var(--card-border, #2A2A2A);
+    background-color: var(--card-bg, #DCEBFF);
+    border: 1px solid var(--card-border, #B3D4FF);
     border-radius: 1rem;
   }
 
   .card-elevated {
-    background-color: var(--card-bg, #181818);
-    border: 1px solid var(--card-border, #2A2A2A);
+    background-color: var(--card-bg, #DCEBFF);
+    border: 1px solid var(--card-border, #B3D4FF);
     border-radius: 1rem;
-    background-image: linear-gradient(135deg, rgba(255,255,255,0.015) 0%, transparent 50%);
-    box-shadow: var(--depth-1, 0 1px 3px rgba(0,0,0,0.3));
+    background-image: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%);
+    box-shadow: var(--depth-1, 0 1px 3px rgba(0,0,0,0.06));
   }
 
   .card-elevated:hover {
-    box-shadow: var(--depth-2, 0 4px 16px rgba(0,0,0,0.4));
+    box-shadow: var(--depth-2, 0 4px 16px rgba(0,0,0,0.08));
   }
 
   .card-gold {
-    background-color: var(--card-bg, #181818);
-    border: 1px solid rgba(212, 175, 55, 0.15);
+    background-color: var(--card-bg, #DCEBFF);
+    border: 1px solid var(--accent-color, #2563EB);
     border-radius: 1rem;
-    box-shadow: 0 0 16px rgba(212,175,55,0.06);
+    box-shadow: 0 0 16px rgba(0,0,0,0.04);
   }
 
-  /* === GOLD TEXT / GRADIENTS === */
+  /* === ACCENT TEXT / GRADIENTS === */
   .gold-text {
-    background: linear-gradient(135deg, #D4AF37, #F5D76E, #8C6A1A);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--accent-color, #2563EB);
   }
 
   .gold-bg {
-    background: linear-gradient(135deg, #D4AF37, #F5D76E, #8C6A1A);
+    background: var(--accent-color, #2563EB);
   }
 
   .gold-bg-hover {
-    background: linear-gradient(135deg, #F5D76E, #D4AF37, #CFAE4A);
+    background: var(--accent-color, #2563EB);
+    opacity: 0.9;
   }
 
-  /* === GOLD GLOW EFFECTS — subtle, premium === */
+  /* === ACCENT GLOW EFFECTS === */
   .gold-glow-sm {
-    box-shadow: 0 0 12px rgba(212,175,55,0.08);
+    box-shadow: 0 0 12px rgba(0,0,0,0.04);
   }
 
   .gold-glow {
-    box-shadow: 0 0 20px rgba(212,175,55,0.1), 0 0 60px rgba(212,175,55,0.03);
+    box-shadow: 0 0 20px rgba(0,0,0,0.06);
   }
 
   .gold-glow-lg {
-    box-shadow: 0 0 30px rgba(212,175,55,0.15), 0 0 80px rgba(212,175,55,0.05);
+    box-shadow: 0 0 30px rgba(0,0,0,0.08);
   }
 
   /* === DIVIDERS === */
   .divider {
     height: 1px;
-    background-color: var(--divider-color, #2A2A2A);
+    background-color: var(--divider-color, #B3D4FF);
   }
 
   .divider-gold {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(212,175,55,0.25), transparent);
+    background: linear-gradient(90deg, transparent, var(--accent-color, #2563EB), transparent);
+    opacity: 0.25;
   }
 
-  /* === GOLD PILL BADGE === */
+  /* === ACCENT PILL BADGE === */
   .gold-pill {
     display: inline-flex;
     align-items: center;
@@ -124,9 +123,10 @@
     border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 600;
-    background: rgba(212, 175, 55, 0.08);
-    color: #F5D76E;
-    border: 1px solid rgba(212, 175, 55, 0.15);
+    background: var(--accent-color, #2563EB);
+    color: #FFFFFF;
+    border: 1px solid var(--accent-color, #2563EB);
+    opacity: 0.9;
   }
 
   /* === STAT NUMBERS === */
@@ -147,9 +147,9 @@
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(212, 175, 55, 0.04) 40%,
-      rgba(212, 175, 55, 0.07) 50%,
-      rgba(212, 175, 55, 0.04) 60%,
+      rgba(0, 0, 0, 0.02) 40%,
+      rgba(0, 0, 0, 0.04) 50%,
+      rgba(0, 0, 0, 0.02) 60%,
       transparent 100%
     );
     background-size: 200% 100%;
@@ -169,7 +169,7 @@
     transform: translateX(-50%);
     width: 500px;
     height: 350px;
-    background: radial-gradient(ellipse, rgba(212,175,55,0.07) 0%, transparent 70%);
+    background: radial-gradient(ellipse, rgba(0,0,0,0.03) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -183,10 +183,10 @@
   }
 
   .glass-gold {
-    background: rgba(212, 175, 55, 0.06);
+    background: var(--glass-bg, rgba(255, 255, 255, 0.7));
     backdrop-filter: blur(20px) saturate(200%);
     -webkit-backdrop-filter: blur(20px) saturate(200%);
-    border: 1px solid rgba(212, 175, 55, 0.15);
+    border: 1px solid var(--glass-border, rgba(0, 0, 0, 0.06));
   }
 
   .glass-strong {
@@ -218,9 +218,9 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .glass-hover-gold:hover {
-    background: rgba(212, 175, 55, 0.1);
-    border-color: rgba(212, 175, 55, 0.25);
-    box-shadow: 0 8px 32px rgba(212, 175, 55, 0.08), 0 0 0 1px rgba(212, 175, 55, 0.1);
+    background: var(--glass-hover-bg, rgba(255, 255, 255, 0.85));
+    border-color: var(--glass-border-hover, rgba(0, 0, 0, 0.1));
+    box-shadow: var(--glass-shadow, 0 8px 32px rgba(0,0,0,0.06));
     transform: translateY(-1px);
   }
 
@@ -248,7 +248,7 @@
 
   /* === INNER GLOW === */
   .inner-glow-gold {
-    box-shadow: inset 0 1px 0 0 rgba(212, 175, 55, 0.08), 0 0 0 1px rgba(212, 175, 55, 0.12);
+    box-shadow: inset 0 1px 0 0 rgba(0, 0, 0, 0.03), 0 0 0 1px rgba(0, 0, 0, 0.06);
   }
 }
 

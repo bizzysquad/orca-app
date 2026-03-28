@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Menu, Sun, Moon } from 'lucide-react'
+import { Settings, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -32,7 +32,7 @@ const routeIdMap: Record<string, string> = {
 
 export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
   const pathname = usePathname()
-  const { theme, isDark, setIsDark } = useTheme()
+  const { theme } = useTheme()
 
   // Read admin nav labels
   const [navLabels, setNavLabels] = useState<Record<string, string>>({})
@@ -94,22 +94,6 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
-        {/* Light / Dark Mode Toggle */}
-        <button
-          onClick={() => setIsDark(!isDark)}
-          className={cn(
-            'relative p-2 sm:p-2.5 rounded-lg transition-all duration-300',
-            'hover:opacity-80'
-          )}
-          style={{
-            color: isDark ? theme.gold : theme.gold,
-            backgroundColor: `${theme.gold}15`,
-          }}
-          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {isDark ? <Sun size={20} strokeWidth={1.5} /> : <Moon size={20} strokeWidth={1.5} />}
-        </button>
-
         {/* Settings Link */}
         <Link
           href="/settings"

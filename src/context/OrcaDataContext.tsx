@@ -238,8 +238,7 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     'orca-roommates',
     'orca-dashboard-order',
     'orca-dashboard-pinned',
-    'orca-theme-mode',
-    'orca-admin-theme',
+    'orca-theme-id',
     'orca-admin-nav',
   ], [])
 

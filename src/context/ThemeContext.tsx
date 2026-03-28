@@ -1,176 +1,245 @@
 'use client'
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
-const THEMES = {
-  dark: {
-    name:'dark',
-    bg:'#09090b',
-    bgS:'#131316',
-    card:'#18181b',
-    border:'#27272a',
-    text:'#fafafa',
-    textS:'#a1a1aa',
-    textM:'#71717a',
-    gold:'#d4a843',
-    goldL:'#f5d680',
-    goldD:'#b8860b',
-    goldBg:'rgba(212,168,67,0.08)',
-    goldBg2:'rgba(212,168,67,0.15)',
-    ok:'#4ade80',
-    okBg:'rgba(74,222,128,0.08)',
-    warn:'#fbbf24',
-    warnBg:'rgba(251,191,36,0.08)',
-    bad:'#f87171',
-    badBg:'rgba(248,113,113,0.08)',
-    nav:'#0c0c0e',
-    input:'#131316',
-    shadow:'0 1px 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2)',
-    shadowL:'0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3)',
-    overlay:'rgba(0,0,0,0.75)',
-    glow:'0 0 20px rgba(212,168,67,0.15)',
-    cardGlass:'rgba(24,24,27,0.8)',
-    navGlass:'rgba(12,12,14,0.85)',
-  },
-  light: {
-    name:'light',
-    bg:'#fafaf9',
-    bgS:'#f4f4f2',
-    card:'#ffffff',
-    border:'#e4e4e0',
-    text:'#18181b',
-    textS:'#52525b',
-    textM:'#a1a1aa',
-    gold:'#b8860b',
-    goldL:'#d4a843',
-    goldD:'#8b6914',
-    goldBg:'rgba(184,134,11,0.05)',
-    goldBg2:'rgba(184,134,11,0.1)',
-    ok:'#16a34a',
-    okBg:'rgba(22,163,74,0.06)',
-    warn:'#d97706',
-    warnBg:'rgba(217,119,6,0.06)',
-    bad:'#dc2626',
-    badBg:'rgba(220,38,38,0.06)',
-    nav:'#ffffff',
-    input:'#ffffff',
-    shadow:'0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)',
-    shadowL:'0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
-    overlay:'rgba(0,0,0,0.4)',
-    glow:'0 0 20px rgba(184,134,11,0.1)',
-    cardGlass:'rgba(255,255,255,0.85)',
-    navGlass:'rgba(255,255,255,0.9)',
-  },
+export interface GlassVars {
+  glassBg: string
+  glassStrongBg: string
+  glassSubtleBg: string
+  glassBorder: string
+  glassBorderHover: string
+  glassHoverBg: string
+  glassShadow: string
+  depth1: string
+  depth2: string
+  depth3: string
+  scrollThumb: string
+  scrollThumbHover: string
 }
 
-export type Theme = typeof THEMES.dark
-
-export interface AdminThemeOverrides {
-  primaryColor?: string
-  bgDark?: string
-  bgCard?: string
-  borderColor?: string
-  textPrimary?: string
-  textSecondary?: string
-  textMuted?: string
+export interface Theme {
+  id: string
+  name: string
+  bg: string
+  surface: string
+  card: string
+  text: string
+  subtext: string
+  accent: string
+  border: string
+  input: string
+  nav: string
+  ok: string
+  okBg: string
+  warn: string
+  warnBg: string
+  bad: string
+  badBg: string
+  shadow: string
+  shadowL: string
+  overlay: string
+  cardGlass: string
+  navGlass: string
+  glassVars: GlassVars
+  // Backward-compatible aliases (old theme property names)
+  gold: string
+  goldL: string
+  goldD: string
+  goldBg: string
+  goldBg2: string
+  glow: string
+  textS: string
+  textM: string
+  bgS: string
 }
+
+const LIGHT_GLASS_VARS: GlassVars = {
+  glassBg: 'rgba(255, 255, 255, 0.7)',
+  glassStrongBg: 'rgba(255, 255, 255, 0.85)',
+  glassSubtleBg: 'rgba(255, 255, 255, 0.5)',
+  glassBorder: 'rgba(0, 0, 0, 0.06)',
+  glassBorderHover: 'rgba(0, 0, 0, 0.1)',
+  glassHoverBg: 'rgba(255, 255, 255, 0.85)',
+  glassShadow: '0 8px 32px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+  depth1: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.03)',
+  depth2: '0 4px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+  depth3: '0 8px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05)',
+  scrollThumb: '#d4d4d0',
+  scrollThumbHover: '#c4c4c0',
+}
+
+// Helper to add backward-compatible aliases to a base theme definition
+function withAliases(t: Omit<Theme, 'gold' | 'goldL' | 'goldD' | 'goldBg' | 'goldBg2' | 'glow' | 'textS' | 'textM' | 'bgS'>): Theme {
+  return {
+    ...t,
+    gold: t.accent,
+    goldL: t.accent,
+    goldD: t.accent,
+    goldBg: `${t.accent}14`,
+    goldBg2: `${t.accent}26`,
+    glow: `0 0 20px ${t.accent}26`,
+    textS: t.subtext,
+    textM: t.subtext,
+    bgS: t.surface,
+  }
+}
+
+const LIGHT_SHADOW = '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)'
+const LIGHT_SHADOW_L = '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)'
+const LIGHT_OVERLAY = 'rgba(0,0,0,0.4)'
+
+const BASE_THEME_PROPS = {
+  shadow: LIGHT_SHADOW,
+  shadowL: LIGHT_SHADOW_L,
+  overlay: LIGHT_OVERLAY,
+  cardGlass: 'rgba(255,255,255,0.85)',
+  navGlass: 'rgba(255,255,255,0.9)',
+  glassVars: LIGHT_GLASS_VARS,
+  ok: '#16a34a',
+  okBg: 'rgba(22,163,74,0.08)',
+  warn: '#d97706',
+  warnBg: 'rgba(217,119,6,0.08)',
+  bad: '#dc2626',
+  badBg: 'rgba(220,38,38,0.08)',
+} as const
+
+export const THEMES: Record<string, Theme> = {
+  'ocean-blue': withAliases({
+    id: 'ocean-blue', name: 'Ocean Blue',
+    bg: '#EAF3FF', surface: '#FFFFFF', card: '#DCEBFF',
+    text: '#0F172A', subtext: '#475569', accent: '#2563EB',
+    border: '#B3D4FF', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'sage-green': withAliases({
+    id: 'sage-green', name: 'Sage Green',
+    bg: '#ECFDF5', surface: '#FFFFFF', card: '#D1FAE5',
+    text: '#022C22', subtext: '#065F46', accent: '#10B981',
+    border: '#A7F3D0', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'sunset-orange': withAliases({
+    id: 'sunset-orange', name: 'Sunset Orange',
+    bg: '#FFF7ED', surface: '#FFFFFF', card: '#FFEDD5',
+    text: '#431407', subtext: '#9A3412', accent: '#F97316',
+    border: '#FED7AA', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'rose-pink': withAliases({
+    id: 'rose-pink', name: 'Rose Pink',
+    bg: '#FFF1F2', surface: '#FFFFFF', card: '#FFE4E6',
+    text: '#4C0519', subtext: '#9F1239', accent: '#F43F5E',
+    border: '#FECDD3', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'lavender-purple': withAliases({
+    id: 'lavender-purple', name: 'Lavender Purple',
+    bg: '#F5F3FF', surface: '#FFFFFF', card: '#EDE9FE',
+    text: '#2E1065', subtext: '#6D28D9', accent: '#7C3AED',
+    border: '#DDD6FE', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'teal-mint': withAliases({
+    id: 'teal-mint', name: 'Teal Mint',
+    bg: '#F0FDFA', surface: '#FFFFFF', card: '#CCFBF1',
+    text: '#042F2E', subtext: '#0F766E', accent: '#14B8A6',
+    border: '#99F6E4', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'sand-beige': withAliases({
+    id: 'sand-beige', name: 'Sand Beige',
+    bg: '#FAF3E0', surface: '#FFFFFF', card: '#F5E6CC',
+    text: '#1F2937', subtext: '#6B7280', accent: '#D97706',
+    border: '#E5D5B0', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'sky-indigo': withAliases({
+    id: 'sky-indigo', name: 'Sky Indigo',
+    bg: '#EEF2FF', surface: '#FFFFFF', card: '#E0E7FF',
+    text: '#1E1B4B', subtext: '#4338CA', accent: '#6366F1',
+    border: '#C7D2FE', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'soft-gray': withAliases({
+    id: 'soft-gray', name: 'Soft Gray',
+    bg: '#F3F4F6', surface: '#FFFFFF', card: '#E5E7EB',
+    text: '#111827', subtext: '#6B7280', accent: '#3B82F6',
+    border: '#D1D5DB', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+  'cool-aqua': withAliases({
+    id: 'cool-aqua', name: 'Cool Aqua',
+    bg: '#ECFEFF', surface: '#FFFFFF', card: '#CFFAFE',
+    text: '#083344', subtext: '#155E75', accent: '#06B6D4',
+    border: '#A5F3FC', input: '#FFFFFF', nav: '#FFFFFF',
+    ...BASE_THEME_PROPS,
+  }),
+}
+
+export const THEME_LIST = Object.values(THEMES)
 
 type ThemeContextType = {
   theme: Theme
+  themeId: string
+  setThemeId: (id: string) => void
+  allThemes: Theme[]
   isDark: boolean
-  setIsDark: (v: boolean) => void
-  applyAdminTheme: (overrides: AdminThemeOverrides) => void
-  resetTheme: () => void
 }
+
+const defaultTheme = THEMES['ocean-blue']
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: THEMES.dark,
-  isDark: true,
-  setIsDark: () => {},
-  applyAdminTheme: () => {},
-  resetTheme: () => {},
+  theme: defaultTheme,
+  themeId: 'ocean-blue',
+  setThemeId: () => {},
+  allThemes: THEME_LIST,
+  isDark: false,
 })
 
-function applyOverrides(base: Theme, overrides: AdminThemeOverrides): Theme {
-  return {
-    ...base,
-    ...(overrides.primaryColor && {
-      gold: overrides.primaryColor,
-      goldL: overrides.primaryColor,
-      goldD: overrides.primaryColor,
-      goldBg: `${overrides.primaryColor}14`,
-      goldBg2: `${overrides.primaryColor}26`,
-      glow: `0 0 20px ${overrides.primaryColor}26`,
-    }),
-    ...(overrides.bgDark && { bg: overrides.bgDark }),
-    ...(overrides.bgCard && { card: overrides.bgCard, bgS: overrides.bgCard }),
-    ...(overrides.borderColor && { border: overrides.borderColor }),
-    ...(overrides.textPrimary && { text: overrides.textPrimary }),
-    ...(overrides.textSecondary && { textS: overrides.textSecondary }),
-    ...(overrides.textMuted && { textM: overrides.textMuted }),
-  }
-}
-
-const ADMIN_THEME_KEY = 'orca-admin-theme'
+const THEME_ID_KEY = 'orca-theme-id'
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [isDark, setIsDarkState] = useState(true)
-  const [adminOverrides, setAdminOverrides] = useState<AdminThemeOverrides | null>(null)
+  const [themeId, setThemeIdState] = useState<string>('ocean-blue')
+  const theme = THEMES[themeId] || THEMES['ocean-blue']
 
-  // Persist dark/light preference and notify other tabs / components
-  const setIsDark = (v: boolean) => {
-    setIsDarkState(v)
-    const mode = v ? 'dark' : 'light'
-    try {
-      localStorage.setItem('orca-theme-mode', mode)
-      // Notify all listeners: cross-tab via storage event, same-tab via custom event
-      window.dispatchEvent(new StorageEvent('storage', { key: 'orca-theme-mode', newValue: mode }))
-      window.dispatchEvent(new CustomEvent('orca-theme-changed', { detail: { mode } }))
-    } catch {}
+  const setThemeId = (id: string) => {
+    if (THEMES[id]) {
+      setThemeIdState(id)
+      try {
+        localStorage.setItem(THEME_ID_KEY, id)
+        window.dispatchEvent(new StorageEvent('storage', { key: THEME_ID_KEY, newValue: id }))
+        window.dispatchEvent(new CustomEvent('orca-theme-changed', { detail: { themeId: id } }))
+      } catch {}
+      if (typeof console !== 'undefined') console.log('[ORCA Theme] Theme changed to:', id)
+    }
   }
 
-  // Load persisted theme mode and admin overrides on mount
   useEffect(() => {
     try {
-      const mode = localStorage.getItem('orca-theme-mode')
-      if (mode === 'light') setIsDarkState(false)
-      else if (mode === 'dark') setIsDarkState(true)
-      if (typeof console !== 'undefined') console.log('[ORCA Theme] Loaded mode:', mode || 'dark (default)')
-    } catch {}
-    try {
-      const saved = localStorage.getItem(ADMIN_THEME_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        setAdminOverrides(parsed)
-        if (typeof console !== 'undefined') console.log('[ORCA Theme] Loaded admin overrides:', parsed)
+      const saved = localStorage.getItem(THEME_ID_KEY)
+      if (saved && THEMES[saved]) {
+        setThemeIdState(saved)
+        if (typeof console !== 'undefined') console.log('[ORCA Theme] Loaded theme:', saved)
+      } else {
+        setThemeIdState('ocean-blue')
+        if (typeof console !== 'undefined') console.log('[ORCA Theme] Using default theme: ocean-blue')
       }
     } catch {}
   }, [])
 
-  // Listen for cross-tab storage changes (admin theme + mode)
   useEffect(() => {
     const storageHandler = (e: StorageEvent) => {
-      if (e.key === ADMIN_THEME_KEY) {
-        try {
-          setAdminOverrides(e.newValue ? JSON.parse(e.newValue) : null)
-        } catch {}
-      }
-      if (e.key === 'orca-theme-mode') {
-        setIsDarkState(e.newValue === 'dark' || e.newValue === null)
+      if (e.key === THEME_ID_KEY && e.newValue && THEMES[e.newValue]) {
+        setThemeIdState(e.newValue)
       }
     }
-    // Also listen for same-tab orca-local-write events (e.g. from admin or settings)
     const localWriteHandler = (e: any) => {
       const key = e?.detail?.key || ''
-      if (key === 'orca-theme-mode') {
+      if (key === THEME_ID_KEY) {
         try {
-          const mode = localStorage.getItem('orca-theme-mode')
-          setIsDarkState(mode === 'dark' || mode === null)
-        } catch {}
-      }
-      if (key === ADMIN_THEME_KEY) {
-        try {
-          const saved = localStorage.getItem(ADMIN_THEME_KEY)
-          setAdminOverrides(saved ? JSON.parse(saved) : null)
+          const saved = localStorage.getItem(THEME_ID_KEY)
+          if (saved && THEMES[saved]) {
+            setThemeIdState(saved)
+          }
         } catch {}
       }
     }
@@ -182,82 +251,68 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const baseTheme = isDark ? THEMES.dark : THEMES.light
-  const theme = adminOverrides ? applyOverrides(baseTheme, adminOverrides) : baseTheme
-
-  // Sync CSS custom properties for glass classes, Tailwind colors, and globals.css
   useEffect(() => {
     const root = document.documentElement
-    // Theme-aware color tokens for Tailwind and CSS
-    root.style.setProperty('--brand-black', theme.bg)
-    root.style.setProperty('--brand-soft', theme.bgS)
-    root.style.setProperty('--surface-card', theme.card)
-    root.style.setProperty('--surface-elevated', isDark ? '#202020' : '#f0f0ee')
-    root.style.setProperty('--surface-border', theme.border)
-    root.style.setProperty('--gold-primary', theme.gold)
-    root.style.setProperty('--gold-highlight', theme.goldL)
-    root.style.setProperty('--gold-deep', theme.goldD)
-    root.style.setProperty('--text-primary', theme.text)
-    root.style.setProperty('--text-secondary', theme.textS)
-    root.style.setProperty('--text-muted', theme.textM)
-    root.style.setProperty('--nav-bg', theme.nav)
-    root.style.setProperty('--input-bg', theme.input)
-    root.style.setProperty('--ok-color', theme.ok)
-    root.style.setProperty('--bad-color', theme.bad)
-    root.style.setProperty('--warn-color', theme.warn)
 
-    if (isDark) {
-      root.style.setProperty('--glass-bg', 'rgba(24, 24, 27, 0.6)')
-      root.style.setProperty('--glass-strong-bg', 'rgba(24, 24, 27, 0.75)')
-      root.style.setProperty('--glass-subtle-bg', 'rgba(24, 24, 27, 0.4)')
-      root.style.setProperty('--glass-border', 'rgba(255, 255, 255, 0.06)')
-      root.style.setProperty('--glass-border-hover', 'rgba(255, 255, 255, 0.1)')
-      root.style.setProperty('--glass-hover-bg', 'rgba(24, 24, 27, 0.75)')
-      root.style.setProperty('--glass-shadow', '0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05)')
-      root.style.setProperty('--depth-1', '0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.03)')
-      root.style.setProperty('--depth-2', '0 4px 12px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.04)')
-      root.style.setProperty('--depth-3', '0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05)')
-      root.style.setProperty('--scrollbar-thumb', '#2A2A2A')
-      root.style.setProperty('--scrollbar-thumb-hover', '#3A3A3A')
-    } else {
-      root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.7)')
-      root.style.setProperty('--glass-strong-bg', 'rgba(255, 255, 255, 0.85)')
-      root.style.setProperty('--glass-subtle-bg', 'rgba(255, 255, 255, 0.5)')
-      root.style.setProperty('--glass-border', 'rgba(0, 0, 0, 0.06)')
-      root.style.setProperty('--glass-border-hover', 'rgba(0, 0, 0, 0.1)')
-      root.style.setProperty('--glass-hover-bg', 'rgba(255, 255, 255, 0.85)')
-      root.style.setProperty('--glass-shadow', '0 8px 32px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)')
-      root.style.setProperty('--depth-1', '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.03)')
-      root.style.setProperty('--depth-2', '0 4px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)')
-      root.style.setProperty('--depth-3', '0 8px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05)')
-      root.style.setProperty('--scrollbar-thumb', '#d4d4d0')
-      root.style.setProperty('--scrollbar-thumb-hover', '#c4c4c0')
-    }
-    // Legacy aliases
     root.style.setProperty('--body-bg', theme.bg)
     root.style.setProperty('--body-text', theme.text)
     root.style.setProperty('--card-bg', theme.card)
     root.style.setProperty('--card-border', theme.border)
     root.style.setProperty('--divider-color', theme.border)
 
-    // CRITICAL: Force body and html background/color with !important via CSS
-    // Inline styles alone can be overridden by Tailwind/CSS specificity issues
+    root.style.setProperty('--surface-bg', theme.surface)
+    root.style.setProperty('--surface-card', theme.card)
+    root.style.setProperty('--surface-elevated', theme.surface)
+    root.style.setProperty('--surface-border', theme.border)
+    root.style.setProperty('--brand-black', theme.bg)
+    root.style.setProperty('--brand-soft', theme.surface)
+    root.style.setProperty('--text-primary', theme.text)
+    root.style.setProperty('--text-secondary', theme.subtext)
+    root.style.setProperty('--text-muted', theme.subtext)
+    root.style.setProperty('--accent-color', theme.accent)
+    root.style.setProperty('--gold-primary', theme.accent)
+    root.style.setProperty('--gold-highlight', theme.accent)
+    root.style.setProperty('--gold-deep', theme.accent)
+    root.style.setProperty('--nav-bg', theme.nav)
+    root.style.setProperty('--input-bg', theme.input)
+
+    root.style.setProperty('--ok-color', theme.ok)
+    root.style.setProperty('--ok-bg', theme.okBg)
+    root.style.setProperty('--warn-color', theme.warn)
+    root.style.setProperty('--warn-bg', theme.warnBg)
+    root.style.setProperty('--bad-color', theme.bad)
+    root.style.setProperty('--bad-bg', theme.badBg)
+
+    root.style.setProperty('--shadow', theme.shadow)
+    root.style.setProperty('--shadow-lg', theme.shadowL)
+    root.style.setProperty('--overlay', theme.overlay)
+
+    root.style.setProperty('--glass-bg', theme.glassVars.glassBg)
+    root.style.setProperty('--glass-strong-bg', theme.glassVars.glassStrongBg)
+    root.style.setProperty('--glass-subtle-bg', theme.glassVars.glassSubtleBg)
+    root.style.setProperty('--glass-border', theme.glassVars.glassBorder)
+    root.style.setProperty('--glass-border-hover', theme.glassVars.glassBorderHover)
+    root.style.setProperty('--glass-hover-bg', theme.glassVars.glassHoverBg)
+    root.style.setProperty('--glass-shadow', theme.glassVars.glassShadow)
+    root.style.setProperty('--depth-1', theme.glassVars.depth1)
+    root.style.setProperty('--depth-2', theme.glassVars.depth2)
+    root.style.setProperty('--depth-3', theme.glassVars.depth3)
+    root.style.setProperty('--scrollbar-thumb', theme.glassVars.scrollThumb)
+    root.style.setProperty('--scrollbar-thumb-hover', theme.glassVars.scrollThumbHover)
+
     document.body.style.setProperty('background-color', theme.bg, 'important')
     document.body.style.setProperty('color', theme.text, 'important')
     root.style.setProperty('background-color', theme.bg, 'important')
     root.style.setProperty('color', theme.text, 'important')
 
-    // Also set as standard inline for components reading style directly
     document.body.style.backgroundColor = theme.bg
     document.body.style.color = theme.text
 
-    // Update meta theme-color for mobile browser chrome
     const metaThemeColor = document.querySelector('meta[name="theme-color"]')
     if (metaThemeColor) {
       metaThemeColor.setAttribute('content', theme.bg)
     }
 
-    // Inject/update a <style> tag to force the background on all root-level elements
     let styleEl = document.getElementById('orca-theme-override') as HTMLStyleElement | null
     if (!styleEl) {
       styleEl = document.createElement('style')
@@ -271,37 +326,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       }
     `
 
-    // Toggle a data attribute for CSS selectors
-    root.setAttribute('data-theme', isDark ? 'dark' : 'light')
-  }, [isDark, theme])
-
-  const applyAdminTheme = (overrides: AdminThemeOverrides) => {
-    setAdminOverrides(overrides)
-    const json = JSON.stringify(overrides)
-    try {
-      localStorage.setItem(ADMIN_THEME_KEY, json)
-      // Dispatch StorageEvent for cross-tab sync (same-tab state is already set above)
-      window.dispatchEvent(new StorageEvent('storage', { key: ADMIN_THEME_KEY, newValue: json }))
-    } catch {}
-    if (typeof console !== 'undefined') console.log('[ORCA Theme] Admin overrides applied:', overrides)
-  }
-
-  const resetTheme = () => {
-    setAdminOverrides(null)
-    try {
-      localStorage.removeItem(ADMIN_THEME_KEY)
-      window.dispatchEvent(new StorageEvent('storage', { key: ADMIN_THEME_KEY, newValue: null }))
-    } catch {}
-    if (typeof console !== 'undefined') console.log('[ORCA Theme] Theme reset to defaults')
-  }
+    root.setAttribute('data-theme', themeId)
+  }, [theme, themeId])
 
   return (
-    <ThemeContext.Provider value={{ theme, isDark, setIsDark, applyAdminTheme, resetTheme }}>
+    <ThemeContext.Provider value={{ theme, themeId, setThemeId, allThemes: THEME_LIST, isDark: false }}>
       {children}
     </ThemeContext.Provider>
   )
 }
 
 export const useTheme = () => useContext(ThemeContext)
-
-export { THEMES }

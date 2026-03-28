@@ -533,6 +533,29 @@ export default function DashboardPage() {
   // Next upcoming bill for preview on dashboard
   const nextBill = useMemo(() => allUpcomingBills[0] || null, [allUpcomingBills])
 
+  // Bills due this week (or today)
+  const billsDueThisWeek = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const endOfWeek = new Date(today)
+    endOfWeek.setDate(endOfWeek.getDate() + 7)
+
+    return bills
+      .filter(b => {
+        if (b.status === 'paid') return false
+        const due = new Date(b.due + 'T00:00:00')
+        return due >= today && due <= endOfWeek
+      })
+      .reduce((sum, b) => sum + b.amount, 0)
+  }, [bills])
+
+  const billsDueToday = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return bills
+      .filter(b => b.status !== 'paid' && b.due === today)
+      .reduce((sum, b) => sum + b.amount, 0)
+  }, [bills])
+
   // Also check all bills sorted by due date for the next one coming up
   const nextBillAny = useMemo(() => {
     if (nextBill) return nextBill
@@ -850,14 +873,17 @@ export default function DashboardPage() {
                   <Receipt size={16} style={{ color: '#ef4444' }} />
                 </div>
                 <p className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: '#ef4444' }}>
-                  –{fmt(allocation.br)}
+                  –{fmt(billsDueThisWeek)}
+                </p>
+                <p className="text-xs font-medium mb-1" style={{ color: theme.textS }}>
+                  {billsDueToday > 0 ? `${fmt(billsDueToday)} due today` : 'Due this week'}
                 </p>
                 {nextBill ? (
-                  <p className="text-sm" style={{ color: theme.textM }}>
+                  <p className="text-xs" style={{ color: theme.textM }}>
                     Next: {nextBill.name} · {fmtD(nextBill.due)} · –{fmt(nextBill.amount)}
                   </p>
                 ) : (
-                  <p className="text-sm" style={{ color: theme.textM }}>
+                  <p className="text-xs" style={{ color: theme.textM }}>
                     No upcoming bills
                   </p>
                 )}
@@ -940,29 +966,62 @@ export default function DashboardPage() {
                     ? `~${fmt(safeToSpend.daily)}/day`
                     : `~${fmt(safeToSpend.weekly)}/week`}
                 </p>
-                {/* Breakdown */}
-                <div className="pt-2 space-y-1" style={{ borderTop: `1px solid ${theme.border}40` }}>
+                {/* Detailed Breakdown */}
+                <div className="mt-3 pt-3 space-y-2" style={{ borderTop: `1px solid ${theme.border}50` }}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: theme.textM }}>How it's calculated</p>
                   {checkingBalance > 0 && (
-                    <div className="flex justify-between text-[11px]" style={{ color: theme.textM }}>
-                      <span>Checking</span>
-                      <span>{fmt(checkingBalance)}</span>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.gold }} />
+                        <span className="text-xs" style={{ color: theme.textS }}>Checking Balance</span>
+                      </div>
+                      <span className="text-xs font-semibold" style={{ color: theme.text }}>{fmt(checkingBalance)}</span>
                     </div>
                   )}
                   {safeToSpend.totalIncome > 0 && (
-                    <div className="flex justify-between text-[11px]" style={{ color: theme.textM }}>
-                      <span>Incoming</span>
-                      <span>+{fmt(safeToSpend.totalIncome)}</span>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#22c55e' }} />
+                        <span className="text-xs" style={{ color: theme.textS }}>Incoming Payments</span>
+                      </div>
+                      <span className="text-xs font-semibold" style={{ color: '#22c55e' }}>+{fmt(safeToSpend.totalIncome)}</span>
                     </div>
                   )}
                   {safeToSpend.totalBills > 0 && (
-                    <div className="flex justify-between text-[11px]" style={{ color: theme.textM }}>
-                      <span>Bills</span>
-                      <span style={{ color: '#ef4444' }}>–{fmt(safeToSpend.totalBills)}</span>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#ef4444' }} />
+                        <span className="text-xs" style={{ color: theme.textS }}>Bills Reserved</span>
+                      </div>
+                      <span className="text-xs font-semibold" style={{ color: '#ef4444' }}>-{fmt(safeToSpend.totalBills)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-[11px] font-semibold pt-1" style={{ color: theme.gold, borderTop: `1px solid ${theme.border}30` }}>
-                    <span>Remaining</span>
-                    <span>{fmt(safeToSpend.amount)}</span>
+                  {(() => {
+                    const savingsReserved = goals
+                      .filter(g => g.active && g.current < g.target)
+                      .reduce((sum, g) => sum + (g.cVal || 0), 0)
+                    return savingsReserved > 0 ? (
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#3b82f6' }} />
+                          <span className="text-xs" style={{ color: theme.textS }}>Savings Reserved</span>
+                        </div>
+                        <span className="text-xs font-semibold" style={{ color: '#3b82f6' }}>-{fmt(savingsReserved)}</span>
+                      </div>
+                    ) : null
+                  })()}
+                  {(user.safeToSpendBuffer || 0) > 0 && (
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.textM }} />
+                        <span className="text-xs" style={{ color: theme.textS }}>Buffer</span>
+                      </div>
+                      <span className="text-xs font-semibold" style={{ color: theme.textM }}>-{fmt(user.safeToSpendBuffer || 0)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-2 mt-1" style={{ borderTop: `1px solid ${theme.border}30` }}>
+                    <span className="text-xs font-bold" style={{ color: theme.gold }}>Safe to Spend</span>
+                    <span className="text-sm font-bold" style={{ color: theme.gold }}>{fmt(safeToSpend.amount)}</span>
                   </div>
                 </div>
               </div>

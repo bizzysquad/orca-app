@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createBrowserClient } from '@supabase/ssr'
 import { useTheme } from '@/context/ThemeContext'
-import type { AdminThemeOverrides } from '@/context/ThemeContext'
 import {
   Shield,
   Users,
@@ -54,6 +53,7 @@ import {
   ListTodo,
   ShoppingCart,
   Calendar,
+  Check,
 } from 'lucide-react'
 
 // Color constants (fallbacks only — component uses theme-aware values)
@@ -113,16 +113,6 @@ interface NavItem {
   visible: boolean
 }
 
-interface ThemeConfig {
-  primaryColor: string
-  bgDark: string
-  bgCard: string
-  borderColor: string
-  textPrimary: string
-  textSecondary: string
-  textMuted: string
-}
-
 interface Notification {
   id: string
   type: 'email' | 'sms' | 'push'
@@ -173,17 +163,6 @@ const DEFAULT_NAV: NavItem[] = [
   { id: 'settings', label: 'Settings', order: 5, visible: true },
 ]
 
-// Default Theme
-const DEFAULT_THEME: ThemeConfig = {
-  primaryColor: GOLD_FALLBACK,
-  bgDark: BG_DARK_FALLBACK,
-  bgCard: BG_CARD_FALLBACK,
-  borderColor: BORDER_FALLBACK,
-  textPrimary: TEXT_PRIMARY_FALLBACK,
-  textSecondary: TEXT_SECONDARY_FALLBACK,
-  textMuted: TEXT_MUTED_FALLBACK,
-}
-
 // Tabs Configuration — grouped to fit without scrolling
 const TABS = [
   { id: 'users', label: 'Users', icon: Users },
@@ -214,17 +193,17 @@ const SUB_TABS: Record<string, { id: string; label: string }[]> = {
 }
 
 export default function AdminPage() {
-  const { theme, isDark, setIsDark, applyAdminTheme, resetTheme } = useTheme()
+  const { theme, themeId, setThemeId, allThemes } = useTheme()
 
   // Theme-aware color constants — these map to the active theme so the
-  // entire admin panel automatically switches between light and dark mode.
-  const GOLD = theme.gold
+  // entire admin panel automatically switches themes.
+  const GOLD = theme.accent
   const BG_DARK = theme.bg
   const BG_CARD = theme.card
   const BORDER_COLOR = theme.border
   const TEXT_PRIMARY = theme.text
-  const TEXT_SECONDARY = theme.textS
-  const TEXT_MUTED = theme.textM
+  const TEXT_SECONDARY = theme.subtext
+  const TEXT_MUTED = theme.subtext
 
   // Admin auth state
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
@@ -490,10 +469,6 @@ export default function AdminPage() {
     } catch {}
   }, [navItems])
 
-  // Theme states
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(DEFAULT_THEME)
-  const [customThemePreview, setCustomThemePreview] = useState(false)
-
   // Notification states — empty until real notifications are sent
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
@@ -646,16 +621,6 @@ export default function AdminPage() {
   const [ipWhitelist, setIpWhitelist] = useState('')
   const [fraudMonitoring, setFraudMonitoring] = useState(true)
 
-  // Theme presets
-  const [themePresets] = useState([
-    { name: 'ORCA Gold', primary: '#d4a843', bg: '#09090b', card: '#18181b', border: '#27272a' },
-    { name: 'Ocean Blue', primary: '#3b82f6', bg: '#0a0a1a', card: '#141428', border: '#1e1e3a' },
-    { name: 'Emerald', primary: '#10b981', bg: '#0a0f0d', card: '#141f1a', border: '#1e2f27' },
-    { name: 'Rose', primary: '#f43f5e', bg: '#0f0a0b', card: '#1f141a', border: '#2f1e27' },
-    { name: 'Violet', primary: '#8b5cf6', bg: '#0d0a14', card: '#1a1428', border: '#271e3a' },
-    { name: 'Sunset', primary: '#f97316', bg: '#0f0c0a', card: '#1f1814', border: '#2f261e' },
-  ])
-
   // Billing extras — loaded from payment provider in production
   const [invoices] = useState<Array<{ id: string; user: string; amount: number; date: string; status: string }>>([])
   const [refundReason, setRefundReason] = useState('')
@@ -778,10 +743,6 @@ export default function AdminPage() {
     }
   }
 
-  const handleThemeColorChange = (key: keyof ThemeConfig, value: string) => {
-    setThemeConfig({ ...themeConfig, [key]: value })
-  }
-
   const handleAddCategory = () => {
     if (newCategory.trim() && !budgetCategories.includes(newCategory.trim())) {
       setBudgetCategories([...budgetCategories, newCategory.trim()])
@@ -812,64 +773,6 @@ export default function AdminPage() {
       ])
       setNewRoleName('')
     }
-  }
-
-  const handleApplyThemePreset = (preset: typeof themePresets[0]) => {
-    setThemeConfig({
-      primaryColor: preset.primary,
-      bgDark: preset.bg,
-      bgCard: preset.card,
-      borderColor: preset.border,
-      textPrimary: '#fafafa',
-      textSecondary: '#a1a1aa',
-      textMuted: '#71717a',
-    })
-  }
-
-  const [themeSaved, setThemeSaved] = useState(false)
-  const handleSaveTheme = () => {
-    const overrides: AdminThemeOverrides = {
-      primaryColor: themeConfig.primaryColor,
-      bgDark: themeConfig.bgDark,
-      bgCard: themeConfig.bgCard,
-      borderColor: themeConfig.borderColor,
-      textPrimary: themeConfig.textPrimary,
-      textSecondary: themeConfig.textSecondary,
-      textMuted: themeConfig.textMuted,
-    }
-    applyAdminTheme(overrides)
-    setThemeSaved(true)
-    setTimeout(() => setThemeSaved(false), 3000)
-  }
-
-  const handleResetTheme = () => {
-    resetTheme()
-    setThemeConfig(DEFAULT_THEME)
-    setThemeSaved(false)
-  }
-
-  const getComplementary = (hex: string) => {
-    const r = parseInt(hex.slice(1, 3), 16)
-    const g = parseInt(hex.slice(3, 5), 16)
-    const b = parseInt(hex.slice(5, 7), 16)
-    return `#${(255 - r).toString(16).padStart(2, '0')}${(255 - g).toString(16).padStart(2, '0')}${(255 - b).toString(16).padStart(2, '0')}`
-  }
-
-  const getContrastRatio = (hex1: string, hex2: string) => {
-    const lum = (hex: string) => {
-      const r = parseInt(hex.slice(1, 3), 16) / 255
-      const g = parseInt(hex.slice(3, 5), 16) / 255
-      const b = parseInt(hex.slice(5, 7), 16) / 255
-      const sR = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
-      const sG = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
-      const sB = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
-      return 0.2126 * sR + 0.7152 * sG + 0.0722 * sB
-    }
-    const l1 = lum(hex1)
-    const l2 = lum(hex2)
-    const lighter = Math.max(l1, l2)
-    const darker = Math.min(l1, l2)
-    return ((lighter + 0.05) / (darker + 0.05)).toFixed(1)
   }
 
   const supportFilteredUsers = useMemo(() => {
@@ -1781,13 +1684,6 @@ export default function AdminPage() {
                         <span style={{ color: TEXT_SECONDARY }} className="text-sm font-medium">New Signups</span>
                         <motion.button whileHover={{ scale: 1.05 }} onClick={() => setSignupsEnabled(!signupsEnabled)} style={{ backgroundColor: signupsEnabled ? '#10b98144' : `${BORDER_COLOR}`, borderColor: signupsEnabled ? '#10b981' : BORDER_COLOR, color: signupsEnabled ? '#10b981' : TEXT_MUTED }} className="px-3 py-1 rounded-full text-xs font-semibold border">{signupsEnabled ? 'Enabled' : 'Disabled'}</motion.button>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span style={{ color: TEXT_SECONDARY }} className="text-sm font-medium">Theme Mode</span>
-                        <div className="flex gap-2">
-                          <motion.button whileHover={{ scale: 1.05 }} onClick={() => { setIsDark(true); try { window.dispatchEvent(new StorageEvent('storage', { key: 'orca-theme-mode', newValue: 'dark' })); } catch {} }} style={{ backgroundColor: isDark ? `${GOLD}44` : BORDER_COLOR, borderColor: isDark ? GOLD : BORDER_COLOR, color: isDark ? GOLD : TEXT_MUTED }} className="px-3 py-1 rounded-full text-xs font-semibold border">Dark</motion.button>
-                          <motion.button whileHover={{ scale: 1.05 }} onClick={() => { setIsDark(false); try { window.dispatchEvent(new StorageEvent('storage', { key: 'orca-theme-mode', newValue: 'light' })); } catch {} }} style={{ backgroundColor: !isDark ? `${GOLD}44` : BORDER_COLOR, borderColor: !isDark ? GOLD : BORDER_COLOR, color: !isDark ? GOLD : TEXT_MUTED }} className="px-3 py-1 rounded-full text-xs font-semibold border">Light</motion.button>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -2443,126 +2339,48 @@ export default function AdminPage() {
 
             {activeTab === 'customize' && activeSubTab === 'theme' && (
               <div className="space-y-6">
-                {/* Theme Presets */}
+                {/* Theme Selector */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Theme Presets</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                    {themePresets.map((preset) => (
-                      <motion.button key={preset.name} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => handleApplyThemePreset(preset)} style={{ backgroundColor: preset.bg, borderColor: themeConfig.primaryColor === preset.primary ? preset.primary : BORDER_COLOR }} className="p-4 rounded-lg border text-center">
-                        <div style={{ backgroundColor: preset.primary, width: 32, height: 32 }} className="rounded-full mx-auto mb-2" />
-                        <p className="text-xs font-medium" style={{ color: themeConfig.primaryColor === preset.primary ? preset.primary : TEXT_SECONDARY }}>{preset.name}</p>
-                      </motion.button>
-                    ))}
+                  <div className="mb-6">
+                    <h2 className="text-xl font-bold mb-2" style={{ color: GOLD }}>Select Theme</h2>
+                    <p style={{ color: TEXT_SECONDARY }} className="text-sm">Choose a theme to instantly update the app's appearance</p>
                   </div>
-                </motion.div>
-
-                {/* Custom Colors */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Custom Colors</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {([
-                      { key: 'primaryColor' as const, label: 'Primary / Accent' },
-                      { key: 'bgDark' as const, label: 'Background Dark' },
-                      { key: 'bgCard' as const, label: 'Card Background' },
-                      { key: 'borderColor' as const, label: 'Borders' },
-                      { key: 'textPrimary' as const, label: 'Text Primary' },
-                      { key: 'textSecondary' as const, label: 'Text Secondary' },
-                      { key: 'textMuted' as const, label: 'Text Muted' },
-                    ]).map(({ key, label }) => (
-                      <div key={key} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="p-3 rounded-lg border">
-                        <label style={{ color: TEXT_SECONDARY }} className="block text-xs font-medium mb-2">{label}</label>
-                        <div className="flex items-center gap-3">
-                          <input type="color" value={themeConfig[key]} onChange={(e) => handleThemeColorChange(key, e.target.value)} className="w-10 h-10 rounded cursor-pointer border-0" style={{ backgroundColor: 'transparent' }} />
-                          <input type="text" value={themeConfig[key]} onChange={(e) => handleThemeColorChange(key, e.target.value)} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="flex-1 px-3 py-1.5 rounded border focus:outline-none text-sm font-mono" />
-                        </div>
-                      </div>
-                    ))}
+                  <div className="mb-4 flex items-center gap-2">
+                    <span style={{ color: TEXT_SECONDARY }} className="text-sm">Current theme:</span>
+                    <span style={{ color: theme.text }} className="text-sm font-semibold">
+                      {theme.name || 'Unknown'}
+                    </span>
                   </div>
-                </motion.div>
-
-                {/* Complementary Colors & Contrast */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Color Harmony & Legibility</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <p style={{ color: TEXT_SECONDARY }} className="text-sm font-medium mb-3">Complementary Colors</p>
-                      <div className="flex items-center gap-4">
-                        <div className="text-center">
-                          <div style={{ backgroundColor: themeConfig.primaryColor, width: 48, height: 48 }} className="rounded-lg mb-1" />
-                          <p style={{ color: TEXT_MUTED }} className="text-xs">Primary</p>
-                        </div>
-                        <span style={{ color: TEXT_MUTED }}>→</span>
-                        <div className="text-center">
-                          <div style={{ backgroundColor: getComplementary(themeConfig.primaryColor), width: 48, height: 48 }} className="rounded-lg mb-1" />
-                          <p style={{ color: TEXT_MUTED }} className="text-xs">Complement</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <p style={{ color: TEXT_SECONDARY }} className="text-sm font-medium mb-3">Contrast Ratios</p>
-                      <div className="space-y-2">
-                        {[
-                          { label: 'Primary on Dark BG', c1: themeConfig.primaryColor, c2: themeConfig.bgDark },
-                          { label: 'Text on Dark BG', c1: themeConfig.textPrimary, c2: themeConfig.bgDark },
-                          { label: 'Text on Card BG', c1: themeConfig.textPrimary, c2: themeConfig.bgCard },
-                          { label: 'Muted on Card BG', c1: themeConfig.textMuted, c2: themeConfig.bgCard },
-                        ].map((pair) => {
-                          const ratio = parseFloat(getContrastRatio(pair.c1, pair.c2))
-                          const pass = ratio >= 4.5
-                          return (
-                            <div key={pair.label} className="flex items-center justify-between">
-                              <span style={{ color: TEXT_SECONDARY }} className="text-xs">{pair.label}</span>
-                              <span style={{ color: pass ? '#10b981' : '#ef4444' }} className="text-xs font-bold">{ratio}:1 {pass ? '✓ AA' : '✗ Fail'}</span>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {allThemes.map((t) => (
+                      <div
+                        key={t.id}
+                        onClick={() => setThemeId(t.id)}
+                        className="cursor-pointer rounded-xl p-3 transition-all border-2"
+                        style={{
+                          borderColor: themeId === t.id ? t.accent : theme.border,
+                          backgroundColor: theme.card,
+                        }}
+                      >
+                        {/* Mini preview */}
+                        <div className="rounded-lg overflow-hidden mb-3 h-24" style={{ backgroundColor: t.bg }}>
+                          <div className="p-2 space-y-1.5">
+                            <div className="h-2 w-12 rounded" style={{ backgroundColor: t.accent }} />
+                            <div className="flex gap-1.5">
+                              <div className="h-8 flex-1 rounded" style={{ backgroundColor: t.card }} />
+                              <div className="h-8 flex-1 rounded" style={{ backgroundColor: t.card }} />
                             </div>
-                          )
-                        })}
+                            <div className="h-3 w-16 rounded" style={{ backgroundColor: t.text, opacity: 0.2 }} />
+                          </div>
+                        </div>
+                        {/* Name + checkmark */}
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium" style={{ color: theme.text }}>{t.name}</p>
+                          {themeId === t.id && <Check size={16} style={{ color: t.accent }} />}
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                </motion.div>
-
-                {/* Live Preview */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: themeConfig.bgCard, borderColor: themeConfig.borderColor }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: themeConfig.primaryColor }}>Live Preview</h2>
-                  <div style={{ backgroundColor: themeConfig.bgDark, borderColor: themeConfig.borderColor }} className="rounded-lg border p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div style={{ backgroundColor: `${themeConfig.primaryColor}22`, width: 40, height: 40 }} className="rounded-full flex items-center justify-center">
-                        <span style={{ color: themeConfig.primaryColor }} className="text-sm font-bold">O</span>
-                      </div>
-                      <div>
-                        <p style={{ color: themeConfig.textPrimary }} className="font-bold">{appName}</p>
-                        <p style={{ color: themeConfig.textMuted }} className="text-xs">{tagline}</p>
-                      </div>
-                    </div>
-                    <div style={{ backgroundColor: themeConfig.bgCard, borderColor: themeConfig.borderColor }} className="rounded-lg border p-4 mb-3">
-                      <p style={{ color: themeConfig.textSecondary }} className="text-sm mb-1">Sample Card</p>
-                      <p style={{ color: themeConfig.textPrimary }} className="text-2xl font-bold">$1,234.56</p>
-                      <p style={{ color: themeConfig.textMuted }} className="text-xs mt-1">Monthly spending</p>
-                    </div>
-                    <motion.button style={{ backgroundColor: themeConfig.primaryColor, color: themeConfig.bgDark }} className="w-full py-2 rounded-lg font-bold text-sm">Sample Button</motion.button>
-                  </div>
-                </motion.div>
-
-                {/* Save / Reset Theme Buttons */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }} className="flex gap-4">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={handleSaveTheme}
-                    style={{ backgroundColor: themeSaved ? '#10b981' : GOLD, color: BG_DARK }}
-                    className="flex-1 py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2"
-                  >
-                    {themeSaved ? <><CheckCircle size={18} /> Theme Saved &amp; Applied!</> : <><Save size={18} /> Save Changes</>}
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={handleResetTheme}
-                    style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }}
-                    className="px-6 py-3 rounded-lg font-bold text-sm border flex items-center gap-2"
-                  >
-                    <RefreshCw size={16} /> Reset to Default
-                  </motion.button>
                 </motion.div>
 
                 {/* ─── Branding: Logo Management ─── */}
@@ -2655,13 +2473,13 @@ export default function AdminPage() {
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
                 >
                   <h3 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Brand Colors</h3>
-                  <p className="text-sm mb-4" style={{ color: TEXT_MUTED }}>Current brand palette derived from theme settings above.</p>
+                  <p className="text-sm mb-4" style={{ color: TEXT_MUTED }}>Current theme palette colors.</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
-                      { name: 'Gold (Primary)', hex: themeConfig.primaryColor },
-                      { name: 'Background', hex: themeConfig.bgDark },
-                      { name: 'Card', hex: themeConfig.bgCard },
-                      { name: 'Border', hex: themeConfig.borderColor },
+                      { name: 'Accent', hex: theme.accent },
+                      { name: 'Background', hex: theme.bg },
+                      { name: 'Card', hex: theme.card },
+                      { name: 'Border', hex: theme.border },
                     ].map((c) => (
                       <div key={c.name} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: BORDER_COLOR }}>
                         <div className="w-8 h-8 rounded-lg flex-shrink-0" style={{ backgroundColor: c.hex }} />

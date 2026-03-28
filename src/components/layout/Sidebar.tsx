@@ -32,7 +32,7 @@ interface SidebarProps {
 
 export default function Sidebar({ userName = 'User', open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const { theme, isDark } = useTheme()
+  const { theme } = useTheme()
   const { data } = useOrcaData()
 
   // Custom logo from admin

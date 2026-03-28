@@ -6,8 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   User,
   Shield,
-  Moon,
-  Sun,
   LogOut,
   Save,
   Edit3,
@@ -25,7 +23,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const { data, setData, loading } = useOrcaData()
   const user = data.user
-  const { isDark, setIsDark, theme } = useTheme()
+  const { theme, themeId, setThemeId, allThemes } = useTheme()
 
   // Profile edit state
   const [editingName, setEditingName] = useState(false)
@@ -435,33 +433,36 @@ export default function SettingsPage() {
             Appearance
           </h2>
           <div
-            className="rounded-lg p-6 flex gap-4"
+            className="rounded-lg p-6"
             style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
           >
-            <button
-              onClick={() => setIsDark(true)}
-              className="flex-1 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
-              style={{
-                backgroundColor: isDark ? theme.gold : theme.bgS,
-                color: isDark ? theme.bg : theme.textS,
-                borderWidth: '1px',
-                borderColor: isDark ? theme.gold : theme.border,
-              }}
-            >
-              <Moon className="w-4 h-4" /> Dark
-            </button>
-            <button
-              onClick={() => setIsDark(false)}
-              className="flex-1 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
-              style={{
-                backgroundColor: !isDark ? theme.gold : theme.bgS,
-                color: !isDark ? theme.bg : theme.textS,
-                borderWidth: '1px',
-                borderColor: !isDark ? theme.gold : theme.border,
-              }}
-            >
-              <Sun className="w-4 h-4" /> Light
-            </button>
+            {/* Theme Selection */}
+            <div>
+              <label className="block text-sm font-semibold mb-3" style={{ color: theme.text }}>Theme</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {allThemes.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setThemeId(t.id)}
+                    className="rounded-lg p-3 text-left transition-all border-2"
+                    style={{
+                      backgroundColor: t.bg,
+                      borderColor: themeId === t.id ? t.accent : t.border,
+                      boxShadow: themeId === t.id ? `0 0 0 1px ${t.accent}` : 'none',
+                    }}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: t.accent }} />
+                      <span className="text-xs font-semibold" style={{ color: t.text }}>{t.name}</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <div className="h-1.5 flex-1 rounded" style={{ backgroundColor: t.card }} />
+                      <div className="h-1.5 w-4 rounded" style={{ backgroundColor: t.accent }} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </motion.div>
 
