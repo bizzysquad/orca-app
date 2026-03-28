@@ -885,10 +885,11 @@ export default function SmartStackPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         style={{ backgroundColor: theme.card, borderColor: theme.border }}
-        className="border rounded-xl p-6"
+        className="border rounded-xl p-4 sm:p-6"
       >
-        <h3 style={{ color: theme.text }} className="text-2xl font-bold mb-6 flex items-center gap-3">
-          <Briefcase size={28} style={{ color: theme.gold }} />
+        <h3 style={{ color: theme.text }} className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3 px-1 sm:px-0">
+          <Briefcase size={22} className="flex-shrink-0 sm:hidden" style={{ color: theme.gold }} />
+          <Briefcase size={28} className="flex-shrink-0 hidden sm:block" style={{ color: theme.gold }} />
           Incoming Payments
         </h3>
 

@@ -240,6 +240,7 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     'orca-dashboard-pinned',
     'orca-theme-mode',
     'orca-admin-theme',
+    'orca-admin-nav',
   ], [])
 
   // Push current localStorage to Supabase profiles.local_data

@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Settings, Menu, Sun, Moon } from 'lucide-react'
@@ -11,7 +11,7 @@ interface DesktopTopBarProps {
   onMenuToggle?: () => void
 }
 
-const ROUTE_TITLES: Record<string, string> = {
+const DEFAULT_ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/smart-stack': 'Smart Stack',
   '/bill-boss': 'Bill Boss',
@@ -21,10 +21,45 @@ const ROUTE_TITLES: Record<string, string> = {
   '/admin': 'Admin Panel',
 }
 
+const routeIdMap: Record<string, string> = {
+  '/dashboard': 'dashboard',
+  '/smart-stack': 'smart-stack',
+  '/bill-boss': 'bill-boss',
+  '/stack-circle': 'stack-circle',
+  '/task-list': 'task-list',
+  '/settings': 'settings',
+}
+
 export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
   const pathname = usePathname()
-  const title = ROUTE_TITLES[pathname] || 'ORCA'
   const { theme, isDark, setIsDark } = useTheme()
+
+  // Read admin nav labels
+  const [navLabels, setNavLabels] = useState<Record<string, string>>({})
+  useEffect(() => {
+    const load = () => {
+      try {
+        const saved = localStorage.getItem('orca-admin-nav')
+        if (saved) {
+          const items = JSON.parse(saved)
+          const map: Record<string, string> = {}
+          items.forEach((n: any) => { if (n.id && n.label) map[n.id] = n.label })
+          setNavLabels(map)
+        }
+      } catch {}
+    }
+    load()
+    const handler = () => load()
+    window.addEventListener('orca-nav-updated', handler)
+    window.addEventListener('orca-sync-ready', handler)
+    return () => {
+      window.removeEventListener('orca-nav-updated', handler)
+      window.removeEventListener('orca-sync-ready', handler)
+    }
+  }, [])
+
+  const routeId = routeIdMap[pathname]
+  const title = (routeId && navLabels[routeId]) || DEFAULT_ROUTE_TITLES[pathname] || 'ORCA'
 
   return (
     <div

@@ -47,14 +47,53 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
   // Use OrcaData name (most up-to-date, editable in Settings) > server-passed userName > fallback
   const resolvedName = (data.user?.name && data.user.name.trim()) ? data.user.name : userName
 
-  const navItems: NavItem[] = [
-    { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', emoji: '🏠' },
-    { name: 'Smart Stack', icon: BarChart3, href: '/smart-stack', emoji: '📊' },
-    { name: 'Bill Boss', icon: Receipt, href: '/bill-boss', emoji: '📄' },
-    { name: 'Task List', icon: ClipboardList, href: '/task-list', emoji: '📝' },
-    { name: 'Stack Circle', icon: Users, href: '/stack-circle', emoji: '👥' },
-    { name: 'Settings', icon: Settings, href: '/settings', emoji: '⚙️' },
-  ]
+  // Icon and route lookup by nav id
+  const navMeta: Record<string, { icon: React.ElementType; href: string; emoji: string; defaultLabel: string }> = {
+    dashboard: { icon: LayoutDashboard, href: '/dashboard', emoji: '🏠', defaultLabel: 'Dashboard' },
+    'smart-stack': { icon: BarChart3, href: '/smart-stack', emoji: '📊', defaultLabel: 'Smart Stack' },
+    'bill-boss': { icon: Receipt, href: '/bill-boss', emoji: '📄', defaultLabel: 'Bill Boss' },
+    'task-list': { icon: ClipboardList, href: '/task-list', emoji: '📝', defaultLabel: 'Task List' },
+    'stack-circle': { icon: Users, href: '/stack-circle', emoji: '👥', defaultLabel: 'Stack Circle' },
+    settings: { icon: Settings, href: '/settings', emoji: '⚙️', defaultLabel: 'Settings' },
+  }
+
+  // Read admin nav config from localStorage for custom labels, order, visibility
+  const [adminNav, setAdminNav] = useState<any[] | null>(null)
+  useEffect(() => {
+    const loadNav = () => {
+      try {
+        const saved = localStorage.getItem('orca-admin-nav')
+        if (saved) setAdminNav(JSON.parse(saved))
+      } catch {}
+    }
+    loadNav()
+    const handler = () => loadNav()
+    window.addEventListener('orca-nav-updated', handler)
+    window.addEventListener('orca-sync-ready', handler)
+    return () => {
+      window.removeEventListener('orca-nav-updated', handler)
+      window.removeEventListener('orca-sync-ready', handler)
+    }
+  }, [])
+
+  // Build final nav items: admin config (ordered, filtered, renamed) merged with icon/route metadata
+  const navItems: NavItem[] = (() => {
+    if (adminNav && adminNav.length > 0) {
+      return adminNav
+        .filter((n: any) => n.visible !== false)
+        .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+        .map((n: any) => {
+          const meta = navMeta[n.id]
+          if (!meta) return null
+          return { name: n.label || meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji }
+        })
+        .filter(Boolean) as NavItem[]
+    }
+    // Fallback: default hardcoded nav
+    return Object.entries(navMeta).map(([, meta]) => ({
+      name: meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji,
+    }))
+  })()
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard' || pathname === '/'

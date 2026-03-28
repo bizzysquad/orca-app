@@ -1,9 +1,12 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Scissors, Receipt, PiggyBank, TrendingUp } from 'lucide-react'
+import {
+  LayoutDashboard, Scissors, Receipt, PiggyBank, TrendingUp,
+  BarChart3, Users, ClipboardList, Settings,
+} from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
@@ -14,17 +17,70 @@ interface NavItem {
   href: string
 }
 
+// Icon lookup for admin-configured nav items
+const navIconMap: Record<string, React.ElementType> = {
+  dashboard: LayoutDashboard,
+  'smart-stack': BarChart3,
+  'bill-boss': Receipt,
+  'task-list': ClipboardList,
+  'stack-circle': Users,
+  settings: Settings,
+}
+
+const navHrefMap: Record<string, string> = {
+  dashboard: '/dashboard',
+  'smart-stack': '/smart-stack',
+  'bill-boss': '/bill-boss',
+  'task-list': '/task-list',
+  'stack-circle': '/stack-circle',
+  settings: '/settings',
+}
+
+const defaultBottomItems: NavItem[] = [
+  { name: 'Home', icon: LayoutDashboard, href: '/dashboard' },
+  { name: 'Smart Stack', icon: BarChart3, href: '/smart-stack' },
+  { name: 'Bills', icon: Receipt, href: '/bill-boss' },
+  { name: 'Tasks', icon: ClipboardList, href: '/task-list' },
+  { name: 'Settings', icon: Settings, href: '/settings' },
+]
+
 const BottomNav = React.forwardRef<HTMLDivElement, {}>((_props, ref) => {
   const pathname = usePathname()
   const { theme } = useTheme()
 
-  const navItems: NavItem[] = [
-    { name: 'Home', icon: LayoutDashboard, href: '/dashboard' },
-    { name: 'Split', icon: Scissors, href: '/check-spitter' },
-    { name: 'Bills', icon: Receipt, href: '/bill-boss' },
-    { name: 'Save', icon: PiggyBank, href: '/savings' },
-    { name: 'Credit', icon: TrendingUp, href: '/credit-score' },
-  ]
+  // Read admin nav config for consistent naming/order/visibility
+  const [adminNav, setAdminNav] = useState<any[] | null>(null)
+  useEffect(() => {
+    const loadNav = () => {
+      try {
+        const saved = localStorage.getItem('orca-admin-nav')
+        if (saved) setAdminNav(JSON.parse(saved))
+      } catch {}
+    }
+    loadNav()
+    const handler = () => loadNav()
+    window.addEventListener('orca-nav-updated', handler)
+    window.addEventListener('orca-sync-ready', handler)
+    return () => {
+      window.removeEventListener('orca-nav-updated', handler)
+      window.removeEventListener('orca-sync-ready', handler)
+    }
+  }, [])
+
+  const navItems: NavItem[] = (() => {
+    if (adminNav && adminNav.length > 0) {
+      return adminNav
+        .filter((n: any) => n.visible !== false)
+        .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+        .slice(0, 5) // Max 5 items for bottom nav
+        .map((n: any) => ({
+          name: n.label || n.id,
+          icon: navIconMap[n.id] || LayoutDashboard,
+          href: navHrefMap[n.id] || '/dashboard',
+        }))
+    }
+    return defaultBottomItems
+  })()
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard' || pathname === '/'

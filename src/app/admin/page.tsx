@@ -469,9 +469,26 @@ export default function AdminPage() {
     refetchMetrics()
   }, [adminAuthenticated])
 
-  // Navigation states
-  const [navItems, setNavItems] = useState<NavItem[]>(DEFAULT_NAV)
+  // Navigation states — load from localStorage, fall back to defaults
+  const [navItems, setNavItems] = useState<NavItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('orca-admin-nav')
+        if (saved) return JSON.parse(saved)
+      } catch {}
+    }
+    return DEFAULT_NAV
+  })
   const [editingNavItem, setEditingNavItem] = useState<string | null>(null)
+
+  // Persist nav changes to localStorage and broadcast
+  useEffect(() => {
+    try {
+      localStorage.setItem('orca-admin-nav', JSON.stringify(navItems))
+      window.dispatchEvent(new CustomEvent('orca-local-write', { detail: { key: 'orca-admin-nav' } }))
+      window.dispatchEvent(new CustomEvent('orca-nav-updated', { detail: { navItems } }))
+    } catch {}
+  }, [navItems])
 
   // Theme states
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(DEFAULT_THEME)
