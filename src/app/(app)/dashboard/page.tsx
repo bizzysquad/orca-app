@@ -351,7 +351,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const handler = (e: any) => {
       const key = e?.detail?.key || ''
-      if (key.includes('payment') || key.includes('savings') || key.includes('bills')) {
+      if (key.includes('payment') || key.includes('savings') || key.includes('bills') || key.includes('task')) {
         setLocalWriteTick(c => c + 1)
       }
     }
@@ -412,12 +412,23 @@ export default function DashboardPage() {
     'stack-circle',
   ])
 
-  // Load section order from localStorage
+  // Load section order from localStorage — merge in any new sections that were added
   useEffect(() => {
+    const defaultSections = ['financial-cards', 'spend-paycheck', 'rent-tracker', 'calendar', 'credit-score', 'stack-circle']
     const saved = localStorage.getItem('orca-dashboard-order')
     if (saved) {
       try {
-        setSectionOrder(JSON.parse(saved))
+        // Filter out any removed sections (e.g. task-list was removed from dashboard)
+        const parsed: string[] = JSON.parse(saved).filter((s: string) => defaultSections.includes(s))
+        // Find any sections that exist in defaults but not in saved order
+        const missing = defaultSections.filter(s => !parsed.includes(s))
+        if (missing.length > 0) {
+          const merged = [...parsed, ...missing]
+          setSectionOrder(merged)
+          localStorage.setItem('orca-dashboard-order', JSON.stringify(merged))
+        } else {
+          setSectionOrder(parsed)
+        }
       } catch (e) {
         // Keep default order if parsing fails
       }
@@ -800,7 +811,7 @@ export default function DashboardPage() {
 
     return events
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calMonth, calYear, bills, group, syncReady])
+  }, [calMonth, calYear, bills, group, syncReady, localWriteTick])
 
   // Compute current week dates for weekly view
   const weekDates = useMemo(() => {
@@ -1074,7 +1085,7 @@ export default function DashboardPage() {
         )
 
       case 'rent-tracker':
-        return rentTracker ? (
+        return (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div variants={fadeUp} className="glass rounded-2xl p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
               <div className="flex items-center justify-between mb-4">
@@ -1082,37 +1093,48 @@ export default function DashboardPage() {
                   <Home size={18} style={{ color: theme.gold }} />
                   <p className="text-base font-semibold" style={{ color: theme.text }}>Rent Tracker</p>
                 </div>
-                {rentTracker.isPaid && (
+                {rentTracker?.isPaid && (
                   <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>PAID</span>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-xs mb-1" style={{ color: theme.textM }}>Saved Toward Rent</p>
-                  <p className="text-2xl font-bold" style={{ color: rentTracker.isPaid ? '#22c55e' : theme.gold }}>{fmt(rentTracker.saved)}</p>
+              {rentTracker ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-xs mb-1" style={{ color: theme.textM }}>Saved Toward Rent</p>
+                      <p className="text-2xl font-bold" style={{ color: rentTracker.isPaid ? '#22c55e' : theme.gold }}>{fmt(rentTracker.saved)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs mb-1" style={{ color: theme.textM }}>Remaining</p>
+                      <p className="text-2xl font-bold" style={{ color: rentTracker.remaining > 0 ? '#ef4444' : '#22c55e' }}>{fmt(rentTracker.remaining)}</p>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: `${theme.border}60` }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min((rentTracker.saved / rentTracker.total) * 100, 100)}%`,
+                        backgroundColor: rentTracker.isPaid ? '#22c55e' : theme.gold,
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs mt-2" style={{ color: theme.textM }}>
+                    {fmt(rentTracker.saved)} of {fmt(rentTracker.total)} rent
+                    {!rentTracker.isPaid && rentTracker.remaining > 0 && ` · ${fmt(rentTracker.remaining)} to go`}
+                  </p>
+                </>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm mb-2" style={{ color: theme.textM }}>No rent amount configured yet</p>
+                  <Link href="/settings" className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg transition-all hover:opacity-80" style={{ backgroundColor: `${theme.gold}15`, color: theme.gold }}>
+                    <Settings size={14} />
+                    Set Up in Settings
+                  </Link>
                 </div>
-                <div>
-                  <p className="text-xs mb-1" style={{ color: theme.textM }}>Remaining</p>
-                  <p className="text-2xl font-bold" style={{ color: rentTracker.remaining > 0 ? '#ef4444' : '#22c55e' }}>{fmt(rentTracker.remaining)}</p>
-                </div>
-              </div>
-              {/* Progress bar */}
-              <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: `${theme.border}60` }}>
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${Math.min((rentTracker.saved / rentTracker.total) * 100, 100)}%`,
-                    backgroundColor: rentTracker.isPaid ? '#22c55e' : theme.gold,
-                  }}
-                />
-              </div>
-              <p className="text-xs mt-2" style={{ color: theme.textM }}>
-                {fmt(rentTracker.saved)} of {fmt(rentTracker.total)} rent
-                {!rentTracker.isPaid && rentTracker.remaining > 0 && ` · ${fmt(rentTracker.remaining)} to go`}
-              </p>
+              )}
             </motion.div>
           </DraggableSection>
-        ) : null
+        )
 
       case 'calendar':
         return (
