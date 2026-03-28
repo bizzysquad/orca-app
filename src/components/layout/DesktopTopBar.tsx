@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Menu } from 'lucide-react'
+import { Settings, Menu, Home, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -32,7 +32,7 @@ const routeIdMap: Record<string, string> = {
 
 export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
   const pathname = usePathname()
-  const { theme } = useTheme()
+  const { theme, themeId, setThemeId, allThemes } = useTheme()
 
   // Read admin nav labels
   const [navLabels, setNavLabels] = useState<Record<string, string>>({})
@@ -84,6 +84,34 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
           style={{ color: theme.textM }}
         >
           <Menu size={22} />
+        </button>
+        {/* Home button */}
+        <Link
+          href="/dashboard"
+          className={cn(
+            'p-2 rounded-lg transition-colors duration-200',
+            'hover:opacity-80'
+          )}
+          style={{ color: theme.gold }}
+        >
+          <Home size={20} strokeWidth={1.5} />
+        </Link>
+        {/* Theme toggle */}
+        <button
+          onClick={() => {
+            const ids = allThemes.map(t => t.id)
+            const idx = ids.indexOf(themeId)
+            const next = ids[(idx + 1) % ids.length]
+            setThemeId(next)
+          }}
+          className={cn(
+            'p-2 rounded-lg transition-colors duration-200',
+            'hover:opacity-80'
+          )}
+          style={{ color: theme.gold }}
+          title={`Theme: ${theme.name}`}
+        >
+          <Palette size={20} strokeWidth={1.5} />
         </button>
         <h1
           className="text-lg sm:text-xl font-semibold"

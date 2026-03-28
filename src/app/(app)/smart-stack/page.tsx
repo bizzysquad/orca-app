@@ -14,7 +14,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { setLocalSynced } from '@/lib/syncLocal';
 import CalendarPicker from '@/components/CalendarPicker';
 
-type Tab = 'budget' | 'savings';
+type Tab = 'income' | 'savings';
 
 interface Obligation {
   id: string;
@@ -66,8 +66,9 @@ interface PaymentEntry {
 // ============== PROJECTION CALCULATOR COMPONENT ==============
 function ProjectionCalculator({ theme }: { theme: any }) {
   const [goalAmount, setGoalAmount] = useState('')
+  const [currentSaved, setCurrentSaved] = useState('')
   const [timeframe, setTimeframe] = useState('')
-  const [timeUnit, setTimeUnit] = useState<'weeks' | 'months' | 'years'>('months')
+  const [timeUnit, setTimeUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('months')
   const [result, setResult] = useState<{ perWeek: number; perMonth: number; perDay: number } | null>(null)
 
   const calculate = () => {
@@ -75,11 +76,18 @@ function ProjectionCalculator({ theme }: { theme: any }) {
     const time = parseFloat(timeframe)
     if (!goal || !time || goal <= 0 || time <= 0) return
 
+    const remaining = goal - (parseFloat(currentSaved) || 0)
+    if (remaining <= 0) {
+      setResult({ perWeek: 0, perMonth: 0, perDay: 0 })
+      return
+    }
+
     let totalWeeks = time
+    if (timeUnit === 'days') totalWeeks = time / 7
     if (timeUnit === 'months') totalWeeks = time * 4.33
     if (timeUnit === 'years') totalWeeks = time * 52
 
-    const perWeek = goal / totalWeeks
+    const perWeek = remaining / totalWeeks
     const perMonth = perWeek * 4.33
     const perDay = perWeek / 7
 
@@ -116,6 +124,23 @@ function ProjectionCalculator({ theme }: { theme: any }) {
           />
         </div>
 
+        <div>
+          <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">How much do you have now? ($)</label>
+          <input
+            type="number"
+            value={currentSaved}
+            onChange={(e) => setCurrentSaved(e.target.value)}
+            placeholder="e.g. 1000"
+            className="w-full rounded-lg px-4 py-2.5 text-sm"
+            style={{
+              backgroundColor: theme.bg,
+              borderColor: theme.border,
+              color: theme.text,
+              border: `1px solid ${theme.border}`,
+            }}
+          />
+        </div>
+
         <div className="flex gap-3">
           <div className="flex-1">
             <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">Timeframe</label>
@@ -137,7 +162,7 @@ function ProjectionCalculator({ theme }: { theme: any }) {
             <label style={{ color: theme.textS }} className="block text-sm font-semibold mb-2">Unit</label>
             <select
               value={timeUnit}
-              onChange={(e) => setTimeUnit(e.target.value as 'weeks' | 'months' | 'years')}
+              onChange={(e) => setTimeUnit(e.target.value as 'days' | 'weeks' | 'months' | 'years')}
               className="w-full rounded-lg px-4 py-2.5 text-sm"
               style={{
                 backgroundColor: theme.bg,
@@ -146,6 +171,7 @@ function ProjectionCalculator({ theme }: { theme: any }) {
                 border: `1px solid ${theme.border}`,
               }}
             >
+              <option value="days">Days</option>
               <option value="weeks">Weeks</option>
               <option value="months">Months</option>
               <option value="years">Years</option>
@@ -170,20 +196,21 @@ function ProjectionCalculator({ theme }: { theme: any }) {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-3 gap-3 pt-4 border-t"
+            className="pt-4 border-t space-y-3"
             style={{ borderColor: theme.border }}
           >
-            <div className="text-center p-3 rounded-lg" style={{ backgroundColor: `${theme.ok}20` }}>
-              <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Day</p>
-              <p style={{ color: theme.ok }} className="text-sm font-bold">{fmt(result.perDay)}</p>
-            </div>
-            <div className="text-center p-3 rounded-lg" style={{ backgroundColor: `${theme.gold}20` }}>
-              <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Week</p>
-              <p style={{ color: theme.gold }} className="text-sm font-bold">{fmt(result.perWeek)}</p>
-            </div>
-            <div className="text-center p-3 rounded-lg" style={{ backgroundColor: `${theme.warn}20` }}>
-              <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Month</p>
-              <p style={{ color: theme.warn }} className="text-sm font-bold">{fmt(result.perMonth)}</p>
+            <p className="text-sm font-semibold" style={{ color: theme.text }}>
+              Based on your income and bills this month, you need to set aside:
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-center p-3 rounded-lg" style={{ backgroundColor: `${theme.gold}20` }}>
+                <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Week</p>
+                <p style={{ color: theme.gold }} className="text-lg font-bold">{fmt(result.perWeek)}</p>
+              </div>
+              <div className="text-center p-3 rounded-lg" style={{ backgroundColor: `${theme.ok}20` }}>
+                <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Day</p>
+                <p style={{ color: theme.ok }} className="text-lg font-bold">{fmt(result.perDay)}</p>
+              </div>
             </div>
           </motion.div>
         )}
@@ -202,14 +229,14 @@ export default function SmartStackPage() {
       const tab = params.get('tab');
       if (tab === 'savings') return 'savings';
     }
-    return 'budget';
+    return 'income';
   });
 
   // Also respond to URL changes (e.g. navigating from Dashboard savings card)
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab === 'savings') setActiveTab('savings');
-    else if (tab === 'budget') setActiveTab('budget');
+    else if (tab === 'income') setActiveTab('income');
   }, [searchParams]);
   const [budgetLocked, setBudgetLocked] = useState(false);
   const [paycheckHistory, setPaycheckHistory] = useState<PaycheckEntry[]>([]);
@@ -232,7 +259,7 @@ export default function SmartStackPage() {
     return [];
   });
   const [newAccountName, setNewAccountName] = useState('');
-  const [projectionMode, setProjectionMode] = useState<'check' | 'payment'>('payment');
+  const [projectionMode, setProjectionMode] = useState<'payment' | 'check' | 'calculator'>('payment');
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
 
   // Pay Splitter adjustable settings (persisted)
@@ -919,23 +946,11 @@ export default function SmartStackPage() {
         </h3>
 
         <div className="space-y-6">
-          {/* Summary */}
-          <div className="grid grid-cols-2 gap-4">
-            <div style={{ backgroundColor: theme.bg, borderColor: theme.gold }} className="border-2 rounded-lg p-4 min-w-0 overflow-hidden">
-              <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-1">Total Expected</p>
-              <p style={{ color: theme.gold }} className="text-xl sm:text-2xl font-bold truncate">{fmt(totalPayments)}</p>
-            </div>
-            <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4 min-w-0 overflow-hidden">
-              <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-1">Next Payment</p>
-              <p style={{ color: theme.text }} className="text-xl sm:text-2xl font-bold truncate">
-                {nextPayment ? fmt(nextPayment.amount) : '$0.00'}
-              </p>
-              {nextPayment && (
-                <p style={{ color: theme.textM }} className="text-xs mt-1">
-                  {new Date(nextPayment.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </p>
-              )}
-            </div>
+          {/* Instructions */}
+          <div className="rounded-lg p-4" style={{ backgroundColor: `${theme.gold}10`, border: `1px solid ${theme.gold}30` }}>
+            <p className="text-sm" style={{ color: theme.textS }}>
+              Track your expected income here. Add each paycheck or payment you expect to receive, set the date and recurrence, then mark them as received when they arrive. This feeds into your Safe to Spend calculation on the Dashboard.
+            </p>
           </div>
 
           {/* Add / Edit Payment Form */}
@@ -1522,25 +1537,19 @@ export default function SmartStackPage() {
 
             {/* Guidance Card */}
             <div className="rounded-xl p-4" style={{ backgroundColor: `${theme.gold}08`, border: `1px solid ${theme.gold}25` }}>
-              <p className="text-sm font-bold mb-3" style={{ color: theme.gold }}>
+              <p className="text-sm font-semibold mb-3" style={{ color: theme.text }}>
                 Based on your income and bills this month, you need to set aside:
               </p>
               <div className="grid grid-cols-2 gap-3">
-                <div className="text-center rounded-lg p-3" style={{ backgroundColor: theme.card }}>
-                  <p className="text-2xl font-bold" style={{ color: theme.gold }}>{fmt(splitterWeeklyAlloc)}</p>
-                  <p className="text-[10px] font-semibold uppercase mt-1" style={{ color: theme.textM }}>per week</p>
+                <div className="text-center p-3 rounded-lg" style={{ backgroundColor: `${theme.gold}20` }}>
+                  <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Week</p>
+                  <p style={{ color: theme.gold }} className="text-lg font-bold">{fmt(splitterWeeklyAlloc)}</p>
                 </div>
-                <div className="text-center rounded-lg p-3" style={{ backgroundColor: theme.card }}>
-                  <p className="text-2xl font-bold" style={{ color: theme.gold }}>{fmt(splitterPerPayment)}</p>
-                  <p className="text-[10px] font-semibold uppercase mt-1" style={{ color: theme.textM }}>per paycheck</p>
-                  <p className="text-[9px] mt-0.5" style={{ color: theme.textM }}>({splitterPaymentCount} payment{splitterPaymentCount !== 1 ? 's' : ''} this month)</p>
+                <div className="text-center p-3 rounded-lg" style={{ backgroundColor: `${theme.ok}20` }}>
+                  <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Day</p>
+                  <p style={{ color: theme.ok }} className="text-lg font-bold">{fmt(splitterWeeklyAlloc / 7)}</p>
                 </div>
               </div>
-              <p className="text-xs mt-3" style={{ color: theme.textS }}>
-                Allocate <span style={{ color: theme.gold }} className="font-semibold">{fmt(splitterWeeklyAlloc)}/week</span> toward bills to stay fully covered for {monthLabel}.
-                {splitterRemaining > 0 && <> You&apos;ll have <span style={{ color: theme.ok }} className="font-semibold">{fmt(splitterRemaining)}</span> left to spend.</>}
-                {splitterRemaining === 0 && splitterBillsTotal > splitterTotalAvailable && <> <span style={{ color: theme.bad }} className="font-semibold">Warning:</span> Your bills exceed your available income by {fmt(splitterBillsTotal - splitterTotalAvailable)}.</>}
-              </p>
             </div>
           </div>
         ) : (
@@ -1626,8 +1635,8 @@ export default function SmartStackPage() {
                     }}>
                       {isPast ? 'Received' : isFuture ? 'Upcoming' : 'Expected'}
                     </span>
-                    <p style={{ color: isPast ? theme.ok : theme.text }} className="font-bold text-sm">
-                      {fmt(entry.amount)}
+                    <p style={{ color: '#22c55e' }} className="font-bold text-sm">
+                      +{fmt(entry.amount)}
                     </p>
                   </div>
                 </motion.div>
@@ -1639,23 +1648,12 @@ export default function SmartStackPage() {
     );
   };
 
-  // ============== TAB: BUDGET ==============
-  const renderBudgetTab = () => {
-    // Toggle between Incoming Payments and Check Projector
+  // ============== TAB: INCOME ==============
+  const renderIncomeTab = () => {
+    // Toggle between Incoming Payments, Check Projector, and Projection Calculator
     const renderProjectionToggle = () => (
       <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-3 mb-8">
-        <div className="flex rounded-lg overflow-hidden" style={{ backgroundColor: theme.bg }}>
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setProjectionMode('check')}
-            style={{
-              backgroundColor: projectionMode === 'check' ? theme.gold : 'transparent',
-              color: projectionMode === 'check' ? theme.bgS : theme.textM,
-            }}
-            className="flex-1 py-3 font-semibold text-sm flex items-center justify-center gap-2 rounded-lg transition-all"
-          >
-            <DollarSign size={16} /> Check Projector
-          </motion.button>
+        <div className="flex rounded-lg overflow-hidden gap-2" style={{ backgroundColor: theme.bg }}>
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={() => setProjectionMode('payment')}
@@ -1663,9 +1661,31 @@ export default function SmartStackPage() {
               backgroundColor: projectionMode === 'payment' ? theme.gold : 'transparent',
               color: projectionMode === 'payment' ? theme.bgS : theme.textM,
             }}
-            className="flex-1 py-3 font-semibold text-sm flex items-center justify-center gap-2 rounded-lg transition-all"
+            className="flex-1 py-2 font-semibold text-xs flex items-center justify-center gap-1 rounded-lg transition-all"
           >
-            <Briefcase size={16} /> Incoming Payments
+            <Briefcase size={14} /> Incoming Payments
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setProjectionMode('check')}
+            style={{
+              backgroundColor: projectionMode === 'check' ? theme.gold : 'transparent',
+              color: projectionMode === 'check' ? theme.bgS : theme.textM,
+            }}
+            className="flex-1 py-2 font-semibold text-xs flex items-center justify-center gap-1 rounded-lg transition-all"
+          >
+            <DollarSign size={14} /> Check Projection
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setProjectionMode('calculator')}
+            style={{
+              backgroundColor: projectionMode === 'calculator' ? theme.gold : 'transparent',
+              color: projectionMode === 'calculator' ? theme.bgS : theme.textM,
+            }}
+            className="flex-1 py-2 font-semibold text-xs flex items-center justify-center gap-1 rounded-lg transition-all"
+          >
+            <Target size={14} /> Projection Calculator
           </motion.button>
         </div>
       </div>
@@ -1681,15 +1701,16 @@ export default function SmartStackPage() {
 
         {projectionMode === 'payment' ? (
           renderPaymentProjection()
-        ) : (
+        ) : projectionMode === 'check' ? (
           <>
             {renderCheckProjectionWithCalendar()}
           </>
+        ) : (
+          <ProjectionCalculator theme={theme} />
         )}
 
         {renderSplitter()}
         {renderPaycheckHistory()}
-        <ProjectionCalculator theme={theme} />
       </motion.div>
     );
   };
@@ -2165,7 +2186,7 @@ export default function SmartStackPage() {
           style={{ backgroundColor: theme.card, borderColor: theme.border }}
           className="border rounded-xl p-2 mb-8 flex gap-2"
         >
-          {(['budget', 'savings'] as Tab[]).map((tab) => (
+          {(['income', 'savings'] as Tab[]).map((tab) => (
             <motion.button
               key={tab}
               whileHover={{ scale: 1.05 }}
@@ -2183,7 +2204,7 @@ export default function SmartStackPage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'budget' && renderBudgetTab()}
+        {activeTab === 'income' && renderIncomeTab()}
         {activeTab === 'savings' && renderSavingsTab()}
       </div>
     </div>

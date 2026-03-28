@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Bell, BellRing, Edit3 } from 'lucide-react'
+import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Edit3 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
 import { getRecurringBillDates } from '@/lib/income-engine'
@@ -230,8 +230,9 @@ export default function BillBossPage() {
   const [viewMode, setViewMode] = useState<'list' | 'compact'>('compact')
   const [notifications, setNotifications] = useState<Array<{ id: string; billId: string; billName: string; amount: number; dueDate: string; type: 'due-today' | 'upcoming'; dismissed: boolean }>>([])
   const [editingBillId, setEditingBillId] = useState<string | null>(null)
-  const [showNotifications, setShowNotifications] = useState(false)
   const [collapsedSplits, setCollapsedSplits] = useState<Record<string, boolean>>({})
+  const [partialPayId, setPartialPayId] = useState<string | null>(null)
+  const [partialPayAmount, setPartialPayAmount] = useState('')
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -317,13 +318,6 @@ export default function BillBossPage() {
       return newNotifs.map(n => ({ ...n, dismissed: dismissed.has(n.id) }))
     })
   }, [bills])
-
-  // Quick-pay from notification
-  const handleNotifPay = (billId: string) => {
-    const today = new Date().toISOString().split('T')[0]
-    persistBills(bills.map(b => b.id === billId ? { ...b, status: 'paid' as const, paidDate: today } : b))
-    setNotifications(prev => prev.map(n => n.billId === billId ? { ...n, dismissed: true } : n))
-  }
 
   const activeNotifCount = notifications.filter(n => !n.dismissed).length
 
@@ -498,14 +492,45 @@ export default function BillBossPage() {
     setShowAddForm(false)
   }
 
-  // Handler: Pay full bill — track actual paid date
+  // Handler: Show partial payment dialog
   const handlePayFull = (billId: string) => {
+    const bill = bills.find(b => b.id === billId)
+    if (bill) {
+      setPartialPayId(billId)
+      setPartialPayAmount(String(bill.amount))
+    }
+  }
+
+  // Handler: Apply partial or full payment
+  const handleApplyPartialPayment = () => {
+    if (!partialPayId || !partialPayAmount) return
+
+    const amount = parseFloat(partialPayAmount)
+    if (isNaN(amount) || amount <= 0) return
+
+    const bill = bills.find(b => b.id === partialPayId)
+    if (!bill) return
+
     const today = new Date().toISOString().split('T')[0]
-    persistBills(bills.map(b =>
-      b.id === billId
-        ? { ...b, status: 'paid' as const, paidDate: today }
-        : b
-    ))
+
+    if (amount >= bill.amount) {
+      // Full payment
+      persistBills(bills.map(b =>
+        b.id === partialPayId
+          ? { ...b, status: 'paid' as const, paidDate: today }
+          : b
+      ))
+    } else {
+      // Partial payment
+      persistBills(bills.map(b =>
+        b.id === partialPayId
+          ? { ...b, amount: b.amount - amount, status: 'upcoming' as const }
+          : b
+      ))
+    }
+
+    setPartialPayId(null)
+    setPartialPayAmount('')
   }
 
   // Handler: Delete bill
@@ -591,63 +616,6 @@ export default function BillBossPage() {
             <p className="text-sm mt-1" style={{ color: theme.textM }}>Manage your monthly bills</p>
           </div>
           {/* Notification Bell */}
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-xl transition-colors"
-              style={{ backgroundColor: activeNotifCount > 0 ? `${theme.gold}15` : theme.card }}
-            >
-              {activeNotifCount > 0 ? <BellRing size={22} style={{ color: theme.gold }} /> : <Bell size={22} style={{ color: theme.textM }} />}
-              {activeNotifCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: theme.bad, color: '#fff' }}>
-                  {activeNotifCount}
-                </span>
-              )}
-            </button>
-
-            {/* Notification Dropdown */}
-            <AnimatePresence>
-              {showNotifications && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                  style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                  className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-[320px] border rounded-xl shadow-2xl z-50 overflow-hidden"
-                >
-                  <div className="p-3 border-b" style={{ borderColor: theme.border }}>
-                    <p className="text-sm font-bold" style={{ color: theme.text }}>Bill Reminders</p>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {notifications.filter(n => !n.dismissed).length === 0 ? (
-                      <div className="p-4 text-center">
-                        <p className="text-sm" style={{ color: theme.textM }}>No upcoming reminders</p>
-                      </div>
-                    ) : (
-                      notifications.filter(n => !n.dismissed).map(notif => (
-                        <div key={notif.id} className="p-3 border-b last:border-b-0 flex items-center gap-3" style={{ borderColor: `${theme.border}60` }}>
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: notif.type === 'due-today' ? theme.bad : theme.warn }} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{notif.billName}</p>
-                            <p className="text-xs" style={{ color: theme.textM }}>
-                              {notif.type === 'due-today' ? 'Due today' : `Due ${fmtD(notif.dueDate)}`} · {fmt(notif.amount)}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => handleNotifPay(notif.billId)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0 hover:opacity-80 transition-colors"
-                            style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
-                          >
-                            Pay
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
         </div>
       </motion.div>
 
@@ -1293,6 +1261,78 @@ export default function BillBossPage() {
           </motion.div>
         )}
       </div>
+
+      {/* 6b. Partial Payment Modal */}
+      <AnimatePresence>
+        {partialPayId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
+            onClick={() => setPartialPayId(null)}
+          >
+            <motion.div
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ backgroundColor: theme.card, borderColor: theme.border }}
+              className="w-full border-t rounded-t-2xl p-6 space-y-4"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 style={{ color: theme.text }} className="font-bold text-lg">Payment</h2>
+                <button
+                  onClick={() => setPartialPayId(null)}
+                  className="p-1 rounded-lg transition-colors"
+                  style={{ backgroundColor: theme.textS }}
+                >
+                  <X className="w-5 h-5" style={{ color: theme.textM }} />
+                </button>
+              </div>
+
+              <p style={{ color: theme.textM }} className="text-sm">
+                Enter payment amount:
+              </p>
+
+              <input
+                type="number"
+                value={partialPayAmount}
+                onChange={(e) => setPartialPayAmount(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border font-semibold text-lg"
+                style={{
+                  backgroundColor: theme.bg,
+                  borderColor: theme.border,
+                  color: theme.text
+                }}
+                step="0.01"
+                min="0"
+              />
+
+              <div className="flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleApplyPartialPayment}
+                  style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
+                  className="flex-1 px-4 py-2.5 rounded-lg font-semibold hover:opacity-80 transition-colors"
+                >
+                  Apply
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setPartialPayId(null)}
+                  style={{ backgroundColor: theme.textS, color: theme.textM }}
+                  className="flex-1 px-4 py-2.5 rounded-lg font-semibold hover:opacity-80 transition-colors"
+                >
+                  Cancel
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 7. Split Modal */}
       <AnimatePresence>

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Settings } from 'lucide-react'
+import { Settings, Home, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -14,7 +14,7 @@ interface TopBarProps {
 
 const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
   ({ title = 'ORCA', notificationCount = 0 }, ref) => {
-    const { theme } = useTheme()
+    const { theme, themeId, setThemeId, allThemes } = useTheme()
 
     const [customLogo, setCustomLogo] = useState<string | null>(null)
     useEffect(() => {
@@ -52,6 +52,29 @@ const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
         </h1>
 
         <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Home button */}
+          <Link
+            href="/dashboard"
+            className="p-2.5 rounded-lg transition-colors duration-200"
+            style={{ color: theme.gold }}
+          >
+            <Home size={18} strokeWidth={1.5} />
+          </Link>
+          {/* Theme toggle */}
+          <button
+            onClick={() => {
+              const ids = allThemes.map(t => t.id)
+              const idx = ids.indexOf(themeId)
+              const next = ids[(idx + 1) % ids.length]
+              setThemeId(next)
+            }}
+            className="p-2.5 rounded-lg transition-colors duration-200"
+            style={{ color: theme.gold }}
+            title={`Theme: ${theme.name}`}
+          >
+            <Palette size={18} strokeWidth={1.5} />
+          </button>
+          {/* Settings Link */}
           <Link
             href="/settings"
             className="p-2.5 rounded-lg transition-colors duration-200"

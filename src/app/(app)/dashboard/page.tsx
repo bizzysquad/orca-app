@@ -399,6 +399,8 @@ export default function DashboardPage() {
 
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
+  const [calendarView, setCalendarView] = useState<'monthly' | 'weekly'>('monthly')
+  const [weekOffset, setWeekOffset] = useState(0)
   const [spendView, setSpendView] = useState<'weekly' | 'daily'>('weekly')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [sectionOrder, setSectionOrder] = useState<string[]>([
@@ -800,6 +802,19 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calMonth, calYear, bills, group, syncReady])
 
+  // Compute current week dates for weekly view
+  const weekDates = useMemo(() => {
+    const today = new Date()
+    const dayOfWeek = today.getDay()
+    const sunday = new Date(today)
+    sunday.setDate(today.getDate() - dayOfWeek + (weekOffset * 7))
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(sunday)
+      d.setDate(sunday.getDate() + i)
+      return d
+    })
+  }, [weekOffset])
+
   const upcomingEvents = useMemo(() => {
     return calendarEvents
       .sort((a, b) => a.date - b.date)
@@ -1104,17 +1119,80 @@ export default function DashboardPage() {
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div variants={fadeUp}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Calendar</h2>
+                <h2 className="text-xl font-bold" style={{ color: theme.text }}>Calendar</h2>
+                <div className="flex rounded-lg p-0.5" style={{ backgroundColor: `${theme.border}60` }}>
+                  <button
+                    onClick={() => setCalendarView('monthly')}
+                    className="px-3 py-1 rounded-md text-xs font-semibold transition-all"
+                    style={{
+                      backgroundColor: calendarView === 'monthly' ? theme.gold : 'transparent',
+                      color: calendarView === 'monthly' ? theme.bg : theme.textS,
+                    }}
+                  >
+                    Month
+                  </button>
+                  <button
+                    onClick={() => setCalendarView('weekly')}
+                    className="px-3 py-1 rounded-md text-xs font-semibold transition-all"
+                    style={{
+                      backgroundColor: calendarView === 'weekly' ? theme.gold : 'transparent',
+                      color: calendarView === 'weekly' ? theme.bg : theme.textS,
+                    }}
+                  >
+                    Week
+                  </button>
+                </div>
               </div>
-              <MonthlyCalendar
-                events={calendarEvents}
-                month={calMonth}
-                year={calYear}
-                onMonthChange={handleMonthChange}
-                onDayClick={(day) => setSelectedDay(day === 0 ? null : day)}
-                selectedDay={selectedDay}
-                theme={theme}
-              />
+
+              {calendarView === 'weekly' ? (
+                <div className="glass rounded-2xl p-4 sm:p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <button onClick={() => setWeekOffset(w => w - 1)} className="p-2 rounded-lg hover:opacity-70 transition-opacity" style={{ color: theme.textS }}>
+                      <ChevronLeft size={18} />
+                    </button>
+                    <p className="font-semibold text-sm" style={{ color: theme.text }}>
+                      {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                    <button onClick={() => setWeekOffset(w => w + 1)} className="p-2 rounded-lg hover:opacity-70 transition-opacity" style={{ color: theme.textS }}>
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {weekDates.map((date, i) => {
+                      const isToday = date.toDateString() === new Date().toDateString()
+                      const dayEvents = calendarEvents.filter(e => e.date === date.getDate() && date.getMonth() === calMonth && date.getFullYear() === calYear)
+                      return (
+                        <div key={i} className="text-center p-2 rounded-lg" style={{ backgroundColor: isToday ? `${theme.gold}20` : 'transparent', border: isToday ? `1px solid ${theme.gold}` : 'none' }}>
+                          <p className="text-[10px] font-semibold mb-1" style={{ color: theme.textM }}>
+                            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]}
+                          </p>
+                          <p className="text-sm font-bold mb-1" style={{ color: isToday ? theme.gold : theme.text }}>{date.getDate()}</p>
+                          {dayEvents.length > 0 && (
+                            <div className="flex justify-center gap-0.5">
+                              {dayEvents.slice(0, 2).map((ev, j) => {
+                                const eventColor = ev.type === 'paycheck' ? '#22c55e' : ev.type === 'bill' ? '#ef4444' : ev.type === 'dayoff' ? '#3b82f6' : ev.type === 'task' ? '#a855f7' : ev.type === 'group' ? '#f97316' : theme.textM
+                                return (
+                                  <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: eventColor }} />
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <MonthlyCalendar
+                  events={calendarEvents}
+                  month={calMonth}
+                  year={calYear}
+                  onMonthChange={handleMonthChange}
+                  onDayClick={(day) => setSelectedDay(day === 0 ? null : day)}
+                  selectedDay={selectedDay}
+                  theme={theme}
+                />
+              )}
 
               {upcomingEvents.length > 0 && (
                 <div className="mt-3 space-y-2">
