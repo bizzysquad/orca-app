@@ -10,7 +10,6 @@ import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
 
 import type { Bill, BillAlloc, RentEntry, BillRecurrence, RecurrenceEndType } from '@/lib/types'
-import WheelDatePicker from '@/components/WheelDatePicker'
 import CalendarPicker from '@/components/CalendarPicker'
 
 const CATEGORIES = [
@@ -232,19 +231,7 @@ export default function BillBossPage() {
   const [notifications, setNotifications] = useState<Array<{ id: string; billId: string; billName: string; amount: number; dueDate: string; type: 'due-today' | 'upcoming'; dismissed: boolean }>>([])
   const [editingBillId, setEditingBillId] = useState<string | null>(null)
   const [showNotifications, setShowNotifications] = useState(false)
-  const [showDatePicker, setShowDatePicker] = useState(false)
-  const [datePickerMonth, setDatePickerMonth] = useState(new Date().getMonth())
-  const [datePickerYear, setDatePickerYear] = useState(new Date().getFullYear())
   const [collapsedSplits, setCollapsedSplits] = useState<Record<string, boolean>>({})
-  const [isMobile, setIsMobile] = useState(false)
-
-  // Detect mobile viewport
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 640)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -549,7 +536,7 @@ export default function BillBossPage() {
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg }} className="min-h-screen pb-20">
+    <div style={{ backgroundColor: theme.bg }} className="min-h-screen pb-20 overflow-x-hidden">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -760,96 +747,12 @@ export default function BillBossPage() {
                   onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
                   onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
                 />
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowDatePicker(!showDatePicker)}
-                    style={{ backgroundColor: theme.bg, borderColor: theme.border, color: formData.due ? theme.text : `${theme.textM}80` }}
-                    className="w-full px-4 py-2.5 border rounded-lg text-left flex items-center justify-between focus:outline-none"
-                  >
-                    <span>{formData.due ? fmtD(formData.due) : 'Due Date'}</span>
-                    <Calendar size={16} style={{ color: theme.textM }} />
-                  </button>
-
-                  {showDatePicker && (
-                    <>
-                      {isMobile ? (
-                        /* iOS-style Wheel Date Picker for mobile */
-                        <div className="absolute z-50 top-full left-0 right-0 mt-1 shadow-xl">
-                          <WheelDatePicker
-                            value={formData.due || undefined}
-                            onChange={(date) => { setFormData({ ...formData, due: date }); setShowDatePicker(false) }}
-                            onClose={() => setShowDatePicker(false)}
-                            theme={theme}
-                          />
-                        </div>
-                      ) : (
-                        /* Desktop: mini calendar picker */
-                        <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-xl p-4 shadow-xl">
-                          {/* Quick Select Buttons */}
-                          <div className="flex gap-2 mb-3">
-                            {[
-                              { label: '1st', day: 1 },
-                              { label: '15th', day: 15 },
-                              { label: 'Last', day: new Date(datePickerYear, datePickerMonth + 1, 0).getDate() },
-                            ].map(opt => (
-                              <button
-                                key={opt.label}
-                                type="button"
-                                onClick={() => {
-                                  const m = String(datePickerMonth + 1).padStart(2, '0')
-                                  const d = String(opt.day).padStart(2, '0')
-                                  setFormData({ ...formData, due: `${datePickerYear}-${m}-${d}` })
-                                  setShowDatePicker(false)
-                                }}
-                                style={{ backgroundColor: `${theme.gold}15`, color: theme.gold, borderColor: `${theme.gold}30` }}
-                                className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold border hover:opacity-80 transition-colors"
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-
-                          {/* Mini Calendar */}
-                          <div className="flex items-center justify-between mb-2">
-                            <button type="button" onClick={() => { let m = datePickerMonth - 1, y = datePickerYear; if (m < 0) { m = 11; y-- } setDatePickerMonth(m); setDatePickerYear(y) }} style={{ color: theme.textM }} className="p-1"><ChevronLeft size={14} /></button>
-                            <span className="text-xs font-semibold" style={{ color: theme.text }}>{new Date(datePickerYear, datePickerMonth).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
-                            <button type="button" onClick={() => { let m = datePickerMonth + 1, y = datePickerYear; if (m > 11) { m = 0; y++ } setDatePickerMonth(m); setDatePickerYear(y) }} style={{ color: theme.textM }} className="p-1"><ChevronRight size={14} /></button>
-                          </div>
-                          <div className="grid grid-cols-7 gap-0.5 mb-1">
-                            {['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="text-center text-[9px] font-semibold py-0.5" style={{ color: theme.textM }}>{d}</div>)}
-                          </div>
-                          <div className="grid grid-cols-7 gap-0.5">
-                            {Array.from({ length: new Date(datePickerYear, datePickerMonth, 1).getDay() }, (_, i) => <div key={`e-${i}`} />)}
-                            {Array.from({ length: new Date(datePickerYear, datePickerMonth + 1, 0).getDate() }, (_, i) => {
-                              const day = i + 1
-                              const m = String(datePickerMonth + 1).padStart(2, '0')
-                              const d = String(day).padStart(2, '0')
-                              const dateStr = `${datePickerYear}-${m}-${d}`
-                              const isSelected = formData.due === dateStr
-                              const isToday = new Date().getDate() === day && new Date().getMonth() === datePickerMonth && new Date().getFullYear() === datePickerYear
-                              return (
-                                <button
-                                  key={day}
-                                  type="button"
-                                  onClick={() => { setFormData({ ...formData, due: dateStr }); setShowDatePicker(false) }}
-                                  className="aspect-square rounded-md flex items-center justify-center text-xs transition-all hover:opacity-80"
-                                  style={{
-                                    backgroundColor: isSelected ? theme.gold : isToday ? `${theme.gold}20` : 'transparent',
-                                    color: isSelected ? theme.bg : isToday ? theme.gold : theme.text,
-                                    fontWeight: isSelected || isToday ? 600 : 400,
-                                  }}
-                                >
-                                  {day}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+                <CalendarPicker
+                  value={formData.due}
+                  onChange={(date) => setFormData({ ...formData, due: date })}
+                  placeholder="Due Date"
+                  theme={theme}
+                />
               </div>
 
               <select

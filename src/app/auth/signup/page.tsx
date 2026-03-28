@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -35,6 +35,12 @@ const strengthLabels = {
 
 export default function SignupPage() {
   const router = useRouter()
+
+  // Custom logo
+  const [customLogo, setCustomLogo] = useState<string | null>(null)
+  useEffect(() => {
+    setCustomLogo(localStorage.getItem('orca-custom-logo') || null)
+  }, [])
 
   const [step, setStep] = useState<'credentials' | 'verify-email'>('credentials')
   const [fullName, setFullName] = useState('')
@@ -153,7 +159,11 @@ export default function SignupPage() {
       <div className="relative w-full max-w-[360px] z-10 animate-fade-in">
         {/* Logo & Branding */}
         <div className="flex justify-center mb-8">
-          <Image src="/logo.svg" alt="ORCA" width={48} height={48} className="rounded-xl" />
+          {customLogo ? (
+            <img src={customLogo} alt="ORCA" width={48} height={48} className="rounded-xl object-contain" />
+          ) : (
+            <Image src="/logo.svg" alt="ORCA" width={48} height={48} className="rounded-xl" />
+          )}
         </div>
 
         <h1 className="text-center text-3xl font-bold mb-2 text-gold">ORCA</h1>

@@ -19,6 +19,12 @@ function LoginPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  // Custom logo
+  const [customLogo, setCustomLogo] = useState<string | null>(null)
+  useEffect(() => {
+    setCustomLogo(localStorage.getItem('orca-custom-logo') || null)
+  }, [])
+
   // Email/Password
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -93,7 +99,11 @@ function LoginPageInner() {
       <div className="relative w-full max-w-[360px] z-10 animate-fade-in">
         {/* Logo & Branding */}
         <div className="flex justify-center mb-8">
-          <Image src="/logo.svg" alt="ORCA" width={48} height={48} className="rounded-xl" priority />
+          {customLogo ? (
+            <img src={customLogo} alt="ORCA" width={48} height={48} className="rounded-xl object-contain" />
+          ) : (
+            <Image src="/logo.svg" alt="ORCA" width={48} height={48} className="rounded-xl" priority />
+          )}
         </div>
 
         <h1 className="text-center text-3xl font-bold mb-2" style={{ color: '#d4a843' }}>

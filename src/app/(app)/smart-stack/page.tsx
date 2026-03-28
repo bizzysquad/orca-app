@@ -1,5 +1,6 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, DollarSign, Target, Heart,
@@ -194,7 +195,22 @@ function ProjectionCalculator({ theme }: { theme: any }) {
 export default function SmartStackPage() {
   const { theme } = useTheme();
   const { data, setData, loading } = useOrcaData();
-  const [activeTab, setActiveTab] = useState<Tab>('budget');
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab === 'savings') return 'savings';
+    }
+    return 'budget';
+  });
+
+  // Also respond to URL changes (e.g. navigating from Dashboard savings card)
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'savings') setActiveTab('savings');
+    else if (tab === 'budget') setActiveTab('budget');
+  }, [searchParams]);
   const [budgetLocked, setBudgetLocked] = useState(false);
   const [paycheckHistory, setPaycheckHistory] = useState<PaycheckEntry[]>([]);
   const [frequency, setFrequency] = useState<'weekly' | 'biweekly'>('biweekly');
@@ -217,6 +233,7 @@ export default function SmartStackPage() {
   });
   const [newAccountName, setNewAccountName] = useState('');
   const [projectionMode, setProjectionMode] = useState<'check' | 'payment'>('payment');
+  const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
 
   // Pay Splitter adjustable settings (persisted)
   const [customSavingsAmount, setCustomSavingsAmount] = useState<string>(() => {
@@ -878,13 +895,13 @@ export default function SmartStackPage() {
         <div className="space-y-6">
           {/* Summary */}
           <div className="grid grid-cols-2 gap-4">
-            <div style={{ backgroundColor: theme.bg, borderColor: theme.gold }} className="border-2 rounded-lg p-4">
+            <div style={{ backgroundColor: theme.bg, borderColor: theme.gold }} className="border-2 rounded-lg p-4 min-w-0 overflow-hidden">
               <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-1">Total Expected</p>
-              <p style={{ color: theme.gold }} className="text-2xl font-bold">{fmt(totalPayments)}</p>
+              <p style={{ color: theme.gold }} className="text-xl sm:text-2xl font-bold truncate">{fmt(totalPayments)}</p>
             </div>
-            <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
+            <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4 min-w-0 overflow-hidden">
               <p style={{ color: theme.textM }} className="text-xs font-semibold uppercase mb-1">Next Payment</p>
-              <p style={{ color: theme.text }} className="text-2xl font-bold">
+              <p style={{ color: theme.text }} className="text-xl sm:text-2xl font-bold truncate">
                 {nextPayment ? fmt(nextPayment.amount) : '$0.00'}
               </p>
               {nextPayment && (
@@ -931,12 +948,12 @@ export default function SmartStackPage() {
             {/* Recurrence selector */}
             <div>
               <label style={{ color: theme.textM }} className="block text-xs font-semibold mb-1">Recurrence</label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {(['none', 'weekly', 'biweekly', 'monthly'] as const).map(opt => (
                   <button
                     key={opt}
                     onClick={() => setNewPaymentRecurrence(opt)}
-                    className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    className="py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-all truncate"
                     style={{
                       backgroundColor: newPaymentRecurrence === opt ? theme.gold : theme.bgS,
                       color: newPaymentRecurrence === opt ? theme.bgS : theme.textM,
@@ -1492,10 +1509,10 @@ export default function SmartStackPage() {
                   </div>
                 </div>
 
-                {/* Quick add funds buttons */}
+                {/* Quick add funds buttons + custom amount */}
                 <div>
                   <label style={{ color: theme.textS }} className="block text-xs font-semibold mb-1">Quick Add</label>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-4 gap-2 mb-2">
                     {[10, 25, 50, 100].map(amt => (
                       <button
                         key={amt}
@@ -1506,6 +1523,36 @@ export default function SmartStackPage() {
                         +${amt}
                       </button>
                     ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
+                      <input
+                        type="number"
+                        value={customAddAmounts[acct.id] || ''}
+                        onChange={(e) => setCustomAddAmounts(prev => ({ ...prev, [acct.id]: e.target.value }))}
+                        placeholder="Custom amount"
+                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                        className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const amt = parseFloat(customAddAmounts[acct.id] || '0');
+                        if (amt > 0) {
+                          quickAddFunds(acct.id, amt);
+                          setCustomAddAmounts(prev => ({ ...prev, [acct.id]: '' }));
+                        }
+                      }}
+                      disabled={!customAddAmounts[acct.id] || parseFloat(customAddAmounts[acct.id] || '0') <= 0}
+                      style={{
+                        backgroundColor: customAddAmounts[acct.id] && parseFloat(customAddAmounts[acct.id] || '0') > 0 ? theme.gold : theme.border,
+                        color: customAddAmounts[acct.id] && parseFloat(customAddAmounts[acct.id] || '0') > 0 ? theme.bgS : theme.textM,
+                      }}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed shrink-0"
+                    >
+                      Add
+                    </button>
                   </div>
                 </div>
 
@@ -1728,8 +1775,8 @@ export default function SmartStackPage() {
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen p-6">
-      <div className="max-w-4xl mx-auto">
+    <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen p-3 sm:p-6 overflow-x-hidden">
+      <div className="max-w-4xl mx-auto w-full">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}

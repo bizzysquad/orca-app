@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Save, CheckCircle, X, Upload, GripVertical, Edit3, ChevronUp, ChevronDown, Eye } from 'lucide-react'
 import { ThemeConfig, NavItem, GOLD, BG_DARK, BG_CARD, BORDER_COLOR, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED } from './types'
@@ -46,6 +47,31 @@ interface Props {
 }
 
 export default function CustomizeTab(props: Props) {
+  const [customLogo, setCustomLogo] = useState<string | null>(null)
+  useEffect(() => {
+    setCustomLogo(localStorage.getItem('orca-custom-logo') || null)
+    const handler = (e: any) => setCustomLogo(e.detail?.logo || null)
+    window.addEventListener('orca-logo-updated', handler)
+    return () => window.removeEventListener('orca-logo-updated', handler)
+  }, [])
+
+  const handleLogoUpload = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setCustomLogo(dataUrl)
+      localStorage.setItem('orca-custom-logo', dataUrl)
+      window.dispatchEvent(new CustomEvent('orca-logo-updated', { detail: { logo: dataUrl } }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const resetLogo = () => {
+    setCustomLogo(null)
+    localStorage.removeItem('orca-custom-logo')
+    window.dispatchEvent(new CustomEvent('orca-logo-updated', { detail: { logo: null } }))
+  }
+
   return (
     <>
       {/* Settings Sub-Tab */}
@@ -619,10 +645,23 @@ export default function CustomizeTab(props: Props) {
                     }}
                     className="border rounded-lg p-6 h-32 flex items-center justify-center"
                   >
-                    <p style={{ color: TEXT_MUTED }} className="text-sm">
-                      Logo preview
-                    </p>
+                    {customLogo ? (
+                      <img src={customLogo} alt="Logo" className="w-20 h-20 object-contain" />
+                    ) : (
+                      <p style={{ color: TEXT_MUTED }} className="text-sm">
+                        No custom logo
+                      </p>
+                    )}
                   </div>
+                  {customLogo && (
+                    <button
+                      onClick={resetLogo}
+                      className="mt-2 text-xs px-3 py-1 rounded-lg transition-all hover:opacity-80"
+                      style={{ backgroundColor: '#ef444420', color: '#ef4444' }}
+                    >
+                      Reset to Default
+                    </button>
+                  )}
                 </div>
                 <div>
                   <h4 style={{ color: TEXT_SECONDARY }} className="text-sm font-semibold mb-3">
@@ -639,7 +678,15 @@ export default function CustomizeTab(props: Props) {
                     <span style={{ color: TEXT_SECONDARY }} className="text-sm font-medium">
                       Click to upload
                     </span>
-                    <input type="file" accept="image/*" className="hidden" />
+                    <input
+                      type="file"
+                      accept="image/svg+xml,image/png,image/jpeg"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLogoUpload(file);
+                      }}
+                    />
                   </label>
                 </div>
               </div>

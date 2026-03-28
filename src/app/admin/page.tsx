@@ -392,6 +392,32 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [showDropdown, setShowDropdown] = useState<string | null>(null)
 
+  // Custom logo state
+  const [customLogo, setCustomLogo] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('orca-custom-logo') || null
+    }
+    return null
+  })
+
+  const handleLogoUpload = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setCustomLogo(dataUrl)
+      localStorage.setItem('orca-custom-logo', dataUrl)
+      // Dispatch event so other components can pick up the change
+      window.dispatchEvent(new CustomEvent('orca-logo-updated', { detail: { logo: dataUrl } }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const resetLogo = () => {
+    setCustomLogo(null)
+    localStorage.removeItem('orca-custom-logo')
+    window.dispatchEvent(new CustomEvent('orca-logo-updated', { detail: { logo: null } }))
+  }
+
   // Subscription states
   const [trialDuration, setTrialDuration] = useState(40)
   const [trialSlots, setTrialSlots] = useState(500)
@@ -2538,8 +2564,17 @@ export default function AdminPage() {
                     <div className="flex-shrink-0">
                       <p className="text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: TEXT_SECONDARY }}>Current Logo</p>
                       <div className="w-32 h-32 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden" style={{ borderColor: BORDER_COLOR, backgroundColor: BG_DARK }}>
-                        <img src="/logo.svg" alt="Current Logo" className="w-20 h-20 object-contain" />
+                        <img src={customLogo || '/logo.svg'} alt="Current Logo" className="w-20 h-20 object-contain" />
                       </div>
+                      {customLogo && (
+                        <button
+                          onClick={resetLogo}
+                          className="mt-2 text-xs px-3 py-1 rounded-lg transition-all hover:opacity-80"
+                          style={{ backgroundColor: '#ef444420', color: '#ef4444' }}
+                        >
+                          Reset to Default
+                        </button>
+                      )}
                     </div>
 
                     {/* Upload Section */}
@@ -2561,7 +2596,7 @@ export default function AdminPage() {
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              alert(`Logo "${file.name}" selected. In production, this would upload to storage and update all logo references across the app.`);
+                              handleLogoUpload(file);
                             }
                           }}
                         />

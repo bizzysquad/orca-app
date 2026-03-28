@@ -346,6 +346,19 @@ export default function DashboardPage() {
     return () => window.removeEventListener('orca-sync-ready', handler)
   }, [])
 
+  // Re-render trigger for local writes (e.g. Smart Stack adds a payment)
+  const [localWriteTick, setLocalWriteTick] = useState(0)
+  useEffect(() => {
+    const handler = (e: any) => {
+      const key = e?.detail?.key || ''
+      if (key.includes('payment') || key.includes('savings') || key.includes('bills')) {
+        setLocalWriteTick(c => c + 1)
+      }
+    }
+    window.addEventListener('orca-local-write', handler)
+    return () => window.removeEventListener('orca-local-write', handler)
+  }, [])
+
   // Bills: use context data, fallback to localStorage
   const bills: Bill[] = useMemo(() => {
     if (data.bills && data.bills.length > 0) return data.bills
@@ -480,39 +493,48 @@ export default function DashboardPage() {
     return sorted[0] || null
   }, [nextBill, bills])
 
-  // Next incoming payment from payment entries
+  // Next incoming payment from payment entries — reads context first, then localStorage fallback
   const nextIncomingPayment = useMemo(() => {
-    try {
-      if (typeof window !== 'undefined') {
+    let entries: any[] = []
+    // Primary: context data (written by Smart Stack on add/edit)
+    if (data.incomingPayments && data.incomingPayments.length > 0) {
+      entries = data.incomingPayments
+    }
+    // Fallback: localStorage
+    if (entries.length === 0 && typeof window !== 'undefined') {
+      try {
         const stored = localStorage.getItem('orca-payment-entries')
-        if (stored) {
-          const entries = JSON.parse(stored)
-          const upcoming = entries
-            .filter((p: any) => new Date(p.date) >= new Date())
-            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-          return upcoming[0] || null
-        }
-      }
-    } catch {}
-    return null
+        if (stored) entries = JSON.parse(stored)
+      } catch {}
+    }
+    if (entries.length === 0) return null
+    const upcoming = entries
+      .filter((p: any) => {
+        const pDate = new Date(p.date + 'T23:59:59')
+        return pDate >= new Date() && p.status !== 'received'
+      })
+      .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    return upcoming[0] || null
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncReady])
+  }, [data.incomingPayments, syncReady, localWriteTick])
 
   // Total income from all upcoming payment entries (for Safe to Spend clarity)
   const totalUpcomingIncome = useMemo(() => {
-    try {
-      if (typeof window !== 'undefined') {
+    let entries: any[] = []
+    if (data.incomingPayments && data.incomingPayments.length > 0) {
+      entries = data.incomingPayments
+    }
+    if (entries.length === 0 && typeof window !== 'undefined') {
+      try {
         const stored = localStorage.getItem('orca-payment-entries')
-        if (stored) {
-          return JSON.parse(stored)
-            .filter((p: any) => new Date(p.date) >= new Date() && p.status !== 'received')
-            .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
-        }
-      }
-    } catch {}
-    return 0
+        if (stored) entries = JSON.parse(stored)
+      } catch {}
+    }
+    return entries
+      .filter((p: any) => new Date(p.date + 'T23:59:59') >= new Date() && p.status !== 'received')
+      .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncReady])
+  }, [data.incomingPayments, syncReady, localWriteTick])
 
   // Savings goal total for progress tracking
   const savingsGoalTotal = useMemo(() => {
@@ -769,7 +791,8 @@ export default function DashboardPage() {
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {/* Bills Card */}
-              <div className="rounded-2xl p-6 glass-hover" style={{
+              <Link href="/bill-boss" className="block">
+              <div className="rounded-2xl p-6 glass-hover cursor-pointer transition-all active:scale-[0.98]" style={{
                 background: `rgba(239, 68, 68, 0.06)`,
                 backdropFilter: 'blur(16px) saturate(180%)',
                 WebkitBackdropFilter: 'blur(16px) saturate(180%)',
@@ -789,9 +812,10 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
+              </Link>
 
               {/* Savings Card */}
-              <Link href="/smart-stack" className="block">
+              <Link href="/smart-stack?tab=savings" className="block">
                 <div className="rounded-2xl p-6 glass-hover cursor-pointer transition-all active:scale-[0.98]" style={{
                   background: `rgba(34, 197, 94, 0.06)`,
                   backdropFilter: 'blur(16px) saturate(180%)',
@@ -880,7 +904,7 @@ export default function DashboardPage() {
                       <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
                         +{fmt(nextIncomingPayment.amount)}
                       </p>
-                      <p className="text-sm" style={{ color: theme.textM }}>
+                      <p className="text-xs sm:text-sm truncate" style={{ color: theme.textM }}>
                         {nextIncomingPayment.description} · {fmtD(nextIncomingPayment.date)} · {daysTo(nextIncomingPayment.date)}d
                       </p>
                     </>
@@ -1123,17 +1147,17 @@ export default function DashboardPage() {
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }}>
+    <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }} className="overflow-x-hidden">
       <motion.div
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.08 } } }}
-        className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-4xl"
+        className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-4xl w-full"
       >
         {/* Welcome Message */}
-        <motion.div variants={fadeUp} className="flex items-start justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl sm:text-5xl font-bold" style={{ color: theme.gold }}>
+        <motion.div variants={fadeUp} className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-5xl font-bold truncate" style={{ color: theme.gold }}>
               {firstName
                 ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName}`
                 : 'Welcome back'}

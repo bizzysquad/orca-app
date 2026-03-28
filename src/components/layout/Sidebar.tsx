@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -34,6 +34,15 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
   const pathname = usePathname()
   const { theme, isDark } = useTheme()
   const { data } = useOrcaData()
+
+  // Custom logo from admin
+  const [customLogo, setCustomLogo] = useState<string | null>(null)
+  useEffect(() => {
+    setCustomLogo(localStorage.getItem('orca-custom-logo') || null)
+    const handler = (e: any) => setCustomLogo(e.detail?.logo || null)
+    window.addEventListener('orca-logo-updated', handler)
+    return () => window.removeEventListener('orca-logo-updated', handler)
+  }, [])
 
   // Use OrcaData name (most up-to-date, editable in Settings) > server-passed userName > fallback
   const resolvedName = (data.user?.name && data.user.name.trim()) ? data.user.name : userName
@@ -87,7 +96,11 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         {/* Logo and Brand */}
         <div className="flex items-center justify-between px-5 mb-8 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <Image src="/logo.svg" alt="ORCA" width={40} height={40} className="rounded-xl" style={{ boxShadow: `0 4px 12px ${theme.gold}33` }} />
+            {customLogo ? (
+              <img src={customLogo} alt="ORCA" width={40} height={40} className="rounded-xl object-contain" style={{ boxShadow: `0 4px 12px ${theme.gold}33` }} />
+            ) : (
+              <Image src="/logo.svg" alt="ORCA" width={40} height={40} className="rounded-xl" style={{ boxShadow: `0 4px 12px ${theme.gold}33` }} />
+            )}
             <div className="flex flex-col">
               <h1 className="font-black text-base tracking-[-1px]" style={{ color: theme.gold }}>ORCA</h1>
               <p className="text-[10px] tracking-[2px] uppercase" style={{ color: theme.textS }}>Financial Control</p>

@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Bell, Settings } from 'lucide-react'
@@ -13,6 +13,14 @@ interface TopBarProps {
 
 const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
   ({ title = 'ORCA', notificationCount = 0 }, ref) => {
+    const [customLogo, setCustomLogo] = useState<string | null>(null)
+    useEffect(() => {
+      setCustomLogo(localStorage.getItem('orca-custom-logo') || null)
+      const handler = (e: any) => setCustomLogo(e.detail?.logo || null)
+      window.addEventListener('orca-logo-updated', handler)
+      return () => window.removeEventListener('orca-logo-updated', handler)
+    }, [])
+
     return (
       <div
         ref={ref}
@@ -25,7 +33,11 @@ const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
         )}
       >
         <div className="flex-shrink-0">
-          <Image src="/logo-sm.png" alt="ORCA" width={28} height={28} priority className="rounded-lg" />
+          {customLogo ? (
+            <img src={customLogo} alt="ORCA" width={28} height={28} className="rounded-lg object-contain" />
+          ) : (
+            <Image src="/logo-sm.png" alt="ORCA" width={28} height={28} priority className="rounded-lg" />
+          )}
         </div>
 
         <h1 className="flex-1 text-center font-semibold text-sm text-text-primary tracking-[0.15em] uppercase">
