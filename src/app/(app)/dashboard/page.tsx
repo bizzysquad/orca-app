@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
-  DollarSign, Receipt, Palmtree, Calendar,
-  GripVertical, Settings, Pin, PinOff,
+  DollarSign, Receipt, Palmtree, Calendar, Home,
+  GripVertical, Settings, Pin, PinOff, PiggyBank, Wallet,
 } from 'lucide-react'
 
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -263,7 +263,8 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
 }) {
   const sectionLabels: Record<string, string> = {
     'financial-cards': 'Financial Overview',
-    'spend-paycheck': 'Next Payment',
+    'spend-paycheck': 'Spending & Income',
+    'rent-tracker': 'Rent Tracker',
     'calendar': 'Calendar',
     'credit-score': 'Credit Score',
     'stack-circle': 'Stack Circle',
@@ -390,6 +391,7 @@ export default function DashboardPage() {
   const [sectionOrder, setSectionOrder] = useState<string[]>([
     'financial-cards',
     'spend-paycheck',
+    'rent-tracker',
     'calendar',
     'credit-score',
     'stack-circle',
@@ -495,6 +497,96 @@ export default function DashboardPage() {
     return null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncReady])
+
+  // Total income from all upcoming payment entries (for Safe to Spend clarity)
+  const totalUpcomingIncome = useMemo(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('orca-payment-entries')
+        if (stored) {
+          return JSON.parse(stored)
+            .filter((p: any) => new Date(p.date) >= new Date() && p.status !== 'received')
+            .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
+        }
+      }
+    } catch {}
+    return 0
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncReady])
+
+  // Savings goal total for progress tracking
+  const savingsGoalTotal = useMemo(() => {
+    let goalTotal = goals.reduce((sum, g) => sum + g.target, 0)
+    if (typeof window !== 'undefined') {
+      try {
+        const savedAccounts = localStorage.getItem('orca-savings-accounts')
+        if (savedAccounts) {
+          const accounts = JSON.parse(savedAccounts)
+          const acctGoalTotal = accounts.reduce((sum: number, a: any) => sum + (a.goal || 0), 0)
+          if (!goals.some(g => g.id?.startsWith('savings-acct-'))) {
+            goalTotal += acctGoalTotal
+          }
+        }
+      } catch {}
+    }
+    return goalTotal
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goals, syncReady])
+
+  // Rent tracker data
+  const rentTracker = useMemo(() => {
+    const rentAmount = user.rentAmount || 0
+    if (rentAmount <= 0) return null
+    // Check for rent-specific savings or payment entries marked for rent
+    let savedTowardRent = 0
+    try {
+      if (typeof window !== 'undefined') {
+        const savedAccounts = localStorage.getItem('orca-savings-accounts')
+        if (savedAccounts) {
+          const accounts = JSON.parse(savedAccounts)
+          const rentAcct = accounts.find((a: any) => a.name?.toLowerCase().includes('rent'))
+          if (rentAcct) savedTowardRent = rentAcct.amount || 0
+        }
+      }
+    } catch {}
+    // Also check rent entries for current month
+    const currentMonth = new Date().toISOString().slice(0, 7)
+    const currentRent = data.rent?.find(r => r.month === currentMonth)
+    const isPaid = currentRent?.status === 'paid'
+    return {
+      total: rentAmount,
+      saved: isPaid ? rentAmount : savedTowardRent,
+      remaining: isPaid ? 0 : Math.max(0, rentAmount - savedTowardRent),
+      isPaid,
+      dueDay: 1, // Typically 1st of month
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.rentAmount, data.rent, syncReady])
+
+  // Stack Circle stats from localStorage (all groups)
+  const stackCircleStats = useMemo(() => {
+    const allGroups: any[] = []
+    if (group) allGroups.push(group)
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('orca-stack-circle-groups')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          parsed.forEach((g: any) => {
+            if (!allGroups.some(eg => eg.id === g.id)) allGroups.push(g)
+          })
+        }
+      }
+    } catch {}
+    return {
+      groups: allGroups,
+      totalGroups: allGroups.length,
+      totalMembers: allGroups.reduce((sum: number, g: any) => sum + (g.members?.length || 0), 0),
+      totalSaved: allGroups.reduce((sum: number, g: any) => sum + (g.current || 0), 0),
+      totalTarget: allGroups.reduce((sum: number, g: any) => sum + (g.target || 0), 0),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group, syncReady])
 
   // Build calendar events for the selected month — Incoming Payments are the only income source
   const calendarEvents = useMemo(() => {
@@ -699,20 +791,34 @@ export default function DashboardPage() {
               </div>
 
               {/* Savings Card */}
-              <div className="rounded-2xl p-6 glass-hover" style={{
-                background: `rgba(34, 197, 94, 0.06)`,
-                backdropFilter: 'blur(16px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-                border: `1px solid rgba(34, 197, 94, 0.2)`,
-              }}>
-                <p className="text-sm mb-3" style={{ color: theme.textS }}>Savings</p>
-                <p className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: '#22c55e' }}>
-                  {fmt(totalSavings)}
-                </p>
-                <p className="text-sm" style={{ color: theme.textM }}>
-                  Total saved
-                </p>
-              </div>
+              <Link href="/smart-stack" className="block">
+                <div className="rounded-2xl p-6 glass-hover cursor-pointer transition-all active:scale-[0.98]" style={{
+                  background: `rgba(34, 197, 94, 0.06)`,
+                  backdropFilter: 'blur(16px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+                  border: `1px solid rgba(34, 197, 94, 0.2)`,
+                }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm" style={{ color: theme.textS }}>Savings</p>
+                    <PiggyBank size={16} style={{ color: '#22c55e' }} />
+                  </div>
+                  <p className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: '#22c55e' }}>
+                    {fmt(totalSavings)}
+                  </p>
+                  {savingsGoalTotal > 0 ? (
+                    <>
+                      <div className="w-full h-1.5 rounded-full overflow-hidden mt-2 mb-1" style={{ backgroundColor: `${theme.border}60` }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min((totalSavings / savingsGoalTotal) * 100, 100)}%`, backgroundColor: '#22c55e' }} />
+                      </div>
+                      <p className="text-xs" style={{ color: theme.textM }}>
+                        {Math.round((totalSavings / savingsGoalTotal) * 100)}% of {fmt(savingsGoalTotal)} goal
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm" style={{ color: theme.textM }}>Total saved</p>
+                  )}
+                </div>
+              </Link>
             </motion.div>
 
           </DraggableSection>
@@ -725,7 +831,10 @@ export default function DashboardPage() {
               {/* Safe to Spend Card */}
               <div className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold" style={{ backgroundColor: theme.card }}>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm" style={{ color: theme.textS }}>Safe to Spend</p>
+                  <div>
+                    <p className="text-sm" style={{ color: theme.textS }}>Safe to Spend</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: theme.textM }}>After bills & savings</p>
+                  </div>
                   <div className="flex rounded-lg p-0.5" style={{ backgroundColor: `${theme.border}60` }}>
                     <button
                       onClick={() => setSpendView('daily')}
@@ -760,31 +869,77 @@ export default function DashboardPage() {
               </div>
 
               {/* Next Payment Card — sourced exclusively from Incoming Payments */}
-              <div className="glass rounded-2xl p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
-                <p className="text-sm mb-2" style={{ color: theme.textS }}>Next Payment</p>
-                {nextIncomingPayment ? (
-                  <>
-                    <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
-                      +{fmt(nextIncomingPayment.amount)}
-                    </p>
-                    <p className="text-sm" style={{ color: theme.textM }}>
-                      {nextIncomingPayment.description} · {fmtD(nextIncomingPayment.date)} · {daysTo(nextIncomingPayment.date)}d
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: theme.textM }}>
-                      $0.00
-                    </p>
-                    <p className="text-sm" style={{ color: theme.textM }}>
-                      Add a payment in Smart Stack
-                    </p>
-                  </>
-                )}
-              </div>
+              <Link href="/smart-stack" className="block">
+                <div className="glass rounded-2xl p-6 glass-hover depth-1 cursor-pointer transition-all active:scale-[0.98]" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm" style={{ color: theme.textS }}>Next Payment</p>
+                    <Wallet size={16} style={{ color: '#22c55e' }} />
+                  </div>
+                  {nextIncomingPayment ? (
+                    <>
+                      <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
+                        +{fmt(nextIncomingPayment.amount)}
+                      </p>
+                      <p className="text-sm" style={{ color: theme.textM }}>
+                        {nextIncomingPayment.description} · {fmtD(nextIncomingPayment.date)} · {daysTo(nextIncomingPayment.date)}d
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: theme.textM }}>
+                        —
+                      </p>
+                      <p className="text-sm" style={{ color: theme.textM }}>
+                        No upcoming payments
+                      </p>
+                    </>
+                  )}
+                </div>
+              </Link>
             </motion.div>
           </DraggableSection>
         )
+
+      case 'rent-tracker':
+        return rentTracker ? (
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
+            <motion.div variants={fadeUp} className="glass rounded-2xl p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Home size={18} style={{ color: theme.gold }} />
+                  <p className="text-base font-semibold" style={{ color: theme.text }}>Rent Tracker</p>
+                </div>
+                {rentTracker.isPaid && (
+                  <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>PAID</span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-xs mb-1" style={{ color: theme.textM }}>Saved Toward Rent</p>
+                  <p className="text-2xl font-bold" style={{ color: rentTracker.isPaid ? '#22c55e' : theme.gold }}>{fmt(rentTracker.saved)}</p>
+                </div>
+                <div>
+                  <p className="text-xs mb-1" style={{ color: theme.textM }}>Remaining</p>
+                  <p className="text-2xl font-bold" style={{ color: rentTracker.remaining > 0 ? '#ef4444' : '#22c55e' }}>{fmt(rentTracker.remaining)}</p>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: `${theme.border}60` }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min((rentTracker.saved / rentTracker.total) * 100, 100)}%`,
+                    backgroundColor: rentTracker.isPaid ? '#22c55e' : theme.gold,
+                  }}
+                />
+              </div>
+              <p className="text-xs mt-2" style={{ color: theme.textM }}>
+                {fmt(rentTracker.saved)} of {fmt(rentTracker.total)} rent
+                {!rentTracker.isPaid && rentTracker.remaining > 0 && ` · ${fmt(rentTracker.remaining)} to go`}
+              </p>
+            </motion.div>
+          </DraggableSection>
+        ) : null
 
       case 'calendar':
         return (
@@ -904,42 +1059,53 @@ export default function DashboardPage() {
       }
 
       case 'stack-circle':
-        return group ? (
+        return stackCircleStats.totalGroups > 0 ? (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <motion.div
-              variants={fadeUp}
-              className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <p className="text-sm mb-1" style={{ color: theme.textS }}>Stack Circle</p>
-                  <h3 className="text-2xl font-bold" style={{ color: theme.text }}>{group.name}</h3>
-                  <p className="text-sm mt-2 flex items-center gap-1" style={{ color: theme.textM }}>
-                    <Users size={16} /> {group.members.length} members
-                  </p>
+            <Link href="/stack-circle" className="block">
+              <motion.div
+                variants={fadeUp}
+                className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold cursor-pointer transition-all active:scale-[0.98]"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Users size={18} style={{ color: theme.gold }} />
+                    <p className="text-base font-semibold" style={{ color: theme.text }}>Stack Circle</p>
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ backgroundColor: `${theme.gold}15`, color: theme.gold }}>
+                    {stackCircleStats.totalGroups} group{stackCircleStats.totalGroups !== 1 ? 's' : ''}
+                  </span>
                 </div>
-                <div
-                  className="rounded-lg px-3 py-2 flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
-                  style={{
-                    backgroundColor: `${theme.gold}15`,
-                  }}
-                >
-                  <code className="text-sm font-mono" style={{ color: theme.gold }}>{group.code}</code>
-                  <Copy size={14} style={{ color: theme.gold }} />
+                {/* Aggregate stats */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div>
+                    <p className="text-xs" style={{ color: theme.textM }}>Members</p>
+                    <p className="text-lg font-bold" style={{ color: theme.text }}>{stackCircleStats.totalMembers}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs" style={{ color: theme.textM }}>Saved</p>
+                    <p className="text-lg font-bold" style={{ color: '#22c55e' }}>{fmt(stackCircleStats.totalSaved)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs" style={{ color: theme.textM }}>Goal</p>
+                    <p className="text-lg font-bold" style={{ color: theme.gold }}>{fmt(stackCircleStats.totalTarget)}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-3">
-                <ProgressBar current={group.current} target={group.target} color={theme.gold} theme={theme} />
-                <div className="grid grid-cols-3 gap-2">
-                  {group.members.slice(0, 3).map((member, i) => (
-                    <div key={i} className="text-center">
-                      <p className="text-xs" style={{ color: theme.textM }}>Member {i + 1}</p>
-                      <p className="text-sm font-semibold" style={{ color: theme.text }}>{pct(member.contrib || 0, group.target)}%</p>
+                {/* Progress bar */}
+                {stackCircleStats.totalTarget > 0 && (
+                  <ProgressBar current={stackCircleStats.totalSaved} target={stackCircleStats.totalTarget} color={theme.gold} theme={theme} />
+                )}
+                {/* Show first group name */}
+                {group && (
+                  <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${theme.border}40` }}>
+                    <p className="text-sm font-medium" style={{ color: theme.textS }}>{group.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <code className="text-xs font-mono" style={{ color: theme.gold }}>{group.code}</code>
+                      <Copy size={12} style={{ color: theme.gold }} />
                     </div>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
+                  </div>
+                )}
+              </motion.div>
+            </Link>
           </DraggableSection>
         ) : null
 

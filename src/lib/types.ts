@@ -80,7 +80,7 @@ export interface BillAlloc {
   paid: boolean
 }
 
-export type BillRecurrence = 'weekly' | 'monthly' | 'yearly' | 'custom'
+export type BillRecurrence = 'one-time' | 'weekly' | 'monthly' | 'yearly' | 'custom'
 export type RecurrenceEndType = 'ongoing' | 'after-date' | 'after-count'
 
 export interface Bill {

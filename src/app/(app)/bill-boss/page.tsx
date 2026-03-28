@@ -26,7 +26,7 @@ const CATEGORIES = [
   'Other',
 ]
 
-const RECURRENCE_OPTIONS: BillRecurrence[] = ['weekly', 'monthly', 'yearly', 'custom']
+const RECURRENCE_OPTIONS: BillRecurrence[] = ['one-time', 'weekly', 'monthly', 'yearly', 'custom']
 
 function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedDay, theme }: {
   bills: Bill[]
@@ -228,7 +228,7 @@ export default function BillBossPage() {
   const [calYear, setCalYear] = useState(2026)
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [rentReceipts, setRentReceipts] = useState<Record<string, string>>({})
-  const [viewMode, setViewMode] = useState<'list' | 'compact'>('list')
+  const [viewMode, setViewMode] = useState<'list' | 'compact'>('compact')
   const [notifications, setNotifications] = useState<Array<{ id: string; billId: string; billName: string; amount: number; dueDate: string; type: 'due-today' | 'upcoming'; dismissed: boolean }>>([])
   const [editingBillId, setEditingBillId] = useState<string | null>(null)
   const [showNotifications, setShowNotifications] = useState(false)
@@ -330,6 +330,13 @@ export default function BillBossPage() {
   const paidTotal = bills
     .filter(b => b.status === 'paid')
     .reduce((sum, b) => sum + b.amount, 0)
+
+  // Next bill due (soonest upcoming)
+  const nextBillDue = useMemo(() => {
+    return bills
+      .filter(b => b.status === 'upcoming')
+      .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0] || null
+  }, [bills])
 
   // Calculate monthly bill total for selected calendar month
   const monthlyBillTotal = useMemo(() => {
@@ -623,16 +630,34 @@ export default function BillBossPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <div className="relative overflow-hidden rounded-2xl p-8" style={{ backgroundImage: `linear-gradient(to bottom right, ${theme.gold}, ${theme.goldD})`, color: theme.bg }}>
-            <div className="text-center">
+          <div className="relative overflow-hidden rounded-2xl p-6 sm:p-8" style={{ backgroundImage: `linear-gradient(to bottom right, ${theme.gold}, ${theme.goldD})`, color: theme.bg }}>
+            <div className="text-center mb-4">
               <p className="text-sm font-medium opacity-90 mb-2">Total Monthly Bills</p>
-              <p className="text-4xl sm:text-5xl font-bold mb-6">{fmt(unpaidTotal)}</p>
-              <div className="rounded-lg inline-block px-4 py-2" style={{ backgroundColor: `${theme.bg}20` }}>
+              <p className="text-4xl sm:text-5xl font-bold mb-3">{fmt(unpaidTotal)}</p>
+              <div className="rounded-lg inline-block px-4 py-1.5" style={{ backgroundColor: `${theme.bg}20` }}>
                 <p className="text-sm">
                   Paid: <span className="font-bold">{fmt(paidTotal)}</span>
                 </p>
               </div>
             </div>
+
+            {/* Next Bill Due + Quick Pay */}
+            {nextBillDue && (
+              <div className="mt-4 pt-4 border-t flex items-center justify-between gap-3" style={{ borderColor: `${theme.bg}25` }}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium opacity-80">Next Due</p>
+                  <p className="text-base font-bold truncate">{nextBillDue.name}</p>
+                  <p className="text-xs opacity-80">{fmtD(nextBillDue.due)} · {fmt(nextBillDue.amount)}</p>
+                </div>
+                <button
+                  onClick={() => handlePayFull(nextBillDue.id)}
+                  className="shrink-0 px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+                  style={{ backgroundColor: theme.bg, color: theme.gold }}
+                >
+                  Pay
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
 
@@ -864,6 +889,7 @@ export default function BillBossPage() {
                   onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
                   onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
                 >
+                  <option value="one-time">One-Time Payment</option>
                   <option value="weekly">Weekly</option>
                   <option value="monthly">Monthly</option>
                   <option value="yearly">Yearly</option>

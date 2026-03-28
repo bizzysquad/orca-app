@@ -1356,6 +1356,18 @@ export default function SmartStackPage() {
     }, 2000);
   };
 
+  const quickAddFunds = (id: string, addAmount: number) => {
+    const updated = savingsAccounts.map(a =>
+      a.id === id ? { ...a, amount: a.amount + addAmount, saved: true } : a
+    );
+    setSavingsAccounts(updated);
+    setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
+    syncSavingsToDashboard(updated);
+    setTimeout(() => {
+      setSavingsAccounts(prev => prev.map(a => a.id === id ? { ...a, saved: false } : a));
+    }, 2000);
+  };
+
   const removeSavingsAccount = (id: string) => {
     const updated = savingsAccounts.filter(a => a.id !== id);
     setSavingsAccounts(updated);
@@ -1418,7 +1430,7 @@ export default function SmartStackPage() {
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
               className="border rounded-xl p-5"
             >
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-3">
                 <h4 style={{ color: theme.text }} className="text-lg font-bold">{acct.name}</h4>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
@@ -1430,9 +1442,27 @@ export default function SmartStackPage() {
                 </motion.button>
               </div>
 
+              {/* Current balance */}
+              <p style={{ color: theme.gold }} className="text-2xl font-bold mb-3">{fmt(acct.amount)}</p>
+
+              {/* Goal progress bar */}
+              {acct.goal > 0 && (
+                <div className="mb-3">
+                  <div className="flex justify-between mb-1">
+                    <span style={{ color: theme.textM }} className="text-xs">Progress</span>
+                    <span style={{ color: theme.text }} className="text-xs font-bold">{Math.min(acctProgress, 100).toFixed(0)}%</span>
+                  </div>
+                  <div style={{ backgroundColor: theme.bg }} className="h-1.5 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, acctProgress)}%`, backgroundColor: acctProgress >= 100 ? '#22c55e' : theme.gold }} />
+                  </div>
+                  <p style={{ color: theme.textM }} className="text-xs mt-1">{fmt(acct.amount)} of {fmt(acct.goal)} goal</p>
+                </div>
+              )}
+
               <div className="space-y-3">
+                {/* Edit balance */}
                 <div>
-                  <label style={{ color: theme.textS }} className="block text-xs font-semibold mb-1">Amount</label>
+                  <label style={{ color: theme.textS }} className="block text-xs font-semibold mb-1">Edit Balance</label>
                   <div className="relative">
                     <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
                     <input
@@ -1440,13 +1470,44 @@ export default function SmartStackPage() {
                       value={acct.amount || ''}
                       onChange={(e) => updateSavingsAccount(acct.id, 'amount', parseFloat(e.target.value) || 0)}
                       style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                      className="w-full border rounded-lg pl-7 pr-3 py-2.5 font-semibold"
+                      className="w-full border rounded-lg pl-7 pr-3 py-2.5 font-semibold text-sm"
                       placeholder="0.00"
                     />
                   </div>
                 </div>
 
-                {/* Goal removed per user request */}
+                {/* Savings goal */}
+                <div>
+                  <label style={{ color: theme.textS }} className="block text-xs font-semibold mb-1">Savings Goal</label>
+                  <div className="relative">
+                    <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">$</span>
+                    <input
+                      type="number"
+                      value={acct.goal || ''}
+                      onChange={(e) => updateSavingsAccount(acct.id, 'goal', parseFloat(e.target.value) || 0)}
+                      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                      className="w-full border rounded-lg pl-7 pr-3 py-2.5 text-sm"
+                      placeholder="Set a goal (optional)"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick add funds buttons */}
+                <div>
+                  <label style={{ color: theme.textS }} className="block text-xs font-semibold mb-1">Quick Add</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[10, 25, 50, 100].map(amt => (
+                      <button
+                        key={amt}
+                        onClick={() => quickAddFunds(acct.id, amt)}
+                        style={{ backgroundColor: `${theme.gold}15`, color: theme.gold, borderColor: `${theme.gold}30` }}
+                        className="py-2 rounded-lg text-xs font-semibold border active:scale-95 transition-all"
+                      >
+                        +${amt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
@@ -1458,7 +1519,7 @@ export default function SmartStackPage() {
                   }}
                   className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
                 >
-                  {acct.saved ? <><Check size={16} /> Saved!</> : <><Target size={16} /> Save</>}
+                  {acct.saved ? <><Check size={16} /> Saved!</> : <><Target size={16} /> Save Changes</>}
                 </motion.button>
               </div>
             </motion.div>
