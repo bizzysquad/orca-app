@@ -69,7 +69,15 @@ const BottomNav = React.forwardRef<HTMLDivElement, {}>((_props, ref) => {
 
   const navItems: NavItem[] = (() => {
     if (adminNav && adminNav.length > 0) {
-      return adminNav
+      // Ensure required nav items are present even if saved config is missing them
+      let merged = [...adminNav]
+      const requiredIds = Object.keys(navIconMap)
+      requiredIds.forEach(id => {
+        if (!merged.some((n: any) => n.id === id)) {
+          merged.push({ id, label: id.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' '), order: merged.length + 1, visible: true })
+        }
+      })
+      return merged
         .filter((n: any) => n.visible !== false)
         .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
         .slice(0, 5) // Max 5 items for bottom nav

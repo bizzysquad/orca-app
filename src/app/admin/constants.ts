@@ -15,8 +15,9 @@ export const DEFAULT_NAV: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', order: 1, visible: true },
   { id: 'smart-stack', label: 'Smart Stack', order: 2, visible: true },
   { id: 'bill-boss', label: 'Bill Boss', order: 3, visible: true },
-  { id: 'stack-circle', label: 'Stack Circle', order: 4, visible: true },
-  { id: 'settings', label: 'Settings', order: 5, visible: true },
+  { id: 'task-list', label: 'Task List', order: 4, visible: true },
+  { id: 'stack-circle', label: 'Stack Circle', order: 5, visible: true },
+  { id: 'settings', label: 'Settings', order: 6, visible: true },
 ]
 
 // Default Theme

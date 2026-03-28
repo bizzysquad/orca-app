@@ -360,21 +360,68 @@ export default function BillBossPage() {
       .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0] || null
   }, [bills])
 
-  // Calculate monthly bill total for selected calendar month
+  // Calculate monthly bill total for selected calendar month — expands recurring bills
   const monthlyBillTotal = useMemo(() => {
-    return bills.reduce((sum, b) => {
-      const d = new Date(b.due + 'T00:00:00')
-      if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
-        return sum + b.amount
-      }
-      // Also count split allocs in this month
+    let total = 0
+    const monthStart = new Date(calYear, calMonth, 1)
+    const monthEnd = new Date(calYear, calMonth + 1, 0)
+
+    bills.forEach(b => {
+      // Count split allocs in this month
       const allocInMonth = b.alloc.reduce((aSum, a) => {
         const ad = new Date(a.date + 'T00:00:00')
         if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) return aSum + a.amount
         return aSum
       }, 0)
-      return sum + allocInMonth
-    }, 0)
+
+      if (allocInMonth > 0) {
+        total += allocInMonth
+        return
+      }
+
+      const dueDate = new Date(b.due + 'T00:00:00')
+      const recurrence = b.recurrence || 'one-time'
+
+      if (recurrence === 'one-time' || !recurrence) {
+        // One-time: count only if due date is in the selected month
+        if (dueDate.getMonth() === calMonth && dueDate.getFullYear() === calYear) {
+          total += b.amount
+        }
+      } else if (recurrence === 'monthly') {
+        // Monthly: appears once per month (on the same day, clamped to month length)
+        const day = Math.min(dueDate.getDate(), monthEnd.getDate())
+        const candidate = new Date(calYear, calMonth, day)
+        if (candidate >= dueDate) {
+          total += b.amount
+        }
+      } else if (recurrence === 'yearly') {
+        // Yearly: appears once per year on the same month/day
+        if (dueDate.getMonth() === calMonth) {
+          const candidate = new Date(calYear, calMonth, dueDate.getDate())
+          if (candidate >= dueDate) {
+            total += b.amount
+          }
+        }
+      } else {
+        // Weekly, biweekly, custom: generate occurrences and count those in this month
+        const intervalDays = recurrence === 'weekly' ? 7 : recurrence === 'biweekly' ? 14 : (b.customRecurrenceDays || 30)
+        const cursor = new Date(dueDate)
+        // Fast-forward to near the month start
+        if (cursor < monthStart) {
+          const daysGap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
+          cursor.setDate(cursor.getDate() + daysGap)
+        }
+        // Walk forward and count hits in the month
+        while (cursor <= monthEnd) {
+          if (cursor >= monthStart && cursor >= dueDate) {
+            total += b.amount
+          }
+          cursor.setDate(cursor.getDate() + intervalDays)
+        }
+      }
+    })
+
+    return total
   }, [bills, calMonth, calYear])
 
   // Both views show all bills — view mode only changes layout

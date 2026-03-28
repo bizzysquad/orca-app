@@ -79,7 +79,16 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
   // Build final nav items: admin config (ordered, filtered, renamed) merged with icon/route metadata
   const navItems: NavItem[] = (() => {
     if (adminNav && adminNav.length > 0) {
-      return adminNav
+      // Ensure required nav items are present even if saved config is missing them
+      let merged = [...adminNav]
+      const requiredIds = Object.keys(navMeta)
+      requiredIds.forEach(id => {
+        if (!merged.some((n: any) => n.id === id)) {
+          const meta = navMeta[id]
+          merged.push({ id, label: meta.defaultLabel, order: merged.length + 1, visible: true })
+        }
+      })
+      return merged
         .filter((n: any) => n.visible !== false)
         .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
         .map((n: any) => {
