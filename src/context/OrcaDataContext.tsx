@@ -235,6 +235,8 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     'orca-notes',
     'orca-stack-circle-groups',
     'orca-roommates',
+    'orca-dashboard-order',
+    'orca-dashboard-pinned',
   ], [])
 
   // Push current localStorage to Supabase profiles.local_data
@@ -242,19 +244,25 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     const uid = userIdRef.current
     if (!uid) return
     const localData: Record<string, any> = {}
+    let keyCount = 0
     for (const key of SYNC_KEYS) {
       try {
         const val = localStorage.getItem(key)
         if (val !== null) {
           try { localData[key] = JSON.parse(val) } catch { localData[key] = val }
+          keyCount++
         }
       } catch {}
     }
     try {
-      await supabase.from('profiles').update({ local_data: localData }).eq('id', uid)
+      const { error } = await supabase.from('profiles').update({ local_data: localData }).eq('id', uid)
+      if (error) {
+        console.warn('[ORCA Sync] Cloud push failed:', error.message)
+      } else {
+        console.log(`[ORCA Sync] Pushed ${keyCount} keys to cloud`)
+      }
     } catch (err) {
-      // Column may not exist yet (migration not run) — fail silently
-      console.warn('[ORCA Sync] Cloud sync failed:', err)
+      console.warn('[ORCA Sync] Cloud sync error:', err)
     }
   }, [supabase, SYNC_KEYS])
 
@@ -264,7 +272,7 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     syncTimeoutRef.current = setTimeout(() => { syncToCloud() }, 2000)
   }, [syncToCloud])
 
-  // On initial load: pull cloud local_data and hydrate empty localStorage keys
+  // On initial load: pull cloud local_data and hydrate localStorage (always overwrite for cross-device sync)
   useEffect(() => {
     async function hydrateFromCloud() {
       try {
@@ -272,34 +280,47 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
         if (!authData?.user?.id) return
         userIdRef.current = authData.user.id
 
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('local_data')
           .eq('id', authData.user.id)
           .single()
 
+        if (profileError) {
+          console.warn('[ORCA Sync] Could not fetch cloud data:', profileError.message)
+          // Still push local data to cloud so other devices can pick it up
+          debouncedSync()
+          return
+        }
+
         if (profile?.local_data && typeof profile.local_data === 'object') {
           const cloud = profile.local_data as Record<string, any>
+          let hydrated = 0
           for (const key of SYNC_KEYS) {
             if (cloud[key] !== undefined) {
-              const localVal = localStorage.getItem(key)
-              // Hydrate only when local is missing
-              if (!localVal) {
-                const val = typeof cloud[key] === 'string' ? cloud[key] : JSON.stringify(cloud[key])
-                localStorage.setItem(key, val)
-              }
+              const val = typeof cloud[key] === 'string' ? cloud[key] : JSON.stringify(cloud[key])
+              // Always overwrite local with cloud data to ensure cross-device consistency
+              localStorage.setItem(key, val)
+              hydrated++
             }
           }
+          console.log(`[ORCA Sync] Hydrated ${hydrated} keys from cloud`)
           // Signal that cloud data has been hydrated — components can re-read
           window.dispatchEvent(new Event('orca-sync-ready'))
+        } else {
+          console.log('[ORCA Sync] No cloud data found — pushing local data to cloud')
+          // First time: push local state to cloud for other devices
+          syncToCloud()
         }
-      } catch {
-        // Column may not exist yet — fine
+      } catch (err) {
+        console.warn('[ORCA Sync] Hydration error (local_data column may not exist):', err)
+        // Push local to cloud anyway in case column now exists
+        debouncedSync()
       }
     }
     hydrateFromCloud()
     return () => { if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current) }
-  }, [supabase, SYNC_KEYS])
+  }, [supabase, SYNC_KEYS, syncToCloud, debouncedSync])
 
   // Listen for localStorage writes (cross-tab and programmatic) to auto-sync
   useEffect(() => {
@@ -317,6 +338,16 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadData()
+  }, [loadData])
+
+  // Re-load data after cloud hydration to pick up synced localStorage values
+  useEffect(() => {
+    const handleSyncReady = () => {
+      console.log('[ORCA Sync] Cloud hydration complete — reloading data context')
+      loadData()
+    }
+    window.addEventListener('orca-sync-ready', handleSyncReady)
+    return () => window.removeEventListener('orca-sync-ready', handleSyncReady)
   }, [loadData])
 
   return (
