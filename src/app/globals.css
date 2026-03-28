@@ -15,10 +15,11 @@
     scroll-behavior: smooth;
   }
 
-  body {
+  body, html {
     background-color: var(--body-bg, #0A0A0A);
     color: var(--body-text, #F5F5F5);
     overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   /* Gold selection */

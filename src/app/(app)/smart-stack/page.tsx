@@ -6,7 +6,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Target, Heart,
   Lock, Edit3, Plus, Trash2, Pause, Play, LineChart,
   AlertCircle, CheckCircle, Zap, Check, Calendar, Briefcase,
-  Home, ExternalLink,
+  Home, ExternalLink, Layers, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
@@ -860,11 +860,36 @@ export default function SmartStackPage() {
     };
 
     const toggleStatus = (id: string) => {
+      const entry = paymentEntries.find(p => p.id === id);
+      const wasReceived = entry?.status === 'received';
       const updated = paymentEntries.map(p =>
         p.id === id ? { ...p, status: p.status === 'received' ? 'expected' as const : 'received' as const } : p
       );
       setPaymentEntries(updated);
       syncPaymentsToDashboard(updated);
+
+      // Auto-update checking balance: add when received, subtract when un-received
+      if (entry) {
+        try {
+          const settingsStr = localStorage.getItem('orca-user-settings');
+          if (settingsStr) {
+            const settings = JSON.parse(settingsStr);
+            const currentBal = settings.checkingBalance || 0;
+            if (wasReceived) {
+              // Toggling from received → expected: subtract
+              settings.checkingBalance = Math.max(0, currentBal - entry.amount);
+            } else {
+              // Toggling from expected → received: add
+              settings.checkingBalance = currentBal + entry.amount;
+            }
+            setLocalSynced('orca-user-settings', JSON.stringify(settings));
+            setData(prev => ({
+              ...prev,
+              user: { ...prev.user, checkingBalance: settings.checkingBalance },
+            }));
+          }
+        } catch {}
+      }
     };
 
     const totalPayments = paymentEntries.reduce((sum, p) => sum + p.amount, 0);
@@ -1187,6 +1212,348 @@ export default function SmartStackPage() {
     );
   };
 
+  // ============== SPLITTER (ALLOCATOR) ==============
+  const [splitterMonth, setSplitterMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [splitterIncomeMode, setSplitterIncomeMode] = useState<'auto' | 'manual'>('auto');
+  const [splitterBillsMode, setSplitterBillsMode] = useState<'auto' | 'manual'>('auto');
+  const [splitterManualIncome, setSplitterManualIncome] = useState('');
+  const [splitterManualBills, setSplitterManualBills] = useState('');
+
+  // Compute auto income for the selected month from Incoming Payments
+  const splitterAutoIncome = useMemo(() => {
+    const [y, m] = splitterMonth.split('-').map(Number);
+    const monthStart = new Date(y, m - 1, 1);
+    const monthEnd = new Date(y, m, 0, 23, 59, 59);
+
+    return paymentEntries
+      .filter(p => {
+        const d = new Date(p.date + 'T00:00:00');
+        if (p.recurrence && p.recurrence !== 'none') {
+          // For recurring, check if any occurrence falls in month
+          const interval = p.recurrence === 'weekly' ? 7 : p.recurrence === 'biweekly' ? 14 : 0;
+          if (p.recurrence === 'monthly') {
+            const day = Math.min(d.getDate(), monthEnd.getDate());
+            const candidate = new Date(y, m - 1, day);
+            return candidate >= d;
+          } else if (interval > 0) {
+            const cursor = new Date(d);
+            while (cursor < monthStart) cursor.setDate(cursor.getDate() + interval);
+            return cursor <= monthEnd;
+          }
+        }
+        return d >= monthStart && d <= monthEnd;
+      })
+      .reduce((sum, p) => {
+        if (p.recurrence === 'weekly') {
+          // Count how many weeks fall in this month
+          const d = new Date(p.date + 'T00:00:00');
+          const cursor = new Date(d);
+          while (cursor < monthStart) cursor.setDate(cursor.getDate() + 7);
+          let count = 0;
+          while (cursor <= monthEnd) { count++; cursor.setDate(cursor.getDate() + 7); }
+          return sum + (p.amount * count);
+        } else if (p.recurrence === 'biweekly') {
+          const d = new Date(p.date + 'T00:00:00');
+          const cursor = new Date(d);
+          while (cursor < monthStart) cursor.setDate(cursor.getDate() + 14);
+          let count = 0;
+          while (cursor <= monthEnd) { count++; cursor.setDate(cursor.getDate() + 14); }
+          return sum + (p.amount * count);
+        }
+        return sum + p.amount;
+      }, 0);
+  }, [paymentEntries, splitterMonth]);
+
+  // Compute auto bills total for the selected month from Bill Boss
+  const splitterAutoBills = useMemo(() => {
+    const [y, m] = splitterMonth.split('-').map(Number);
+    const monthStart = new Date(y, m - 1, 1);
+    const monthEnd = new Date(y, m, 0, 23, 59, 59);
+
+    return data.bills
+      .filter(b => b.status !== 'paid')
+      .reduce((sum, b) => {
+        const due = new Date(b.due + 'T00:00:00');
+        if (b.recurrence === 'monthly') {
+          // Monthly recurring: always due once this month
+          return sum + b.amount;
+        } else if (b.recurrence === 'weekly') {
+          const cursor = new Date(due);
+          while (cursor < monthStart) cursor.setDate(cursor.getDate() + 7);
+          let count = 0;
+          while (cursor <= monthEnd) { count++; cursor.setDate(cursor.getDate() + 7); }
+          return sum + (b.amount * count);
+        } else if (b.recurrence === 'yearly') {
+          if (due.getMonth() === m - 1) return sum + b.amount;
+          return sum;
+        } else {
+          // One-time or other: check if due in this month
+          if (due >= monthStart && due <= monthEnd) return sum + b.amount;
+          return sum;
+        }
+      }, 0);
+  }, [data.bills, splitterMonth]);
+
+  const splitterIncome = splitterIncomeMode === 'auto' ? splitterAutoIncome : (parseFloat(splitterManualIncome) || 0);
+  const splitterBillsTotal = splitterBillsMode === 'auto' ? splitterAutoBills : (parseFloat(splitterManualBills) || 0);
+  const checkingBal = data.user?.checkingBalance || 0;
+  const splitterTotalAvailable = splitterIncome + checkingBal;
+  const splitterRemaining = Math.max(0, splitterTotalAvailable - splitterBillsTotal);
+
+  // Weeks in the selected month
+  const splitterWeeksInMonth = useMemo(() => {
+    const [y, m] = splitterMonth.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    return daysInMonth / 7;
+  }, [splitterMonth]);
+
+  const splitterWeeklyAlloc = splitterBillsTotal / splitterWeeksInMonth;
+
+  // Count upcoming payments in month for per-payment allocation
+  const splitterPaymentCount = useMemo(() => {
+    const [y, m] = splitterMonth.split('-').map(Number);
+    const monthStart = new Date(y, m - 1, 1);
+    const monthEnd = new Date(y, m, 0, 23, 59, 59);
+    let count = 0;
+    paymentEntries.forEach(p => {
+      const d = new Date(p.date + 'T00:00:00');
+      if (p.recurrence === 'weekly') {
+        const cursor = new Date(d);
+        while (cursor < monthStart) cursor.setDate(cursor.getDate() + 7);
+        while (cursor <= monthEnd) { count++; cursor.setDate(cursor.getDate() + 7); }
+      } else if (p.recurrence === 'biweekly') {
+        const cursor = new Date(d);
+        while (cursor < monthStart) cursor.setDate(cursor.getDate() + 14);
+        while (cursor <= monthEnd) { count++; cursor.setDate(cursor.getDate() + 14); }
+      } else if (p.recurrence === 'monthly') {
+        count++;
+      } else if (d >= monthStart && d <= monthEnd) {
+        count++;
+      }
+    });
+    return Math.max(count, 1);
+  }, [paymentEntries, splitterMonth]);
+
+  const splitterPerPayment = splitterBillsTotal / splitterPaymentCount;
+
+  const renderSplitter = () => {
+    const monthLabel = (() => {
+      const [y, m] = splitterMonth.split('-').map(Number);
+      return new Date(y, m - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    })();
+
+    const handleMonthNav = (dir: number) => {
+      const [y, m] = splitterMonth.split('-').map(Number);
+      const d = new Date(y, m - 1 + dir, 1);
+      setSplitterMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    };
+
+    const pctBills = splitterTotalAvailable > 0 ? Math.min((splitterBillsTotal / splitterTotalAvailable) * 100, 100) : 0;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ backgroundColor: theme.card, borderColor: theme.border }}
+        className="border rounded-xl p-4 sm:p-6"
+      >
+        <h3 style={{ color: theme.text }} className="text-xl sm:text-2xl font-bold mb-2 flex items-center gap-2 sm:gap-3">
+          <Layers size={24} className="flex-shrink-0" style={{ color: theme.gold }} />
+          Splitter
+        </h3>
+        <p className="text-xs mb-5" style={{ color: theme.textM }}>
+          Allocate your income toward bills — see exactly how much to set aside each week or paycheck.
+        </p>
+
+        {/* Month Selector */}
+        <div className="flex items-center justify-between mb-5 rounded-lg p-3" style={{ backgroundColor: theme.bg }}>
+          <button onClick={() => handleMonthNav(-1)} className="p-1.5 rounded-lg hover:opacity-70 transition-all" style={{ color: theme.textS }}>
+            <ChevronLeft size={18} />
+          </button>
+          <p className="text-sm font-semibold" style={{ color: theme.text }}>{monthLabel}</p>
+          <button onClick={() => handleMonthNav(1)} className="p-1.5 rounded-lg hover:opacity-70 transition-all" style={{ color: theme.textS }}>
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        {/* Income Section */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: theme.textM }}>Monthly Income</p>
+            <div className="flex rounded-md overflow-hidden" style={{ backgroundColor: theme.bg }}>
+              <button
+                onClick={() => setSplitterIncomeMode('auto')}
+                className="px-2.5 py-1 text-[10px] font-semibold transition-all"
+                style={{ backgroundColor: splitterIncomeMode === 'auto' ? theme.gold : 'transparent', color: splitterIncomeMode === 'auto' ? theme.bg : theme.textM }}
+              >
+                Auto
+              </button>
+              <button
+                onClick={() => setSplitterIncomeMode('manual')}
+                className="px-2.5 py-1 text-[10px] font-semibold transition-all"
+                style={{ backgroundColor: splitterIncomeMode === 'manual' ? theme.gold : 'transparent', color: splitterIncomeMode === 'manual' ? theme.bg : theme.textM }}
+              >
+                Manual
+              </button>
+            </div>
+          </div>
+          {splitterIncomeMode === 'auto' ? (
+            <div className="rounded-lg p-3 flex items-center justify-between" style={{ backgroundColor: `${theme.ok}10`, border: `1px solid ${theme.ok}30` }}>
+              <div>
+                <p className="text-xs" style={{ color: theme.textM }}>From Incoming Payments</p>
+                <p className="text-lg font-bold" style={{ color: theme.ok }}>{fmt(splitterAutoIncome)}</p>
+              </div>
+              {splitterAutoIncome === 0 && (
+                <p className="text-[10px] max-w-[120px] text-right" style={{ color: theme.textM }}>No payments found for this month</p>
+              )}
+            </div>
+          ) : (
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold" style={{ color: theme.textM }}>$</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={splitterManualIncome}
+                onChange={e => setSplitterManualIncome(e.target.value)}
+                placeholder="Enter monthly income"
+                className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm"
+                style={{ backgroundColor: theme.input, borderColor: theme.border, borderWidth: '1px', color: theme.text }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Bills Section */}
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: theme.textM }}>Monthly Bills</p>
+            <div className="flex rounded-md overflow-hidden" style={{ backgroundColor: theme.bg }}>
+              <button
+                onClick={() => setSplitterBillsMode('auto')}
+                className="px-2.5 py-1 text-[10px] font-semibold transition-all"
+                style={{ backgroundColor: splitterBillsMode === 'auto' ? theme.gold : 'transparent', color: splitterBillsMode === 'auto' ? theme.bg : theme.textM }}
+              >
+                Bill Boss
+              </button>
+              <button
+                onClick={() => setSplitterBillsMode('manual')}
+                className="px-2.5 py-1 text-[10px] font-semibold transition-all"
+                style={{ backgroundColor: splitterBillsMode === 'manual' ? theme.gold : 'transparent', color: splitterBillsMode === 'manual' ? theme.bg : theme.textM }}
+              >
+                Manual
+              </button>
+            </div>
+          </div>
+          {splitterBillsMode === 'auto' ? (
+            <div className="rounded-lg p-3 flex items-center justify-between" style={{ backgroundColor: `${theme.bad}08`, border: `1px solid ${theme.bad}30` }}>
+              <div>
+                <p className="text-xs" style={{ color: theme.textM }}>From Bill Boss ({monthLabel})</p>
+                <p className="text-lg font-bold" style={{ color: theme.bad }}>{fmt(splitterAutoBills)}</p>
+              </div>
+              <p className="text-[10px] max-w-[120px] text-right" style={{ color: theme.textM }}>
+                {data.bills.filter(b => b.status !== 'paid').length} unpaid bills
+              </p>
+            </div>
+          ) : (
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold" style={{ color: theme.textM }}>$</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={splitterManualBills}
+                onChange={e => setSplitterManualBills(e.target.value)}
+                placeholder="Enter monthly bills total"
+                className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm"
+                style={{ backgroundColor: theme.input, borderColor: theme.border, borderWidth: '1px', color: theme.text }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Allocation Results */}
+        {splitterIncome > 0 || splitterBillsTotal > 0 ? (
+          <div className="space-y-4">
+            {/* Visual bar */}
+            <div>
+              <div className="flex justify-between text-[11px] mb-1.5" style={{ color: theme.textM }}>
+                <span>Bills ({Math.round(pctBills)}%)</span>
+                <span>Remaining ({Math.round(100 - pctBills)}%)</span>
+              </div>
+              <div className="w-full h-3 rounded-full overflow-hidden flex" style={{ backgroundColor: theme.border }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pctBills}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                  className="h-full rounded-l-full"
+                  style={{ backgroundColor: theme.bad }}
+                />
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${100 - pctBills}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                  className="h-full rounded-r-full"
+                  style={{ backgroundColor: theme.ok }}
+                />
+              </div>
+            </div>
+
+            {/* Summary Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {checkingBal > 0 && (
+                <div className="rounded-lg p-3" style={{ backgroundColor: `${theme.gold}0a`, border: `1px solid ${theme.gold}20` }}>
+                  <p className="text-[10px] font-semibold uppercase mb-0.5" style={{ color: theme.textM }}>Starting Balance</p>
+                  <p className="text-base font-bold" style={{ color: theme.gold }}>{fmt(checkingBal)}</p>
+                </div>
+              )}
+              <div className="rounded-lg p-3" style={{ backgroundColor: `${theme.ok}08`, border: `1px solid ${theme.ok}20` }}>
+                <p className="text-[10px] font-semibold uppercase mb-0.5" style={{ color: theme.textM }}>Total Available</p>
+                <p className="text-base font-bold" style={{ color: theme.ok }}>{fmt(splitterTotalAvailable)}</p>
+              </div>
+              <div className="rounded-lg p-3" style={{ backgroundColor: `${theme.bad}08`, border: `1px solid ${theme.bad}20` }}>
+                <p className="text-[10px] font-semibold uppercase mb-0.5" style={{ color: theme.textM }}>Total Bills</p>
+                <p className="text-base font-bold" style={{ color: theme.bad }}>–{fmt(splitterBillsTotal)}</p>
+              </div>
+              <div className="rounded-lg p-3" style={{ backgroundColor: `${theme.gold}0a`, border: `1px solid ${theme.gold}30` }}>
+                <p className="text-[10px] font-semibold uppercase mb-0.5" style={{ color: theme.textM }}>After Bills</p>
+                <p className="text-base font-bold" style={{ color: theme.gold }}>{fmt(splitterRemaining)}</p>
+              </div>
+            </div>
+
+            {/* Guidance Card */}
+            <div className="rounded-xl p-4" style={{ backgroundColor: `${theme.gold}08`, border: `1px solid ${theme.gold}25` }}>
+              <p className="text-sm font-bold mb-3" style={{ color: theme.gold }}>
+                Based on your income and bills this month, you need to set aside:
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center rounded-lg p-3" style={{ backgroundColor: theme.card }}>
+                  <p className="text-2xl font-bold" style={{ color: theme.gold }}>{fmt(splitterWeeklyAlloc)}</p>
+                  <p className="text-[10px] font-semibold uppercase mt-1" style={{ color: theme.textM }}>per week</p>
+                </div>
+                <div className="text-center rounded-lg p-3" style={{ backgroundColor: theme.card }}>
+                  <p className="text-2xl font-bold" style={{ color: theme.gold }}>{fmt(splitterPerPayment)}</p>
+                  <p className="text-[10px] font-semibold uppercase mt-1" style={{ color: theme.textM }}>per paycheck</p>
+                  <p className="text-[9px] mt-0.5" style={{ color: theme.textM }}>({splitterPaymentCount} payment{splitterPaymentCount !== 1 ? 's' : ''} this month)</p>
+                </div>
+              </div>
+              <p className="text-xs mt-3" style={{ color: theme.textS }}>
+                Allocate <span style={{ color: theme.gold }} className="font-semibold">{fmt(splitterWeeklyAlloc)}/week</span> toward bills to stay fully covered for {monthLabel}.
+                {splitterRemaining > 0 && <> You&apos;ll have <span style={{ color: theme.ok }} className="font-semibold">{fmt(splitterRemaining)}</span> left to spend.</>}
+                {splitterRemaining === 0 && splitterBillsTotal > splitterTotalAvailable && <> <span style={{ color: theme.bad }} className="font-semibold">Warning:</span> Your bills exceed your available income by {fmt(splitterBillsTotal - splitterTotalAvailable)}.</>}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg p-6 text-center" style={{ backgroundColor: theme.bg }}>
+            <p className="text-sm" style={{ color: theme.textM }}>
+              Add income payments or bills to see your allocation plan.
+            </p>
+          </div>
+        )}
+      </motion.div>
+    );
+  };
+
   // ============== INCOME HISTORY ==============
   const [editingActualId, setEditingActualId] = useState<string | null>(null);
   const [editingActualValue, setEditingActualValue] = useState('');
@@ -1320,6 +1687,7 @@ export default function SmartStackPage() {
           </>
         )}
 
+        {renderSplitter()}
         {renderPaycheckHistory()}
         <ProjectionCalculator theme={theme} />
       </motion.div>

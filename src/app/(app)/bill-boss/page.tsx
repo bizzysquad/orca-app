@@ -246,10 +246,51 @@ export default function BillBossPage() {
   }, [data.bills])
 
   // Persist bills to both context and localStorage whenever they change
+  // Also auto-deduct from checking balance when a bill transitions to "paid"
   const persistBills = (updatedBills: Bill[]) => {
-    setBills(updatedBills)
-    setData(prev => ({ ...prev, bills: updatedBills }))
-    try { setLocalSynced('orca-bills', JSON.stringify(updatedBills)) } catch {}
+    // Detect newly paid bills (were not paid before, now paid)
+    const previousBills = bills;
+    let deductTotal = 0;
+    updatedBills.forEach(ub => {
+      if (ub.status === 'paid') {
+        const prev = previousBills.find(pb => pb.id === ub.id);
+        if (prev && prev.status !== 'paid') {
+          deductTotal += ub.amount;
+        }
+      }
+      // Check for newly paid split allocations
+      ub.alloc.forEach(ua => {
+        if (ua.paid) {
+          const prevBill = previousBills.find(pb => pb.id === ub.id);
+          const prevAlloc = prevBill?.alloc.find(pa => pa.id === ua.id);
+          if (prevAlloc && !prevAlloc.paid) {
+            deductTotal += ua.amount;
+          }
+        }
+      });
+    });
+
+    // Auto-deduct from checking balance
+    if (deductTotal > 0) {
+      try {
+        const settingsStr = localStorage.getItem('orca-user-settings');
+        if (settingsStr) {
+          const settings = JSON.parse(settingsStr);
+          const currentBal = settings.checkingBalance || 0;
+          settings.checkingBalance = Math.max(0, currentBal - deductTotal);
+          setLocalSynced('orca-user-settings', JSON.stringify(settings));
+          // Also update context
+          setData(prev => ({
+            ...prev,
+            user: { ...prev.user, checkingBalance: settings.checkingBalance },
+          }));
+        }
+      } catch {}
+    }
+
+    setBills(updatedBills);
+    setData(prev => ({ ...prev, bills: updatedBills }));
+    try { setLocalSynced('orca-bills', JSON.stringify(updatedBills)); } catch {}
   }
 
   // Generate notifications from bills

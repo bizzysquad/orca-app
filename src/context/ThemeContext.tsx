@@ -240,17 +240,36 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty('--card-border', theme.border)
     root.style.setProperty('--divider-color', theme.border)
 
-    // CRITICAL: Set body and html background/color directly so all pages inherit
+    // CRITICAL: Force body and html background/color with !important via CSS
+    // Inline styles alone can be overridden by Tailwind/CSS specificity issues
+    document.body.style.setProperty('background-color', theme.bg, 'important')
+    document.body.style.setProperty('color', theme.text, 'important')
+    root.style.setProperty('background-color', theme.bg, 'important')
+    root.style.setProperty('color', theme.text, 'important')
+
+    // Also set as standard inline for components reading style directly
     document.body.style.backgroundColor = theme.bg
     document.body.style.color = theme.text
-    root.style.backgroundColor = theme.bg
-    root.style.color = theme.text
 
     // Update meta theme-color for mobile browser chrome
     const metaThemeColor = document.querySelector('meta[name="theme-color"]')
     if (metaThemeColor) {
       metaThemeColor.setAttribute('content', theme.bg)
     }
+
+    // Inject/update a <style> tag to force the background on all root-level elements
+    let styleEl = document.getElementById('orca-theme-override') as HTMLStyleElement | null
+    if (!styleEl) {
+      styleEl = document.createElement('style')
+      styleEl.id = 'orca-theme-override'
+      document.head.appendChild(styleEl)
+    }
+    styleEl.textContent = `
+      html, body, #__next {
+        background-color: ${theme.bg} !important;
+        color: ${theme.text} !important;
+      }
+    `
 
     // Toggle a data attribute for CSS selectors
     root.setAttribute('data-theme', isDark ? 'dark' : 'light')
