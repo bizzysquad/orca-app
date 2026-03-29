@@ -351,7 +351,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const handler = (e: any) => {
       const key = e?.detail?.key || ''
-      if (key.includes('payment') || key.includes('savings') || key.includes('bills') || key.includes('task')) {
+      if (key.includes('payment') || key.includes('savings') || key.includes('bills') || key.includes('task') || key.includes('stack-circle')) {
         setLocalWriteTick(c => c + 1)
       }
     }
@@ -661,7 +661,7 @@ export default function DashboardPage() {
       totalTarget: allGroups.reduce((sum: number, g: any) => sum + (g.target || 0), 0),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group, syncReady])
+  }, [group, syncReady, localWriteTick])
 
   // Build calendar events for the selected month — Incoming Payments are the only income source
   const calendarEvents = useMemo(() => {

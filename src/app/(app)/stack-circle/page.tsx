@@ -186,9 +186,8 @@ export default function StackCirclePage() {
 
   // Save groups to localStorage whenever they change
   useEffect(() => {
-    if (groups.length > 0) {
-      setLocalSynced('orca-stack-circle-groups', JSON.stringify(groups));
-    }
+    // Always persist — including empty array so deletions are fully cleared
+    setLocalSynced('orca-stack-circle-groups', JSON.stringify(groups));
   }, [groups]);
 
   // Get current group

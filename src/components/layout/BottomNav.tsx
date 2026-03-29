@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Scissors, Receipt, PiggyBank, TrendingUp,
-  BarChart3, Users, ClipboardList, Settings,
+  BarChart3, Users, ClipboardList, Settings, ArrowUp,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -47,6 +47,20 @@ const defaultBottomItems: NavItem[] = [
 const BottomNav = React.forwardRef<HTMLDivElement, {}>((_props, ref) => {
   const pathname = usePathname()
   const { theme } = useTheme()
+  const [showScrollButton, setShowScrollButton] = useState(false)
+
+  // Handle scroll listener for mobile home button
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollButton(window.scrollY > 300)
+    }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   // Read admin nav config for consistent naming/order/visibility
   const [adminNav, setAdminNav] = useState<any[] | null>(null)
@@ -145,6 +159,27 @@ const BottomNav = React.forwardRef<HTMLDivElement, {}>((_props, ref) => {
           )
         })}
       </nav>
+
+      {/* Floating scroll-to-top button for mobile */}
+      <motion.button
+        onClick={scrollToTop}
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={showScrollButton ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.8 }}
+        transition={{ duration: 0.3 }}
+        className={cn(
+          'fixed bottom-24 right-4 z-40',
+          'hidden sm:hidden md:hidden lg:hidden',
+          'p-3 rounded-full',
+          'transition-all duration-200',
+          'shadow-lg',
+        )}
+        style={{
+          background: `linear-gradient(135deg, ${theme.gold}, ${theme.goldD})`,
+          pointerEvents: showScrollButton ? 'auto' : 'none',
+        }}
+      >
+        <ArrowUp size={20} style={{ color: theme.bg }} strokeWidth={2} />
+      </motion.button>
     </div>
   )
 })

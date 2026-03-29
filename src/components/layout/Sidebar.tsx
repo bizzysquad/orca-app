@@ -12,6 +12,7 @@ import {
   Settings,
   ClipboardList,
   X,
+  Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
@@ -55,6 +56,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
     'task-list': { icon: ClipboardList, href: '/task-list', emoji: '📝', defaultLabel: 'Task List' },
     'stack-circle': { icon: Users, href: '/stack-circle', emoji: '👥', defaultLabel: 'Stack Circle' },
     settings: { icon: Settings, href: '/settings', emoji: '⚙️', defaultLabel: 'Settings' },
+    admin: { icon: Shield, href: '/admin', emoji: '🔐', defaultLabel: 'Admin' },
   }
 
   // Read admin nav config from localStorage for custom labels, order, visibility
@@ -77,6 +79,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
   }, [])
 
   // Build final nav items: admin config (ordered, filtered, renamed) merged with icon/route metadata
+  const isAdmin = data.user?.email === 'mckiveja@gmail.com'
   const navItems: NavItem[] = (() => {
     if (adminNav && adminNav.length > 0) {
       // Ensure required nav items are present even if saved config is missing them
@@ -89,7 +92,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         }
       })
       return merged
-        .filter((n: any) => n.visible !== false)
+        .filter((n: any) => n.visible !== false && (n.id !== 'admin' || isAdmin))
         .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
         .map((n: any) => {
           const meta = navMeta[n.id]
@@ -99,9 +102,11 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         .filter(Boolean) as NavItem[]
     }
     // Fallback: default hardcoded nav
-    return Object.entries(navMeta).map(([, meta]) => ({
-      name: meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji,
-    }))
+    return Object.entries(navMeta)
+      .filter(([id]) => id !== 'admin' || isAdmin)
+      .map(([, meta]) => ({
+        name: meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji,
+      }))
   })()
 
   const isActive = (href: string) => {

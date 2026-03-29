@@ -1074,10 +1074,10 @@ export default function AdminPage() {
         </div>
       </motion.div>
 
-      {/* Tab Navigation — fixed, no scroll */}
+      {/* Tab Navigation — 4x2 grid layout */}
       <div style={{ backgroundColor: BG_CARD, borderBottomColor: BORDER_COLOR }} className="border-b sticky top-[104px] z-30 backdrop-blur">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-wrap gap-1 py-3">
+          <div className="grid grid-cols-4 gap-2 py-3">
             {TABS.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -1097,7 +1097,7 @@ export default function AdminPage() {
                     borderColor: isActive ? GOLD : BORDER_COLOR,
                     color: isActive ? GOLD : TEXT_SECONDARY,
                   }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border transition-all text-sm font-medium"
+                  className="flex flex-col items-center gap-1.5 px-3 py-2 rounded-lg border transition-all text-sm font-medium"
                 >
                   <Icon size={16} />
                   {tab.label}
