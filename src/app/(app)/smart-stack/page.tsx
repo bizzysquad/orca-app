@@ -948,8 +948,8 @@ export default function SmartStackPage() {
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen p-3 sm:p-6 overflow-x-hidden">
-      <div className="max-w-4xl mx-auto w-full">
+    <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+      <div className="max-w-3xl mx-auto w-full">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}

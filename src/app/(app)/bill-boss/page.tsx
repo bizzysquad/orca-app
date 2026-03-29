@@ -668,10 +668,10 @@ export default function BillBossPage() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-30 backdrop-blur-xl border-b p-4 sm:p-6"
+        className="sticky top-0 z-30 backdrop-blur-xl border-b p-4 sm:p-6 lg:p-8"
         style={{ backgroundColor: `${theme.bg}95`, borderColor: theme.border }}
       >
-        <div className="flex items-center justify-between">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold" style={{ color: theme.text }}>Bill Boss</h1>
             <p className="text-sm mt-1" style={{ color: theme.textM }}>Manage your monthly bills</p>
@@ -680,7 +680,7 @@ export default function BillBossPage() {
         </div>
       </motion.div>
 
-      <div className="p-4 sm:p-6 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
         {/* 1. Hero Card - Total Monthly Bills */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

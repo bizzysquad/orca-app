@@ -2,64 +2,50 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Settings, Menu, Home, Palette } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import { Menu, Bell, Sun, Moon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
 interface DesktopTopBarProps {
   onMenuToggle?: () => void
+  notificationCount?: number
+  userName?: string
 }
 
-const DEFAULT_ROUTE_TITLES: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/smart-stack': 'Smart Stack',
-  '/bill-boss': 'Bill Boss',
-  '/stack-circle': 'Stack Circle',
-  '/task-list': 'Task List',
-  '/settings': 'Settings',
-  '/admin': 'Admin Panel',
-}
-
-const routeIdMap: Record<string, string> = {
-  '/dashboard': 'dashboard',
-  '/smart-stack': 'smart-stack',
-  '/bill-boss': 'bill-boss',
-  '/stack-circle': 'stack-circle',
-  '/task-list': 'task-list',
-  '/settings': 'settings',
-}
-
-export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
-  const pathname = usePathname()
+export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, userName = 'User' }: DesktopTopBarProps) {
+  const router = useRouter()
   const { theme, themeId, setThemeId, allThemes } = useTheme()
+  const [customLogo, setCustomLogo] = useState<string | null>(null)
 
-  // Read admin nav labels
-  const [navLabels, setNavLabels] = useState<Record<string, string>>({})
+  // Read custom logo from localStorage
   useEffect(() => {
     const load = () => {
       try {
-        const saved = localStorage.getItem('orca-admin-nav')
-        if (saved) {
-          const items = JSON.parse(saved)
-          const map: Record<string, string> = {}
-          items.forEach((n: any) => { if (n.id && n.label) map[n.id] = n.label })
-          setNavLabels(map)
-        }
+        const saved = localStorage.getItem('orca-custom-logo')
+        setCustomLogo(saved)
       } catch {}
     }
     load()
     const handler = () => load()
-    window.addEventListener('orca-nav-updated', handler)
-    window.addEventListener('orca-sync-ready', handler)
+    window.addEventListener('orca-logo-updated', handler)
     return () => {
-      window.removeEventListener('orca-nav-updated', handler)
-      window.removeEventListener('orca-sync-ready', handler)
+      window.removeEventListener('orca-logo-updated', handler)
     }
   }, [])
 
-  const routeId = routeIdMap[pathname]
-  const title = (routeId && navLabels[routeId]) || DEFAULT_ROUTE_TITLES[pathname] || 'ORCA'
+  // Compute user initials
+  const getInitials = (name: string): string => {
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  const initials = getInitials(userName)
 
   return (
     <div
@@ -73,6 +59,7 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
         borderBottom: `1px solid ${theme.border}`,
       }}
     >
+      {/* Left side: Hamburger + ORCA Logo + Text */}
       <div className="flex items-center gap-3">
         {/* Hamburger menu — mobile only */}
         <button
@@ -85,18 +72,59 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
         >
           <Menu size={22} />
         </button>
-        {/* Home button */}
-        <Link
-          href="/dashboard"
-          className={cn(
-            'p-2 rounded-lg transition-colors duration-200',
-            'hover:opacity-80'
+
+        {/* ORCA Logo and Text */}
+        <div className="flex items-center gap-2">
+          {customLogo ? (
+            <Image
+              src={customLogo}
+              alt="ORCA Logo"
+              width={32}
+              height={32}
+              className="rounded"
+            />
+          ) : (
+            <Image
+              src="/logo.svg"
+              alt="ORCA Logo"
+              width={32}
+              height={32}
+              className="rounded"
+            />
           )}
-          style={{ color: theme.gold }}
-        >
-          <Home size={20} strokeWidth={1.5} />
-        </Link>
-        {/* Theme toggle */}
+          <span
+            className="font-bold text-lg"
+            style={{ color: theme.gold }}
+          >
+            ORCA
+          </span>
+        </div>
+      </div>
+
+      {/* Right side: Notification Bell + Theme Toggle + Profile Circle */}
+      <div className="flex items-center gap-2">
+        {/* Notification Bell */}
+        <div className="relative">
+          <button
+            className={cn(
+              'p-2 rounded-lg transition-colors duration-200',
+              'hover:opacity-80 relative'
+            )}
+            style={{ color: theme.textM }}
+          >
+            <Bell size={20} strokeWidth={1.5} />
+            {notificationCount > 0 && (
+              <span
+                className="absolute top-1 right-1 w-4 h-4 rounded-full text-xs font-bold flex items-center justify-center text-white"
+                style={{ backgroundColor: theme.gold }}
+              >
+                {notificationCount > 9 ? '9+' : notificationCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Light/Dark Mode Toggle */}
         <button
           onClick={() => {
             const ids = allThemes.map(t => t.id)
@@ -108,31 +136,28 @@ export default function DesktopTopBar({ onMenuToggle }: DesktopTopBarProps) {
             'p-2 rounded-lg transition-colors duration-200',
             'hover:opacity-80'
           )}
-          style={{ color: theme.gold }}
-          title={`Theme: ${theme.name}`}
-        >
-          <Palette size={20} strokeWidth={1.5} />
-        </button>
-        <h1
-          className="text-lg sm:text-xl font-semibold"
-          style={{ color: theme.text }}
-        >
-          {title}
-        </h1>
-      </div>
-
-      <div className="flex items-center gap-1 sm:gap-2">
-        {/* Settings Link */}
-        <Link
-          href="/settings"
-          className={cn(
-            'p-2 sm:p-2.5 rounded-lg transition-colors duration-200',
-            'hover:opacity-80'
-          )}
           style={{ color: theme.textM }}
+          title="Toggle theme"
         >
-          <Settings size={20} strokeWidth={1.5} />
-        </Link>
+          {theme.isDark ? <Sun size={20} strokeWidth={1.5} /> : <Moon size={20} strokeWidth={1.5} />}
+        </button>
+
+        {/* Profile Circle with Initials */}
+        <button
+          onClick={() => router.push('/settings')}
+          className={cn(
+            'w-8 h-8 rounded-full transition-opacity duration-200',
+            'hover:opacity-80 flex items-center justify-center',
+            'font-bold text-xs'
+          )}
+          style={{
+            background: `linear-gradient(135deg, ${theme.gold}, ${theme.goldD})`,
+            color: theme.bg,
+          }}
+          title={userName}
+        >
+          {initials}
+        </button>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import Sidebar from './Sidebar'
 import DesktopTopBar from './DesktopTopBar'
+import MobileHomeButton from './MobileHomeButton'
 import { useTheme } from '@/context/ThemeContext'
 
 interface AppShellProps {
@@ -32,15 +33,20 @@ export default function AppShell({ children, notificationCount = 0, userName = '
         {/* Desktop Top Bar */}
         <DesktopTopBar
           onMenuToggle={() => setSidebarOpen(true)}
+          notificationCount={notificationCount}
+          userName={userName}
         />
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto" style={{ backgroundColor: theme.bg }}>
-          <div className="max-w-[720px] mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 pb-12">
+          <div className="w-full">
             {children}
           </div>
         </main>
       </div>
+
+      {/* Mobile floating scroll-to-top button */}
+      <MobileHomeButton />
     </div>
   )
 }

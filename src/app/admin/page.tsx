@@ -964,7 +964,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div style={{ backgroundColor: BG_DARK, color: TEXT_PRIMARY }} className="min-h-screen">
+    <div style={{ backgroundColor: BG_DARK, color: TEXT_PRIMARY }} className="min-h-screen w-full">
       {/* Platform Status Banner */}
       {isLiveMode && (
         <motion.div
@@ -973,7 +973,7 @@ export default function AdminPage() {
           style={{ backgroundColor: '#10b98122', borderBottomColor: '#10b981' }}
           className="border-b"
         >
-          <div className="max-w-7xl mx-auto px-6 py-3">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
             <div className="flex items-center justify-between flex-wrap gap-2 text-sm">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
@@ -1023,7 +1023,7 @@ export default function AdminPage() {
         style={{ backgroundColor: BG_CARD, borderBottomColor: BORDER_COLOR }}
         className="border-b sticky top-0 z-40 backdrop-blur"
       >
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Shield style={{ color: GOLD }} size={32} />
@@ -1076,7 +1076,7 @@ export default function AdminPage() {
 
       {/* Tab Navigation — 4x2 grid layout */}
       <div style={{ backgroundColor: BG_CARD, borderBottomColor: BORDER_COLOR }} className="border-b sticky top-[104px] z-30 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-4 gap-2 py-3">
             {TABS.map((tab) => {
               const Icon = tab.icon
@@ -1131,7 +1131,7 @@ export default function AdminPage() {
       </div>
 
       {/* Content Area */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}

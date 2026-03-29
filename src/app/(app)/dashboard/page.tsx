@@ -1152,7 +1152,7 @@ export default function DashboardPage() {
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.08 } } }}
-        className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-4xl w-full"
+        className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-5xl mx-auto w-full"
       >
         {/* Welcome Message */}
         <motion.div variants={fadeUp} className="flex items-start justify-between gap-3">

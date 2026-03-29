@@ -67,6 +67,21 @@ const LIGHT_GLASS_VARS: GlassVars = {
   scrollThumbHover: '#c4c4c0',
 }
 
+const DARK_GLASS_VARS: GlassVars = {
+  glassBg: 'rgba(30, 41, 59, 0.7)',
+  glassStrongBg: 'rgba(30, 41, 59, 0.85)',
+  glassSubtleBg: 'rgba(30, 41, 59, 0.5)',
+  glassBorder: 'rgba(255, 255, 255, 0.06)',
+  glassBorderHover: 'rgba(255, 255, 255, 0.1)',
+  glassHoverBg: 'rgba(30, 41, 59, 0.85)',
+  glassShadow: '0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04)',
+  depth1: '0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.03)',
+  depth2: '0 4px 12px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04)',
+  depth3: '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)',
+  scrollThumb: '#404854',
+  scrollThumbHover: '#505864',
+}
+
 // Helper to add backward-compatible aliases to a base theme definition
 function withAliases(t: Omit<Theme, 'gold' | 'goldL' | 'goldD' | 'goldBg' | 'goldBg2' | 'glow' | 'textS' | 'textM' | 'bgS'>): Theme {
   return {
@@ -87,6 +102,10 @@ const LIGHT_SHADOW = '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)'
 const LIGHT_SHADOW_L = '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)'
 const LIGHT_OVERLAY = 'rgba(0,0,0,0.4)'
 
+const DARK_SHADOW = '0 1px 2px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.3)'
+const DARK_SHADOW_L = '0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.4)'
+const DARK_OVERLAY = 'rgba(0,0,0,0.8)'
+
 const BASE_THEME_PROPS = {
   shadow: LIGHT_SHADOW,
   shadowL: LIGHT_SHADOW_L,
@@ -101,6 +120,47 @@ const BASE_THEME_PROPS = {
   bad: '#dc2626',
   badBg: 'rgba(220,38,38,0.08)',
 } as const
+
+const BASE_DARK_THEME_PROPS = {
+  shadow: DARK_SHADOW,
+  shadowL: DARK_SHADOW_L,
+  overlay: DARK_OVERLAY,
+  cardGlass: 'rgba(30,41,59,0.85)',
+  navGlass: 'rgba(30,41,59,0.9)',
+  glassVars: DARK_GLASS_VARS,
+  ok: '#22c55e',
+  okBg: 'rgba(34,197,94,0.15)',
+  warn: '#f59e0b',
+  warnBg: 'rgba(245,158,11,0.15)',
+  bad: '#ef4444',
+  badBg: 'rgba(239,68,68,0.15)',
+} as const
+
+// Helper function to create a dark variant of a light theme
+function makeDark(lightTheme: Theme): Theme {
+  // Dark color mappings for backgrounds and surfaces
+  const darkBg = '#0F172A'
+  const darkSurface = '#1E293B'
+  const darkCard = '#1E293B'
+  const darkText = '#F1F5F9'
+  const darkSubtext = '#94A3B8'
+  const darkBorder = '#334155'
+  const darkInput = '#1E293B'
+  const darkNav = '#1E293B'
+
+  return {
+    ...lightTheme,
+    bg: darkBg,
+    surface: darkSurface,
+    card: darkCard,
+    text: darkText,
+    subtext: darkSubtext,
+    border: darkBorder,
+    input: darkInput,
+    nav: darkNav,
+    ...BASE_DARK_THEME_PROPS,
+  }
+}
 
 export const THEMES: Record<string, Theme> = {
   'ocean-blue': withAliases({
@@ -183,6 +243,7 @@ type ThemeContextType = {
   setThemeId: (id: string) => void
   allThemes: Theme[]
   isDark: boolean
+  toggleDark: () => void
 }
 
 const defaultTheme = THEMES['ocean-blue']
@@ -193,13 +254,18 @@ const ThemeContext = createContext<ThemeContextType>({
   setThemeId: () => {},
   allThemes: THEME_LIST,
   isDark: false,
+  toggleDark: () => {},
 })
 
 const THEME_ID_KEY = 'orca-theme-id'
+const DARK_MODE_KEY = 'orca-dark-mode'
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeId, setThemeIdState] = useState<string>('ocean-blue')
-  const theme = THEMES[themeId] || THEMES['ocean-blue']
+  const [isDarkMode, setIsDarkModeState] = useState<boolean>(false)
+
+  const baseTheme = THEMES[themeId] || THEMES['ocean-blue']
+  const theme = isDarkMode ? makeDark(baseTheme) : baseTheme
 
   const setThemeId = (id: string) => {
     if (THEMES[id]) {
@@ -213,6 +279,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const toggleDark = () => {
+    const newDarkMode = !isDarkMode
+    setIsDarkModeState(newDarkMode)
+    try {
+      localStorage.setItem(DARK_MODE_KEY, newDarkMode ? 'true' : 'false')
+      window.dispatchEvent(new CustomEvent('orca-dark-mode-changed', { detail: { isDark: newDarkMode } }))
+    } catch {}
+    if (typeof console !== 'undefined') console.log('[ORCA Theme] Dark mode changed to:', newDarkMode)
+  }
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(THEME_ID_KEY)
@@ -223,6 +299,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         setThemeIdState('ocean-blue')
         if (typeof console !== 'undefined') console.log('[ORCA Theme] Using default theme: ocean-blue')
       }
+
+      const savedDarkMode = localStorage.getItem(DARK_MODE_KEY)
+      if (savedDarkMode === 'true') {
+        setIsDarkModeState(true)
+        if (typeof console !== 'undefined') console.log('[ORCA Theme] Dark mode enabled')
+      }
     } catch {}
   }, [])
 
@@ -230,6 +312,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const storageHandler = (e: StorageEvent) => {
       if (e.key === THEME_ID_KEY && e.newValue && THEMES[e.newValue]) {
         setThemeIdState(e.newValue)
+      }
+      if (e.key === DARK_MODE_KEY && e.newValue !== null) {
+        setIsDarkModeState(e.newValue === 'true')
       }
     }
     const localWriteHandler = (e: any) => {
@@ -242,17 +327,35 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           }
         } catch {}
       }
+      if (key === DARK_MODE_KEY) {
+        try {
+          const saved = localStorage.getItem(DARK_MODE_KEY)
+          setIsDarkModeState(saved === 'true')
+        } catch {}
+      }
+    }
+    const darkModeChangedHandler = (e: any) => {
+      setIsDarkModeState(e?.detail?.isDark ?? false)
     }
     window.addEventListener('storage', storageHandler)
     window.addEventListener('orca-local-write', localWriteHandler)
+    window.addEventListener('orca-dark-mode-changed', darkModeChangedHandler)
     return () => {
       window.removeEventListener('storage', storageHandler)
       window.removeEventListener('orca-local-write', localWriteHandler)
+      window.removeEventListener('orca-dark-mode-changed', darkModeChangedHandler)
     }
   }, [])
 
   useEffect(() => {
     const root = document.documentElement
+
+    // Add or remove dark class
+    if (isDarkMode) {
+      root.classList.add('dark')
+    } else {
+      root.classList.remove('dark')
+    }
 
     root.style.setProperty('--body-bg', theme.bg)
     root.style.setProperty('--body-text', theme.text)
@@ -327,10 +430,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     `
 
     root.setAttribute('data-theme', themeId)
-  }, [theme, themeId])
+  }, [theme, themeId, isDarkMode])
 
   return (
-    <ThemeContext.Provider value={{ theme, themeId, setThemeId, allThemes: THEME_LIST, isDark: false }}>
+    <ThemeContext.Provider value={{ theme, themeId, setThemeId, allThemes: THEME_LIST, isDark: isDarkMode, toggleDark }}>
       {children}
     </ThemeContext.Provider>
   )

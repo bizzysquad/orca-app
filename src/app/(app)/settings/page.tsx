@@ -151,14 +151,14 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24" style={{ backgroundColor: theme.bg }}>
+    <div className="min-h-screen pb-24 w-full" style={{ backgroundColor: theme.bg }}>
       {/* Header */}
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full">
         <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Settings</h1>
         <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Manage your account, preferences, and data</p>
       </div>
 
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto flex flex-col sm:flex-row gap-6">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full flex flex-col sm:flex-row gap-6">
         {/* Sidebar nav */}
         <div className="sm:w-52 flex-shrink-0">
           <div

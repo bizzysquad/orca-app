@@ -462,18 +462,18 @@ export default function StackCirclePage() {
 
   return (
     <div
-      className="min-h-screen pb-32 overflow-x-hidden transition-colors"
+      className="min-h-screen pb-32 overflow-x-hidden transition-colors w-full"
       style={{ backgroundColor: theme.bg, color: theme.text }}
     >
       {/* Header */}
       <motion.div
-        className="border-b px-3 sm:px-6 py-4 sm:py-8 transition-colors"
+        className="border-b px-4 sm:px-6 lg:px-8 py-4 sm:py-8 transition-colors"
         style={{ borderColor: theme.border, backgroundColor: theme.bg }}
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="flex items-center gap-3 mb-2">
+        <div className="max-w-4xl mx-auto flex items-center gap-3 mb-2">
           <div className="p-2.5 rounded-2xl" style={{ backgroundColor: tealLight }}>
             <Users className="w-5 h-5" style={{ color: teal }} />
           </div>
@@ -481,17 +481,19 @@ export default function StackCirclePage() {
             Stack Circle
           </h1>
         </div>
-        <p className="text-sm" style={{ color: theme.textM }}>
-          Save together, achieve more
-        </p>
+        <div className="max-w-4xl mx-auto">
+          <p className="text-sm" style={{ color: theme.textM }}>
+            Save together, achieve more
+          </p>
+        </div>
       </motion.div>
 
       {/* Tabs */}
       <div
-        className="border-b px-3 sm:px-6 transition-colors"
+        className="border-b px-4 sm:px-6 lg:px-8 transition-colors"
         style={{ borderColor: theme.border, backgroundColor: theme.bg }}
       >
-        <div className="flex gap-4 sm:gap-8 overflow-x-auto">
+        <div className="max-w-4xl mx-auto flex gap-4 sm:gap-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('group')}
             className={`py-2 sm:py-3 px-0 font-semibold text-xs sm:text-sm border-b-2 transition-colors ${
@@ -525,7 +527,7 @@ export default function StackCirclePage() {
 
       {/* Content */}
       <motion.div
-        className="px-3 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-8 max-w-5xl mx-auto"
+        className="px-4 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-8 max-w-4xl mx-auto w-full"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
