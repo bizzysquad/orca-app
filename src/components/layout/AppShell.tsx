@@ -28,7 +28,7 @@ export default function AppShell({ children, notificationCount = 0, userName = '
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col md:ml-[220px]">
+      <div className="flex-1 flex flex-col md:ml-[240px]">
         {/* Desktop Top Bar */}
         <DesktopTopBar
           onMenuToggle={() => setSidebarOpen(true)}

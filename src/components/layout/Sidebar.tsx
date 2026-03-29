@@ -23,6 +23,7 @@ interface NavItem {
   icon: React.ElementType
   href: string
   emoji: string
+  id: string
 }
 
 interface SidebarProps {
@@ -92,22 +93,47 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         }
       })
       return merged
-        .filter((n: any) => n.visible !== false && (n.id !== 'admin' || isAdmin))
+        .filter((n: any) => n.visible !== false && (n.id !== 'admin' || isAdmin) && n.id !== 'settings')
         .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
         .map((n: any) => {
           const meta = navMeta[n.id]
           if (!meta) return null
-          return { name: n.label || meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji }
+          return { id: n.id, name: n.label || meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji }
         })
         .filter(Boolean) as NavItem[]
     }
     // Fallback: default hardcoded nav
     return Object.entries(navMeta)
-      .filter(([id]) => id !== 'admin' || isAdmin)
-      .map(([, meta]) => ({
+      .filter(([id]) => (id !== 'admin' || isAdmin) && id !== 'settings')
+      .map(([id, meta]) => ({
+        id,
         name: meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji,
       }))
   })()
+
+  // Navigation groups based on Figma design
+  const navGroups: Record<string, NavItem[]> = {
+    main: navItems.filter(item => item.id === 'dashboard'),
+    finance: navItems.filter(item => ['smart-stack', 'bill-boss'].includes(item.id)),
+    community: navItems.filter(item => item.id === 'stack-circle'),
+    tools: navItems.filter(item => item.id === 'task-list'),
+  }
+
+  const adminItem = isAdmin && navMeta.admin ? {
+    id: 'admin',
+    name: navMeta.admin.defaultLabel,
+    icon: navMeta.admin.icon,
+    href: navMeta.admin.href,
+    emoji: navMeta.admin.emoji,
+  } : null
+
+  const settingsItem = navMeta.settings ? {
+    id: 'settings',
+    name: navMeta.settings.defaultLabel,
+    icon: navMeta.settings.icon,
+    href: navMeta.settings.href,
+    emoji: navMeta.settings.emoji,
+  } : null
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
@@ -115,6 +141,60 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
   }
 
   const initials = resolvedName.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2) || 'U'
+
+  // Render a nav item
+  const renderNavItem = (item: NavItem) => {
+    const active = isActive(item.href)
+    const Icon = item.icon
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={onClose}
+        className={cn(
+          'relative flex items-center gap-3',
+          'px-4 py-3 rounded-xl',
+          'transition-all duration-300 ease-out',
+          'text-sm font-medium',
+        )}
+        style={{
+          color: active ? theme.gold : theme.textS,
+          backgroundColor: active ? theme.goldBg2 : 'transparent',
+        }}
+      >
+        {active && (
+          <div
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
+            style={{ backgroundColor: theme.gold }}
+          />
+        )}
+        <Icon
+          size={18}
+          strokeWidth={active ? 2 : 1.5}
+          className="flex-shrink-0"
+        />
+        <span className="truncate">{item.name}</span>
+      </Link>
+    )
+  }
+
+  // Render a nav group section
+  const renderNavGroup = (label: string, items: NavItem[]) => {
+    if (!items || items.length === 0) return null
+    return (
+      <div key={label} className="space-y-1">
+        <p
+          className="text-[10px] font-semibold uppercase tracking-[1.5px] px-4 pt-4 pb-2"
+          style={{ color: theme.textM }}
+        >
+          {label}
+        </p>
+        <div className="space-y-1">
+          {items.map(item => renderNavItem(item))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -131,7 +211,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
       <div
         className={cn(
           'fixed left-0 top-0 bottom-0 z-50',
-          'w-[220px]',
+          'w-[240px]',
           'border-r',
           'flex flex-col',
           'pt-6 pb-6',
@@ -169,45 +249,45 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 space-y-1">
-          {navItems.map((item) => {
-            const active = isActive(item.href)
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                className={cn(
-                  'relative flex items-center gap-3',
-                  'px-4 py-3 rounded-xl',
-                  'transition-all duration-300 ease-out',
-                  'text-sm font-medium',
-                )}
-                style={{
-                  color: active ? theme.gold : theme.textS,
-                  backgroundColor: active ? theme.goldBg2 : 'transparent',
-                }}
+        <nav className="flex-1 overflow-y-auto px-3">
+          {/* Main Group */}
+          {renderNavGroup('MAIN', navGroups.main)}
+
+          {/* Finance Group */}
+          {renderNavGroup('FINANCE', navGroups.finance)}
+
+          {/* Community Group */}
+          {renderNavGroup('COMMUNITY', navGroups.community)}
+
+          {/* Tools Group */}
+          {renderNavGroup('TOOLS', navGroups.tools)}
+
+          {/* Admin Group (if user is admin) */}
+          {adminItem && (
+            <div className="space-y-1">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-[1.5px] px-4 pt-4 pb-2"
+                style={{ color: theme.textM }}
               >
-                {active && (
-                  <div
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
-                    style={{ backgroundColor: theme.gold }}
-                  />
-                )}
-                <Icon
-                  size={18}
-                  strokeWidth={active ? 2 : 1.5}
-                  className="flex-shrink-0"
-                />
-                <span className="truncate">{item.name}</span>
-              </Link>
-            )
-          })}
+                ADMIN
+              </p>
+              <div className="space-y-1">
+                {renderNavItem(adminItem)}
+              </div>
+            </div>
+          )}
         </nav>
 
-        {/* User Profile at Bottom */}
-        <div className="pt-4 px-3 flex-shrink-0" style={{ borderTop: `1px solid ${theme.border}99` }}>
+        {/* Settings and User Profile at Bottom */}
+        <div className="pt-4 px-3 flex-shrink-0 space-y-2" style={{ borderTop: `1px solid ${theme.border}99` }}>
+          {/* Settings Link */}
+          {settingsItem && (
+            <div className="space-y-1">
+              {renderNavItem(settingsItem)}
+            </div>
+          )}
+
+          {/* User Profile */}
           <div
             className="flex items-center gap-3 px-4 py-3 rounded-xl"
             style={{ backgroundColor: `${theme.border}20` }}

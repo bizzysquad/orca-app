@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
@@ -943,6 +944,40 @@ export default function DashboardPage() {
     localStorage.setItem('orca-dashboard-order', JSON.stringify(newOrder))
   }
 
+  // Calculate actual user credit score
+  const userCreditScore = useMemo(() => {
+    // Try to get from context data first
+    if (user?.creditScore) {
+      return user.creditScore
+    }
+
+    // If per-bureau scores exist, calculate average
+    if (user?.creditScoreTransUnion || user?.creditScoreEquifax || user?.creditScoreExperian) {
+      const scores = [
+        user.creditScoreTransUnion,
+        user.creditScoreEquifax,
+        user.creditScoreExperian,
+      ].filter((score): score is number => typeof score === 'number')
+      if (scores.length > 0) {
+        return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      }
+    }
+
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('orca-user-settings')
+        if (saved) {
+          const settings = JSON.parse(saved)
+          if (settings.creditScore) return settings.creditScore
+        }
+      } catch {}
+    }
+
+    // Default fallback
+    return 648
+  }, [user?.creditScore, user?.creditScoreTransUnion, user?.creditScoreEquifax, user?.creditScoreExperian])
+
   const renderSection = (sectionId: string, index: number) => {
     switch (sectionId) {
       case 'financial-cards':
@@ -950,59 +985,65 @@ export default function DashboardPage() {
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Next Payment Card */}
-              <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                    <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
-                    Next Payment
+              <Link href="/smart-stack">
+                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                      <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
+                      Next Payment
+                    </div>
+                    <ArrowUpRight className="w-4 h-4" style={{ color: '#10B981' }} />
                   </div>
-                  <ArrowUpRight className="w-4 h-4" style={{ color: '#10B981' }} />
+                  <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
+                    {nextIncomingPayment ? `+${fmt(nextIncomingPayment.amount)}` : '$0.00'}
+                  </div>
+                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                    {nextIncomingPayment
+                      ? `${nextIncomingPayment.description || 'Income'} · ${new Date(nextIncomingPayment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${daysTo(nextIncomingPayment.date)}d`
+                      : 'No upcoming payments'}
+                  </div>
                 </div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
-                  {nextIncomingPayment ? `+${fmt(nextIncomingPayment.amount)}` : '$0.00'}
-                </div>
-                <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                  {nextIncomingPayment
-                    ? `${nextIncomingPayment.description || 'Income'} · ${new Date(nextIncomingPayment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${daysTo(nextIncomingPayment.date)}d`
-                    : 'No upcoming payments'}
-                </div>
-              </div>
+              </Link>
 
               {/* Bills Due Card */}
-              <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                    <Receipt className="w-4 h-4" style={{ color: '#EF4444' }} />
-                    Bills Due
+              <Link href="/bill-boss">
+                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                      <Receipt className="w-4 h-4" style={{ color: '#EF4444' }} />
+                      Bills Due
+                    </div>
+                    <ArrowDownRight className="w-4 h-4" style={{ color: '#EF4444' }} />
                   </div>
-                  <ArrowDownRight className="w-4 h-4" style={{ color: '#EF4444' }} />
+                  <div style={{ fontSize: 28, fontWeight: 800, color: '#EF4444' }}>
+                    {nextBill ? `−${fmt(nextBill.amount)}` : '$0.00'}
+                  </div>
+                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                    {nextBill
+                      ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${fmt(billsDueThisWeek)} this week`
+                      : 'All paid up'}
+                  </div>
                 </div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#EF4444' }}>
-                  {nextBill ? `−${fmt(nextBill.amount)}` : '$0.00'}
-                </div>
-                <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                  {nextBill
-                    ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${fmt(billsDueThisWeek)} this week`
-                    : 'All paid up'}
-                </div>
-              </div>
+              </Link>
 
               {/* Total Saved Card */}
-              <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                    <PiggyBank className="w-4 h-4" style={{ color: '#6366F1' }} />
-                    Total Saved
+              <Link href="/smart-stack?tab=savings">
+                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                      <PiggyBank className="w-4 h-4" style={{ color: '#6366F1' }} />
+                      Total Saved
+                    </div>
+                    <ArrowUpRight className="w-4 h-4" style={{ color: '#6366F1' }} />
                   </div>
-                  <ArrowUpRight className="w-4 h-4" style={{ color: '#6366F1' }} />
+                  <div style={{ fontSize: 28, fontWeight: 800, color: '#6366F1' }}>
+                    {fmt(totalSavings)}
+                  </div>
+                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                    Across all accounts
+                  </div>
                 </div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#6366F1' }}>
-                  {fmt(totalSavings)}
-                </div>
-                <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                  Across all accounts
-                </div>
-              </div>
+              </Link>
             </motion.div>
           </DraggableSection>
         )
@@ -1020,23 +1061,27 @@ export default function DashboardPage() {
       case 'credit-score':
         return (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <motion.div variants={fadeUp} className="rounded-2xl p-5" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-bold" style={{ color: theme.text }}>Credit Score</h3>
-                <button className="text-xs hover:opacity-80" style={{ color: '#6366F1' }}>Update</button>
-              </div>
-              <div className="flex items-center gap-4">
-                <CreditScoreRing score={648} limit={850} theme={theme} />
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>Fair</div>
-                  <div className="text-xs mt-0.5" style={{ color: theme.textS }}>34% utilization</div>
-                  <div className="text-xs mt-1" style={{ color: theme.textS }}>Range: 300–850</div>
-                  <div className="mt-2 rounded-full overflow-hidden" style={{ height: 5, background: theme.border, width: 120 }}>
-                    <div className="h-full rounded-full" style={{ width: `${(648 / 850) * 100}%`, background: '#F59E0B' }} />
+            <Link href="/settings?tab=financial">
+              <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-bold" style={{ color: theme.text }}>Credit Score</h3>
+                  <Link href="/settings?tab=financial" onClick={(e) => e.stopPropagation()}>
+                    <button className="text-xs hover:opacity-80" style={{ color: '#6366F1' }}>Update</button>
+                  </Link>
+                </div>
+                <div className="flex items-center gap-4">
+                  <CreditScoreRing score={userCreditScore} limit={850} theme={theme} />
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>Fair</div>
+                    <div className="text-xs mt-0.5" style={{ color: theme.textS }}>34% utilization</div>
+                    <div className="text-xs mt-1" style={{ color: theme.textS }}>Range: 300–850</div>
+                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 5, background: theme.border, width: 120 }}>
+                      <div className="h-full rounded-full" style={{ width: `${(userCreditScore / 850) * 100}%`, background: '#F59E0B' }} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </Link>
           </DraggableSection>
         )
 

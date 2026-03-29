@@ -843,7 +843,7 @@ export default function SmartStackPage() {
 
             <div className="mb-3">
               <label className="block text-xs mb-2" style={{ color: theme.textM, fontWeight: 600 }}>Quick Add</label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-4 gap-2 mb-3">
                 {[10, 25, 50, 100].map(amt => (
                   <button key={amt} onClick={() => {
                     const updated = [...savingsAccounts];
@@ -858,6 +858,42 @@ export default function SmartStackPage() {
                     +${amt}
                   </button>
                 ))}
+              </div>
+
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
+                  <input
+                    type="number"
+                    placeholder="Custom amount"
+                    value={customAddAmounts[acct.id] || ''}
+                    onChange={e => setCustomAddAmounts(prev => ({ ...prev, [acct.id]: e.target.value }))}
+                    className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none"
+                    style={{
+                      backgroundColor: theme.bg,
+                      borderColor: theme.border,
+                      color: theme.text,
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    const customAmount = parseFloat(customAddAmounts[acct.id] || '0');
+                    if (customAmount > 0) {
+                      const updated = [...savingsAccounts];
+                      const idx = updated.findIndex(a => a.id === acct.id);
+                      updated[idx].amount += customAmount;
+                      updated[idx].saved = true;
+                      setSavingsAccounts(updated);
+                      setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
+                      setCustomAddAmounts(prev => ({ ...prev, [acct.id]: '' }));
+                    }
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
+                  style={{ backgroundColor: '#0891B2' }}>
+                  Add
+                </button>
               </div>
             </div>
 

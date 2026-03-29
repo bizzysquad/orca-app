@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useState, useEffect, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User,
@@ -37,8 +37,18 @@ export default function SettingsPage() {
   const user = data.user
   const { theme, themeId, setThemeId, allThemes } = useTheme()
 
-  // Tab navigation
-  const [activeTab, setActiveTab] = useState<SettingsTab>('account')
+  // Tab navigation — read from URL query param if present
+  const searchParams = useSearchParams()
+  const initialTab = (searchParams.get('tab') as SettingsTab) || 'account'
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
+
+  // Sync tab with URL changes
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as SettingsTab
+    if (tabParam && ['account', 'financial', 'appearance', 'privacy'].includes(tabParam)) {
+      setActiveTab(tabParam)
+    }
+  }, [searchParams])
 
   // Profile edit state
   const [editingName, setEditingName] = useState(false)
@@ -54,6 +64,22 @@ export default function SettingsPage() {
   const [scoreTransUnion, setScoreTransUnion] = useState(String(user.creditScoreTransUnion || ''))
   const [scoreEquifax, setScoreEquifax] = useState(String(user.creditScoreEquifax || ''))
   const [scoreExperian, setScoreExperian] = useState(String(user.creditScoreExperian || ''))
+
+  // Auto-calculate average credit score from bureau scores
+  const averageCreditScore = useMemo(() => {
+    const scores = [scoreTransUnion, scoreEquifax, scoreExperian]
+      .map(s => parseInt(s))
+      .filter(n => !isNaN(n) && n > 0)
+    if (scores.length === 0) return null
+    return Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
+  }, [scoreTransUnion, scoreEquifax, scoreExperian])
+
+  // Auto-update overall score when bureau scores change
+  useEffect(() => {
+    if (averageCreditScore !== null) {
+      setCreditScore(String(averageCreditScore))
+    }
+  }, [averageCreditScore])
 
   // Reset / Delete account state
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -342,20 +368,37 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-4" id="credit-score-section">
                   <div>
-                    <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Overall Score (300–850)
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        Overall Score (300–850)
+                      </label>
+                      {averageCreditScore !== null && (
+                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#6366F115', color: '#6366F1', fontWeight: 600 }}>
+                          Auto-averaged
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="number"
                       placeholder="648"
                       value={creditScore}
                       onChange={(e) => setCreditScore(e.target.value)}
+                      readOnly={averageCreditScore !== null}
                       className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                      style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                      style={{
+                        background: averageCreditScore !== null ? `${theme.input}80` : theme.input,
+                        border: `1px solid ${theme.border}`,
+                        color: theme.text,
+                        cursor: averageCreditScore !== null ? 'default' : undefined,
+                      }}
                     />
-                    <p className="text-xs mt-1" style={{ color: theme.textM }}>Your primary credit score (300–850)</p>
+                    <p className="text-xs mt-1" style={{ color: theme.textM }}>
+                      {averageCreditScore !== null
+                        ? 'Automatically calculated from your bureau scores below'
+                        : 'Enter manually, or fill in bureau scores below for auto-average'}
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
