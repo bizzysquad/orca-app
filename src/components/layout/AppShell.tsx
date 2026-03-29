@@ -18,7 +18,7 @@ export default function AppShell({ children, notificationCount = 0, userName = '
 
   return (
     <div
-      className="relative w-full min-h-screen flex"
+      className="relative w-full min-h-screen flex overflow-x-hidden max-w-[100vw]"
       style={{ backgroundColor: theme.bg, color: theme.text }}
     >
       {/* Sidebar Navigation */}
@@ -29,7 +29,7 @@ export default function AppShell({ children, notificationCount = 0, userName = '
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col md:ml-[240px]">
+      <div className="flex-1 flex flex-col md:ml-[240px] min-w-0 max-w-full overflow-x-hidden">
         {/* Desktop Top Bar */}
         <DesktopTopBar
           onMenuToggle={() => setSidebarOpen(true)}
@@ -38,8 +38,8 @@ export default function AppShell({ children, notificationCount = 0, userName = '
         />
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto" style={{ backgroundColor: theme.bg }}>
-          <div className="w-full">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: theme.bg }}>
+          <div className="w-full max-w-full">
             {children}
           </div>
         </main>

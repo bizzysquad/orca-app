@@ -462,7 +462,7 @@ export default function StackCirclePage() {
 
   return (
     <div
-      className="min-h-screen pb-32 overflow-x-hidden transition-colors w-full"
+      className="min-h-screen pb-32 overflow-x-hidden transition-colors w-full max-w-full"
       style={{ backgroundColor: theme.bg, color: theme.text }}
     >
       {/* Header */}

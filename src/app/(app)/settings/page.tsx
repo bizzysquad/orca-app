@@ -151,7 +151,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24 w-full" style={{ backgroundColor: theme.bg }}>
+    <div className="min-h-screen pb-24 w-full max-w-full overflow-x-hidden" style={{ backgroundColor: theme.bg }}>
       {/* Header */}
       <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full">
         <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Settings</h1>

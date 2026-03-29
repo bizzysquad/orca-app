@@ -151,7 +151,7 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   }
 
   return (
-    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-6 sm:p-8">
+    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-full box-border">
       <div className="flex items-center justify-between mb-6">
         <button onClick={() => onMonthChange(-1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = '#6366F1'} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
           <ChevronLeft size={20} />
@@ -663,15 +663,15 @@ export default function BillBossPage() {
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg }} className="min-h-screen pb-20 overflow-x-hidden">
+    <div style={{ backgroundColor: theme.bg }} className="w-full min-h-screen pb-20 overflow-x-hidden max-w-full">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-30 backdrop-blur-xl border-b p-4 sm:p-6 lg:p-8"
+        className="sticky top-0 z-30 backdrop-blur-xl border-b px-4 py-4 sm:px-6 sm:py-4 lg:px-8 lg:py-4"
         style={{ backgroundColor: `${theme.bg}95`, borderColor: theme.border }}
       >
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
+        <div className="max-w-3xl mx-auto w-full flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold" style={{ color: theme.text }}>Bill Boss</h1>
             <p className="text-sm mt-1" style={{ color: theme.textM }}>Manage your monthly bills</p>
@@ -687,10 +687,10 @@ export default function BillBossPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <div className="relative overflow-hidden rounded-2xl p-8 sm:p-10" style={{ backgroundImage: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', color: '#fff' }}>
+          <div className="relative overflow-hidden rounded-2xl p-4 sm:p-8 w-full max-w-full box-border" style={{ backgroundImage: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', color: '#fff' }}>
             <div className="text-center mb-6">
               <p className="text-sm font-medium opacity-80 mb-2">Total Monthly Bills</p>
-              <p className="text-5xl sm:text-6xl font-bold mb-4">{fmt(unpaidTotal)}</p>
+              <p className="text-3xl sm:text-5xl font-bold mb-4 break-words">{fmt(unpaidTotal)}</p>
               <div className="rounded-full inline-flex gap-4 px-5 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
                 <div>
                   <p className="text-xs opacity-70">Paid</p>
@@ -706,15 +706,15 @@ export default function BillBossPage() {
 
             {/* Next Bill Due + Quick Pay */}
             {nextBillDue && (
-              <div className="mt-6 pt-6 border-t flex items-center justify-between gap-4" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
+              <div className="mt-6 pt-6 border-t flex items-center justify-between gap-3 sm:gap-4 flex-wrap sm:flex-nowrap" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium opacity-70">Next Due</p>
-                  <p className="text-lg font-bold truncate mt-1">{nextBillDue.name}</p>
+                  <p className="text-base sm:text-lg font-bold truncate mt-1">{nextBillDue.name}</p>
                   <p className="text-xs opacity-70 mt-1">{fmtD(nextBillDue.due)} · {fmt(nextBillDue.amount)}</p>
                 </div>
                 <button
                   onClick={() => handlePayFull(nextBillDue.id)}
-                  className="shrink-0 px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
+                  className="shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
                   style={{ backgroundColor: '#fff', color: '#6366F1' }}
                 >
                   Pay Now
@@ -799,7 +799,7 @@ export default function BillBossPage() {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="border rounded-2xl p-8 space-y-5"
+              className="border rounded-2xl p-5 sm:p-8 space-y-5"
             >
               <input
                 type="text"
@@ -812,14 +812,14 @@ export default function BillBossPage() {
                 onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 w-full">
                 <input
                   type="number"
                   placeholder="Amount ($)"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
+                  className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
                   onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
                   onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
                 />
@@ -985,17 +985,17 @@ export default function BillBossPage() {
                 >
                   <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-6 space-y-4">
                     {/* Bill Header with Icon */}
-                    <div className="flex items-start gap-4">
+                    <div className="flex items-start gap-3 sm:gap-4 flex-wrap sm:flex-nowrap">
                       <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0"
                         style={{ backgroundColor: `${iconConfig.color}20` }}
                       >
-                        <Icon className="w-6 h-6" style={{ color: iconConfig.color }} />
+                        <Icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: iconConfig.color }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <h3 style={{ color: theme.text }} className="font-bold text-lg">{bill.name}</h3>
-                          <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: `${iconConfig.color}15`, color: iconConfig.color }}>
+                        <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
+                          <h3 style={{ color: theme.text }} className="font-bold text-base sm:text-lg truncate">{bill.name}</h3>
+                          <span className="px-2 sm:px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: `${iconConfig.color}15`, color: iconConfig.color }}>
                             {bill.cat}
                           </span>
                         </div>
@@ -1008,7 +1008,7 @@ export default function BillBossPage() {
                           {bill.recurrenceEndAfter && <span> · {bill.recurrenceEndAfter}x left</span>}
                         </p>
                       </div>
-                      <p className="text-3xl font-bold flex-shrink-0" style={{ color: '#EF4444' }}>
+                      <p className="text-xl sm:text-3xl font-bold flex-shrink-0" style={{ color: '#EF4444' }}>
                         –{fmt(bill.amount)}
                       </p>
                     </div>
@@ -1076,7 +1076,7 @@ export default function BillBossPage() {
                     )}
 
                     {/* Action Buttons */}
-                    <div className="flex gap-3 pt-2">
+                    <div className="flex gap-2 sm:gap-3 pt-2 flex-wrap sm:flex-nowrap">
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -1369,7 +1369,7 @@ export default function BillBossPage() {
               exit={{ y: 100, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="w-full border-t rounded-t-3xl p-8 space-y-5"
+              className="w-full max-w-full border-t rounded-t-3xl p-5 sm:p-8 space-y-5 overflow-hidden"
             >
               <div className="flex justify-between items-center mb-2">
                 <h2 style={{ color: theme.text }} className="font-bold text-xl">Payment</h2>

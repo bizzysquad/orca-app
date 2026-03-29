@@ -26,7 +26,7 @@ export default function WeeklySplitPage() {
   }
 
   return (
-    <div className="min-h-screen pb-14" style={{ backgroundColor: theme.bg, color: theme.text }}>
+    <div className="min-h-screen pb-14 max-w-full overflow-x-hidden" style={{ backgroundColor: theme.bg, color: theme.text }}>
       <motion.div initial="hidden" animate="show" className="px-5 py-6 space-y-5 max-w-5xl mx-auto">
         <motion.div variants={statCard} className="rounded-2xl border p-6" style={{ borderColor: theme.border, backgroundColor: theme.bgS }}>
           <h1 className="text-3xl font-bold" style={{ color: theme.gold }}>Weekly Income Split</h1>

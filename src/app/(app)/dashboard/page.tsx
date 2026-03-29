@@ -1147,7 +1147,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }} className="overflow-x-hidden">
+    <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }} className="overflow-x-hidden max-w-full">
       <motion.div
         initial="hidden"
         animate="show"

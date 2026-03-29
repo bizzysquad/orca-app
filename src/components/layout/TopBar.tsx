@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Settings, Home, Palette } from 'lucide-react'
+import { Settings, Home, Palette, Sun, Moon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -14,7 +14,7 @@ interface TopBarProps {
 
 const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
   ({ title = 'ORCA', notificationCount = 0 }, ref) => {
-    const { theme, themeId, setThemeId, allThemes } = useTheme()
+    const { theme, themeId, setThemeId, allThemes, isDark, toggleDark } = useTheme()
 
     const [customLogo, setCustomLogo] = useState<string | null>(null)
     useEffect(() => {
@@ -60,7 +60,16 @@ const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
           >
             <Home size={18} strokeWidth={1.5} />
           </Link>
-          {/* Theme toggle */}
+          {/* Light/Dark Mode Toggle */}
+          <button
+            onClick={toggleDark}
+            className="p-2.5 rounded-lg transition-colors duration-200"
+            style={{ color: theme.gold }}
+            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {isDark ? <Sun size={18} strokeWidth={1.5} /> : <Moon size={18} strokeWidth={1.5} />}
+          </button>
+          {/* Theme color cycle */}
           <button
             onClick={() => {
               const ids = allThemes.map(t => t.id)
@@ -69,7 +78,7 @@ const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
               setThemeId(next)
             }}
             className="p-2.5 rounded-lg transition-colors duration-200"
-            style={{ color: theme.gold }}
+            style={{ color: theme.textM }}
             title={`Theme: ${theme.name}`}
           >
             <Palette size={18} strokeWidth={1.5} />

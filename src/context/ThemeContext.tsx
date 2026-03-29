@@ -159,6 +159,13 @@ function makeDark(lightTheme: Theme): Theme {
     input: darkInput,
     nav: darkNav,
     ...BASE_DARK_THEME_PROPS,
+    // Update backward-compatible aliases to use dark values
+    textS: darkSubtext,
+    textM: darkSubtext,
+    bgS: darkSurface,
+    goldBg: `${lightTheme.accent}14`,
+    goldBg2: `${lightTheme.accent}26`,
+    glow: `0 0 20px ${lightTheme.accent}26`,
   }
 }
 

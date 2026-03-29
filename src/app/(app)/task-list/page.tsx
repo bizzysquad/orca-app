@@ -213,7 +213,8 @@ export default function TaskListPage() {
   const pct = totalTasks === 0 ? 0 : Math.round((totalCompleted / totalTasks) * 100)
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full min-h-screen" style={{ backgroundColor: theme.bg, color: theme.text }}>
+    <div className="p-4 sm:p-6 lg:p-8 w-full min-h-screen overflow-x-hidden" style={{ backgroundColor: theme.bg, color: theme.text }}>
+    <div className="max-w-4xl mx-auto w-full">
       {/* Header */}
       <div className="mb-6">
         <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0F172A' }}>Task List & Reminders</h1>
@@ -606,6 +607,7 @@ export default function TaskListPage() {
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }

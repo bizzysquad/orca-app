@@ -16,7 +16,7 @@ interface DesktopTopBarProps {
 
 export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, userName = 'User' }: DesktopTopBarProps) {
   const router = useRouter()
-  const { theme, themeId, setThemeId, allThemes } = useTheme()
+  const { theme, isDark, toggleDark } = useTheme()
   const [customLogo, setCustomLogo] = useState<string | null>(null)
 
   // Read custom logo from localStorage
@@ -126,20 +126,15 @@ export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, use
 
         {/* Light/Dark Mode Toggle */}
         <button
-          onClick={() => {
-            const ids = allThemes.map(t => t.id)
-            const idx = ids.indexOf(themeId)
-            const next = ids[(idx + 1) % ids.length]
-            setThemeId(next)
-          }}
+          onClick={toggleDark}
           className={cn(
             'p-2 rounded-lg transition-colors duration-200',
             'hover:opacity-80'
           )}
           style={{ color: theme.textM }}
-          title="Toggle theme"
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         >
-          {theme.isDark ? <Sun size={20} strokeWidth={1.5} /> : <Moon size={20} strokeWidth={1.5} />}
+          {isDark ? <Sun size={20} strokeWidth={1.5} /> : <Moon size={20} strokeWidth={1.5} />}
         </button>
 
         {/* Profile Circle with Initials */}
