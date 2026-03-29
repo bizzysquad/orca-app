@@ -25,7 +25,7 @@
 
   /* Prevent any element from causing horizontal overflow */
   *, *::before, *::after {
-    max-width: 100%;
+    box-sizing: border-box;
   }
 
   /* Allow flex/grid items to shrink properly */
@@ -35,7 +35,19 @@
   }
 
   /* Fix native date inputs overflowing on mobile */
-  input[type="date"] {
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"] {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    overflow: hidden;
+  }
+
+  /* Ensure all inputs respect container width */
+  input, select, textarea {
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;

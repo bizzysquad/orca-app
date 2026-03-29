@@ -812,7 +812,7 @@ export default function BillBossPage() {
                 onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
               />
 
-              <div className="grid grid-cols-2 gap-4 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
                 <input
                   type="number"
                   placeholder="Amount ($)"

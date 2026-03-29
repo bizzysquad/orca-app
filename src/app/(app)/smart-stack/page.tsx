@@ -519,10 +519,10 @@ export default function SmartStackPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         style={{ backgroundColor: theme.card, borderColor: theme.border }}
-        className="border rounded-2xl p-5"
+        className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full"
       >
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `#0891B220` }}>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `#0891B220` }}>
             <BarChart3 size={20} style={{ color: '#0891B2' }} />
           </div>
           <div>
@@ -691,7 +691,7 @@ export default function SmartStackPage() {
         </div>
 
         {projectionMode === 'payment' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-5">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `#0891B220` }}>
                 <Wallet className="w-5 h-5" style={{ color: '#0891B2' }} />

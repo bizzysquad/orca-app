@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { Menu, Bell, Sun, Moon } from 'lucide-react'
+import { Menu, Home, Sun, Moon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -101,28 +101,20 @@ export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, use
         </div>
       </div>
 
-      {/* Right side: Notification Bell + Theme Toggle + Profile Circle */}
+      {/* Right side: Home + Theme Toggle + Profile Circle */}
       <div className="flex items-center gap-2">
-        {/* Notification Bell */}
-        <div className="relative">
-          <button
-            className={cn(
-              'p-2 rounded-lg transition-colors duration-200',
-              'hover:opacity-80 relative'
-            )}
-            style={{ color: theme.textM }}
-          >
-            <Bell size={20} strokeWidth={1.5} />
-            {notificationCount > 0 && (
-              <span
-                className="absolute top-1 right-1 w-4 h-4 rounded-full text-xs font-bold flex items-center justify-center text-white"
-                style={{ backgroundColor: theme.gold }}
-              >
-                {notificationCount > 9 ? '9+' : notificationCount}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* Home Button — navigates to Dashboard */}
+        <button
+          onClick={() => router.push('/dashboard')}
+          className={cn(
+            'p-2 rounded-lg transition-colors duration-200',
+            'hover:opacity-80'
+          )}
+          style={{ color: theme.gold }}
+          title="Go to Dashboard"
+        >
+          <Home size={20} strokeWidth={1.5} />
+        </button>
 
         {/* Light/Dark Mode Toggle */}
         <button

@@ -41,9 +41,9 @@ const TopBar = React.forwardRef<HTMLDivElement, TopBarProps>(
       >
         <div className="flex-shrink-0">
           {customLogo ? (
-            <img src={customLogo} alt="ORCA" width={28} height={28} className="rounded-lg object-contain" />
+            <Image src={customLogo} alt="ORCA Logo" width={28} height={28} className="rounded object-contain" />
           ) : (
-            <Image src="/logo-sm.png" alt="ORCA" width={28} height={28} priority className="rounded-lg" />
+            <Image src="/logo.svg" alt="ORCA Logo" width={28} height={28} priority className="rounded" />
           )}
         </div>
 
