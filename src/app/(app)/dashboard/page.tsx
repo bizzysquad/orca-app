@@ -7,6 +7,8 @@ import {
   ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
   DollarSign, Receipt, Palmtree, Calendar,
   GripVertical, Pin, PinOff, PiggyBank, Wallet,
+  TrendingUp, ArrowUpRight, ArrowDownRight, CreditCard,
+  Bell,
 } from 'lucide-react'
 
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -40,7 +42,7 @@ function CreditScoreRing({ score, limit, theme }: { score: number; limit: number
     color = '#22c55e'
     label = 'Very Good'
   } else if (score >= 670) {
-    color = theme.gold
+    color = '#f59e0b'
     label = 'Good'
   } else if (score >= 580) {
     color = '#f59e0b'
@@ -68,7 +70,7 @@ function CreditScoreRing({ score, limit, theme }: { score: number; limit: number
   )
 }
 
-function ProgressBar({ current, target, color = '#d4a843', theme }: { current: number; target: number; color?: string; theme: any }) {
+function ProgressBar({ current, target, color = '#6366F1', theme }: { current: number; target: number; color?: string; theme: any }) {
   const percentage = Math.min((current / target) * 100, 100)
   return (
     <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
@@ -111,11 +113,11 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
   const getEventsForDay = (day: number) => events.filter(e => e.date === day)
 
   const eventDot = (type: string) => {
-    if (type === 'paycheck') return '#22c55e'
-    if (type === 'bill') return '#ef4444'
+    if (type === 'paycheck') return '#10B981'
+    if (type === 'bill') return '#EF4444'
     if (type === 'dayoff') return '#3b82f6'
     if (type === 'task') return '#a855f7'
-    if (type === 'group') return '#f97316'
+    if (type === 'group') return '#F59E0B'
     return theme.textM
   }
 
@@ -138,11 +140,11 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
             : 'hover:opacity-70'
         }`}
         style={{
-          backgroundColor: isToday ? `${theme.gold}20` : selectedDay === d ? `${theme.gold}10` : 'transparent',
-          borderColor: isToday ? theme.gold : selectedDay === d ? `${theme.gold}50` : 'transparent',
+          backgroundColor: isToday ? '#6366F120' : selectedDay === d ? '#6366F110' : 'transparent',
+          borderColor: isToday ? '#6366F1' : selectedDay === d ? '#6366F150' : 'transparent',
         }}
       >
-        <span style={{ color: isToday ? theme.gold : theme.textS, fontWeight: 500 }}>
+        <span style={{ color: isToday ? '#6366F1' : theme.textS, fontWeight: 500 }}>
           {d}
         </span>
         {dayEvents.length > 0 && (
@@ -161,13 +163,13 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
   }
 
   return (
-    <div className="glass rounded-2xl p-4 sm:p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
+    <div className="rounded-2xl p-5" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
       <div className="flex items-center justify-between mb-4">
         <button onClick={() => onMonthChange(-1)} className="p-2 rounded-lg transition-colors" style={{ color: theme.textS }}>
           <ChevronLeft size={18} />
         </button>
         <div className="flex items-center gap-2">
-          <Calendar size={16} style={{ color: theme.gold }} />
+          <Calendar size={16} style={{ color: '#0891B2' }} />
           <h3 className="font-semibold" style={{ color: theme.text }}>{monthName}</h3>
         </div>
         <button onClick={() => onMonthChange(1)} className="p-2 rounded-lg transition-colors" style={{ color: theme.textS }}>
@@ -189,23 +191,23 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
 
       <div className="flex flex-wrap gap-3 sm:gap-4 mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
         <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10B981' }} />
           <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Payment</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[#ef4444]" />
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#EF4444' }} />
           <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Bill Due</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[#3b82f6]" />
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#3b82f6' }} />
           <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Day Off</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[#a855f7]" />
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#a855f7' }} />
           <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Task</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[#f97316]" />
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F59E0B' }} />
           <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Group</span>
         </div>
       </div>
@@ -282,9 +284,9 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
             whileTap={{ scale: 0.85 }}
             onClick={() => onTogglePin(id)}
             style={{
-              backgroundColor: isPinned ? `${theme.gold}30` : theme.border,
-              color: isPinned ? theme.gold : theme.textM,
-              borderColor: isPinned ? theme.gold : theme.border,
+              backgroundColor: isPinned ? '#6366F130' : theme.border,
+              color: isPinned ? '#6366F1' : theme.textM,
+              borderColor: isPinned ? '#6366F1' : theme.border,
             }}
             className="w-8 h-8 rounded-lg flex items-center justify-center border"
             title={isPinned ? 'Unpin from top' : 'Pin to top'}
@@ -298,8 +300,8 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
                 onClick={() => onMoveUp(index)}
                 disabled={isFirst}
                 style={{
-                  backgroundColor: isFirst ? theme.border : theme.gold,
-                  color: isFirst ? theme.textM : theme.bgS,
+                  backgroundColor: isFirst ? theme.border : '#6366F1',
+                  color: isFirst ? theme.textM : '#fff',
                 }}
                 className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
               >
@@ -310,8 +312,8 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
                 onClick={() => onMoveDown(index)}
                 disabled={isLast}
                 style={{
-                  backgroundColor: isLast ? theme.border : theme.gold,
-                  color: isLast ? theme.textM : theme.bgS,
+                  backgroundColor: isLast ? theme.border : '#6366F1',
+                  color: isLast ? theme.textM : '#fff',
                 }}
                 className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
               >
@@ -321,11 +323,11 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
           )}
           <span style={{ color: theme.textS }} className="text-sm font-medium">
             {sectionLabels[id] || id}
-            {isPinned && <span style={{ color: theme.gold }} className="ml-2 text-xs font-bold">PINNED</span>}
+            {isPinned && <span style={{ color: '#6366F1' }} className="ml-2 text-xs font-bold">PINNED</span>}
           </span>
         </motion.div>
       )}
-      <div style={isReordering ? { borderColor: isPinned ? `${theme.gold}60` : `${theme.gold}40`, borderWidth: 1, borderStyle: isPinned ? 'solid' : 'dashed', borderRadius: 12, padding: 4 } : {}}>
+      <div style={isReordering ? { borderColor: isPinned ? '#6366F160' : '#6366F140', borderWidth: 1, borderStyle: isPinned ? 'solid' : 'dashed', borderRadius: 12, padding: 4 } : {}}>
         {children}
       </div>
     </motion.div>
@@ -404,6 +406,7 @@ export default function DashboardPage() {
   const [spendView, setSpendView] = useState<'weekly' | 'daily'>('weekly')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [selectedWeekDay, setSelectedWeekDay] = useState<Date | null>(null)
+  const [safeToSpendView, setSafeToSpendView] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
   const [sectionOrder, setSectionOrder] = useState<string[]>([
     'financial-cards',
     'spend-paycheck',
@@ -945,464 +948,109 @@ export default function DashboardPage() {
       case 'financial-cards':
         return (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              {/* Bills Card */}
-              <Link href="/bill-boss" className="block">
-              <div className="rounded-2xl p-6 glass-hover cursor-pointer transition-all active:scale-[0.98]" style={{
-                background: `rgba(239, 68, 68, 0.06)`,
-                backdropFilter: 'blur(16px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-                border: `1px solid rgba(239, 68, 68, 0.2)`,
-              }}>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm" style={{ color: theme.textS }}>Bills</p>
-                  <Receipt size={16} style={{ color: '#ef4444' }} />
-                </div>
-                <p className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: '#ef4444' }}>
-                  –{fmt(billsDueThisWeek)}
-                </p>
-                <p className="text-xs font-medium mb-1" style={{ color: theme.textS }}>
-                  {billsDueToday > 0 ? `${fmt(billsDueToday)} due today` : 'Due this week'}
-                </p>
-                {nextBill ? (
-                  <p className="text-xs" style={{ color: theme.textM }}>
-                    Next: {nextBill.name} · {fmtD(nextBill.due)} · –{fmt(nextBill.amount)}
-                  </p>
-                ) : (
-                  <p className="text-xs" style={{ color: theme.textM }}>
-                    No upcoming bills
-                  </p>
-                )}
-              </div>
-              </Link>
-
-              {/* Savings Card */}
-              <Link href="/smart-stack?tab=savings" className="block">
-                <div className="rounded-2xl p-6 glass-hover cursor-pointer transition-all active:scale-[0.98]" style={{
-                  background: `rgba(34, 197, 94, 0.06)`,
-                  backdropFilter: 'blur(16px) saturate(180%)',
-                  WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-                  border: `1px solid rgba(34, 197, 94, 0.2)`,
-                }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm" style={{ color: theme.textS }}>Savings</p>
-                    <PiggyBank size={16} style={{ color: '#22c55e' }} />
+            <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Next Payment Card */}
+              <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                    <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
+                    Next Payment
                   </div>
-                  <p className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: '#22c55e' }}>
-                    {fmt(totalSavings)}
-                  </p>
-                  {savingsGoalTotal > 0 ? (
-                    <>
-                      <div className="w-full h-1.5 rounded-full overflow-hidden mt-2 mb-1" style={{ backgroundColor: `${theme.border}60` }}>
-                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min((totalSavings / savingsGoalTotal) * 100, 100)}%`, backgroundColor: '#22c55e' }} />
-                      </div>
-                      <p className="text-xs" style={{ color: theme.textM }}>
-                        {Math.round((totalSavings / savingsGoalTotal) * 100)}% of {fmt(savingsGoalTotal)} goal
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm" style={{ color: theme.textM }}>Total saved</p>
-                  )}
+                  <ArrowUpRight className="w-4 h-4" style={{ color: '#10B981' }} />
                 </div>
-              </Link>
-            </motion.div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
+                  {nextIncomingPayment ? `+${fmt(nextIncomingPayment.amount)}` : '$0.00'}
+                </div>
+                <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                  {nextIncomingPayment
+                    ? `${nextIncomingPayment.description || 'Income'} · ${new Date(nextIncomingPayment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${daysTo(nextIncomingPayment.date)}d`
+                    : 'No upcoming payments'}
+                </div>
+              </div>
 
+              {/* Bills Due Card */}
+              <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                    <Receipt className="w-4 h-4" style={{ color: '#EF4444' }} />
+                    Bills Due
+                  </div>
+                  <ArrowDownRight className="w-4 h-4" style={{ color: '#EF4444' }} />
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: '#EF4444' }}>
+                  {nextBill ? `−${fmt(nextBill.amount)}` : '$0.00'}
+                </div>
+                <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                  {nextBill
+                    ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${fmt(billsDueThisWeek)} this week`
+                    : 'All paid up'}
+                </div>
+              </div>
+
+              {/* Total Saved Card */}
+              <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                    <PiggyBank className="w-4 h-4" style={{ color: '#6366F1' }} />
+                    Total Saved
+                  </div>
+                  <ArrowUpRight className="w-4 h-4" style={{ color: '#6366F1' }} />
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: '#6366F1' }}>
+                  {fmt(totalSavings)}
+                </div>
+                <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                  Across all accounts
+                </div>
+              </div>
+            </motion.div>
           </DraggableSection>
         )
 
       case 'spend-paycheck':
-        return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              {/* Safe to Spend Card */}
-              <div className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold" style={{ backgroundColor: theme.card }}>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-sm" style={{ color: theme.textS }}>Safe to Spend</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: theme.textM }}>After bills & savings</p>
-                  </div>
-                  <div className="flex rounded-lg p-0.5" style={{ backgroundColor: `${theme.border}60` }}>
-                    <button
-                      onClick={() => setSpendView('daily')}
-                      className="px-3 py-1 rounded-md text-xs font-semibold transition-all"
-                      style={{
-                        backgroundColor: spendView === 'daily' ? theme.gold : 'transparent',
-                        color: spendView === 'daily' ? theme.bg : theme.textS,
-                      }}
-                    >
-                      Daily
-                    </button>
-                    <button
-                      onClick={() => setSpendView('weekly')}
-                      className="px-3 py-1 rounded-md text-xs font-semibold transition-all"
-                      style={{
-                        backgroundColor: spendView === 'weekly' ? theme.gold : 'transparent',
-                        color: spendView === 'weekly' ? theme.bg : theme.textS,
-                      }}
-                    >
-                      Weekly
-                    </button>
-                  </div>
-                </div>
-                <p className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: theme.gold }}>
-                  {spendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.daily)}
-                </p>
-                <p className="text-sm mb-2" style={{ color: theme.textM }}>
-                  {spendView === 'weekly'
-                    ? `~${fmt(safeToSpend.daily)}/day`
-                    : `~${fmt(safeToSpend.weekly)}/week`}
-                </p>
-                {/* Detailed Breakdown */}
-                <div className="mt-3 pt-3 space-y-2" style={{ borderTop: `1px solid ${theme.border}50` }}>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: theme.textM }}>How it's calculated</p>
-                  {checkingBalance > 0 && (
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.gold }} />
-                        <span className="text-xs" style={{ color: theme.textS }}>Checking Balance</span>
-                      </div>
-                      <span className="text-xs font-semibold" style={{ color: theme.text }}>{fmt(checkingBalance)}</span>
-                    </div>
-                  )}
-                  {safeToSpend.totalIncome > 0 && (
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#22c55e' }} />
-                        <span className="text-xs" style={{ color: theme.textS }}>Incoming Payments</span>
-                      </div>
-                      <span className="text-xs font-semibold" style={{ color: '#22c55e' }}>+{fmt(safeToSpend.totalIncome)}</span>
-                    </div>
-                  )}
-                  {safeToSpend.totalBills > 0 && (
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#ef4444' }} />
-                        <span className="text-xs" style={{ color: theme.textS }}>Bills Reserved</span>
-                      </div>
-                      <span className="text-xs font-semibold" style={{ color: '#ef4444' }}>-{fmt(safeToSpend.totalBills)}</span>
-                    </div>
-                  )}
-                  {(() => {
-                    const savingsReserved = goals
-                      .filter(g => g.active && g.current < g.target)
-                      .reduce((sum, g) => sum + (g.cVal || 0), 0)
-                    return savingsReserved > 0 ? (
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#3b82f6' }} />
-                          <span className="text-xs" style={{ color: theme.textS }}>Savings Reserved</span>
-                        </div>
-                        <span className="text-xs font-semibold" style={{ color: '#3b82f6' }}>-{fmt(savingsReserved)}</span>
-                      </div>
-                    ) : null
-                  })()}
-                  {(user.safeToSpendBuffer || 0) > 0 && (
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.textM }} />
-                        <span className="text-xs" style={{ color: theme.textS }}>Buffer</span>
-                      </div>
-                      <span className="text-xs font-semibold" style={{ color: theme.textM }}>-{fmt(user.safeToSpendBuffer || 0)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center pt-2 mt-1" style={{ borderTop: `1px solid ${theme.border}30` }}>
-                    <span className="text-xs font-bold" style={{ color: theme.gold }}>Safe to Spend</span>
-                    <span className="text-sm font-bold" style={{ color: theme.gold }}>{fmt(safeToSpend.amount)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Next Payment Card — sourced exclusively from Incoming Payments */}
-              <Link href="/smart-stack" className="block">
-                <div className="glass rounded-2xl p-6 glass-hover depth-1 cursor-pointer transition-all active:scale-[0.98]" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm" style={{ color: theme.textS }}>Next Payment</p>
-                    <Wallet size={16} style={{ color: '#22c55e' }} />
-                  </div>
-                  {nextIncomingPayment ? (
-                    <>
-                      <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: '#22c55e' }}>
-                        +{fmt(nextIncomingPayment.amount)}
-                      </p>
-                      <p className="text-xs sm:text-sm truncate" style={{ color: theme.textM }}>
-                        {nextIncomingPayment.description} · {fmtD(nextIncomingPayment.date)} · {daysTo(nextIncomingPayment.date)}d
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-2xl sm:text-3xl font-bold mb-1" style={{ color: theme.textM }}>
-                        —
-                      </p>
-                      <p className="text-sm" style={{ color: theme.textM }}>
-                        No upcoming payments
-                      </p>
-                    </>
-                  )}
-                </div>
-              </Link>
-            </motion.div>
-          </DraggableSection>
-        )
+        return null
 
       case 'calendar':
         return (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <motion.div variants={fadeUp}>
+            <MonthlyCalendar events={calendarEvents} month={calMonth} year={calYear} onMonthChange={handleMonthChange} onDayClick={setSelectedDay} selectedDay={selectedDay} theme={theme} />
+          </DraggableSection>
+        )
+
+      case 'credit-score':
+        return (
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
+            <motion.div variants={fadeUp} className="rounded-2xl p-5" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold" style={{ color: theme.text }}>Calendar</h2>
-                <div className="flex rounded-lg p-0.5" style={{ backgroundColor: `${theme.border}60` }}>
-                  <button
-                    onClick={() => setCalendarView('monthly')}
-                    className="px-3 py-1 rounded-md text-xs font-semibold transition-all"
-                    style={{
-                      backgroundColor: calendarView === 'monthly' ? theme.gold : 'transparent',
-                      color: calendarView === 'monthly' ? theme.bg : theme.textS,
-                    }}
-                  >
-                    Month
-                  </button>
-                  <button
-                    onClick={() => setCalendarView('weekly')}
-                    className="px-3 py-1 rounded-md text-xs font-semibold transition-all"
-                    style={{
-                      backgroundColor: calendarView === 'weekly' ? theme.gold : 'transparent',
-                      color: calendarView === 'weekly' ? theme.bg : theme.textS,
-                    }}
-                  >
-                    Week
-                  </button>
+                <h3 className="text-base font-bold" style={{ color: theme.text }}>Credit Score</h3>
+                <button className="text-xs hover:opacity-80" style={{ color: '#6366F1' }}>Update</button>
+              </div>
+              <div className="flex items-center gap-4">
+                <CreditScoreRing score={648} limit={850} theme={theme} />
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>Fair</div>
+                  <div className="text-xs mt-0.5" style={{ color: theme.textS }}>34% utilization</div>
+                  <div className="text-xs mt-1" style={{ color: theme.textS }}>Range: 300–850</div>
+                  <div className="mt-2 rounded-full overflow-hidden" style={{ height: 5, background: theme.border, width: 120 }}>
+                    <div className="h-full rounded-full" style={{ width: `${(648 / 850) * 100}%`, background: '#F59E0B' }} />
+                  </div>
                 </div>
               </div>
-
-              {calendarView === 'weekly' ? (
-                <div className="glass rounded-2xl p-4 sm:p-6 glass-hover depth-1" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
-                  <div className="flex items-center justify-between mb-4">
-                    <button onClick={() => { setWeekOffset(w => w - 1); setSelectedWeekDay(null) }} className="p-2 rounded-lg hover:opacity-70 transition-opacity" style={{ color: theme.textS }}>
-                      <ChevronLeft size={18} />
-                    </button>
-                    <p className="font-semibold text-sm" style={{ color: theme.text }}>
-                      {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </p>
-                    <button onClick={() => { setWeekOffset(w => w + 1); setSelectedWeekDay(null) }} className="p-2 rounded-lg hover:opacity-70 transition-opacity" style={{ color: theme.textS }}>
-                      <ChevronRight size={18} />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {weekDates.map((date, i) => {
-                      const isToday = date.toDateString() === new Date().toDateString()
-                      const dateKey = date.toISOString().slice(0, 10)
-                      const dayEvents = weeklyEvents.get(dateKey) || []
-                      const isSelected = selectedWeekDay?.toISOString().slice(0, 10) === dateKey
-                      return (
-                        <div
-                          key={i}
-                          onClick={() => setSelectedWeekDay(isSelected ? null : date)}
-                          className="text-center p-2 rounded-lg cursor-pointer transition-all"
-                          style={{
-                            backgroundColor: isToday ? `${theme.gold}20` : isSelected ? `${theme.gold}10` : 'transparent',
-                            border: isToday ? `1px solid ${theme.gold}` : isSelected ? `1px solid ${theme.gold}50` : '1px solid transparent',
-                          }}
-                        >
-                          <p className="text-[10px] font-semibold mb-1" style={{ color: theme.textM }}>
-                            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]}
-                          </p>
-                          <p className="text-sm font-bold mb-1" style={{ color: isToday ? theme.gold : isSelected ? theme.gold : theme.text }}>{date.getDate()}</p>
-                          {dayEvents.length > 0 && (
-                            <div className="flex justify-center gap-0.5">
-                              {dayEvents.slice(0, 3).map((ev, j) => {
-                                const eventColor = ev.type === 'paycheck' ? '#22c55e' : ev.type === 'bill' ? '#ef4444' : ev.type === 'dayoff' ? '#3b82f6' : ev.type === 'task' ? '#a855f7' : ev.type === 'group' ? '#f97316' : theme.textM
-                                return (
-                                  <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: eventColor }} />
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* Legend */}
-                  <div className="flex flex-wrap gap-3 sm:gap-4 mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
-                    {[
-                      { color: '#22c55e', label: 'Payment' },
-                      { color: '#ef4444', label: 'Bill Due' },
-                      { color: '#3b82f6', label: 'Day Off' },
-                      { color: '#a855f7', label: 'Task' },
-                      { color: '#f97316', label: 'Group' },
-                    ].map(l => (
-                      <div key={l.label} className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: l.color }} />
-                        <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>{l.label}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Selected day detail panel */}
-                  {selectedWeekDay && (() => {
-                    const dk = selectedWeekDay.toISOString().slice(0, 10)
-                    const dayEvs = weeklyEvents.get(dk) || []
-                    const eventDot = (type: string) => type === 'paycheck' ? '#22c55e' : type === 'bill' ? '#ef4444' : type === 'dayoff' ? '#3b82f6' : type === 'task' ? '#a855f7' : type === 'group' ? '#f97316' : theme.textM
-                    return (
-                      <div className="mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="text-sm font-semibold" style={{ color: theme.text }}>
-                            {selectedWeekDay.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                          </p>
-                          <button onClick={() => setSelectedWeekDay(null)} className="text-xs" style={{ color: theme.textS }}>Close</button>
-                        </div>
-                        {dayEvs.length > 0 ? (
-                          <div className="space-y-2">
-                            {dayEvs.map((ev, i) => (
-                              <div key={i} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: `${theme.border}40` }}>
-                                <div className="flex items-center gap-2">
-                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: eventDot(ev.type) }} />
-                                  <div>
-                                    <p className="text-sm font-medium" style={{ color: theme.text }}>{ev.label}</p>
-                                    <p className="text-xs capitalize" style={{ color: theme.textM }}>{ev.type}</p>
-                                  </div>
-                                </div>
-                                {ev.amount && (
-                                  <p className="text-sm font-bold" style={{ color: eventDot(ev.type) }}>
-                                    {ev.type === 'bill' ? '-' : '+'}{fmt(ev.amount)}
-                                  </p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm" style={{ color: theme.textM }}>No events scheduled</p>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </div>
-              ) : (
-                <MonthlyCalendar
-                  events={calendarEvents}
-                  month={calMonth}
-                  year={calYear}
-                  onMonthChange={handleMonthChange}
-                  onDayClick={(day) => setSelectedDay(day === 0 ? null : day)}
-                  selectedDay={selectedDay}
-                  theme={theme}
-                />
-              )}
-
-              {upcomingEvents.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {upcomingEvents.map((ev, i) => {
-                    const getIconColor = (type: string) => {
-                      if (type === 'paycheck') return '#22c55e'
-                      if (type === 'bill') return '#ef4444'
-                      if (type === 'task') return '#a855f7'
-                      if (type === 'group') return '#f97316'
-                      return '#3b82f6'
-                    }
-                    const getIcon = (type: string) => {
-                      if (type === 'paycheck') return DollarSign
-                      if (type === 'bill') return Receipt
-                      return Palmtree
-                    }
-                    const iconColor = getIconColor(ev.type)
-                    const Icon = getIcon(ev.type)
-                    return (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.04 }}
-                        className="glass rounded-xl p-3 flex items-center justify-between glass-hover depth-1"
-                        style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${iconColor}20` }}>
-                            <Icon size={14} style={{ color: iconColor }} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium" style={{ color: theme.text }}>{ev.label}</p>
-                            <p className="text-xs" style={{ color: theme.textM }}>
-                              {new Date(calYear, calMonth, ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </p>
-                          </div>
-                        </div>
-                        {ev.amount && (
-                          <p className="text-sm font-bold" style={{ color: iconColor }}>
-                            {ev.type === 'bill' ? '-' : '+'}{fmt(ev.amount)}
-                          </p>
-                        )}
-                      </motion.div>
-                    )
-                  })}
-                </div>
-              )}
             </motion.div>
           </DraggableSection>
         )
 
-      case 'credit-score': {
-        const hasAnyScore = user.creditScore > 0 || (user.creditScoreTransUnion || 0) > 0 || (user.creditScoreEquifax || 0) > 0 || (user.creditScoreExperian || 0) > 0
-        const bureauScores = [
-          { name: 'TransUnion', score: user.creditScoreTransUnion || 0 },
-          { name: 'Equifax', score: user.creditScoreEquifax || 0 },
-          { name: 'Experian', score: user.creditScoreExperian || 0 },
-        ].filter(b => b.score > 0)
-        const primaryScore = user.creditScore || Math.max(...bureauScores.map(b => b.score), 0)
-        return hasAnyScore ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <motion.div
-              variants={fadeUp}
-              className="glass rounded-2xl p-6 cursor-pointer glass-hover depth-1"
-              style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              onClick={() => window.location.href = '/smart-stack'}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm mb-2" style={{ color: theme.textS }}>Credit Score</p>
-                  <p className="text-lg font-semibold" style={{ color: theme.textS }}>
-                    {primaryScore >= 800 ? 'Excellent' : primaryScore >= 740 ? 'Very Good' : primaryScore >= 670 ? 'Good' : primaryScore >= 580 ? 'Fair' : 'Poor'}
-                  </p>
-                  <p className="text-xs mt-2" style={{ color: theme.textM }}>
-                    {user.utilization}% utilization
-                  </p>
-                </div>
-                <CreditScoreRing score={primaryScore} limit={850} theme={theme} />
-              </div>
-              {bureauScores.length > 0 && (
-                <div className="grid grid-cols-3 gap-3 mt-4 pt-4" style={{ borderTop: `1px solid ${theme.border}` }}>
-                  {[
-                    { name: 'TransUnion', score: user.creditScoreTransUnion || 0 },
-                    { name: 'Equifax', score: user.creditScoreEquifax || 0 },
-                    { name: 'Experian', score: user.creditScoreExperian || 0 },
-                  ].map(bureau => (
-                    <div key={bureau.name} className="text-center">
-                      <p className="text-[10px] font-medium uppercase tracking-wide" style={{ color: theme.textM }}>{bureau.name}</p>
-                      <p className="text-base font-bold mt-0.5" style={{ color: bureau.score > 0 ? theme.text : theme.textM }}>
-                        {bureau.score > 0 ? bureau.score : '—'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          </DraggableSection>
-        ) : null
-      }
-
       case 'stack-circle':
-        return stackCircleStats.totalGroups > 0 ? (
+        return group ? (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <Link href="/stack-circle" className="block">
-              <motion.div
-                variants={fadeUp}
-                className="glass-gold rounded-2xl p-6 glass-hover-gold inner-glow-gold cursor-pointer transition-all active:scale-[0.98]"
-              >
+            <Link href="/stack-circle">
+              <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <Users size={18} style={{ color: theme.gold }} />
+                    <Users size={18} style={{ color: '#6366F1' }} />
                     <p className="text-base font-semibold" style={{ color: theme.text }}>Stack Circle</p>
                   </div>
-                  <span className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ backgroundColor: `${theme.gold}15`, color: theme.gold }}>
+                  <span className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ backgroundColor: '#6366F115', color: '#6366F1' }}>
                     {stackCircleStats.totalGroups} group{stackCircleStats.totalGroups !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -1414,24 +1062,24 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-xs" style={{ color: theme.textM }}>Saved</p>
-                    <p className="text-lg font-bold" style={{ color: '#22c55e' }}>{fmt(stackCircleStats.totalSaved)}</p>
+                    <p className="text-lg font-bold" style={{ color: '#10B981' }}>{fmt(stackCircleStats.totalSaved)}</p>
                   </div>
                   <div>
                     <p className="text-xs" style={{ color: theme.textM }}>Goal</p>
-                    <p className="text-lg font-bold" style={{ color: theme.gold }}>{fmt(stackCircleStats.totalTarget)}</p>
+                    <p className="text-lg font-bold" style={{ color: '#6366F1' }}>{fmt(stackCircleStats.totalTarget)}</p>
                   </div>
                 </div>
                 {/* Progress bar */}
                 {stackCircleStats.totalTarget > 0 && (
-                  <ProgressBar current={stackCircleStats.totalSaved} target={stackCircleStats.totalTarget} color={theme.gold} theme={theme} />
+                  <ProgressBar current={stackCircleStats.totalSaved} target={stackCircleStats.totalTarget} color="#6366F1" theme={theme} />
                 )}
                 {/* Show first group name */}
                 {group && (
                   <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${theme.border}40` }}>
                     <p className="text-sm font-medium" style={{ color: theme.textS }}>{group.name}</p>
                     <div className="flex items-center gap-1.5">
-                      <code className="text-xs font-mono" style={{ color: theme.gold }}>{group.code}</code>
-                      <Copy size={12} style={{ color: theme.gold }} />
+                      <code className="text-xs font-mono" style={{ color: '#6366F1' }}>{group.code}</code>
+                      <Copy size={12} style={{ color: '#6366F1' }} />
                     </div>
                   </div>
                 )}
@@ -1464,7 +1112,7 @@ export default function DashboardPage() {
         {/* Welcome Message */}
         <motion.div variants={fadeUp} className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-5xl font-bold truncate" style={{ color: theme.gold }}>
+            <h1 className="text-2xl sm:text-5xl font-bold truncate" style={{ color: theme.text }}>
               {firstName
                 ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName}`
                 : 'Welcome back'}
@@ -1478,15 +1126,54 @@ export default function DashboardPage() {
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsReordering(!isReordering)}
             style={{
-              backgroundColor: isReordering ? theme.gold : theme.card,
-              color: isReordering ? theme.bgS : theme.textM,
-              borderColor: isReordering ? theme.gold : theme.border,
+              backgroundColor: isReordering ? '#6366F1' : theme.card,
+              color: isReordering ? '#fff' : theme.textM,
+              borderColor: isReordering ? '#6366F1' : theme.border,
             }}
             className="border rounded-lg px-3 py-2 text-sm font-medium flex items-center gap-2 mt-2 shrink-0"
           >
             <GripVertical size={14} />
             {isReordering ? 'Done' : 'Reorder'}
           </motion.button>
+        </motion.div>
+
+        {/* Safe to Spend Hero Card */}
+        <motion.div variants={fadeUp} className="rounded-2xl p-5 sm:p-6" style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: '#fff' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm opacity-70">Safe to Spend</span>
+                <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
+              </div>
+              <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>{fmt(safeToSpend.amount)}</div>
+              <div className="text-sm opacity-60 mt-1">
+                {safeToSpendView === 'daily' ? fmt(safeToSpend.daily) : safeToSpendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.amount)} / {safeToSpendView} available
+              </div>
+              <div className="flex gap-2 mt-4">
+                {['daily', 'weekly', 'monthly'].map(v => (
+                  <button key={v} onClick={() => setSafeToSpendView(v as 'daily' | 'weekly' | 'monthly')} className="px-3 py-1 rounded-lg text-xs transition-all capitalize"
+                    style={{ background: v === safeToSpendView ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', fontWeight: v === safeToSpendView ? 700 : 400 }}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl p-4 space-y-2.5" style={{ background: 'rgba(255,255,255,0.12)', minWidth: 200 }}>
+              <div className="text-xs opacity-60 uppercase tracking-widest mb-3" style={{ fontWeight: 700 }}>How it's calculated</div>
+              <div className="flex justify-between items-center text-sm">
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#34D399' }} /><span className="opacity-80">Incoming</span></div>
+                <span style={{ color: '#34D399', fontWeight: 700 }}>+{fmt(safeToSpend.totalIncome)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#F87171' }} /><span className="opacity-80">Bills Reserved</span></div>
+                <span style={{ color: '#F87171', fontWeight: 700 }}>−{fmt(safeToSpend.totalBills)}</span>
+              </div>
+              <div className="pt-2 flex justify-between items-center text-sm" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+                <span style={{ fontWeight: 700 }}>Safe to Spend</span>
+                <span style={{ fontWeight: 800 }}>{fmt(safeToSpend.amount)}</span>
+              </div>
+            </div>
+          </div>
         </motion.div>
 
         {/* Render sections in order — pinned first, then unpinned */}

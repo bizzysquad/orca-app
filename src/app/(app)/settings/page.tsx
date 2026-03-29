@@ -5,25 +5,40 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User,
+  Wallet,
+  CreditCard,
+  Palette,
   Shield,
   LogOut,
   Save,
-  Edit3,
+  Edit2,
   Check,
   Trash2,
   AlertTriangle,
-  Landmark,
   Info,
+  ChevronRight,
 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
+
+type SettingsTab = 'account' | 'financial' | 'appearance' | 'privacy'
+
+const settingsTabs = [
+  { key: 'account', label: 'Account', icon: User },
+  { key: 'financial', label: 'Financial', icon: Wallet },
+  { key: 'appearance', label: 'Appearance', icon: Palette },
+  { key: 'privacy', label: 'Privacy & Data', icon: Shield },
+]
 
 export default function SettingsPage() {
   const router = useRouter()
   const { data, setData, loading } = useOrcaData()
   const user = data.user
   const { theme, themeId, setThemeId, allThemes } = useTheme()
+
+  // Tab navigation
+  const [activeTab, setActiveTab] = useState<SettingsTab>('account')
 
   // Profile edit state
   const [editingName, setEditingName] = useState(false)
@@ -112,433 +127,380 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: theme.bg }}>
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-20 backdrop-blur border-b"
-        style={{
-          backgroundColor: theme.navGlass,
-          borderColor: theme.border,
-        }}
-      >
-        <div className="max-w-2xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold" style={{ color: theme.text }}>
-            Settings
-          </h1>
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Settings</h1>
+        <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Manage your account, preferences, and data</p>
+      </div>
+
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto flex flex-col sm:flex-row gap-6">
+        {/* Sidebar nav */}
+        <div className="sm:w-52 flex-shrink-0">
+          <div
+            className="rounded-2xl p-2 sticky top-24"
+            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+          >
+            {settingsTabs.map(({ key, label, icon: Icon }) => {
+              const active = activeTab === key
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key as SettingsTab)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all mb-0.5"
+                  style={{
+                    background: active ? '#6366F1' : 'transparent',
+                    color: active ? '#fff' : theme.textM,
+                    fontWeight: active ? 700 : 400,
+                    textAlign: 'left',
+                  }}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  {label}
+                  {active && <ChevronRight className="w-4 h-4 ml-auto opacity-70" />}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </motion.div>
 
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
-        {/* 1. Profile / Account Card — consolidated Name + Email */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
-            Account
-          </h2>
-          <div
-            className="rounded-lg p-6 space-y-5"
-            style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
-          >
-            {/* Avatar + summary */}
-            <div className="flex items-center gap-4 pb-4" style={{ borderBottom: `1px solid ${theme.border}` }}>
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg"
-                style={{ backgroundColor: theme.gold, color: theme.bg }}
-              >
-                {editName?.charAt(0)?.toUpperCase() || 'U'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-lg truncate" style={{ color: theme.text }}>{user.name}</div>
-                <div className="text-sm truncate" style={{ color: theme.textS }}>{user.email}</div>
-              </div>
-            </div>
+        {/* Content */}
+        <div className="flex-1 space-y-5">
+          {/* Account Tab */}
+          {activeTab === 'account' && (
+            <>
+              <div className="rounded-2xl p-5 sm:p-6" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: theme.text }} className="mb-5">Account</h2>
 
-            {/* Name field */}
-            <div>
-              <label className="text-sm font-medium mb-2 block" style={{ color: theme.textS }}>Full Name</label>
-              {editingName ? (
-                <div className="flex gap-2">
-                  <input
-                    value={editName}
-                    onChange={e => setEditName(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg"
-                    style={{
-                      backgroundColor: theme.input,
-                      borderColor: theme.border,
-                      borderWidth: '1px',
-                      color: theme.text,
-                    }}
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleSaveName}
-                    className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all"
-                    style={{ backgroundColor: theme.gold, color: theme.bg }}
+                {/* Avatar */}
+                <div className="flex items-center gap-4 mb-6">
+                  <div
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center text-white flex-shrink-0"
+                    style={{ background: '#6366F1', fontSize: 22, fontWeight: 800 }}
                   >
-                    <Check className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <div
-                  className="px-3 py-2 rounded-lg flex items-center justify-between"
-                  style={{ backgroundColor: theme.bgS, color: theme.text }}
-                >
-                  <span className="truncate">{editName}</span>
-                  <button onClick={() => setEditingName(true)} className="text-sm font-medium ml-2 flex-shrink-0" style={{ color: theme.gold }}>
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Email field */}
-            <div>
-              <label className="text-sm font-medium mb-2 block" style={{ color: theme.textS }}>Email Address</label>
-              {editingEmail ? (
-                <div className="flex gap-2">
-                  <input
-                    value={editEmail}
-                    onChange={e => setEditEmail(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg"
-                    style={{
-                      backgroundColor: theme.input,
-                      borderColor: theme.border,
-                      borderWidth: '1px',
-                      color: theme.text,
-                    }}
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleSaveEmail}
-                    className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all"
-                    style={{ backgroundColor: theme.gold, color: theme.bg }}
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <div
-                  className="px-3 py-2 rounded-lg flex items-center justify-between"
-                  style={{ backgroundColor: theme.bgS, color: theme.text }}
-                >
-                  <span className="truncate">{editEmail}</span>
-                  <button onClick={() => setEditingEmail(true)} className="text-sm font-medium ml-2 flex-shrink-0" style={{ color: theme.gold }}>
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-
-        {/* 2. Checking / Spending Account */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12 }}
-        >
-          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
-            Checking / Spending Account
-          </h2>
-          <div
-            className="rounded-lg p-6 space-y-4"
-            style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
-          >
-            <div className="flex items-start gap-3 pb-3" style={{ borderBottom: `1px solid ${theme.border}` }}>
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: `${theme.gold}15` }}
-              >
-                <Landmark size={18} style={{ color: theme.gold }} />
-              </div>
-              <div>
-                <p className="text-sm font-medium" style={{ color: theme.text }}>Starting Balance</p>
-                <p className="text-xs mt-0.5" style={{ color: theme.textM }}>
-                  Enter the current balance in your checking or spending account. This helps ORCA calculate how much you can safely spend after covering all your bills.
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
-                Current Balance
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold" style={{ color: theme.textM }}>$</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={checkingBalance}
-                  onChange={e => setCheckingBalance(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full pl-7 pr-3 py-2.5 rounded-lg"
-                  style={{
-                    backgroundColor: theme.input,
-                    borderColor: theme.border,
-                    borderWidth: '1px',
-                    color: theme.text,
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2 rounded-lg p-3" style={{ backgroundColor: `${theme.gold}08` }}>
-              <Info size={14} className="flex-shrink-0 mt-0.5" style={{ color: theme.gold }} />
-              <p className="text-xs" style={{ color: theme.textS }}>
-                This balance combines with your incoming payments. Bills are allocated first, and the remainder becomes your &ldquo;Safe to Spend&rdquo; on the Dashboard.
-              </p>
-            </div>
-
-            <button
-              onClick={handleSaveSettings}
-              className="w-full py-2.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
-              style={{
-                backgroundColor: saved ? theme.ok : theme.gold,
-                color: theme.bg,
-              }}
-            >
-              <Save className="w-4 h-4" />
-              {saved ? 'Saved!' : 'Save'}
-            </button>
-          </div>
-        </motion.div>
-
-        {/* 3. Credit Scores */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
-            Credit Scores
-          </h2>
-          <div
-            className="rounded-lg p-6 space-y-5"
-            style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
-          >
-            {/* Overall / Primary Score */}
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textS }}>
-                Overall Score
-              </label>
-              <input
-                type="number"
-                min="300"
-                max="850"
-                value={creditScore}
-                onChange={e => setCreditScore(e.target.value)}
-                placeholder="e.g., 720"
-                className="w-full px-3 py-2.5 rounded-lg"
-                style={{
-                  backgroundColor: theme.input,
-                  borderColor: theme.border,
-                  borderWidth: '1px',
-                  color: theme.text,
-                }}
-              />
-              <p className="text-xs mt-1" style={{ color: theme.textM }}>
-                Your primary credit score (300-850)
-              </p>
-            </div>
-
-            {/* Bureau-specific scores */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: theme.textM }}>
-                  TransUnion
-                </label>
-                <input
-                  type="number"
-                  min="300"
-                  max="850"
-                  value={scoreTransUnion}
-                  onChange={e => setScoreTransUnion(e.target.value)}
-                  placeholder="—"
-                  className="w-full px-3 py-2.5 rounded-lg"
-                  style={{
-                    backgroundColor: theme.input,
-                    borderColor: theme.border,
-                    borderWidth: '1px',
-                    color: theme.text,
-                  }}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: theme.textM }}>
-                  Equifax
-                </label>
-                <input
-                  type="number"
-                  min="300"
-                  max="850"
-                  value={scoreEquifax}
-                  onChange={e => setScoreEquifax(e.target.value)}
-                  placeholder="—"
-                  className="w-full px-3 py-2.5 rounded-lg"
-                  style={{
-                    backgroundColor: theme.input,
-                    borderColor: theme.border,
-                    borderWidth: '1px',
-                    color: theme.text,
-                  }}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: theme.textM }}>
-                  Experian
-                </label>
-                <input
-                  type="number"
-                  min="300"
-                  max="850"
-                  value={scoreExperian}
-                  onChange={e => setScoreExperian(e.target.value)}
-                  placeholder="—"
-                  className="w-full px-3 py-2.5 rounded-lg"
-                  style={{
-                    backgroundColor: theme.input,
-                    borderColor: theme.border,
-                    borderWidth: '1px',
-                    color: theme.text,
-                  }}
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleSaveSettings}
-              className="w-full py-2.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
-              style={{
-                backgroundColor: saved ? theme.ok : theme.gold,
-                color: theme.bg,
-              }}
-            >
-              <Save className="w-4 h-4" />
-              {saved ? 'Saved!' : 'Save'}
-            </button>
-          </div>
-        </motion.div>
-
-        {/* 3. Appearance */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>
-            Appearance
-          </h2>
-          <div
-            className="rounded-lg p-6"
-            style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
-          >
-            {/* Theme Selection */}
-            <div>
-              <label className="block text-sm font-semibold mb-3" style={{ color: theme.text }}>Theme</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {allThemes.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setThemeId(t.id)}
-                    className="rounded-lg p-3 text-left transition-all border-2"
-                    style={{
-                      backgroundColor: t.bg,
-                      borderColor: themeId === t.id ? t.accent : t.border,
-                      boxShadow: themeId === t.id ? `0 0 0 1px ${t.accent}` : 'none',
-                    }}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: t.accent }} />
-                      <span className="text-xs font-semibold" style={{ color: t.text }}>{t.name}</span>
+                    {editName?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, color: theme.text, fontSize: 16 }}>{user.name}</div>
+                    <div className="text-sm" style={{ color: theme.textM }}>{user.email}</div>
+                    <div
+                      className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-full text-xs"
+                      style={{ background: '#DCFCE7', color: '#16A34A', fontWeight: 600 }}
+                    >
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#10B981' }} />
+                      Active
                     </div>
-                    <div className="flex gap-1">
-                      <div className="h-1.5 flex-1 rounded" style={{ backgroundColor: t.card }} />
-                      <div className="h-1.5 w-4 rounded" style={{ backgroundColor: t.accent }} />
+                  </div>
+                </div>
+
+                {/* Form fields */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Full Name
+                    </label>
+                    {editingName ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="flex-1 px-4 py-3 rounded-xl text-sm outline-none"
+                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleSaveName}
+                          className="px-4 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all"
+                          style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={editName}
+                          disabled
+                          className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                        />
+                        <Edit2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: theme.textM, cursor: 'pointer' }} onClick={() => setEditingName(true)} />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Email Address
+                    </label>
+                    {editingEmail ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          value={editEmail}
+                          onChange={(e) => setEditEmail(e.target.value)}
+                          className="flex-1 px-4 py-3 rounded-xl text-sm outline-none"
+                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleSaveEmail}
+                          className="px-4 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all"
+                          style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type="email"
+                          value={editEmail}
+                          disabled
+                          className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                        />
+                        <Edit2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: theme.textM, cursor: 'pointer' }} onClick={() => setEditingEmail(true)} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (!editingName && !editingEmail) {
+                      handleSaveSettings()
+                    }
+                  }}
+                  className="mt-5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
+                  style={{ background: '#6366F1', color: '#fff', fontWeight: 700 }}
+                >
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Financial Tab */}
+          {activeTab === 'financial' && (
+            <>
+              {/* Checking account */}
+              <div className="rounded-2xl p-5 sm:p-6" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="flex items-start gap-3 mb-5">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#EEF2FF' }}>
+                    <Wallet className="w-5 h-5" style={{ color: '#6366F1' }} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Checking / Spending Account</h2>
+                    <p className="text-sm mt-0.5" style={{ color: theme.textM }}>
+                      Enter your current balance to calculate your Safe to Spend amount
+                    </p>
+                  </div>
+                </div>
+
+                <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Current Balance
+                </label>
+                <div className="relative mb-3">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    value={checkingBalance}
+                    onChange={(e) => setCheckingBalance(e.target.value)}
+                    className="w-full pl-8 pr-4 py-3 rounded-xl text-sm outline-none"
+                    style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                  />
+                </div>
+
+                <div
+                  className="flex items-start gap-2 p-3 rounded-xl mb-4 text-xs"
+                  style={{ background: '#EEF2FF', color: '#4F46E5' }}
+                >
+                  ℹ️ This balance combines with your incoming payments. Bills are allocated first, and the remainder becomes your "Safe to Spend" on the Dashboard.
+                </div>
+
+                <button
+                  onClick={handleSaveSettings}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
+                  style={{ background: '#6366F1', color: '#fff', fontWeight: 700 }}
+                >
+                  <Save className="w-4 h-4" />
+                  {saved ? 'Saved!' : 'Save Balance'}
+                </button>
+              </div>
+
+              {/* Credit Scores */}
+              <div className="rounded-2xl p-5 sm:p-6" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="flex items-start gap-3 mb-5">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#FEF3C7' }}>
+                    <CreditCard className="w-5 h-5" style={{ color: '#D97706' }} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Credit Scores</h2>
+                    <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Track your credit across all 3 bureaus</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Overall Score (300–850)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="648"
+                      value={creditScore}
+                      onChange={(e) => setCreditScore(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                      style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                    />
+                    <p className="text-xs mt-1" style={{ color: theme.textM }}>Your primary credit score (300–850)</p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'TransUnion', val: scoreTransUnion, set: setScoreTransUnion },
+                      { label: 'Equifax', val: scoreEquifax, set: setScoreEquifax },
+                      { label: 'Experian', val: scoreExperian, set: setScoreExperian },
+                    ].map(({ label, val, set }) => (
+                      <div key={label}>
+                        <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          {label}
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="—"
+                          value={val}
+                          onChange={(e) => set(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl text-sm outline-none text-center"
+                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSaveSettings}
+                  className="mt-5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
+                  style={{ background: '#6366F1', color: '#fff', fontWeight: 700 }}
+                >
+                  <Save className="w-4 h-4" />
+                  {saved ? 'Saved!' : 'Save Credit Scores'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Appearance Tab */}
+          {activeTab === 'appearance' && (
+            <div className="rounded-2xl p-5 sm:p-6" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+              <h2 style={{ fontSize: 17, fontWeight: 700, color: theme.text }} className="mb-2">Appearance</h2>
+              <p className="text-sm mb-5" style={{ color: theme.textM }}>Choose a theme that matches your style</p>
+
+              <div className="text-xs mb-3" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Theme
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {allThemes.map((t) => {
+                  const active = themeId === t.id
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setThemeId(t.id)}
+                      className="relative flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all hover:opacity-90"
+                      style={{
+                        background: active ? `${t.accent}12` : theme.input,
+                        border: `2px solid ${active ? t.accent : theme.border}`,
+                      }}
+                    >
+                      <div
+                        className="w-8 h-8 rounded-lg flex-shrink-0 relative overflow-hidden"
+                        style={{ background: t.accent }}
+                      >
+                        <div
+                          className="absolute bottom-0 right-0 w-4 h-4 rounded-tl-lg"
+                          style={{ background: t.border }}
+                        />
+                      </div>
+                      <span className="text-xs" style={{ fontWeight: 600, color: theme.text }}>
+                        {t.name}
+                      </span>
+                      {active && (
+                        <div
+                          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                          style={{ background: t.accent }}
+                        >
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Privacy Tab */}
+          {activeTab === 'privacy' && (
+            <>
+              <div className="rounded-2xl p-5" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: theme.text }} className="mb-4">Privacy & Data</h2>
+                <div
+                  className="flex items-start gap-3 p-3.5 rounded-xl mb-5 text-sm"
+                  style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', color: '#166534' }}
+                >
+                  🔒 Your data is encrypted and stored securely. We never share your information with third parties without explicit consent.
+                </div>
+                <button
+                  onClick={() => setShowResetConfirm(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
+                  style={{ background: theme.bad, color: '#fff', fontWeight: 700 }}
+                >
+                  Reset All Data
+                </button>
+              </div>
+
+              <button
+                onClick={() => router.push('/auth/login')}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm transition-all hover:opacity-90"
+                style={{ background: theme.bad, color: '#fff', fontWeight: 700 }}
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
+
+              {/* Danger Zone */}
+              <div
+                className="rounded-2xl p-5"
+                style={{ background: '#FFF5F5', border: '2px solid #FCA5A5' }}
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <AlertTriangle className="w-5 h-5" style={{ color: theme.bad }} />
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.bad }}>Danger Zone</h2>
+                </div>
+                <div className="flex items-start gap-3 mb-4">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: theme.bad }} />
+                  <div>
+                    <div style={{ fontWeight: 700, color: theme.text, fontSize: 14 }}>Permanently delete your account</div>
+                    <div className="text-xs mt-0.5" style={{ color: theme.bad }}>
+                      This will permanently remove your account and all associated data (bills, income, goals, expenses, credit scores, and rent history) across all devices. This action cannot be undone.
                     </div>
-                  </button>
-                ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
+                  style={{ background: theme.bad, color: '#fff', fontWeight: 700 }}
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  Delete My Account
+                </button>
               </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* 4. Privacy & Data */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.text }}>Privacy & Data</h2>
-          <div
-            className="rounded-lg p-6 space-y-4"
-            style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: '1px' }}
-          >
-            <div style={{ color: theme.textS }} className="text-sm">
-              <Shield className="w-4 h-4 inline mr-2" style={{ color: theme.gold }} />
-              Your data is encrypted and stored securely. We never share your information with third parties without explicit consent.
-            </div>
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="w-full py-2 rounded-lg font-semibold transition-all"
-              style={{ backgroundColor: theme.bad, color: '#ffffff' }}
-            >
-              Reset All Data
-            </button>
-          </div>
-        </motion.div>
-
-        {/* 5. Sign Out */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 }}
-        >
-          <button
-            onClick={() => router.push('/auth/login')}
-            className="w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
-            style={{ backgroundColor: theme.bad, color: '#ffffff' }}
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
-        </motion.div>
-
-        {/* 6. Delete Account — Danger Zone */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.bad }}>
-            Danger Zone
-          </h2>
-          <div
-            className="rounded-lg p-6 space-y-4"
-            style={{ backgroundColor: `${theme.bad}08`, borderColor: `${theme.bad}30`, borderWidth: '1px' }}
-          >
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: theme.bad }} />
-              <div>
-                <p className="text-sm font-semibold" style={{ color: theme.text }}>Permanently delete your account</p>
-                <p className="text-xs mt-1" style={{ color: theme.textM }}>
-                  This will permanently remove your account and all associated data (bills, income, goals, expenses, credit scores, and rent history) across all devices. This action cannot be undone.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="w-full py-2.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
-              style={{ backgroundColor: theme.bad, color: '#ffffff' }}
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete My Account
-            </button>
-          </div>
-        </motion.div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Reset Data Confirmation Modal */}
@@ -549,7 +511,7 @@ export default function SettingsPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ backgroundColor: theme.overlay }}
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
             onClick={() => setShowResetConfirm(false)}
           >
             <motion.div
@@ -561,20 +523,20 @@ export default function SettingsPage() {
               onClick={e => e.stopPropagation()}
             >
               <h2 className="text-xl font-bold mb-2" style={{ color: theme.text }}>Reset All Data?</h2>
-              <p style={{ color: theme.textS }} className="mb-6">
+              <p style={{ color: theme.textM }} className="mb-6 text-sm">
                 This action cannot be undone. All your settings and linked accounts will be permanently deleted.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowResetConfirm(false)}
-                  className="flex-1 py-2 rounded-lg font-semibold"
-                  style={{ backgroundColor: theme.bgS, color: theme.text }}
+                  className="flex-1 py-2.5 rounded-xl font-semibold"
+                  style={{ backgroundColor: theme.input, color: theme.text }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleResetData}
-                  className="flex-1 py-2 rounded-lg font-semibold"
+                  className="flex-1 py-2.5 rounded-xl font-semibold"
                   style={{ backgroundColor: theme.bad, color: '#ffffff' }}
                 >
                   Yes, Reset
@@ -593,7 +555,7 @@ export default function SettingsPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center px-4"
-            style={{ backgroundColor: theme.overlay }}
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
             onClick={() => { if (!isDeleting) { setShowDeleteConfirm(false); setDeleteConfirmText(''); setDeleteError('') } }}
           >
             <motion.div
@@ -611,7 +573,7 @@ export default function SettingsPage() {
                 <h2 className="text-xl font-bold" style={{ color: theme.text }}>Delete Account</h2>
               </div>
 
-              <p style={{ color: theme.textS }} className="mb-4 text-sm">
+              <p style={{ color: theme.textM }} className="mb-4 text-sm">
                 This will permanently delete your entire account, including all bills, income sources, expenses, savings goals, credit scores, and rent history. This cannot be undone.
               </p>
 
@@ -623,7 +585,7 @@ export default function SettingsPage() {
                 onChange={e => setDeleteConfirmText(e.target.value)}
                 placeholder="Type DELETE"
                 disabled={isDeleting}
-                className="w-full px-3 py-2.5 rounded-lg mb-4"
+                className="w-full px-3 py-2.5 rounded-xl mb-4"
                 style={{
                   backgroundColor: theme.input,
                   borderColor: theme.border,
@@ -641,15 +603,15 @@ export default function SettingsPage() {
                 <button
                   onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); setDeleteError('') }}
                   disabled={isDeleting}
-                  className="flex-1 py-2.5 rounded-lg font-semibold"
-                  style={{ backgroundColor: theme.bgS, color: theme.text }}
+                  className="flex-1 py-2.5 rounded-xl font-semibold"
+                  style={{ backgroundColor: theme.input, color: theme.text }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDeleteAccount}
                   disabled={deleteConfirmText !== 'DELETE' || isDeleting}
-                  className="flex-1 py-2.5 rounded-lg font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 rounded-xl font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
                   style={{ backgroundColor: theme.bad, color: '#ffffff' }}
                 >
                   {isDeleting ? (

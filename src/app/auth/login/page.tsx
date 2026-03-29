@@ -19,8 +19,11 @@ import {
   Calendar,
   Shield,
   User as UserIcon,
+  ChevronRight,
+  AlertCircle,
 } from 'lucide-react'
 import Input from '@/components/ui/Input'
+import { createBrowserClient } from '@supabase/ssr'
 
 export default function LoginPage() {
   return (
@@ -42,6 +45,7 @@ function LoginPageInner() {
 
   // Tab state (Member Login vs Create Account)
   const [isSignUp, setIsSignUp] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
 
   // Email/Password/Full Name
   const [email, setEmail] = useState('')
@@ -50,11 +54,15 @@ function LoginPageInner() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('')
 
   // General
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState('')
+  const [forgotPasswordError, setForgotPasswordError] = useState('')
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false)
 
   // Check for success message from signup redirect
   useEffect(() => {
@@ -72,6 +80,42 @@ function LoginPageInner() {
       setIsSignUp(false)
     }
   }, [searchParams])
+
+  // Forgot password handler
+  const handleForgotPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setForgotPasswordError('')
+    setForgotPasswordMessage('')
+    setForgotPasswordLoading(true)
+
+    if (!forgotPasswordEmail) {
+      setForgotPasswordError('Please enter your email address')
+      setForgotPasswordLoading(false)
+      return
+    }
+
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      )
+
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
+        redirectTo: `${window.location.origin}/auth/login`,
+      })
+
+      if (error) {
+        setForgotPasswordError(error.message || 'Failed to send reset email. Please try again.')
+      } else {
+        setForgotPasswordMessage('Check your email for a password reset link')
+        setForgotPasswordEmail('')
+      }
+    } catch {
+      setForgotPasswordError('An unexpected error occurred. Please try again.')
+    } finally {
+      setForgotPasswordLoading(false)
+    }
+  }
 
   // Email sign in - real Supabase auth
   const handleEmailSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -243,69 +287,92 @@ function LoginPageInner() {
 
   const getIconColor = (color: string) => {
     const colors: Record<string, string> = {
-      indigo: 'text-indigo-400',
-      red: 'text-red-400',
-      green: 'text-green-400',
-      amber: 'text-amber-400',
-      blue: 'text-blue-400',
-      purple: 'text-purple-400',
+      indigo: '#6366F1',
+      red: '#EF4444',
+      green: '#10B981',
+      amber: '#F59E0B',
+      blue: '#3B82F6',
+      purple: '#8B5CF6',
     }
-    return colors[color] || 'text-slate-400'
+    return colors[color] || '#64748B'
   }
 
   return (
     <div className="min-h-screen bg-slate-950 flex">
       {/* Left Panel - Info/Marketing (55%) */}
-      <div className="hidden lg:flex lg:w-[55%] flex-col justify-between p-12 bg-slate-900" style={{ backgroundColor: '#0F172A' }}>
+      <div
+        className="hidden lg:flex lg:w-[55%] flex-col justify-between p-10 xl:p-14"
+        style={{
+          background: 'linear-gradient(160deg, #0F172A 0%, #1E1B4B 60%, #0F172A 100%)',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+        }}
+      >
         {/* Top: Logo + Branding */}
         <div>
           <div className="flex items-center gap-3 mb-8">
             <div className="w-12 h-12 flex items-center justify-center">
               {customLogo ? (
-                <img src={customLogo} alt="ORCA" width={48} height={48} className="rounded-lg object-contain" />
+                <img src={customLogo} alt="ORCA" width={48} height={48} className="rounded-xl object-cover" />
               ) : (
-                <Image src="/logo.svg" alt="ORCA" width={48} height={48} className="rounded-lg" priority />
+                <img src="/ORCA-Logo.png" alt="ORCA" width={48} height={48} className="rounded-xl object-cover" />
               )}
             </div>
             <div>
-              <h1 className="text-3xl font-bold" style={{ color: '#d4a843' }}>
+              <h1 className="text-xl font-black" style={{ color: '#F59E0B', letterSpacing: '0.08em' }}>
                 ORCA
               </h1>
-              <p className="text-xs text-slate-400">ORGANIZE RESOURCES CONTROL ASSETS</p>
+              <p className="text-xs text-slate-400" style={{ letterSpacing: '0.14em', fontWeight: 600 }}>
+                ORGANIZE RESOURCES CONTROL ASSETS
+              </p>
             </div>
           </div>
 
           {/* Purple pill badge */}
-          <div className="inline-flex items-center gap-2 bg-purple-950/50 border border-purple-500/30 rounded-full px-4 py-2 mb-8">
-            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-            <span className="text-sm text-purple-300">Your Financial Command Center</span>
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs mb-6"
+            style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#818CF8', fontWeight: 600 }}
+          >
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#818CF8' }} />
+            Your Financial Command Center
           </div>
 
           {/* Hero heading */}
-          <div className="mb-6">
-            <h2 className="text-5xl font-bold text-white leading-tight mb-2">
+          <div className="mb-4">
+            <h2 className="text-4xl font-black text-white mb-2" style={{ lineHeight: 1.15 }}>
               Take complete control
             </h2>
-            <h2 className="text-5xl font-bold leading-tight" style={{ color: '#F59E0B' }}>
+            <h2 className="text-4xl font-black" style={{ color: '#F59E0B', lineHeight: 1.15 }}>
               of your money
             </h2>
           </div>
 
           {/* Description */}
-          <p className="text-base text-slate-300 mb-12 max-w-md">
+          <p className="text-base text-slate-300 mb-12 max-w-md" style={{ lineHeight: 1.7 }}>
             ORCA is a personal finance command center that shows you exactly where your money goes, what's safe to
             spend, and how to hit your financial goals — all in one beautifully designed platform.
           </p>
 
           {/* HOW IT WORKS Section */}
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-6">How It Works</p>
-            <div className="grid grid-cols-2 gap-6 mb-12">
+          <div className="mb-8">
+            <p className="text-xs mb-5" style={{ color: '#475569', fontWeight: 700, letterSpacing: '0.12em' }}>
+              HOW IT WORKS
+            </p>
+            <div className="grid grid-cols-2 gap-3">
               {steps.map((step) => (
-                <div key={step.number}>
-                  <p className="text-2xl font-bold text-slate-300 mb-2">{step.number}</p>
-                  <h3 className="text-sm font-semibold text-white mb-1">{step.title}</h3>
-                  <p className="text-xs text-slate-400">{step.description}</p>
+                <div
+                  key={step.number}
+                  className="rounded-2xl p-4"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <div className="mb-2 font-black" style={{ fontSize: 11, color: '#F59E0B', letterSpacing: '0.08em' }}>
+                    {step.number}
+                  </div>
+                  <div className="text-sm mb-1 font-bold" style={{ color: '#F1F5F9' }}>
+                    {step.title}
+                  </div>
+                  <div className="text-xs" style={{ color: '#64748B', lineHeight: 1.5 }}>
+                    {step.description}
+                  </div>
                 </div>
               ))}
             </div>
@@ -314,17 +381,27 @@ function LoginPageInner() {
 
         {/* Bottom: Features Section */}
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-6">Everything Included</p>
-          <div className="grid grid-cols-2 gap-6">
+          <p className="text-xs mb-4" style={{ color: '#475569', fontWeight: 700, letterSpacing: '0.12em' }}>
+            EVERYTHING INCLUDED
+          </p>
+          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
             {features.map((feature) => {
               const IconComponent = feature.icon
               return (
-                <div key={feature.title} className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <IconComponent size={20} className={`${getIconColor(feature.color)} flex-shrink-0 mt-1`} />
-                    <div>
-                      <h3 className="text-sm font-semibold text-white mb-1">{feature.title}</h3>
-                      <p className="text-xs text-slate-400">{feature.description}</p>
+                <div
+                  key={feature.title}
+                  className="flex items-start gap-3 p-3 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
+                >
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${getIconColor(feature.color)}20` }}>
+                    <IconComponent className="w-4 h-4" style={{ color: getIconColor(feature.color) }} />
+                  </div>
+                  <div>
+                    <div className="text-xs mb-0.5" style={{ fontWeight: 700, color: '#E2E8F0' }}>
+                      {feature.title}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#64748B', lineHeight: 1.4 }}>
+                      {feature.description}
                     </div>
                   </div>
                 </div>
@@ -335,203 +412,332 @@ function LoginPageInner() {
       </div>
 
       {/* Right Panel - Login Form (45% on desktop, 100% on mobile) */}
-      <div className="w-full lg:w-[45%] bg-slate-950" style={{ backgroundColor: '#1E293B' }}>
-        <div className="min-h-screen flex items-center justify-center px-6 py-12">
-          <div className="w-full max-w-sm">
-            {/* Logo at top (smaller) */}
-            <div className="flex justify-center mb-8">
-              <div className="relative w-16 h-16 flex items-center justify-center rounded-full border-2 border-gold/30">
+      <div className="flex-1 flex flex-col items-center justify-center px-5 py-10 sm:px-10" style={{ background: '#0F172A' }}>
+        {/* Mobile logo */}
+        <div className="flex flex-col items-center mb-8 lg:hidden">
+          {customLogo ? (
+            <img src={customLogo} alt="ORCA" width={64} height={64} className="rounded-2xl object-cover mb-3" />
+          ) : (
+            <img src="/ORCA-Logo.png" alt="ORCA" width={64} height={64} className="rounded-2xl object-cover mb-3" />
+          )}
+          <div style={{ color: '#F59E0B', fontWeight: 900, fontSize: 22, letterSpacing: '0.08em' }}>ORCA</div>
+          <div style={{ color: '#64748B', fontSize: 11, letterSpacing: '0.12em', fontWeight: 600 }}>ORGANIZE RESOURCES CONTROL ASSETS</div>
+        </div>
+
+        <div className="w-full" style={{ maxWidth: 400 }}>
+          {!showForgotPassword ? (
+            <>
+              {/* Tabs */}
+              <div
+                className="flex gap-1 p-1 rounded-xl mb-7"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                {(['login', 'signup'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => {
+                      setIsSignUp(m === 'signup')
+                      setError('')
+                    }}
+                    className="flex-1 py-2.5 rounded-lg text-sm capitalize transition-all"
+                    style={{
+                      background: isSignUp === (m === 'signup') ? '#6366F1' : 'transparent',
+                      color: isSignUp === (m === 'signup') ? '#FFFFFF' : '#64748B',
+                      fontWeight: isSignUp === (m === 'signup') ? 700 : 500,
+                    }}
+                  >
+                    {m === 'login' ? 'Member Login' : 'Create Account'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Desktop logo (inside form panel) */}
+              <div className="hidden lg:flex flex-col items-center mb-6">
                 {customLogo ? (
-                  <img src={customLogo} alt="ORCA" width={40} height={40} className="rounded-lg object-contain" />
+                  <img
+                    src={customLogo}
+                    alt="ORCA"
+                    width={56}
+                    height={56}
+                    className="rounded-2xl object-cover mb-3"
+                    style={{ boxShadow: '0 0 32px rgba(245,158,11,0.3)' }}
+                  />
                 ) : (
-                  <Image src="/logo.svg" alt="ORCA" width={40} height={40} className="rounded-lg" priority />
+                  <img
+                    src="/ORCA-Logo.png"
+                    alt="ORCA"
+                    width={56}
+                    height={56}
+                    className="rounded-2xl object-cover mb-3"
+                    style={{ boxShadow: '0 0 32px rgba(245,158,11,0.3)' }}
+                  />
                 )}
+                <div style={{ color: '#F59E0B', fontWeight: 900, fontSize: 20, letterSpacing: '0.08em' }}>ORCA</div>
+                <div style={{ color: '#475569', fontSize: 10, letterSpacing: '0.12em', fontWeight: 600 }}>
+                  FINANCIAL COMMAND CENTER
+                </div>
               </div>
-            </div>
 
-            <h1 className="text-center text-2xl font-bold mb-1" style={{ color: '#d4a843' }}>
-              ORCA
-            </h1>
-            <p className="text-center text-xs text-slate-400 mb-8">FINANCIAL COMMAND CENTER</p>
-
-            {/* Tab Toggle */}
-            <div className="flex gap-3 mb-8 bg-slate-800/50 p-1 rounded-lg">
-              <button
-                onClick={() => setIsSignUp(false)}
-                className={`flex-1 py-2 px-4 rounded-md transition-all text-sm font-medium ${
-                  !isSignUp
-                    ? 'bg-purple-600 text-white'
-                    : 'text-slate-400 hover:text-slate-300'
-                }`}
-              >
-                Member Login
-              </button>
-              <button
-                onClick={() => setIsSignUp(true)}
-                className={`flex-1 py-2 px-4 rounded-md transition-all text-sm font-medium ${
-                  isSignUp
-                    ? 'bg-purple-600 text-white'
-                    : 'text-slate-400 hover:text-slate-300'
-                }`}
-              >
-                Create Account
-              </button>
-            </div>
-
-            {/* Heading based on mode */}
-            <h2 className="text-2xl font-bold text-white mb-2">
-              {isSignUp ? 'Create your account' : 'Welcome back'}
-            </h2>
-            <p className="text-sm text-slate-400 mb-8">Sign in to your financial command center</p>
-
-            {/* Success Message */}
-            {successMessage && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 mb-6 flex items-center gap-2">
-                <CheckCircle size={16} className="text-emerald-400 flex-shrink-0" />
-                <p className="text-emerald-400 text-sm">{successMessage}</p>
+              {/* Heading */}
+              <div className="mb-6">
+                <h2 style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9' }}>
+                  {isSignUp ? 'Get started free' : 'Welcome back'}
+                </h2>
+                <p className="text-sm mt-1" style={{ color: '#64748B' }}>
+                  {isSignUp ? 'Join thousands taking control of their finances' : 'Sign in to your financial command center'}
+                </p>
               </div>
-            )}
 
-            {/* Error */}
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-6">
-                <p className="text-red-400 text-sm">{error}</p>
-              </div>
-            )}
-
-            {/* Form */}
-            <form onSubmit={isSignUp ? handleEmailSignUp : handleEmailSignIn} className="space-y-5 mb-8">
-              {isSignUp && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">
-                    Full Name
-                  </label>
-                  <div className="relative">
-                    <Input
-                      type="text"
-                      name="fullName"
-                      placeholder="John Doe"
-                      prefix={<UserIcon size={16} />}
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      autoComplete="name"
-                      required={isSignUp}
-                    />
-                  </div>
+              {/* Success Message */}
+              {successMessage && (
+                <div
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-6"
+                  style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)' }}
+                >
+                  <CheckCircle size={16} style={{ color: '#6EE7B7', flexShrink: 0 }} />
+                  <span style={{ color: '#6EE7B7' }}>{successMessage}</span>
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">
-                  Email Address
-                </label>
-                <Input
-                  type="email"
-                  name="email"
-                  placeholder="you@example.com"
-                  prefix={<Mail size={16} />}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">
-                  Password
-                </label>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    name="password"
-                    placeholder="Enter your password"
-                    prefix={<Lock size={16} />}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 bottom-3 text-slate-400 hover:text-slate-300 transition-colors"
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+              {/* Error */}
+              {error && (
+                <div
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-6"
+                  style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}
+                >
+                  <AlertCircle size={16} style={{ color: '#FCA5A5', flexShrink: 0 }} />
+                  <span style={{ color: '#FCA5A5' }}>{error}</span>
                 </div>
-              </div>
+              )}
 
-              {isSignUp && (
+              {/* Form */}
+              <form onSubmit={isSignUp ? handleEmailSignUp : handleEmailSignIn} className="space-y-4">
+                {isSignUp && (
+                  <div>
+                    <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
+                      <input
+                        type="text"
+                        name="fullName"
+                        placeholder="Your full name"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 rounded-xl text-sm outline-none"
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
+                        required={isSignUp}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">
-                    Confirm Password
+                  <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Email Address
                   </label>
                   <div className="relative">
-                    <Input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      name="confirmPassword"
-                      placeholder="Confirm your password"
-                      prefix={<Lock size={16} />}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      autoComplete="new-password"
-                      required={isSignUp}
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl text-sm outline-none"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-12 py-3 rounded-xl text-sm outline-none"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
+                      required
                     />
                     <button
                       type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 bottom-3 text-slate-400 hover:text-slate-300 transition-colors"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-lg"
+                      style={{ color: '#475569' }}
                     >
-                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  {!isSignUp && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForgotPassword(true)
+                        setError('')
+                      }}
+                      className="text-xs mt-2 transition-all hover:opacity-80"
+                      style={{ color: '#818CF8', fontWeight: 700 }}
+                    >
+                      Forgot Password?
+                    </button>
+                  )}
                 </div>
-              )}
 
-              <div className="pt-2">
+                {isSignUp && (
+                  <div>
+                    <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        name="confirmPassword"
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full pl-10 pr-12 py-3 rounded-xl text-sm outline-none"
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
+                        required={isSignUp}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-lg"
+                        style={{ color: '#475569' }}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm transition-all hover:opacity-90 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: '#fff', fontWeight: 700 }}
                 >
-                  {loading ? (isSignUp ? 'Creating account...' : 'Signing in...') : (isSignUp ? 'Create Account' : 'Sign In')}
-                  {!loading && <ArrowRight size={16} />}
+                  {loading ? (isSignUp ? 'Creating account...' : 'Signing in...') : (isSignUp ? 'Create My Account' : 'Sign In')}
+                  {!loading && <ArrowRight className="w-4 h-4" />}
+                </button>
+              </form>
+
+              {/* Toggle */}
+              <div className="text-center mt-5">
+                <span className="text-sm" style={{ color: '#475569' }}>
+                  {isSignUp ? "Already a member? " : "Don't have an account? "}
+                </span>
+                <button
+                  onClick={() => {
+                    setIsSignUp(!isSignUp)
+                    setError('')
+                  }}
+                  className="text-sm transition-all hover:opacity-80"
+                  style={{ color: '#818CF8', fontWeight: 700 }}
+                >
+                  {isSignUp ? 'Sign in' : 'Create one'}
                 </button>
               </div>
-            </form>
 
-            {/* Toggle Link */}
-            <div className="text-center mb-8">
-              {isSignUp ? (
-                <p className="text-sm text-slate-400">
-                  Already have an account?{' '}
-                  <button
-                    onClick={() => setIsSignUp(false)}
-                    className="text-purple-400 font-semibold hover:text-purple-300 transition-colors"
-                  >
-                    Sign in
-                  </button>
+              {/* Security note */}
+              <div className="flex items-center justify-center gap-1.5 mt-6">
+                <Shield className="w-3.5 h-3.5" style={{ color: '#334155' }} />
+                <span style={{ color: '#334155', fontSize: 11 }}>Secured with end-to-end encryption</span>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Forgot Password Form */}
+              <div className="mb-6">
+                <h2 style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9' }}>Reset Password</h2>
+                <p className="text-sm mt-1" style={{ color: '#64748B' }}>
+                  Enter your email to receive a password reset link
                 </p>
-              ) : (
-                <p className="text-sm text-slate-400">
-                  Don&apos;t have an account?{' '}
-                  <button
-                    onClick={() => setIsSignUp(true)}
-                    className="text-purple-400 font-semibold hover:text-purple-300 transition-colors"
-                  >
-                    Create one
-                  </button>
-                </p>
+              </div>
+
+              {forgotPasswordMessage && (
+                <div
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-6"
+                  style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)' }}
+                >
+                  <CheckCircle size={16} style={{ color: '#6EE7B7', flexShrink: 0 }} />
+                  <span style={{ color: '#6EE7B7' }}>{forgotPasswordMessage}</span>
+                </div>
               )}
-            </div>
 
-            {/* Security Badge */}
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
-              <Shield size={14} />
-              <span>Secured with end-to-end encryption</span>
-            </div>
-          </div>
+              {forgotPasswordError && (
+                <div
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-6"
+                  style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}
+                >
+                  <AlertCircle size={16} style={{ color: '#FCA5A5', flexShrink: 0 }} />
+                  <span style={{ color: '#FCA5A5' }}>{forgotPasswordError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div>
+                  <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
+                    <input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={forgotPasswordEmail}
+                      onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl text-sm outline-none"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={forgotPasswordLoading}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm transition-all hover:opacity-90 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: '#fff', fontWeight: 700 }}
+                >
+                  {forgotPasswordLoading ? 'Sending...' : 'Send Reset Link'}
+                  {!forgotPasswordLoading && <ArrowRight className="w-4 h-4" />}
+                </button>
+              </form>
+
+              {/* Back to Login Link */}
+              <div className="text-center mt-5">
+                <button
+                  onClick={() => {
+                    setShowForgotPassword(false)
+                    setForgotPasswordEmail('')
+                    setForgotPasswordMessage('')
+                    setForgotPasswordError('')
+                  }}
+                  className="text-sm transition-all hover:opacity-80"
+                  style={{ color: '#818CF8', fontWeight: 700 }}
+                >
+                  Back to login
+                </button>
+              </div>
+
+              {/* Security note */}
+              <div className="flex items-center justify-center gap-1.5 mt-6">
+                <Shield className="w-3.5 h-3.5" style={{ color: '#334155' }} />
+                <span style={{ color: '#334155', fontSize: 11 }}>Secured with end-to-end encryption</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

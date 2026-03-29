@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Edit3 } from 'lucide-react'
+import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Edit3, Home, Phone, Car, CreditCard, Heart, Utensils, BookOpen, Zap } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
 import { getRecurringBillDates } from '@/lib/income-engine'
@@ -11,6 +11,20 @@ import { setLocalSynced } from '@/lib/syncLocal'
 
 import type { Bill, BillAlloc, RentEntry, BillRecurrence, RecurrenceEndType } from '@/lib/types'
 import CalendarPicker from '@/components/CalendarPicker'
+
+// Category to icon mapping with Figma colors
+const CATEGORY_ICONS: Record<string, { Icon: React.ComponentType<any>, color: string }> = {
+  'Housing': { Icon: Home, color: '#6366F1' },
+  'Transportation': { Icon: Car, color: '#F59E0B' },
+  'Insurance': { Icon: AlertCircle, color: '#EC4899' },
+  'Utilities': { Icon: Zap, color: '#8B5CF6' },
+  'Entertainment': { Icon: Heart, color: '#EC4899' },
+  'Health': { Icon: Heart, color: '#10B981' },
+  'Food': { Icon: Utensils, color: '#F59E0B' },
+  'Education': { Icon: BookOpen, color: '#3B82F6' },
+  'Debt': { Icon: CreditCard, color: '#EF4444' },
+  'Other': { Icon: AlertCircle, color: '#6B7280' },
+}
 
 const CATEGORIES = [
   'Housing',
@@ -137,17 +151,17 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   }
 
   return (
-    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-6">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => onMonthChange(-1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.gold} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
-          <ChevronLeft size={18} />
+    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-6 sm:p-8">
+      <div className="flex items-center justify-between mb-6">
+        <button onClick={() => onMonthChange(-1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = '#6366F1'} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
+          <ChevronLeft size={20} />
         </button>
-        <div className="flex items-center gap-2">
-          <Calendar size={16} style={{ color: theme.gold }} />
-          <h3 className="font-semibold" style={{ color: theme.text }}>{monthName}</h3>
+        <div className="flex items-center gap-3">
+          <Calendar size={18} style={{ color: '#6366F1' }} />
+          <h3 className="font-bold text-lg" style={{ color: theme.text }}>{monthName}</h3>
         </div>
-        <button onClick={() => onMonthChange(1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.gold} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
-          <ChevronRight size={18} />
+        <button onClick={() => onMonthChange(1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = '#6366F1'} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
+          <ChevronRight size={20} />
         </button>
       </div>
 
@@ -404,7 +418,7 @@ export default function BillBossPage() {
         }
       } else {
         // Weekly, biweekly, custom: generate occurrences and count those in this month
-        const intervalDays = recurrence === 'weekly' ? 7 : recurrence === 'biweekly' ? 14 : (b.customRecurrenceDays || 30)
+        const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
         const cursor = new Date(dueDate)
         // Fast-forward to near the month start
         if (cursor < monthStart) {
@@ -673,31 +687,37 @@ export default function BillBossPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <div className="relative overflow-hidden rounded-2xl p-6 sm:p-8" style={{ backgroundImage: `linear-gradient(to bottom right, ${theme.gold}, ${theme.goldD})`, color: theme.bg }}>
-            <div className="text-center mb-4">
-              <p className="text-sm font-medium opacity-90 mb-2">Total Monthly Bills</p>
-              <p className="text-4xl sm:text-5xl font-bold mb-3">{fmt(unpaidTotal)}</p>
-              <div className="rounded-lg inline-block px-4 py-1.5" style={{ backgroundColor: `${theme.bg}20` }}>
-                <p className="text-sm">
-                  Paid: <span className="font-bold">{fmt(paidTotal)}</span>
-                </p>
+          <div className="relative overflow-hidden rounded-2xl p-8 sm:p-10" style={{ backgroundImage: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', color: '#fff' }}>
+            <div className="text-center mb-6">
+              <p className="text-sm font-medium opacity-80 mb-2">Total Monthly Bills</p>
+              <p className="text-5xl sm:text-6xl font-bold mb-4">{fmt(unpaidTotal)}</p>
+              <div className="rounded-full inline-flex gap-4 px-5 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
+                <div>
+                  <p className="text-xs opacity-70">Paid</p>
+                  <p className="text-sm font-bold">{fmt(paidTotal)}</p>
+                </div>
+                <div style={{ width: '1px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
+                <div>
+                  <p className="text-xs opacity-70">Remaining</p>
+                  <p className="text-sm font-bold">{fmt(unpaidTotal - paidTotal)}</p>
+                </div>
               </div>
             </div>
 
             {/* Next Bill Due + Quick Pay */}
             {nextBillDue && (
-              <div className="mt-4 pt-4 border-t flex items-center justify-between gap-3" style={{ borderColor: `${theme.bg}25` }}>
+              <div className="mt-6 pt-6 border-t flex items-center justify-between gap-4" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium opacity-80">Next Due</p>
-                  <p className="text-base font-bold truncate">{nextBillDue.name}</p>
-                  <p className="text-xs opacity-80">{fmtD(nextBillDue.due)} · {fmt(nextBillDue.amount)}</p>
+                  <p className="text-xs font-medium opacity-70">Next Due</p>
+                  <p className="text-lg font-bold truncate mt-1">{nextBillDue.name}</p>
+                  <p className="text-xs opacity-70 mt-1">{fmtD(nextBillDue.due)} · {fmt(nextBillDue.amount)}</p>
                 </div>
                 <button
                   onClick={() => handlePayFull(nextBillDue.id)}
-                  className="shrink-0 px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
-                  style={{ backgroundColor: theme.bg, color: theme.gold }}
+                  className="shrink-0 px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
+                  style={{ backgroundColor: '#fff', color: '#6366F1' }}
                 >
-                  Pay
+                  Pay Now
                 </button>
               </div>
             )}
@@ -733,27 +753,27 @@ export default function BillBossPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.17 }}
-          className="flex gap-2"
+          className="flex gap-3"
         >
           <button
             onClick={() => setViewMode('list')}
             style={{
-              backgroundColor: viewMode === 'list' ? theme.gold : theme.card,
-              color: viewMode === 'list' ? theme.bg : theme.text,
+              backgroundColor: viewMode === 'list' ? '#6366F1' : theme.card,
+              color: viewMode === 'list' ? '#fff' : theme.text,
               borderColor: theme.border,
             }}
-            className="flex-1 px-4 py-2.5 rounded-lg border font-semibold transition-all"
+            className="flex-1 px-5 py-3 rounded-xl border font-bold transition-all"
           >
             List View
           </button>
           <button
             onClick={() => setViewMode('compact')}
             style={{
-              backgroundColor: viewMode === 'compact' ? theme.gold : theme.card,
-              color: viewMode === 'compact' ? theme.bg : theme.text,
+              backgroundColor: viewMode === 'compact' ? '#6366F1' : theme.card,
+              color: viewMode === 'compact' ? '#fff' : theme.text,
               borderColor: theme.border,
             }}
-            className="flex-1 px-4 py-2.5 rounded-lg border font-semibold transition-all"
+            className="flex-1 px-5 py-3 rounded-xl border font-bold transition-all"
           >
             Compact View
           </button>
@@ -764,8 +784,8 @@ export default function BillBossPage() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => { if (editingBillId) handleCancelEdit(); else setShowAddForm(!showAddForm) }}
-          style={{ backgroundColor: theme.gold, color: theme.bg }}
-          className="w-full px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-all"
+          style={{ backgroundColor: '#6366F1', color: '#fff' }}
+          className="w-full px-6 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all text-base"
         >
           <Plus className="w-5 h-5" />
           {editingBillId ? 'Cancel Edit' : 'Add Bill'}
@@ -779,7 +799,7 @@ export default function BillBossPage() {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="border rounded-xl p-6 space-y-4"
+              className="border rounded-2xl p-8 space-y-5"
             >
               <input
                 type="text"
@@ -787,8 +807,8 @@ export default function BillBossPage() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                className="w-full px-4 py-2.5 border rounded-lg placeholder:opacity-50 focus:outline-none focus:ring-2"
-                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
+                className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
+                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
                 onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
               />
 
@@ -799,8 +819,8 @@ export default function BillBossPage() {
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="px-4 py-2.5 border rounded-lg placeholder:opacity-50 focus:outline-none focus:ring-2"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
+                  className="px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
+                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
                   onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
                 />
                 <CalendarPicker
@@ -815,8 +835,8 @@ export default function BillBossPage() {
                 value={formData.cat}
                 onChange={(e) => setFormData({ ...formData, cat: e.target.value })}
                 style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2"
-                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
+                className="w-full px-5 py-3 border rounded-xl focus:outline-none focus:ring-2 font-medium"
+                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
                 onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
               >
                 {CATEGORIES.map(cat => (
@@ -889,7 +909,7 @@ export default function BillBossPage() {
                         borderColor: formData.recurrenceEndType === opt.value ? theme.gold : theme.border,
                         color: formData.recurrenceEndType === opt.value ? theme.gold : theme.textM,
                       }}
-                      className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold border transition-all"
+                      className="flex-1 px-4 py-2.5 rounded-lg text-xs font-bold border transition-all"
                     >
                       {opt.label}
                     </button>
@@ -921,12 +941,12 @@ export default function BillBossPage() {
                 />
               )}
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 {editingBillId && (
                   <button
                     onClick={handleCancelEdit}
                     style={{ borderColor: theme.border, color: theme.textS }}
-                    className="flex-1 px-4 py-2.5 rounded-lg font-semibold border hover:opacity-80 transition-colors"
+                    className="flex-1 px-5 py-3 rounded-xl font-bold border hover:opacity-80 transition-colors"
                   >
                     Cancel
                   </button>
@@ -934,8 +954,8 @@ export default function BillBossPage() {
                 <button
                   onClick={editingBillId ? handleSaveEdit : handleAddBill}
                   disabled={!formData.name || !formData.amount || !formData.due}
-                  style={{ backgroundColor: theme.gold, color: theme.bg }}
-                  className="flex-1 px-4 py-2.5 rounded-lg font-semibold disabled:opacity-50 hover:opacity-90 transition-colors"
+                  style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                  className="flex-1 px-5 py-3 rounded-xl font-bold disabled:opacity-50 hover:opacity-90 transition-colors"
                 >
                   {editingBillId ? 'Update Bill' : 'Save Bill'}
                 </button>
@@ -950,23 +970,37 @@ export default function BillBossPage() {
             variants={container}
             initial="hidden"
             animate="show"
-            className="space-y-3"
+            className="space-y-4"
           >
             {visibleBills
               .filter(b => b.status === 'upcoming')
-              .map((bill, idx) => (
+              .map((bill, idx) => {
+                const iconConfig = CATEGORY_ICONS[bill.cat] || CATEGORY_ICONS['Other']
+                const Icon = iconConfig.Icon
+                return (
                 <motion.div
                   key={bill.id}
                   variants={item}
                   transition={{ delay: idx * 0.05 }}
                 >
-                  <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl p-5 space-y-3">
-                    {/* Bill Header */}
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 style={{ color: theme.text }} className="font-bold">{bill.name}</h3>
+                  <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-6 space-y-4">
+                    {/* Bill Header with Icon */}
+                    <div className="flex items-start gap-4">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: `${iconConfig.color}20` }}
+                      >
+                        <Icon className="w-6 h-6" style={{ color: iconConfig.color }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 style={{ color: theme.text }} className="font-bold text-lg">{bill.name}</h3>
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: `${iconConfig.color}15`, color: iconConfig.color }}>
+                            {bill.cat}
+                          </span>
+                        </div>
                         <p className="text-sm" style={{ color: theme.textM }}>
-                          {bill.cat} · {fmtD(bill.due)}
+                          Due {fmtD(bill.due)}
                           {bill.recurrence && bill.recurrence !== 'monthly' && (
                             <span> · {bill.recurrence === 'custom' && bill.customRecurrenceDays ? `Every ${bill.customRecurrenceDays}d` : bill.recurrence}</span>
                           )}
@@ -974,14 +1008,14 @@ export default function BillBossPage() {
                           {bill.recurrenceEndAfter && <span> · {bill.recurrenceEndAfter}x left</span>}
                         </p>
                       </div>
-                      <p className="text-2xl font-bold" style={{ color: '#ef4444' }}>
+                      <p className="text-3xl font-bold flex-shrink-0" style={{ color: '#EF4444' }}>
                         –{fmt(bill.amount)}
                       </p>
                     </div>
 
                     {/* Split Payment Schedule (collapsible) */}
                     {bill.alloc.length > 0 && (
-                      <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
+                      <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-xl p-4">
                         <button
                           onClick={() => setCollapsedSplits(prev => ({ ...prev, [bill.id]: !prev[bill.id] }))}
                           className="w-full flex items-center justify-between"
@@ -1042,22 +1076,22 @@ export default function BillBossPage() {
                     )}
 
                     {/* Action Buttons */}
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-3 pt-2">
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => handlePayFull(bill.id)}
-                        style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
-                        className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                        style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                        className="flex-1 px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-colors"
                       >
-                        Pay Full
+                        Pay
                       </motion.button>
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => handleStartEdit(bill.id)}
                         style={{ backgroundColor: `${theme.gold}20`, color: theme.gold }}
-                        className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                        className="px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-80 transition-colors"
                       >
                         Edit
                       </motion.button>
@@ -1066,7 +1100,7 @@ export default function BillBossPage() {
                         whileTap={{ scale: 0.98 }}
                         onClick={() => setSplitModalBillId(bill.id)}
                         style={{ backgroundColor: theme.textS, color: theme.textM }}
-                        className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                        className="px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-80 transition-colors"
                       >
                         Split
                       </motion.button>
@@ -1075,14 +1109,15 @@ export default function BillBossPage() {
                         whileTap={{ scale: 0.98 }}
                         onClick={() => handleDeleteBill(bill.id)}
                         style={{ backgroundColor: `${theme.bad}20`, color: theme.bad }}
-                        className="flex-1 px-4 py-2 rounded-lg font-medium text-sm hover:opacity-80 transition-colors"
+                        className="px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-80 transition-colors"
                       >
                         Del
                       </motion.button>
                     </div>
                   </div>
                 </motion.div>
-              ))}
+              )
+              })}
           </motion.div>
         )}
 
@@ -1093,44 +1128,52 @@ export default function BillBossPage() {
             initial="hidden"
             animate="show"
             style={{ backgroundColor: theme.card, borderColor: theme.border }}
-            className="border rounded-xl overflow-hidden divide-y"
+            className="border rounded-2xl overflow-hidden divide-y"
           >
             {visibleBills
               .filter(b => b.status === 'upcoming')
-              .map((bill, idx) => (
+              .map((bill, idx) => {
+                const iconConfig = CATEGORY_ICONS[bill.cat] || CATEGORY_ICONS['Other']
+                const Icon = iconConfig.Icon
+                return (
                 <motion.div
                   key={bill.id}
                   variants={item}
                   transition={{ delay: idx * 0.03 }}
-                  className="flex items-center gap-3 px-4 py-3"
+                  className="flex items-center gap-4 px-5 py-4"
                   style={{ borderColor: theme.border }}
                 >
-                  {/* Status dot */}
-                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: daysTo(bill.due) <= 3 ? theme.bad : theme.warn }} />
+                  {/* Icon Badge */}
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: `${iconConfig.color}20` }}
+                  >
+                    <Icon className="w-5 h-5" style={{ color: iconConfig.color }} />
+                  </div>
                   {/* Name + Category */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{bill.name}</p>
-                    <p className="text-[11px]" style={{ color: theme.textM }}>
+                    <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{bill.name}</p>
+                    <p className="text-xs" style={{ color: theme.textM }}>
                       {bill.cat} · Due {fmtD(bill.due)}
                       {bill.recurrenceEndDate && ` · Ends ${fmtD(bill.recurrenceEndDate)}`}
                     </p>
                   </div>
                   {/* Amount */}
-                  <p className="text-sm font-bold flex-shrink-0" style={{ color: '#ef4444' }}>–{fmt(bill.amount)}</p>
+                  <p className="text-sm font-bold flex-shrink-0" style={{ color: '#EF4444' }}>–{fmt(bill.amount)}</p>
                   {/* Quick actions */}
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => handlePayFull(bill.id)}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: `${theme.ok}15` }}
+                      style={{ backgroundColor: `#6366F1` }}
                       title="Pay"
                     >
-                      <Check size={14} style={{ color: theme.ok }} />
+                      <Check size={14} style={{ color: '#fff' }} />
                     </button>
                     <button
                       onClick={() => handleStartEdit(bill.id)}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: `${theme.gold}15` }}
+                      style={{ backgroundColor: `${theme.gold}20` }}
                       title="Edit"
                     >
                       <Edit3 size={14} style={{ color: theme.gold }} />
@@ -1138,16 +1181,17 @@ export default function BillBossPage() {
                     <button
                       onClick={() => handleDeleteBill(bill.id)}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: `${theme.bad}15` }}
+                      style={{ backgroundColor: `${theme.bad}20` }}
                       title="Delete"
                     >
                       <Trash2 size={14} style={{ color: theme.bad }} />
                     </button>
                   </div>
                 </motion.div>
-              ))}
+              )
+              })}
             {visibleBills.filter(b => b.status === 'upcoming').length === 0 && (
-              <div className="p-6 text-center">
+              <div className="p-8 text-center">
                 <p className="text-sm" style={{ color: theme.textM }}>No upcoming bills</p>
               </div>
             )}
@@ -1160,9 +1204,9 @@ export default function BillBossPage() {
             variants={item}
             initial="hidden"
             animate="show"
-            className="space-y-3"
+            className="space-y-4 mt-8"
           >
-            <h3 style={{ color: theme.text }} className="font-bold text-lg mt-6 mb-3">Paid Bills</h3>
+            <h3 style={{ color: theme.text }} className="font-bold text-lg mb-4">Paid Bills</h3>
             {viewMode === 'list' ? (
               bills
                 .filter(b => b.status === 'paid')
@@ -1170,7 +1214,7 @@ export default function BillBossPage() {
                   <div
                     key={bill.id}
                     style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                    className="border rounded-xl p-5 opacity-50 flex justify-between items-center"
+                    className="border rounded-2xl p-6 opacity-50 flex justify-between items-center"
                   >
                     <div className="flex items-center gap-3">
                       <Check className="w-5 h-5" style={{ color: theme.ok }} />
@@ -1196,9 +1240,9 @@ export default function BillBossPage() {
                   </div>
                 ))
             ) : (
-              <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-xl overflow-hidden divide-y opacity-60">
+              <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl overflow-hidden divide-y opacity-60">
                 {bills.filter(b => b.status === 'paid').map(bill => (
-                  <div key={bill.id} className="flex items-center gap-3 px-4 py-3" style={{ borderColor: theme.border }}>
+                  <div key={bill.id} className="flex items-center gap-4 px-5 py-4" style={{ borderColor: theme.border }}>
                     <Check size={14} style={{ color: theme.ok }} />
                     <p className="text-sm flex-1 truncate" style={{ color: theme.text }}>{bill.name}</p>
                     <p className="text-sm font-bold" style={{ color: theme.textM }}>–{fmt(bill.amount)}</p>
@@ -1223,7 +1267,7 @@ export default function BillBossPage() {
             initial="hidden"
             animate="show"
             style={{ backgroundColor: `${theme.gold}10`, borderColor: `${theme.gold}30` }}
-            className="border rounded-xl p-6 mt-6"
+            className="border rounded-2xl p-8 mt-8"
           >
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -1298,7 +1342,7 @@ export default function BillBossPage() {
             initial="hidden"
             animate="show"
             style={{ backgroundColor: `${theme.bad}10`, borderColor: `${theme.bad}30` }}
-            className="border rounded-xl p-6 mt-6 flex items-center gap-4"
+            className="border rounded-2xl p-8 mt-8 flex items-center gap-4"
           >
             <AlertCircle className="w-6 h-6 flex-shrink-0" style={{ color: theme.bad }} />
             <div>
@@ -1325,13 +1369,13 @@ export default function BillBossPage() {
               exit={{ y: 100, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="w-full border-t rounded-t-2xl p-6 space-y-4"
+              className="w-full border-t rounded-t-3xl p-8 space-y-5"
             >
-              <div className="flex justify-between items-center mb-4">
-                <h2 style={{ color: theme.text }} className="font-bold text-lg">Payment</h2>
+              <div className="flex justify-between items-center mb-2">
+                <h2 style={{ color: theme.text }} className="font-bold text-xl">Payment</h2>
                 <button
                   onClick={() => setPartialPayId(null)}
-                  className="p-1 rounded-lg transition-colors"
+                  className="p-2 rounded-lg transition-colors"
                   style={{ backgroundColor: theme.textS }}
                 >
                   <X className="w-5 h-5" style={{ color: theme.textM }} />
@@ -1346,7 +1390,7 @@ export default function BillBossPage() {
                 type="number"
                 value={partialPayAmount}
                 onChange={(e) => setPartialPayAmount(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border font-semibold text-lg"
+                className="w-full px-5 py-4 rounded-xl border font-bold text-lg"
                 style={{
                   backgroundColor: theme.bg,
                   borderColor: theme.border,
@@ -1356,13 +1400,13 @@ export default function BillBossPage() {
                 min="0"
               />
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleApplyPartialPayment}
-                  style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
-                  className="flex-1 px-4 py-2.5 rounded-lg font-semibold hover:opacity-80 transition-colors"
+                  style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                  className="flex-1 px-5 py-3.5 rounded-xl font-bold hover:opacity-90 transition-colors"
                 >
                   Apply
                 </motion.button>
@@ -1371,7 +1415,7 @@ export default function BillBossPage() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setPartialPayId(null)}
                   style={{ backgroundColor: theme.textS, color: theme.textM }}
-                  className="flex-1 px-4 py-2.5 rounded-lg font-semibold hover:opacity-80 transition-colors"
+                  className="flex-1 px-5 py-3.5 rounded-xl font-bold hover:opacity-80 transition-colors"
                 >
                   Cancel
                 </motion.button>
@@ -1397,13 +1441,13 @@ export default function BillBossPage() {
               exit={{ y: 100, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="w-full border-t rounded-t-2xl p-6 space-y-4"
+              className="w-full border-t rounded-t-3xl p-8 space-y-5"
             >
-              <div className="flex justify-between items-center mb-4">
-                <h2 style={{ color: theme.text }} className="font-bold text-lg">Split Payment</h2>
+              <div className="flex justify-between items-center mb-2">
+                <h2 style={{ color: theme.text }} className="font-bold text-xl">Split Payment</h2>
                 <button
                   onClick={() => setSplitModalBillId(null)}
-                  className="p-1 rounded-lg transition-colors"
+                  className="p-2 rounded-lg transition-colors"
                   style={{ backgroundColor: theme.textS }}
                 >
                   <X className="w-5 h-5" style={{ color: theme.textM }} />
@@ -1414,15 +1458,15 @@ export default function BillBossPage() {
                 Split this bill into how many payments?
               </p>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-4">
                 {[2, 3, 4].map(num => (
                   <motion.button
                     key={num}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleApplySplit(splitModalBillId, num)}
-                    style={{ backgroundColor: theme.textS, color: theme.text }}
-                    className="px-4 py-3 rounded-lg font-semibold hover:opacity-80 transition-colors"
+                    style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                    className="px-4 py-3.5 rounded-xl font-bold hover:opacity-90 transition-colors"
                   >
                     {num} Payments
                   </motion.button>

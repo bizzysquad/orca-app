@@ -937,7 +937,7 @@ export default function AdminPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
                 placeholder="Enter admin password"
                 style={{ backgroundColor: adminTheme.bg, borderColor: adminError ? '#ef4444' : adminTheme.border, color: adminTheme.text }}
-                className="w-full px-4 py-3 rounded-lg border focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border focus:outline-none"
                 autoFocus
               />
               <AnimatePresence>
@@ -953,7 +953,7 @@ export default function AdminPage() {
               whileTap={{ scale: 0.98 }}
               onClick={handleAdminLogin}
               style={{ backgroundColor: adminTheme.gold, color: adminTheme.bg }}
-              className="w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
             >
               <Lock size={18} /> Authenticate
             </motion.button>
@@ -1037,7 +1037,7 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <a href="/dashboard" style={{ color: TEXT_SECONDARY, borderColor: BORDER_COLOR }} className="px-4 py-2 rounded-lg border text-sm hover:opacity-80 transition-opacity">
+              <a href="/dashboard" style={{ color: TEXT_SECONDARY, borderColor: BORDER_COLOR }} className="px-4 py-2 rounded-xl border text-sm hover:opacity-80 transition-opacity">
                 ← Back to App
               </a>
               <motion.button
@@ -1051,7 +1051,7 @@ export default function AdminPage() {
                 }}
                 disabled={isLoadingUsers}
                 style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD, opacity: isLoadingUsers ? 0.5 : 1 }}
-                className="px-4 py-2 rounded-lg border text-sm font-medium flex items-center gap-2"
+                className="px-4 py-2 rounded-xl border text-sm font-medium flex items-center gap-2"
               >
                 <RefreshCw size={14} className={isLoadingUsers ? 'animate-spin' : ''} /> Sync All
               </motion.button>
@@ -1065,7 +1065,7 @@ export default function AdminPage() {
                 whileTap={{ scale: 0.98 }}
                 onClick={handleAdminLogout}
                 style={{ backgroundColor: '#ef444422', borderColor: '#ef4444', color: '#ef4444' }}
-                className="px-4 py-2 rounded-lg border text-sm font-medium flex items-center gap-2"
+                className="px-4 py-2 rounded-xl border text-sm font-medium flex items-center gap-2"
               >
                 <Lock size={14} /> Logout
               </motion.button>
@@ -1097,7 +1097,7 @@ export default function AdminPage() {
                     borderColor: isActive ? GOLD : BORDER_COLOR,
                     color: isActive ? GOLD : TEXT_SECONDARY,
                   }}
-                  className="flex flex-col items-center gap-1.5 px-3 py-2 rounded-lg border transition-all text-sm font-medium"
+                  className="flex flex-col items-center gap-1.5 px-3 py-2 rounded-xl border transition-all text-sm font-medium"
                 >
                   <Icon size={16} />
                   {tab.label}
@@ -1147,7 +1147,7 @@ export default function AdminPage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                    className="rounded-lg border p-4 flex items-center gap-3"
+                    className="rounded-2xl border p-5 hover:shadow-md transition-shadow flex items-center gap-3"
                   >
                     <div style={{ borderColor: `${GOLD}44`, borderTopColor: GOLD }} className="w-4 h-4 border-2 rounded-full animate-spin" />
                     <span style={{ color: TEXT_SECONDARY }}>Loading live user data...</span>
@@ -1159,7 +1159,7 @@ export default function AdminPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                  className="rounded-lg border p-4 flex items-center justify-between flex-wrap gap-4"
+                  className="rounded-2xl border p-5 hover:shadow-md transition-shadow flex items-center justify-between flex-wrap gap-4"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -1199,7 +1199,7 @@ export default function AdminPage() {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: idx * 0.05 }}
                         style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                        className="rounded-lg border p-4"
+                        className="rounded-2xl border p-5 hover:shadow-md transition-shadow"
                       >
                         <div className="flex items-center justify-between mb-2">
                           <p style={{ color: TEXT_MUTED }} className="text-xs font-medium">
@@ -1233,7 +1233,7 @@ export default function AdminPage() {
                         borderColor: BORDER_COLOR,
                         color: TEXT_PRIMARY,
                       }}
-                      className="w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-offset-0"
+                      className="w-full pl-10 pr-4 py-2 rounded-xl border focus:outline-none focus:ring-2 focus:ring-offset-0"
                       onFocus={(e) => {
                         e.currentTarget.style.borderColor = GOLD
                         e.currentTarget.style.boxShadow = `0 0 0 2px ${GOLD}44`
@@ -1252,7 +1252,7 @@ export default function AdminPage() {
                       borderColor: BORDER_COLOR,
                       color: TEXT_PRIMARY,
                     }}
-                    className="px-4 py-2 rounded-lg border focus:outline-none"
+                    className="px-4 py-2 rounded-xl border focus:outline-none"
                   >
                     <option value="">All Statuses</option>
                     <option value="active">Active</option>
@@ -1268,7 +1268,7 @@ export default function AdminPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                  className="rounded-lg border overflow-hidden"
+                  className="rounded-2xl border overflow-hidden"
                 >
                   <div className="overflow-x-auto">
                     <table className="w-full">
@@ -1378,7 +1378,7 @@ export default function AdminPage() {
                                     setShowDropdown(showDropdown === user.id ? null : user.id)
                                   }
                                   style={{ color: TEXT_SECONDARY }}
-                                  className="p-1 rounded-lg hover:bg-opacity-50 transition-colors"
+                                  className="p-1 rounded-xl hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.color = GOLD
                                     e.currentTarget.style.backgroundColor = `${GOLD}11`
@@ -1398,7 +1398,7 @@ export default function AdminPage() {
                                       animate={{ opacity: 1, scale: 1 }}
                                       exit={{ opacity: 0, scale: 0.9 }}
                                       style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                                      className="absolute right-0 top-full mt-2 w-48 rounded-lg border shadow-xl z-50"
+                                      className="absolute right-0 top-full mt-2 w-48 rounded-xl border shadow-xl z-50"
                                     >
                                       <div className="p-2 space-y-1">
                                         <button
@@ -1482,14 +1482,14 @@ export default function AdminPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                  className="rounded-lg border p-6"
+                  className="rounded-2xl border p-5 hover:shadow-md transition-shadow"
                 >
-                  <h2 className="text-xl font-bold mb-6" style={{ color: GOLD }}>
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-6" style={{ color: GOLD }}>
                     Trial Settings
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">
                         Trial Duration (days)
                       </label>
                       <input
@@ -1501,17 +1501,17 @@ export default function AdminPage() {
                           borderColor: BORDER_COLOR,
                           color: TEXT_PRIMARY,
                         }}
-                        className="w-full px-4 py-2 rounded-lg border focus:outline-none"
+                        className="w-full px-4 py-2 rounded-xl border focus:outline-none"
                       />
                       <p style={{ color: TEXT_MUTED }} className="text-xs mt-2">
                         Default: 40 days
                       </p>
                     </div>
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">
                         Trial Slots Available
                       </label>
-                      <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center border rounded-lg overflow-hidden">
+                      <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center border rounded-xl overflow-hidden">
                         <input
                           type="number"
                           value={trialSlots}
@@ -1532,10 +1532,10 @@ export default function AdminPage() {
                       </p>
                     </div>
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">
                         Trial Capacity
                       </label>
-                      <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-lg border p-4">
+                      <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-xl border p-4">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm">{subscriptionStats.trialCount} active</span>
                           <span style={{ color: TEXT_MUTED }} className="text-sm">
@@ -1563,10 +1563,10 @@ export default function AdminPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                  className="rounded-lg border p-6"
+                  className="rounded-2xl border p-5 hover:shadow-md transition-shadow"
                 >
                   <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold" style={{ color: GOLD }}>
+                    <h2 className="text-xs uppercase tracking-wider font-bold" style={{ color: GOLD }}>
                       Pricing Configuration
                     </h2>
                     <div className="flex items-center gap-2">
@@ -1590,10 +1590,10 @@ export default function AdminPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">
                         Monthly Price
                       </label>
-                      <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center border rounded-lg overflow-hidden">
+                      <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center border rounded-xl overflow-hidden">
                         <span style={{ color: TEXT_MUTED }} className="px-4 py-2">
                           $
                         </span>
@@ -1616,10 +1616,10 @@ export default function AdminPage() {
                     </div>
 
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">
                         Yearly Price
                       </label>
-                      <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center border rounded-lg overflow-hidden">
+                      <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center border rounded-xl overflow-hidden">
                         <span style={{ color: TEXT_MUTED }} className="px-4 py-2">
                           $
                         </span>
@@ -1649,9 +1649,9 @@ export default function AdminPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                  className="rounded-lg border p-6"
+                  className="rounded-2xl border p-5 hover:shadow-md transition-shadow"
                 >
-                  <h2 className="text-xl font-bold mb-6" style={{ color: GOLD }}>
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-6" style={{ color: GOLD }}>
                     Conversion Funnel
                   </h2>
                   <div className="space-y-4">
@@ -1723,7 +1723,7 @@ export default function AdminPage() {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: idx * 0.05 }}
                         style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                        className="rounded-lg border p-4"
+                        className="rounded-2xl border p-5 hover:shadow-md transition-shadow"
                       >
                         <div className="flex items-center justify-between mb-3">
                           <p style={{ color: TEXT_MUTED }} className="text-sm font-medium">
@@ -1745,9 +1745,9 @@ export default function AdminPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3 }}
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
-                  className="rounded-lg border p-6"
+                  className="rounded-2xl border p-5 hover:shadow-md transition-shadow"
                 >
-                  <h2 className="text-xl font-bold mb-6" style={{ color: GOLD }}>
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-6" style={{ color: GOLD }}>
                     User Distribution by Plan
                   </h2>
                   <div className="space-y-4">
@@ -1784,20 +1784,20 @@ export default function AdminPage() {
             {activeTab === 'customize' && activeSubTab === 'settings' && (
               <div className="space-y-6">
                 {/* General Settings */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-6" style={{ color: GOLD }}>General</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-6" style={{ color: GOLD }}>General</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">App Name</label>
-                      <input type="text" value={appName} onChange={(e) => setAppName(e.target.value)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">App Name</label>
+                      <input type="text" value={appName} onChange={(e) => setAppName(e.target.value)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-xl border focus:outline-none" />
                     </div>
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Tagline</label>
-                      <input type="text" value={tagline} onChange={(e) => setTagline(e.target.value)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">Tagline</label>
+                      <input type="text" value={tagline} onChange={(e) => setTagline(e.target.value)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-xl border focus:outline-none" />
                     </div>
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Max Users</label>
-                      <input type="number" value={maxUsers} onChange={(e) => setMaxUsers(parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">Max Users</label>
+                      <input type="number" value={maxUsers} onChange={(e) => setMaxUsers(parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-xl border focus:outline-none" />
                     </div>
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
@@ -1813,13 +1813,13 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Income & Payments */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.025 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Income & Payments</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.025 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Income & Payments</h2>
                   <p style={{ color: TEXT_MUTED }} className="text-xs mb-4">Income settings and defaults for the platform</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Default Safe-to-Spend Buffer ($)</label>
-                      <input type="number" value={defaultSafeToSpendBuffer} onChange={(e) => setDefaultSafeToSpendBuffer(parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">Default Safe-to-Spend Buffer ($)</label>
+                      <input type="number" value={defaultSafeToSpendBuffer} onChange={(e) => setDefaultSafeToSpendBuffer(parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-xl border focus:outline-none" />
                       <p style={{ color: TEXT_MUTED }} className="text-xs mt-1">Safety cushion subtracted from Safe to Spend calculation</p>
                     </div>
                     <div className="space-y-3">
@@ -1833,15 +1833,15 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Onboarding Text */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Onboarding Message</h2>
-                  <textarea value={onboardingText} onChange={(e) => setOnboardingText(e.target.value)} rows={3} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-3 rounded-lg border focus:outline-none resize-none" />
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Onboarding Message</h2>
+                  <textarea value={onboardingText} onChange={(e) => setOnboardingText(e.target.value)} rows={3} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-3 rounded-xl border focus:outline-none resize-none" />
                   <p style={{ color: TEXT_MUTED }} className="text-xs mt-2">Shown to new users after signup</p>
                 </motion.div>
 
                 {/* Budget Categories */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Budget Categories</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Budget Categories</h2>
                   <div className="flex flex-wrap gap-2 mb-4">
                     {budgetCategories.map((cat) => (
                       <span key={cat} style={{ backgroundColor: `${GOLD}22`, borderColor: `${GOLD}44`, color: GOLD }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm border">
@@ -1851,34 +1851,34 @@ export default function AdminPage() {
                     ))}
                   </div>
                   <div className="flex gap-2">
-                    <input type="text" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()} placeholder="Add category..." style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="flex-1 px-4 py-2 rounded-lg border focus:outline-none" />
-                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleAddCategory} style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD }} className="px-4 py-2 rounded-lg border font-medium text-sm">Add</motion.button>
+                    <input type="text" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()} placeholder="Add category..." style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="flex-1 px-4 py-2 rounded-xl border focus:outline-none" />
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleAddCategory} style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD }} className="px-4 py-2 rounded-xl border font-medium text-sm">Add</motion.button>
                   </div>
                 </motion.div>
 
                 {/* Alert Thresholds */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Alert Thresholds</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Alert Thresholds</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Budget Warning (%)</label>
-                      <input type="number" value={alertThresholds.budget} onChange={(e) => setAlertThresholds({ ...alertThresholds, budget: parseInt(e.target.value) || 0 })} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">Budget Warning (%)</label>
+                      <input type="number" value={alertThresholds.budget} onChange={(e) => setAlertThresholds({ ...alertThresholds, budget: parseInt(e.target.value) || 0 })} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-xl border focus:outline-none" />
                       <p style={{ color: TEXT_MUTED }} className="text-xs mt-2">Alert when user hits this % of their budget</p>
                     </div>
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Churn Risk (%)</label>
-                      <input type="number" value={alertThresholds.churn} onChange={(e) => setAlertThresholds({ ...alertThresholds, churn: parseInt(e.target.value) || 0 })} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">Churn Risk (%)</label>
+                      <input type="number" value={alertThresholds.churn} onChange={(e) => setAlertThresholds({ ...alertThresholds, churn: parseInt(e.target.value) || 0 })} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-xl border focus:outline-none" />
                       <p style={{ color: TEXT_MUTED }} className="text-xs mt-2">Flag users inactive for this many days</p>
                     </div>
                   </div>
                 </motion.div>
 
                 {/* Feature Flags */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Feature Flags</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Feature Flags</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {Object.entries(featureFlags).map(([flag, enabled]) => (
-                      <div key={flag} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center justify-between p-3 rounded-lg border">
+                      <div key={flag} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center justify-between p-3 rounded-xl border">
                         <span style={{ color: TEXT_SECONDARY }} className="text-sm font-medium capitalize">{flag.replace(/([A-Z])/g, ' $1').trim()}</span>
                         <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleFeatureToggle(flag)} style={{ backgroundColor: enabled ? '#10b98144' : `${BORDER_COLOR}`, borderColor: enabled ? '#10b981' : BORDER_COLOR, color: enabled ? '#10b981' : TEXT_MUTED }} className="px-2 py-0.5 rounded-full text-xs font-semibold border">{enabled ? 'ON' : 'OFF'}</motion.button>
                       </div>
@@ -1887,8 +1887,8 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Layout Style */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Layout Style</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Layout Style</h2>
                   <p style={{ color: TEXT_MUTED }} className="text-xs mb-4">Choose the primary navigation layout for the app</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {([
@@ -1904,7 +1904,7 @@ export default function AdminPage() {
                           backgroundColor: layoutStyle === layout.id ? `${GOLD}22` : BG_DARK,
                           borderColor: layoutStyle === layout.id ? GOLD : BORDER_COLOR,
                         }}
-                        className="p-4 rounded-lg border text-left transition-all"
+                        className="p-4 rounded-xl border text-left transition-all"
                       >
                         <p className="font-medium text-sm" style={{ color: layoutStyle === layout.id ? GOLD : TEXT_PRIMARY }}>{layout.label}</p>
                         <p className="text-xs mt-1" style={{ color: TEXT_MUTED }}>{layout.desc}</p>
@@ -1914,8 +1914,8 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Button Placement Controls */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Button Placement</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Button Placement</h2>
                   <p style={{ color: TEXT_MUTED }} className="text-xs mb-4">Control where key UI buttons appear in the app</p>
                   <div className="space-y-4">
                     {([
@@ -1923,7 +1923,7 @@ export default function AdminPage() {
                       { key: 'themeToggle' as const, label: 'Theme Toggle', options: ['topbar-right', 'sidebar-bottom', 'settings-page', 'hidden'] },
                       { key: 'homeBtn' as const, label: 'Home Button', options: ['sidebar-top', 'topbar-left', 'hidden'] },
                     ]).map((control) => (
-                      <div key={control.key} className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, borderWidth: 1 }}>
+                      <div key={control.key} className="flex items-center justify-between p-4 rounded-xl" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, borderWidth: 1 }}>
                         <div>
                           <p className="font-medium text-sm" style={{ color: TEXT_PRIMARY }}>{control.label}</p>
                           <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>Current: {buttonPlacements[control.key]}</p>
@@ -1932,7 +1932,7 @@ export default function AdminPage() {
                           value={buttonPlacements[control.key]}
                           onChange={(e) => setButtonPlacements({ ...buttonPlacements, [control.key]: e.target.value })}
                           style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }}
-                          className="px-3 py-1.5 rounded-lg border text-sm focus:outline-none"
+                          className="px-3 py-1.5 rounded-xl border text-sm focus:outline-none"
                         >
                           {control.options.map((opt) => (
                             <option key={opt} value={opt}>{opt.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
@@ -1945,7 +1945,7 @@ export default function AdminPage() {
 
                 {/* Save Button */}
                 <div className="flex items-center gap-4">
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSaveSettings} style={{ backgroundColor: GOLD, color: BG_DARK }} className="px-6 py-3 rounded-lg font-bold text-sm flex items-center gap-2"><Save size={18} /> Save All Settings</motion.button>
+                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSaveSettings} style={{ backgroundColor: GOLD, color: BG_DARK }} className="px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><Save size={18} /> Save All Settings</motion.button>
                   <AnimatePresence>
                     {settingsSaved && (
                       <motion.span initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} style={{ color: '#10b981' }} className="text-sm font-medium flex items-center gap-1"><CheckCircle size={16} /> Settings saved successfully</motion.span>
@@ -1967,7 +1967,7 @@ export default function AdminPage() {
                   ].map((stat, idx) => {
                     const Icon = stat.icon
                     return (
-                      <motion.div key={idx} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-4">
+                      <motion.div key={idx} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between mb-2"><p style={{ color: TEXT_MUTED }} className="text-xs font-medium">{stat.label}</p><Icon size={16} style={{ color: stat.color }} /></div>
                         <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
                       </motion.div>
@@ -1976,8 +1976,8 @@ export default function AdminPage() {
                 </div>
 
                 {/* Security Settings */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-6" style={{ color: GOLD }}>Security Settings</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-6" style={{ color: GOLD }}>Security Settings</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="flex items-center justify-between">
                       <div><p style={{ color: TEXT_PRIMARY }} className="font-medium">Require 2FA for All Users</p><p style={{ color: TEXT_MUTED }} className="text-xs">Force two-factor authentication</p></div>
@@ -1988,22 +1988,22 @@ export default function AdminPage() {
                       <motion.button whileHover={{ scale: 1.05 }} onClick={() => setFraudMonitoring(!fraudMonitoring)} style={{ backgroundColor: fraudMonitoring ? '#10b98144' : BORDER_COLOR, borderColor: fraudMonitoring ? '#10b981' : BORDER_COLOR, color: fraudMonitoring ? '#10b981' : TEXT_MUTED }} className="px-3 py-1 rounded-full text-xs font-semibold border">{fraudMonitoring ? 'Active' : 'Inactive'}</motion.button>
                     </div>
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">Session Timeout (min)</label>
-                      <input type="number" value={sessionTimeout} onChange={(e) => setSessionTimeout(parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">Session Timeout (min)</label>
+                      <input type="number" value={sessionTimeout} onChange={(e) => setSessionTimeout(parseInt(e.target.value) || 0)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-xl border focus:outline-none" />
                     </div>
                     <div>
-                      <label style={{ color: TEXT_SECONDARY }} className="block text-sm font-medium mb-2">IP Whitelist (comma-separated)</label>
-                      <input type="text" value={ipWhitelist} onChange={(e) => setIpWhitelist(e.target.value)} placeholder="e.g. 192.168.1.1, 10.0.0.1" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-lg border focus:outline-none" />
+                      <label style={{ color: TEXT_SECONDARY }} className="block text-xs uppercase tracking-wider font-bold mb-2">IP Whitelist (comma-separated)</label>
+                      <input type="text" value={ipWhitelist} onChange={(e) => setIpWhitelist(e.target.value)} placeholder="e.g. 192.168.1.1, 10.0.0.1" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-4 py-2 rounded-xl border focus:outline-none" />
                     </div>
                   </div>
                 </motion.div>
 
                 {/* Admin Roles */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Admin Roles</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Admin Roles</h2>
                   <div className="space-y-3 mb-4">
                     {adminRoles.map((role) => (
-                      <div key={role.id} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center justify-between p-4 rounded-lg border">
+                      <div key={role.id} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center justify-between p-4 rounded-xl border">
                         <div>
                           <p style={{ color: TEXT_PRIMARY }} className="font-medium">{role.name}</p>
                           <div className="flex flex-wrap gap-1 mt-1">
@@ -2019,14 +2019,14 @@ export default function AdminPage() {
                     ))}
                   </div>
                   <div className="flex gap-2">
-                    <input type="text" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddRole()} placeholder="New role name..." style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="flex-1 px-4 py-2 rounded-lg border focus:outline-none" />
-                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleAddRole} style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD }} className="px-4 py-2 rounded-lg border font-medium text-sm">Add Role</motion.button>
+                    <input type="text" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddRole()} placeholder="New role name..." style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="flex-1 px-4 py-2 rounded-xl border focus:outline-none" />
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleAddRole} style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD }} className="px-4 py-2 rounded-xl border font-medium text-sm">Add Role</motion.button>
                   </div>
                 </motion.div>
 
                 {/* Audit Log */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Audit Log</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Audit Log</h2>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
@@ -2068,7 +2068,7 @@ export default function AdminPage() {
                   ].map((card, idx) => {
                     const Icon = card.icon
                     return (
-                      <motion.div key={idx} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-4">
+                      <motion.div key={idx} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between mb-2"><p style={{ color: TEXT_MUTED }} className="text-xs font-medium">{card.label}</p><Icon size={16} style={{ color: card.color }} /></div>
                         <p className="text-2xl font-bold" style={{ color: card.color }}>{card.value}</p>
                       </motion.div>
@@ -2077,10 +2077,10 @@ export default function AdminPage() {
                 </div>
 
                 {/* User Growth Chart - Coming Soon */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-8">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-xl font-bold mb-1" style={{ color: GOLD }}>User Growth (Last 6 Months)</h2>
+                      <h2 className="text-xs uppercase tracking-wider font-bold mb-1" style={{ color: GOLD }}>User Growth (Last 6 Months)</h2>
                       <p style={{ color: TEXT_SECONDARY }} className="text-sm">Historical chart data coming soon</p>
                     </div>
                     <div style={{ backgroundColor: GOLD + '22', color: GOLD }} className="px-4 py-2 rounded-full text-xs font-semibold">Coming Soon</div>
@@ -2088,10 +2088,10 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Feature Usage - Coming Soon */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-8">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Feature Usage</h2>
+                      <h2 className="text-xs uppercase tracking-wider font-bold mb-1" style={{ color: GOLD }}>Feature Usage</h2>
                       <p style={{ color: TEXT_SECONDARY }} className="text-sm">User engagement metrics coming soon</p>
                     </div>
                     <div style={{ backgroundColor: GOLD + '22', color: GOLD }} className="px-4 py-2 rounded-full text-xs font-semibold">Coming Soon</div>
@@ -2099,10 +2099,10 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Conversion & Retention - Coming Soon */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-8">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Conversion Rates & Platform Stats</h2>
+                      <h2 className="text-xs uppercase tracking-wider font-bold mb-1" style={{ color: GOLD }}>Conversion Rates & Platform Stats</h2>
                       <p style={{ color: TEXT_SECONDARY }} className="text-sm">Detailed analytics coming soon</p>
                     </div>
                     <div style={{ backgroundColor: GOLD + '22', color: GOLD }} className="px-4 py-2 rounded-full text-xs font-semibold">Coming Soon</div>
@@ -2122,7 +2122,7 @@ export default function AdminPage() {
                   ].map((stat, idx) => {
                     const Icon = stat.icon
                     return (
-                      <motion.div key={idx} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-4">
+                      <motion.div key={idx} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between mb-2"><p style={{ color: TEXT_MUTED }} className="text-xs font-medium">{stat.label}</p><Icon size={16} style={{ color: stat.color }} /></div>
                         <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
                       </motion.div>
@@ -2131,11 +2131,11 @@ export default function AdminPage() {
                 </div>
 
                 {/* Notification Templates */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Notification Templates</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Notification Templates</h2>
                   <div className="space-y-3">
                     {notifTemplates.map((tmpl) => (
-                      <div key={tmpl.id} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-lg border p-4">
+                      <div key={tmpl.id} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-xl border p-4">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-3">
                             <span className="font-medium" style={{ color: TEXT_PRIMARY }}>{tmpl.name}</span>
@@ -2152,15 +2152,15 @@ export default function AdminPage() {
                               <div className="pt-3 space-y-3" style={{ borderTopColor: BORDER_COLOR }}>
                                 <div>
                                   <label style={{ color: TEXT_MUTED }} className="block text-xs mb-1">Subject</label>
-                                  <input type="text" value={tmpl.subject} onChange={(e) => setNotifTemplates(notifTemplates.map((t) => t.id === tmpl.id ? { ...t, subject: e.target.value } : t))} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-3 py-2 rounded-lg border focus:outline-none text-sm" />
+                                  <input type="text" value={tmpl.subject} onChange={(e) => setNotifTemplates(notifTemplates.map((t) => t.id === tmpl.id ? { ...t, subject: e.target.value } : t))} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-3 py-2 rounded-xl border focus:outline-none text-sm" />
                                 </div>
                                 <div>
                                   <label style={{ color: TEXT_MUTED }} className="block text-xs mb-1">Body</label>
-                                  <textarea value={tmpl.body} onChange={(e) => setNotifTemplates(notifTemplates.map((t) => t.id === tmpl.id ? { ...t, body: e.target.value } : t))} rows={2} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-3 py-2 rounded-lg border focus:outline-none text-sm resize-none" />
+                                  <textarea value={tmpl.body} onChange={(e) => setNotifTemplates(notifTemplates.map((t) => t.id === tmpl.id ? { ...t, body: e.target.value } : t))} rows={2} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full px-3 py-2 rounded-xl border focus:outline-none text-sm resize-none" />
                                 </div>
                                 <div>
                                   <label style={{ color: TEXT_MUTED }} className="block text-xs mb-1">Channel</label>
-                                  <select value={tmpl.channel} onChange={(e) => setNotifTemplates(notifTemplates.map((t) => t.id === tmpl.id ? { ...t, channel: e.target.value } : t))} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="px-3 py-2 rounded-lg border focus:outline-none text-sm">
+                                  <select value={tmpl.channel} onChange={(e) => setNotifTemplates(notifTemplates.map((t) => t.id === tmpl.id ? { ...t, channel: e.target.value } : t))} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="px-3 py-2 rounded-xl border focus:outline-none text-sm">
                                     <option value="email">Email</option>
                                     <option value="push">Push</option>
                                     <option value="sms">SMS</option>
@@ -2176,8 +2176,8 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Sent History */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Sent History</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Sent History</h2>
                   <p style={{ color: TEXT_MUTED }} className="text-center py-8">No notifications sent yet</p>
                 </motion.div>
               </div>
@@ -2188,7 +2188,7 @@ export default function AdminPage() {
                 {/* Module Toggle Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {modules.map((mod, idx) => (
-                    <motion.div key={mod.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: mod.enabled ? `${GOLD}66` : BORDER_COLOR }} className="rounded-lg border p-6">
+                    <motion.div key={mod.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} style={{ backgroundColor: BG_CARD, borderColor: mod.enabled ? `${GOLD}66` : BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
                           <Puzzle size={20} style={{ color: mod.enabled ? GOLD : TEXT_MUTED }} />
@@ -2290,11 +2290,11 @@ export default function AdminPage() {
                 </div>
 
                 {/* Stack Circle Moderation */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>Stack Circle Groups</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Stack Circle Groups</h2>
                   <div className="space-y-3">
                     {stackCircleGroups.map((group) => (
-                      <div key={group.id} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center justify-between p-4 rounded-lg border">
+                      <div key={group.id} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="flex items-center justify-between p-4 rounded-xl border">
                         <div>
                           <p style={{ color: TEXT_PRIMARY }} className="font-medium">{group.name}</p>
                           <p style={{ color: TEXT_MUTED }} className="text-xs">{group.members} members</p>
@@ -2313,15 +2313,15 @@ export default function AdminPage() {
             {activeTab === 'support' && (
               <div className="space-y-6">
                 {/* User Lookup */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: GOLD }}>User Lookup</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>User Lookup</h2>
                   <div className="relative mb-4">
                     <Search size={18} style={{ color: TEXT_MUTED }} className="absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input type="text" placeholder="Search by name or email..." value={supportSearch} onChange={(e) => setSupportSearch(e.target.value)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none" />
+                    <input type="text" placeholder="Search by name or email..." value={supportSearch} onChange={(e) => setSupportSearch(e.target.value)} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="w-full pl-10 pr-4 py-2 rounded-xl border focus:outline-none" />
                   </div>
                   <div className="space-y-2">
                     {supportFilteredUsers.map((user) => (
-                      <motion.div key={user.id} whileHover={{ scale: 1.005 }} onClick={() => setSelectedSupportUser(selectedSupportUser === user.id ? null : user.id)} style={{ backgroundColor: selectedSupportUser === user.id ? `${GOLD}11` : BG_DARK, borderColor: selectedSupportUser === user.id ? `${GOLD}44` : BORDER_COLOR, cursor: 'pointer' }} className="rounded-lg border p-4">
+                      <motion.div key={user.id} whileHover={{ scale: 1.005 }} onClick={() => setSelectedSupportUser(selectedSupportUser === user.id ? null : user.id)} style={{ backgroundColor: selectedSupportUser === user.id ? `${GOLD}11` : BG_DARK, borderColor: selectedSupportUser === user.id ? `${GOLD}44` : BORDER_COLOR, cursor: 'pointer' }} className="rounded-xl border p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div style={{ backgroundColor: `${GOLD}22`, width: 36, height: 36 }} className="rounded-full flex items-center justify-center"><span style={{ color: GOLD }} className="text-sm font-bold">{user.name.charAt(0)}</span></div>
@@ -2364,8 +2364,8 @@ export default function AdminPage() {
                                   <p style={{ color: TEXT_MUTED }} className="text-xs mb-2">Internal Notes</p>
                                   {supportNotes[user.id] && <p style={{ color: TEXT_SECONDARY, backgroundColor: BG_CARD }} className="text-sm p-3 rounded mb-2">{supportNotes[user.id]}</p>}
                                   <div className="flex gap-2">
-                                    <input type="text" value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Add a note..." style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="flex-1 px-3 py-2 rounded-lg border focus:outline-none text-sm" />
-                                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { if (newNote.trim()) { setSupportNotes({ ...supportNotes, [user.id]: (supportNotes[user.id] ? supportNotes[user.id] + '\n' : '') + newNote.trim() }); setNewNote('') } }} style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD }} className="px-3 py-2 rounded-lg border font-medium text-sm">Save</motion.button>
+                                    <input type="text" value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Add a note..." style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR, color: TEXT_PRIMARY }} className="flex-1 px-3 py-2 rounded-xl border focus:outline-none text-sm" />
+                                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { if (newNote.trim()) { setSupportNotes({ ...supportNotes, [user.id]: (supportNotes[user.id] ? supportNotes[user.id] + '\n' : '') + newNote.trim() }); setNewNote('') } }} style={{ backgroundColor: `${GOLD}22`, borderColor: GOLD, color: GOLD }} className="px-3 py-2 rounded-xl border font-medium text-sm">Save</motion.button>
                                   </div>
                                 </div>
                               </div>
@@ -2382,10 +2382,10 @@ export default function AdminPage() {
             {activeTab === 'billing-subs' && activeSubTab === 'billing' && (
               <div className="space-y-6">
                 {/* Billing Coming Soon */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-8">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-xl font-bold mb-2" style={{ color: GOLD }}>Invoices & Billing</h2>
+                      <h2 className="text-xs uppercase tracking-wider font-bold mb-2" style={{ color: GOLD }}>Invoices & Billing</h2>
                       <p style={{ color: TEXT_SECONDARY }} className="text-sm">Integration with Stripe and invoice tracking coming soon</p>
                     </div>
                     <div style={{ backgroundColor: GOLD + '22', color: GOLD }} className="px-4 py-2 rounded-full text-xs font-semibold">Coming Soon</div>
@@ -2397,9 +2397,9 @@ export default function AdminPage() {
             {activeTab === 'customize' && activeSubTab === 'theme' && (
               <div className="space-y-6">
                 {/* Theme Selector */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <div className="mb-6">
-                    <h2 className="text-xl font-bold mb-2" style={{ color: GOLD }}>Admin Panel Theme</h2>
+                    <h2 className="text-xs uppercase tracking-wider font-bold mb-2" style={{ color: GOLD }}>Admin Panel Theme</h2>
                     <p style={{ color: TEXT_SECONDARY }} className="text-sm">Customize the appearance of the admin panel only (this doesn't affect the user-facing app theme)</p>
                   </div>
                   <div className="mb-4 flex items-center gap-2">
@@ -2420,7 +2420,7 @@ export default function AdminPage() {
                         }}
                       >
                         {/* Mini preview */}
-                        <div className="rounded-lg overflow-hidden mb-3 h-24" style={{ backgroundColor: t.bg }}>
+                        <div className="rounded-2xl overflow-hidden mb-3 h-24" style={{ backgroundColor: t.bg }}>
                           <div className="p-2 space-y-1.5">
                             <div className="h-2 w-12 rounded" style={{ backgroundColor: t.accent }} />
                             <div className="flex gap-1.5">
@@ -2448,7 +2448,7 @@ export default function AdminPage() {
                   className="rounded-xl p-6 border"
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
                 >
-                  <h3 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Logo Management</h3>
+                  <h3 className="text-xs uppercase tracking-wider font-bold mb-1" style={{ color: GOLD }}>Logo Management</h3>
                   <p className="text-sm mb-6" style={{ color: TEXT_MUTED }}>Upload a new logo to update it across the entire app — login page, sidebar, and admin header.</p>
 
                   <div className="flex flex-col md:flex-row gap-6">
@@ -2461,7 +2461,7 @@ export default function AdminPage() {
                       {customLogo && (
                         <button
                           onClick={resetLogo}
-                          className="mt-2 text-xs px-3 py-1 rounded-lg transition-all hover:opacity-80"
+                          className="mt-2 text-xs px-3 py-1 rounded-xl transition-all hover:opacity-80"
                           style={{ backgroundColor: '#ef444420', color: '#ef4444' }}
                         >
                           Reset to Default
@@ -2495,7 +2495,7 @@ export default function AdminPage() {
                       </div>
 
                       {/* Logo Locations */}
-                      <div className="rounded-lg p-4 border" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }}>
+                      <div className="rounded-xl p-4 border" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }}>
                         <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: TEXT_SECONDARY }}>Updates Applied To</p>
                         <div className="space-y-2">
                           {[
@@ -2529,14 +2529,14 @@ export default function AdminPage() {
                   className="rounded-xl p-6 border"
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
                 >
-                  <h3 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Default User Theme</h3>
+                  <h3 className="text-xs uppercase tracking-wider font-bold mb-1" style={{ color: GOLD }}>Default User Theme</h3>
                   <p className="text-sm mb-4" style={{ color: TEXT_MUTED }}>Set the default theme for new users and the live site. Users can still change their own theme.</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {allThemes.map((t) => (
                       <div
                         key={t.id}
                         onClick={() => setDefaultUserTheme(t.id)}
-                        className="cursor-pointer rounded-lg p-3 transition-all border-2"
+                        className="cursor-pointer rounded-xl p-3 transition-all border-2"
                         style={{
                           borderColor: defaultUserTheme === t.id ? t.accent : BORDER_COLOR,
                           backgroundColor: BG_DARK,
@@ -2560,7 +2560,7 @@ export default function AdminPage() {
                   className="rounded-xl p-6 border"
                   style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }}
                 >
-                  <h3 className="text-xl font-bold mb-1" style={{ color: GOLD }}>Brand Colors</h3>
+                  <h3 className="text-xs uppercase tracking-wider font-bold mb-1" style={{ color: GOLD }}>Brand Colors</h3>
                   <p className="text-sm mb-4" style={{ color: TEXT_MUTED }}>Current theme palette colors.</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -2569,8 +2569,8 @@ export default function AdminPage() {
                       { name: 'Card', hex: adminTheme.card },
                       { name: 'Border', hex: adminTheme.border },
                     ].map((c) => (
-                      <div key={c.name} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: BORDER_COLOR }}>
-                        <div className="w-8 h-8 rounded-lg flex-shrink-0" style={{ backgroundColor: c.hex }} />
+                      <div key={c.name} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: BORDER_COLOR }}>
+                        <div className="w-8 h-8 rounded-xl flex-shrink-0" style={{ backgroundColor: c.hex }} />
                         <div>
                           <p className="text-xs font-medium" style={{ color: TEXT_PRIMARY }}>{c.name}</p>
                           <p className="text-xs font-mono" style={{ color: TEXT_MUTED }}>{c.hex}</p>
@@ -2585,12 +2585,12 @@ export default function AdminPage() {
             {activeTab === 'customize' && activeSubTab === 'navigation' && (
               <div className="space-y-6">
                 {/* Nav Editor */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-2" style={{ color: GOLD }}>Tab Order & Names</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-2" style={{ color: GOLD }}>Tab Order & Names</h2>
                   <p style={{ color: TEXT_MUTED }} className="text-sm mb-6">Reorder, rename, or hide main navigation tabs</p>
                   <div className="space-y-2">
                     {navItems.map((item, index) => (
-                      <motion.div key={item.id} layout style={{ backgroundColor: BG_DARK, borderColor: editingNavItem === item.id ? `${GOLD}66` : BORDER_COLOR, opacity: item.visible ? 1 : 0.5 }} className="flex items-center justify-between p-4 rounded-lg border">
+                      <motion.div key={item.id} layout style={{ backgroundColor: BG_DARK, borderColor: editingNavItem === item.id ? `${GOLD}66` : BORDER_COLOR, opacity: item.visible ? 1 : 0.5 }} className="flex items-center justify-between p-4 rounded-xl border">
                         <div className="flex items-center gap-3">
                           <GripVertical size={18} style={{ color: TEXT_MUTED }} />
                           <span style={{ color: TEXT_MUTED }} className="text-xs font-mono w-6">{index + 1}</span>
@@ -2613,12 +2613,12 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Preview */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Navigation Preview</h2>
-                  <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-lg border p-4">
+                  <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-xl border p-4">
                     <div className="flex flex-wrap gap-2">
                       {navItems.filter((n) => n.visible).map((item) => (
-                        <span key={item.id} style={{ backgroundColor: `${GOLD}22`, borderColor: `${GOLD}44`, color: GOLD }} className="px-4 py-2 rounded-lg text-sm font-medium border">{item.label}</span>
+                        <span key={item.id} style={{ backgroundColor: `${GOLD}22`, borderColor: `${GOLD}44`, color: GOLD }} className="px-4 py-2 rounded-xl text-sm font-medium border">{item.label}</span>
                       ))}
                     </div>
                     {navItems.some((n) => !n.visible) && (
@@ -2626,7 +2626,7 @@ export default function AdminPage() {
                         <p style={{ color: TEXT_MUTED }} className="text-xs mb-2">Hidden tabs:</p>
                         <div className="flex flex-wrap gap-2">
                           {navItems.filter((n) => !n.visible).map((item) => (
-                            <span key={item.id} style={{ backgroundColor: BORDER_COLOR, color: TEXT_MUTED }} className="px-3 py-1.5 rounded-lg text-xs">{item.label}</span>
+                            <span key={item.id} style={{ backgroundColor: BORDER_COLOR, color: TEXT_MUTED }} className="px-3 py-1.5 rounded-xl text-xs">{item.label}</span>
                           ))}
                         </div>
                       </div>
@@ -2639,8 +2639,8 @@ export default function AdminPage() {
             {activeTab === 'modules' && activeSubTab === 'tasklist' && (
               <div className="space-y-6">
                 {/* Task List Overview */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-2" style={{ color: GOLD }}>Task List & Reminders</h2>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
+                  <h2 className="text-xs uppercase tracking-wider font-bold mb-2" style={{ color: GOLD }}>Task List & Reminders</h2>
                   <p style={{ color: TEXT_MUTED }} className="text-sm mb-6">Manage the task list feature settings and view usage analytics</p>
 
                   {/* Feature Stats — live from user data */}
@@ -2653,7 +2653,7 @@ export default function AdminPage() {
                     ].map((stat) => {
                       const Icon = stat.icon
                       return (
-                        <div key={stat.label} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-lg border p-4">
+                        <div key={stat.label} style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-xl border p-4">
                           <div className="flex items-center gap-2 mb-2">
                             <Icon size={16} style={{ color: stat.color }} />
                             <span className="text-xs" style={{ color: TEXT_MUTED }}>{stat.label}</span>
@@ -2666,7 +2666,7 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Feature Configuration */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Feature Configuration</h2>
                   <div className="space-y-4">
                     {[
@@ -2679,7 +2679,7 @@ export default function AdminPage() {
                     ].map((feature) => {
                       const enabled = feature.key ? featureFlags[feature.key] : feature.configKey ? !!moduleConfigs['task-lists']?.[feature.configKey] : false
                       return (
-                        <div key={feature.label} className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, borderWidth: 1 }}>
+                        <div key={feature.label} className="flex items-center justify-between p-4 rounded-xl" style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR, borderWidth: 1 }}>
                           <div>
                             <p className="font-medium text-sm" style={{ color: TEXT_PRIMARY }}>{feature.label}</p>
                             <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>{feature.desc}</p>
@@ -2702,13 +2702,13 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Recent Activity — populated from audit log */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Recent Task Activity</h2>
                   {auditLog.length > 0 ? (
                     <div className="space-y-3">
                       {auditLog.slice(0, 5).map((entry, i) => (
-                        <div key={i} className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: BG_DARK }}>
-                          <div className="p-2 rounded-lg" style={{ backgroundColor: `${GOLD}15` }}>
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ backgroundColor: BG_DARK }}>
+                          <div className="p-2 rounded-xl" style={{ backgroundColor: `${GOLD}15` }}>
                             <Activity size={14} style={{ color: GOLD }} />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -2727,7 +2727,7 @@ export default function AdminPage() {
                 </motion.div>
 
                 {/* Category Limits */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-lg border p-6">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
                   <h2 className="text-lg font-bold mb-4" style={{ color: GOLD }}>Category Limits</h2>
                   <p style={{ color: TEXT_MUTED }} className="text-sm mb-4">Set maximum items per category for each plan</p>
                   <div className="overflow-x-auto">
@@ -2795,7 +2795,7 @@ export default function AdminPage() {
               <p style={{ color: TEXT_SECONDARY }} className="mb-2">
                 Are you sure you want to permanently delete this user?
               </p>
-              <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-lg border p-3 mb-4">
+              <div style={{ backgroundColor: BG_DARK, borderColor: BORDER_COLOR }} className="rounded-xl border p-3 mb-4">
                 <p className="font-medium" style={{ color: TEXT_PRIMARY }}>{deleteConfirm.userName}</p>
                 <p className="text-sm" style={{ color: TEXT_MUTED }}>{deleteConfirm.userEmail}</p>
               </div>
@@ -2807,7 +2807,7 @@ export default function AdminPage() {
                   onClick={() => setDeleteConfirm(null)}
                   disabled={isDeleting}
                   style={{ borderColor: BORDER_COLOR, color: TEXT_PRIMARY }}
-                  className="px-4 py-2 rounded-lg border text-sm font-medium hover:opacity-80 transition-opacity"
+                  className="px-4 py-2 rounded-xl border text-sm font-medium hover:opacity-80 transition-opacity"
                 >
                   Cancel
                 </button>
@@ -2815,7 +2815,7 @@ export default function AdminPage() {
                   onClick={handleDeleteUser}
                   disabled={isDeleting}
                   style={{ backgroundColor: '#ef4444' }}
-                  className="px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+                  className="px-4 py-2 rounded-xl text-white text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
                 >
                   {isDeleting ? (
                     <>
