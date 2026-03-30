@@ -67,6 +67,10 @@ export default function SettingsPage() {
   const [scoreEquifax, setScoreEquifax] = useState(String(user.creditScoreEquifax || ''))
   const [scoreExperian, setScoreExperian] = useState(String(user.creditScoreExperian || ''))
 
+  // Utilization & credit limit
+  const [utilization, setUtilization] = useState(String(user.utilization || ''))
+  const [creditLimit, setCreditLimit] = useState(String(user.creditLimit || ''))
+
   // Auto-calculate average credit score from bureau scores
   const averageCreditScore = useMemo(() => {
     const scores = [scoreTransUnion, scoreEquifax, scoreExperian]
@@ -113,6 +117,8 @@ export default function SettingsPage() {
       creditScoreTransUnion: parseInt(scoreTransUnion) || 0,
       creditScoreEquifax: parseInt(scoreEquifax) || 0,
       creditScoreExperian: parseInt(scoreExperian) || 0,
+      utilization: parseFloat(utilization) || 0,
+      creditLimit: parseFloat(creditLimit) || 0,
     }
     setData(prev => ({ ...prev, user: updatedUser }))
     try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
@@ -428,10 +434,46 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
+                  {/* Utilization & Credit Limit */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 mt-2" style={{ borderTop: `1px solid ${theme.border}` }}>
+                    <div>
+                      <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        Utilization %
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          placeholder="e.g. 34"
+                          value={utilization}
+                          onChange={(e) => setUtilization(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: theme.textM }}>%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        Credit Limit
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: theme.textM }}>$</span>
+                        <input
+                          type="number"
+                          placeholder="e.g. 12000"
+                          value={creditLimit}
+                          onChange={(e) => setCreditLimit(e.target.value)}
+                          className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm outline-none"
+                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                 <button
                   onClick={handleSaveSettings}
                   className="mt-5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
-                  style={{ background: '#6366F1', color: '#fff', fontWeight: 700 }}
+                  style={{ background: currentTheme.primary, color: '#fff', fontWeight: 700 }}
                 >
                   <Save className="w-4 h-4" />
                   {saved ? 'Saved!' : 'Save Credit Scores'}

@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <OrcaDataProvider>
-      <AppShell userName={userName} notificationCount={0}>
+      <AppShell userName={userName}>
         {children}
       </AppShell>
     </OrcaDataProvider>

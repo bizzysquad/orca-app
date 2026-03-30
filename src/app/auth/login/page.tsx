@@ -413,7 +413,7 @@ function LoginPageInner() {
 
       {/* Right Panel - Login Form (45% on desktop, 100% on mobile) */}
       <div className="flex-1 flex flex-col items-center justify-center px-5 py-10 sm:px-10" style={{ background: '#0F172A' }}>
-        {/* Mobile logo */}
+        {/* Mobile logo + description */}
         <div className="flex flex-col items-center mb-8 lg:hidden">
           {customLogo ? (
             <img src={customLogo} alt="ORCA" width={64} height={64} className="rounded-2xl object-cover mb-3" />
@@ -421,7 +421,41 @@ function LoginPageInner() {
             <img src="/ORCA-Logo.png" alt="ORCA" width={64} height={64} className="rounded-2xl object-cover mb-3" />
           )}
           <div style={{ color: '#F59E0B', fontWeight: 900, fontSize: 22, letterSpacing: '0.08em' }}>ORCA</div>
-          <div style={{ color: '#64748B', fontSize: 11, letterSpacing: '0.12em', fontWeight: 600 }}>ORGANIZE RESOURCES CONTROL ASSETS</div>
+          <div style={{ color: '#64748B', fontSize: 11, letterSpacing: '0.12em', fontWeight: 600 }} className="mb-4">ORGANIZE RESOURCES CONTROL ASSETS</div>
+
+          {/* Mobile app description */}
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs mb-4"
+            style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#818CF8', fontWeight: 600 }}
+          >
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#818CF8' }} />
+            Your Financial Command Center
+          </div>
+
+          <p className="text-center text-sm mb-5 px-2" style={{ color: '#94A3B8', lineHeight: 1.6 }}>
+            Track every dollar, manage bills, hit savings goals, and see exactly what's safe to spend — all in one beautifully designed platform.
+          </p>
+
+          {/* Quick feature highlights */}
+          <div className="grid grid-cols-3 gap-2 w-full px-1 mb-2">
+            {[
+              { icon: BarChart3, label: 'Smart Stack', color: '#6366F1' },
+              { icon: Receipt, label: 'Bill Boss', color: '#EF4444' },
+              { icon: PiggyBank, label: 'Savings', color: '#10B981' },
+            ].map((f) => {
+              const FIcon = f.icon
+              return (
+                <div
+                  key={f.label}
+                  className="flex flex-col items-center gap-1.5 p-2.5 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <FIcon className="w-4 h-4" style={{ color: f.color }} />
+                  <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600 }}>{f.label}</span>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         <div className="w-full" style={{ maxWidth: 400 }}>

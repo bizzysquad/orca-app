@@ -39,13 +39,20 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
   const { theme, currentTheme, isDark } = useTheme()
   const { data } = useOrcaData()
 
-  // Custom logo from admin
+  // Custom logo from admin — syncs via event + cross-tab storage
   const [customLogo, setCustomLogo] = useState<string | null>(null)
   useEffect(() => {
     setCustomLogo(localStorage.getItem('orca-custom-logo') || null)
-    const handler = (e: any) => setCustomLogo(e.detail?.logo || null)
+    const handler = (e: any) => setCustomLogo(e?.detail?.logo || null)
     window.addEventListener('orca-logo-updated', handler)
-    return () => window.removeEventListener('orca-logo-updated', handler)
+    const storageHandler = (e: StorageEvent) => {
+      if (e.key === 'orca-custom-logo') setCustomLogo(e.newValue || null)
+    }
+    window.addEventListener('storage', storageHandler)
+    return () => {
+      window.removeEventListener('orca-logo-updated', handler)
+      window.removeEventListener('storage', storageHandler)
+    }
   }, [])
 
   const resolvedName = (data.user?.name && data.user.name.trim()) ? data.user.name : userName

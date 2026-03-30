@@ -3,18 +3,17 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Image from 'next/image'
-import { Menu, Sun, Moon, Bell, Search, ChevronRight, Shield } from 'lucide-react'
+import { Menu, Sun, Moon, Home, Search, ChevronRight, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
 
 interface DesktopTopBarProps {
   onMenuToggle?: () => void
-  notificationCount?: number
   userName?: string
 }
 
-export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, userName = 'User' }: DesktopTopBarProps) {
+export default function DesktopTopBar({ onMenuToggle, userName = 'User' }: DesktopTopBarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { theme, isDark, toggleDark, currentTheme } = useTheme()
@@ -23,12 +22,23 @@ export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, use
 
   useEffect(() => {
     const load = () => {
-      try { setCustomLogo(localStorage.getItem('orca-custom-logo')) } catch {}
+      try { setCustomLogo(localStorage.getItem('orca-custom-logo') || null) } catch {}
     }
     load()
-    const handler = () => load()
+    const handler = (e: any) => {
+      const logo = e?.detail?.logo || null
+      setCustomLogo(logo)
+    }
     window.addEventListener('orca-logo-updated', handler)
-    return () => window.removeEventListener('orca-logo-updated', handler)
+    // Also listen for storage events (cross-tab sync)
+    const storageHandler = (e: StorageEvent) => {
+      if (e.key === 'orca-custom-logo') setCustomLogo(e.newValue || null)
+    }
+    window.addEventListener('storage', storageHandler)
+    return () => {
+      window.removeEventListener('orca-logo-updated', handler)
+      window.removeEventListener('storage', storageHandler)
+    }
   }, [])
 
   const resolvedName = (data.user?.name && data.user.name.trim()) ? data.user.name : userName
@@ -120,12 +130,17 @@ export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, use
           {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
 
-        {/* Notifications */}
-        <button className="relative p-2 rounded-xl transition-colors" style={{ color: mutedColor }}>
-          <Bell className="w-5 h-5" />
-          {notificationCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: '#EF4444' }} />
-          )}
+        {/* Home */}
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="p-2 rounded-xl transition-all hover:scale-105"
+          style={{
+            background: (pathname === '/' || pathname === '/dashboard') ? `${currentTheme.primary}25` : 'transparent',
+            color: (pathname === '/' || pathname === '/dashboard') ? currentTheme.primaryLight : mutedColor,
+          }}
+          title="Go to Dashboard"
+        >
+          <Home className="w-5 h-5" />
         </button>
 
         {/* Admin quick-access */}

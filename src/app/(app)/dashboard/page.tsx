@@ -1071,14 +1071,25 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-4">
                   <CreditScoreRing score={userCreditScore} limit={850} theme={theme} />
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>Fair</div>
-                    <div className="text-xs mt-0.5" style={{ color: theme.textS }}>34% utilization</div>
-                    <div className="text-xs mt-1" style={{ color: theme.textS }}>Range: 300–850</div>
-                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 5, background: theme.border, width: 120 }}>
-                      <div className="h-full rounded-full" style={{ width: `${(userCreditScore / 850) * 100}%`, background: '#F59E0B' }} />
-                    </div>
-                  </div>
+                  {(() => {
+                    let statusLabel = 'Poor'
+                    let statusColor = '#ef4444'
+                    if (userCreditScore >= 800) { statusLabel = 'Excellent'; statusColor = '#22c55e' }
+                    else if (userCreditScore >= 740) { statusLabel = 'Very Good'; statusColor = '#22c55e' }
+                    else if (userCreditScore >= 670) { statusLabel = 'Good'; statusColor = '#f59e0b' }
+                    else if (userCreditScore >= 580) { statusLabel = 'Fair'; statusColor = '#f59e0b' }
+                    const util = user?.utilization || 0
+                    return (
+                      <div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: statusColor }}>{statusLabel}</div>
+                        <div className="text-xs mt-0.5" style={{ color: theme.textS }}>{util}% utilization</div>
+                        <div className="text-xs mt-1" style={{ color: theme.textS }}>Range: 300–850</div>
+                        <div className="mt-2 rounded-full overflow-hidden" style={{ height: 5, background: theme.border, width: 120 }}>
+                          <div className="h-full rounded-full" style={{ width: `${(userCreditScore / 850) * 100}%`, background: `linear-gradient(90deg, #EF4444, #F59E0B, #10B981)` }} />
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               </motion.div>
             </Link>
@@ -1195,9 +1206,11 @@ export default function DashboardPage() {
                 <span className="text-sm opacity-70">Safe to Spend</span>
                 <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
               </div>
-              <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>{fmt(safeToSpend.amount)}</div>
+              <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>
+                {safeToSpendView === 'daily' ? fmt(safeToSpend.daily) : safeToSpendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.amount)}
+              </div>
               <div className="text-sm opacity-60 mt-1">
-                {safeToSpendView === 'daily' ? fmt(safeToSpend.daily) : safeToSpendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.amount)} / {safeToSpendView} available
+                {fmt(safeToSpendView === 'daily' ? safeToSpend.daily : safeToSpendView === 'weekly' ? safeToSpend.weekly : safeToSpend.amount)} / {safeToSpendView} available
               </div>
               <div className="flex gap-2 mt-4">
                 {['daily', 'weekly', 'monthly'].map(v => (

@@ -221,7 +221,7 @@ function ProjectionCalculator({ theme }: { theme: any }) {
 }
 
 export default function SmartStackPage() {
-  const { theme } = useTheme();
+  const { theme, isDark, currentTheme } = useTheme();
   const { data, setData, loading } = useOrcaData();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -841,6 +841,118 @@ export default function SmartStackPage() {
             )}
           </motion.div>
         )}
+
+        {/* ── SPLITTER — always shown below Incoming Payments ─── */}
+        {projectionMode === 'payment' && (() => {
+          const now = new Date()
+          const splitterMonthIdx = now.getMonth()
+          const splitterYear = now.getFullYear()
+          const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
+          const daysInMonth = new Date(splitterYear, splitterMonthIdx + 1, 0).getDate()
+
+          // Monthly income from payment entries for current month
+          const monthlyIncome = paymentEntries
+            .filter(p => {
+              const d = new Date(p.date + 'T00:00:00')
+              return d.getMonth() === splitterMonthIdx && d.getFullYear() === splitterYear && p.status !== 'received'
+            })
+            .reduce((sum, p) => sum + p.amount, 0)
+
+          // Monthly bills from Bill Boss
+          const monthlyBills = (data.bills || [])
+            .filter((b: any) => {
+              const d = new Date((b.due || '') + 'T00:00:00')
+              return d.getMonth() === splitterMonthIdx && d.getFullYear() === splitterYear && b.status !== 'paid'
+            })
+            .reduce((sum: number, b: any) => sum + b.amount, 0)
+
+          const unpaidBillCount = (data.bills || []).filter((b: any) => b.status !== 'paid').length
+          const afterBills = Math.max(0, monthlyIncome - monthlyBills)
+          const billPct = monthlyIncome > 0 ? Math.min(100, Math.round((monthlyBills / monthlyIncome) * 100)) : 0
+          const perWeek = monthlyBills / (daysInMonth / 7)
+          const perDay = monthlyBills / daysInMonth
+
+          return (
+            <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `#0891B220` }}>
+                  <TrendingUp className="w-5 h-5" style={{ color: '#0891B2' }} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Splitter</h2>
+                  <p className="text-xs" style={{ color: theme.textM }}>Allocate your income toward bills — see exactly how much to set aside each week or paycheck</p>
+                </div>
+              </div>
+
+              {/* Month label */}
+              <div className="flex items-center justify-center mb-5">
+                <span style={{ fontWeight: 700, color: theme.text, fontSize: 15 }}>{monthNames[splitterMonthIdx]} {splitterYear}</span>
+              </div>
+
+              {/* Income vs Bills cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                <div className="rounded-xl p-4" style={{ background: isDark ? '#052E16' : '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs" style={{ color: '#16A34A', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Monthly Income</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: '#0891B2', color: '#fff', fontWeight: 600 }}>Auto</span>
+                  </div>
+                  <div className="text-xs mb-1" style={{ color: theme.textM }}>From Incoming Payments</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#16A34A' }}>${monthlyIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  {monthlyIncome === 0 && <div className="text-xs mt-1" style={{ color: theme.textM }}>No payments found for this month</div>}
+                </div>
+
+                <div className="rounded-xl p-4" style={{ background: isDark ? '#2D0A0A' : '#FEF2F2', border: '1px solid #FECACA' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs" style={{ color: '#EF4444', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Monthly Bills</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: '#0891B2', color: '#fff', fontWeight: 600 }}>Bill Boss</span>
+                  </div>
+                  <div className="text-xs mb-1" style={{ color: theme.textM }}>From Bill Boss ({monthNames[splitterMonthIdx]} {splitterYear})</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#EF4444' }}>−${monthlyBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  <div className="text-xs mt-1" style={{ color: theme.textM }}>{unpaidBillCount} unpaid bill{unpaidBillCount !== 1 ? 's' : ''}</div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mb-4">
+                <div className="flex justify-between text-xs mb-1.5" style={{ color: theme.textM }}>
+                  <span>Bills ({billPct}%)</span><span>Remaining ({100 - billPct}%)</span>
+                </div>
+                <div className="rounded-full overflow-hidden" style={{ height: 10, background: '#10B981' }}>
+                  <div className="h-full rounded-full" style={{ width: `${billPct}%`, background: '#EF4444' }} />
+                </div>
+              </div>
+
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                {[
+                  { label: 'Total Available', val: `$${monthlyIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, color: '#10B981', bg: isDark ? '#052E16' : '#F0FDF4', border: '#BBF7D0' },
+                  { label: 'Total Bills', val: `−$${monthlyBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, color: '#EF4444', bg: isDark ? '#2D0A0A' : '#FEF2F2', border: '#FECACA' },
+                  { label: 'After Bills', val: `$${afterBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, color: '#10B981', bg: isDark ? '#052E16' : '#F0FDF4', border: '#BBF7D0' },
+                ].map(s => (
+                  <div key={s.label} className="rounded-xl p-3.5" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
+                    <div className="text-xs mb-1" style={{ color: theme.textM, fontWeight: 600, textTransform: 'uppercase' }}>{s.label}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: s.color }}>{s.val}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Per period breakdown */}
+              <div className="rounded-xl p-4" style={{ background: isDark ? '#164E63' : '#E0F9FC', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}` }}>
+                <p className="text-sm mb-3" style={{ color: theme.textM }}>Based on your income and bills this month, you need to set aside:</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#155E75' : '#CFFAFE', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}` }}>
+                    <div className="text-xs mb-1" style={{ color: '#0891B2', fontWeight: 600 }}>Per Week</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#0891B2' }}>${perWeek.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </div>
+                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#052E16' : '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                    <div className="text-xs mb-1" style={{ color: '#10B981', fontWeight: 600 }}>Per Day</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#059669' }}>${perDay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         {projectionMode === 'check' && renderCheckProjectionWithCalendar()}
 

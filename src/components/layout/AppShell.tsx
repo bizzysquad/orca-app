@@ -8,11 +8,10 @@ import { useTheme } from '@/context/ThemeContext'
 
 interface AppShellProps {
   children: React.ReactNode
-  notificationCount?: number
   userName?: string
 }
 
-export default function AppShell({ children, notificationCount = 0, userName = 'User' }: AppShellProps) {
+export default function AppShell({ children, userName = 'User' }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { isDark, currentTheme } = useTheme()
 
@@ -37,7 +36,6 @@ export default function AppShell({ children, notificationCount = 0, userName = '
         {/* Desktop Top Bar */}
         <DesktopTopBar
           onMenuToggle={() => setSidebarOpen(true)}
-          notificationCount={notificationCount}
           userName={userName}
         />
 
