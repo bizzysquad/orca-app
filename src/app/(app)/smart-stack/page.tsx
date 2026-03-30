@@ -361,6 +361,7 @@ export default function SmartStackPage() {
   const [customPeriodEnd, setCustomPeriodEnd] = useState('');
 
   const [weekendWorkDays, setWeekendWorkDays] = useState<string[]>([]);
+  const [weekendsEnabled, setWeekendsEnabled] = useState(true);
 
   const handleBudgetLock = () => {
     if (!budgetLocked) {
@@ -503,9 +504,13 @@ export default function SmartStackPage() {
       const dateStr = d.toISOString().split('T')[0];
       const dayOfWeek = d.getDay();
       const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
-      const isWeekendWork = isWknd && weekendWorkDays.includes(dateStr);
 
-      if (!isWknd || isWeekendWork) {
+      // A weekend day counts as scheduled if:
+      // - weekendsEnabled is true (global toggle), OR
+      // - the specific date is in weekendWorkDays (individual override)
+      const isScheduled = !isWknd || weekendsEnabled || weekendWorkDays.includes(dateStr);
+
+      if (isScheduled) {
         totalScheduledDays++;
         if (!daysOff.some((off) => off.date === dateStr)) {
           workDays++;
@@ -516,7 +521,7 @@ export default function SmartStackPage() {
 
     if (totalScheduledDays === 0) return effectiveNetIncome;
     return effectiveNetIncome * (workDays / totalScheduledDays);
-  }, [effectiveNetIncome, effectivePeriod, daysOff, weekendWorkDays]);
+  }, [effectiveNetIncome, effectivePeriod, daysOff, weekendWorkDays, weekendsEnabled]);
 
   const checkAmount = projectedCheckAmount;
 
@@ -542,13 +547,24 @@ export default function SmartStackPage() {
       const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
 
       if (isWknd) {
-        const isMarkedWorking = weekendWorkDays.includes(dateStr);
-        const isMarkedOff = daysOff.some((d) => d.date === dateStr);
-
-        if (!isMarkedWorking && !isMarkedOff) {
-          setWeekendWorkDays(prev => [...prev, dateStr]);
-        } else if (isMarkedWorking && !isMarkedOff) {
-          setWeekendWorkDays(prev => prev.filter(d => d !== dateStr));
+        if (weekendsEnabled) {
+          // When weekends globally enabled, toggle day off like any weekday
+          setDaysOff((prev) => {
+            const exists = prev.find((d) => d.date === dateStr);
+            if (exists) {
+              return prev.filter((d) => d.date !== dateStr);
+            } else {
+              return [...prev, { date: dateStr }];
+            }
+          });
+        } else {
+          // When weekends globally disabled, toggle individual override
+          const isMarkedWorking = weekendWorkDays.includes(dateStr);
+          if (isMarkedWorking) {
+            setWeekendWorkDays(prev => prev.filter(d => d !== dateStr));
+          } else {
+            setWeekendWorkDays(prev => [...prev, dateStr]);
+          }
         }
       } else {
         setDaysOff((prev) => {
@@ -652,29 +668,44 @@ export default function SmartStackPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="min-w-0">
                 <label className="block text-xs mb-1" style={{ color: theme.textM }}>Start Date</label>
-                <input type="date" value={customPeriodStart} onChange={(e) => setCustomPeriodStart(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm outline-none box-border" style={{
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
-                  color: theme.text,
-                  border: `1px solid ${theme.border}`,
-                }} />
+                <CalendarPicker value={customPeriodStart} onChange={setCustomPeriodStart} placeholder="Select start date" theme={theme} showQuickSelect={false} />
               </div>
               <div className="min-w-0">
-                <label className="block text-xs mb-1" style={{ color: theme.textM }}>Last Date</label>
-                <input type="date" value={customPeriodEnd} onChange={(e) => setCustomPeriodEnd(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm outline-none box-border" style={{
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
-                  color: theme.text,
-                  border: `1px solid ${theme.border}`,
-                }} />
+                <label className="block text-xs mb-1" style={{ color: theme.textM }}>End Date</label>
+                <CalendarPicker value={customPeriodEnd} onChange={setCustomPeriodEnd} placeholder="Select end date" theme={theme} showQuickSelect={false} />
               </div>
             </div>
+            {customPeriodStart && customPeriodEnd && (
+              <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                <span className="text-xs" style={{ color: theme.textM }}>Custom period active</span>
+                <button onClick={() => { setCustomPeriodStart(''); setCustomPeriodEnd(''); }}
+                  className="text-xs px-2 py-1 rounded-lg" style={{ color: '#EF4444', backgroundColor: '#FEF2F2' }}>
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Pay Period Calendar</div>
-              <div className="text-xs" style={{ color: theme.textM }}>Click to mark days off</div>
+              <div className="text-xs" style={{ color: theme.textM }}>Click to toggle days on/off</div>
+            </div>
+
+            {/* Weekend toggle */}
+            <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+              <div>
+                <span className="text-xs font-semibold" style={{ color: theme.text }}>Include Weekends</span>
+                <span className="text-xs ml-1.5" style={{ color: theme.textM }}>({weekendsEnabled ? 'on' : 'off'})</span>
+              </div>
+              <button
+                onClick={() => setWeekendsEnabled(prev => !prev)}
+                className="relative w-11 h-6 rounded-full transition-colors"
+                style={{ backgroundColor: weekendsEnabled ? currentTheme.primary : theme.border }}
+              >
+                <div className="absolute top-0.5 rounded-full w-5 h-5 bg-white shadow transition-transform"
+                  style={{ transform: weekendsEnabled ? 'translateX(22px)' : 'translateX(2px)' }} />
+              </button>
             </div>
 
             <div className="grid grid-cols-7 gap-1 mb-2">
@@ -689,6 +720,9 @@ export default function SmartStackPage() {
                   const off = day && isDayOff(day);
                   const wk = day && isWeekend(day);
                   const wkWork = day && isWeekendWorking(day);
+                  // A day is "active" (scheduled to work) if it's a weekday, or weekend with global toggle on, or individually overridden
+                  const isActive = day && (!wk || weekendsEnabled || wkWork);
+                  const isOff = off || (wk && !weekendsEnabled && !wkWork);
 
                   return (
                     <button
@@ -697,21 +731,21 @@ export default function SmartStackPage() {
                       className="flex flex-col items-center justify-center rounded-xl transition-all"
                       style={{
                         height: 52,
-                        backgroundColor: day ? (off ? (theme.bg) : wk ? (theme.bg) : `${currentTheme.primary}20`) : 'transparent',
-                        border: day ? `1px solid ${off ? theme.border : wk ? theme.border : currentTheme.primary}` : 'none',
-                        opacity: day && wk && !wkWork ? 0.5 : 1,
-                        cursor: day && (wk && !wkWork) ? 'default' : day ? 'pointer' : 'default',
+                        backgroundColor: day ? (isOff ? theme.bg : isActive ? `${currentTheme.primary}20` : theme.bg) : 'transparent',
+                        border: day ? `1px solid ${isOff ? theme.border : isActive ? currentTheme.primary : theme.border}` : 'none',
+                        opacity: 1,
+                        cursor: day ? 'pointer' : 'default',
                       }}
                     >
                       {day && (
                         <>
                           <span className="text-xs" style={{ color: theme.textM, fontWeight: 500 }}>{day.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2)}</span>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: off ? theme.textM : wk ? theme.textM : currentTheme.primary }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM }}>
                             {day.getDate()}
                           </span>
-                          {!wk && (
-                            <span className="text-xs" style={{ color: off ? theme.textM : currentTheme.primary, fontSize: 9 }}>{off ? 'off' : 'on'}</span>
-                          )}
+                          <span className="text-xs" style={{ color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM, fontSize: 9 }}>
+                            {isOff ? 'off' : isActive ? 'on' : 'off'}
+                          </span>
                         </>
                       )}
                     </button>
