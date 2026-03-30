@@ -41,7 +41,7 @@ const CATEGORIES = [
 
 const RECURRENCE_OPTIONS: BillRecurrence[] = ['one-time', 'weekly', 'monthly', 'yearly', 'custom']
 
-function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedDay, theme }: {
+function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedDay, theme, currentTheme }: {
   bills: Bill[]
   month: number
   year: number
@@ -49,6 +49,7 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   onDayClick?: (day: number) => void
   selectedDay?: number | null
   theme: any
+  currentTheme: any
 }) {
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -153,14 +154,14 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   return (
     <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-full box-border">
       <div className="flex items-center justify-between mb-6">
-        <button onClick={() => onMonthChange(-1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = '#6366F1'} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
+        <button onClick={() => onMonthChange(-1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = currentTheme.primary} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
           <ChevronLeft size={20} />
         </button>
         <div className="flex items-center gap-3">
-          <Calendar size={18} style={{ color: '#6366F1' }} />
+          <Calendar size={18} style={{ color: currentTheme.primary }} />
           <h3 className="font-bold text-lg" style={{ color: theme.text }}>{monthName}</h3>
         </div>
-        <button onClick={() => onMonthChange(1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = '#6366F1'} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
+        <button onClick={() => onMonthChange(1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = currentTheme.primary} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
           <ChevronRight size={20} />
         </button>
       </div>
@@ -678,7 +679,14 @@ export default function BillBossPage() {
             <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Bill Boss</h1>
             <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Manage your monthly bills</p>
           </div>
-          {/* Notification Bell */}
+          <button
+            onClick={() => { if (editingBillId) handleCancelEdit(); else setShowAddForm(!showAddForm) }}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90 active:scale-95 shrink-0"
+            style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">{editingBillId ? 'Cancel Edit' : 'Add Bill'}</span>
+          </button>
         </div>
       </motion.div>
 
@@ -689,7 +697,7 @@ export default function BillBossPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <div className="relative overflow-hidden rounded-2xl p-4 sm:p-8 w-full max-w-full box-border" style={{ backgroundImage: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', color: '#fff' }}>
+          <div className="relative overflow-hidden rounded-2xl p-4 sm:p-8 w-full max-w-full box-border" style={{ backgroundImage: `linear-gradient(135deg, ${currentTheme.primary} 0%, #7C3AED 100%)`, color: '#fff' }}>
             <div className="text-center mb-6">
               <p className="text-sm font-medium opacity-80 mb-2">Total Monthly Bills</p>
               <p className="text-3xl sm:text-5xl font-bold mb-4 break-words">{fmt(unpaidTotal)}</p>
@@ -717,7 +725,7 @@ export default function BillBossPage() {
                 <button
                   onClick={() => handlePayFull(nextBillDue.id)}
                   className="shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
-                  style={{ backgroundColor: '#fff', color: '#6366F1' }}
+                  style={{ backgroundColor: '#fff', color: currentTheme.primary }}
                 >
                   Pay Now
                 </button>
@@ -740,6 +748,7 @@ export default function BillBossPage() {
             onDayClick={(day) => setSelectedDay(day === 0 ? null : day)}
             selectedDay={selectedDay}
             theme={theme}
+            currentTheme={currentTheme}
           />
           {/* Monthly Bill Total for selected month */}
           <div className="mt-3 flex items-center justify-between px-2 py-2 rounded-lg" style={{ backgroundColor: `${theme.gold}10` }}>
@@ -786,7 +795,7 @@ export default function BillBossPage() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => { if (editingBillId) handleCancelEdit(); else setShowAddForm(!showAddForm) }}
-          style={{ backgroundColor: '#6366F1', color: '#fff' }}
+          style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
           className="w-full px-6 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all text-base"
         >
           <Plus className="w-5 h-5" />
@@ -810,7 +819,7 @@ export default function BillBossPage() {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
                 className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
-                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
+                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${currentTheme.primary}40`}
                 onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
               />
 
@@ -822,7 +831,7 @@ export default function BillBossPage() {
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
                   className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
+                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${currentTheme.primary}40`}
                   onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
                 />
                 <CalendarPicker
@@ -838,7 +847,7 @@ export default function BillBossPage() {
                 onChange={(e) => setFormData({ ...formData, cat: e.target.value })}
                 style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
                 className="w-full px-5 py-3 border rounded-xl focus:outline-none focus:ring-2 font-medium"
-                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
+                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${currentTheme.primary}40`}
                 onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
               >
                 {CATEGORIES.map(cat => (
@@ -956,7 +965,7 @@ export default function BillBossPage() {
                 <button
                   onClick={editingBillId ? handleSaveEdit : handleAddBill}
                   disabled={!formData.name || !formData.amount || !formData.due}
-                  style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                  style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
                   className="flex-1 px-5 py-3 rounded-xl font-bold disabled:opacity-50 hover:opacity-90 transition-colors"
                 >
                   {editingBillId ? 'Update Bill' : 'Save Bill'}
@@ -1083,7 +1092,7 @@ export default function BillBossPage() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => handlePayFull(bill.id)}
-                        style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                        style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
                         className="flex-1 px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-colors"
                       >
                         Pay
@@ -1415,7 +1424,7 @@ export default function BillBossPage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleApplyPartialPayment}
-                  style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                  style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
                   className="flex-1 px-5 py-3.5 rounded-xl font-bold hover:opacity-90 transition-colors"
                 >
                   Apply
