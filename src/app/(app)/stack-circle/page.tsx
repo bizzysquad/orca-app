@@ -451,38 +451,32 @@ export default function StackCirclePage() {
 
   if (loading) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: theme.bg, color: theme.text }}
-      >
-        <div>Loading...</div>
+      <div className="w-full min-h-full flex items-center justify-center">
+        <div style={{ color: theme.textS }}>Loading...</div>
       </div>
     );
   }
 
   return (
-    <div
-      className="min-h-screen pb-32 overflow-x-hidden transition-colors w-full max-w-full"
-      style={{ backgroundColor: theme.bg, color: theme.text }}
-    >
+    <div className="w-full min-h-full pb-32 overflow-x-hidden transition-colors max-w-full">
       {/* Header */}
       <motion.div
-        className="border-b px-4 sm:px-6 lg:px-8 py-4 sm:py-8 transition-colors"
-        style={{ borderColor: theme.border, backgroundColor: theme.bg }}
+        className="border-b px-4 sm:px-6 lg:px-8 py-4 sm:py-6 transition-colors"
+        style={{ borderColor: theme.border }}
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="max-w-4xl mx-auto flex items-center gap-3 mb-2">
+        <div className="max-w-5xl mx-auto flex items-center gap-3 mb-1">
           <div className="p-2.5 rounded-2xl" style={{ backgroundColor: tealLight }}>
             <Users className="w-5 h-5" style={{ color: teal }} />
           </div>
-          <h1 className="text-xl sm:text-3xl font-bold" style={{ color: theme.text }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>
             Stack Circle
           </h1>
         </div>
-        <div className="max-w-4xl mx-auto">
-          <p className="text-sm" style={{ color: theme.textM }}>
+        <div className="max-w-5xl mx-auto">
+          <p className="text-sm mt-0.5" style={{ color: theme.textM }}>
             Save together, achieve more
           </p>
         </div>
@@ -491,9 +485,9 @@ export default function StackCirclePage() {
       {/* Tabs */}
       <div
         className="border-b px-4 sm:px-6 lg:px-8 transition-colors"
-        style={{ borderColor: theme.border, backgroundColor: theme.bg }}
+        style={{ borderColor: theme.border }}
       >
-        <div className="max-w-4xl mx-auto flex gap-4 sm:gap-8 overflow-x-auto">
+        <div className="max-w-5xl mx-auto flex gap-4 sm:gap-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('group')}
             className={`py-2 sm:py-3 px-0 font-semibold text-xs sm:text-sm border-b-2 transition-colors ${
@@ -527,7 +521,7 @@ export default function StackCirclePage() {
 
       {/* Content */}
       <motion.div
-        className="px-4 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-8 max-w-4xl mx-auto w-full"
+        className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto w-full"
         variants={containerVariants}
         initial="hidden"
         animate="visible"

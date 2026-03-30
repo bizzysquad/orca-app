@@ -9,7 +9,7 @@ import {
   DollarSign, Receipt, Palmtree, Calendar,
   GripVertical, Pin, PinOff, PiggyBank, Wallet,
   TrendingUp, ArrowUpRight, ArrowDownRight, CreditCard,
-  Bell,
+  Bell, Zap,
 } from 'lucide-react'
 
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -336,7 +336,7 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
 }
 
 export default function DashboardPage() {
-  const { theme } = useTheme()
+  const { theme, isDark } = useTheme()
   const { data, loading } = useOrcaData()
   const { user, income, goals, groups } = data
   const group = groups[0] || null
@@ -1140,46 +1140,51 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div>Loading...</div>
+      <div className="w-full min-h-full flex items-center justify-center">
+        <div style={{ color: theme.textS }}>Loading...</div>
       </div>
     )
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }} className="overflow-x-hidden max-w-full">
+    <div className="w-full min-h-full overflow-x-hidden max-w-full">
       <motion.div
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.08 } } }}
-        className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-5xl mx-auto w-full"
+        className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-5"
       >
-        {/* Welcome Message */}
-        <motion.div variants={fadeUp} className="flex items-start justify-between gap-3">
-          <div className="space-y-1 min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-5xl font-bold truncate" style={{ color: theme.text }}>
+        {/* Welcome Message — V10 style */}
+        <motion.div variants={fadeUp} className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>
               {firstName
-                ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName}`
-                : 'Welcome back'}
+                ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName} 👋`
+                : 'Welcome back 👋'}
             </h1>
-            <p className="text-lg" style={{ color: theme.textS }}>
-              Here's your financial snapshot
+            <p className="text-sm mt-0.5" style={{ color: theme.textS }}>
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · Here's your financial snapshot
             </p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setIsReordering(!isReordering)}
-            style={{
-              backgroundColor: isReordering ? '#6366F1' : theme.card,
-              color: isReordering ? '#fff' : theme.textM,
-              borderColor: isReordering ? '#6366F1' : theme.border,
-            }}
-            className="border rounded-lg px-3 py-2 text-sm font-medium flex items-center gap-2 mt-2 shrink-0"
-          >
-            <GripVertical size={14} />
-            {isReordering ? 'Done' : 'Reorder'}
-          </motion.button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link href="/bill-boss" className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:opacity-90 transition-all" style={{ background: isDark ? '#1E1B4B' : '#EEF2FF', color: '#6366F1', fontWeight: 600 }}>
+              <Zap className="w-4 h-4" />Quick Pay
+            </Link>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsReordering(!isReordering)}
+              style={{
+                backgroundColor: isReordering ? '#6366F1' : theme.card,
+                color: isReordering ? '#fff' : theme.textM,
+                borderColor: isReordering ? '#6366F1' : theme.border,
+              }}
+              className="border rounded-lg px-3 py-2 text-sm font-medium flex items-center gap-2 shrink-0"
+            >
+              <GripVertical size={14} />
+              {isReordering ? 'Done' : 'Reorder'}
+            </motion.button>
+          </div>
         </motion.div>
 
         {/* Safe to Spend Hero Card */}

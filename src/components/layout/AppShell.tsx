@@ -14,12 +14,16 @@ interface AppShellProps {
 
 export default function AppShell({ children, notificationCount = 0, userName = 'User' }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { theme } = useTheme()
+  const { isDark, currentTheme } = useTheme()
+
+  // V10 page background: themed dark bg or light universal
+  const pageBg = isDark ? currentTheme.pageBg : '#F0F2FA'
+  const textColor = isDark ? '#F1F5F9' : '#0F172A'
 
   return (
     <div
       className="relative w-full min-h-screen flex overflow-x-hidden max-w-[100vw]"
-      style={{ backgroundColor: theme.bg, color: theme.text }}
+      style={{ backgroundColor: pageBg, color: textColor, transition: 'background 0.2s' }}
     >
       {/* Sidebar Navigation */}
       <Sidebar
@@ -28,8 +32,8 @@ export default function AppShell({ children, notificationCount = 0, userName = '
         onClose={() => setSidebarOpen(false)}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col md:ml-[240px] min-w-0 max-w-full overflow-x-hidden">
+      {/* Main Content Area — lg breakpoint matches V10 (1024px) */}
+      <div className="flex-1 flex flex-col lg:ml-[240px] min-w-0 max-w-full overflow-x-hidden">
         {/* Desktop Top Bar */}
         <DesktopTopBar
           onMenuToggle={() => setSidebarOpen(true)}
@@ -38,7 +42,7 @@ export default function AppShell({ children, notificationCount = 0, userName = '
         />
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: theme.bg }}>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: pageBg, transition: 'background 0.2s' }}>
           <div className="w-full max-w-full">
             {children}
           </div>

@@ -656,14 +656,14 @@ export default function BillBossPage() {
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: theme.bg }} className="min-h-screen flex items-center justify-center">
-        <div style={{ color: theme.text }}>Loading...</div>
+      <div className="w-full min-h-full flex items-center justify-center">
+        <div style={{ color: theme.textS }}>Loading...</div>
       </div>
     )
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg }} className="w-full min-h-screen pb-20 overflow-x-hidden max-w-full">
+    <div className="w-full min-h-full pb-20 overflow-x-hidden max-w-full">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -671,10 +671,10 @@ export default function BillBossPage() {
         className="sticky top-0 z-30 backdrop-blur-xl border-b px-4 py-4 sm:px-6 sm:py-4 lg:px-8 lg:py-4"
         style={{ backgroundColor: `${theme.bg}95`, borderColor: theme.border }}
       >
-        <div className="max-w-3xl mx-auto w-full flex items-center justify-between">
+        <div className="max-w-5xl mx-auto w-full flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold" style={{ color: theme.text }}>Bill Boss</h1>
-            <p className="text-sm mt-1" style={{ color: theme.textM }}>Manage your monthly bills</p>
+            <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Bill Boss</h1>
+            <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Manage your monthly bills</p>
           </div>
           {/* Notification Bell */}
         </div>

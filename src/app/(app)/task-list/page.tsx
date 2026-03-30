@@ -213,12 +213,12 @@ export default function TaskListPage() {
   const pct = totalTasks === 0 ? 0 : Math.round((totalCompleted / totalTasks) * 100)
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 w-full min-h-screen overflow-x-hidden" style={{ backgroundColor: theme.bg, color: theme.text }}>
-    <div className="max-w-4xl mx-auto w-full">
+    <div className="p-4 sm:p-6 lg:p-8 w-full min-h-full overflow-x-hidden">
+    <div className="max-w-5xl mx-auto w-full">
       {/* Header */}
       <div className="mb-6">
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0F172A' }}>Task List & Reminders</h1>
-        <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Task List & Reminders</h1>
+        <p className="text-sm mt-0.5" style={{ color: theme.textM }}>
           Stay organized with notes, tasks, groceries, and meetings
         </p>
       </div>

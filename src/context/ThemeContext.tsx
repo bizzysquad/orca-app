@@ -1,6 +1,144 @@
 'use client'
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
+// ── V10 Color Theme (sidebar gradients, accent colors) ──
+export interface ColorTheme {
+  id: string
+  name: string
+  category: 'women' | 'men'
+  variant: 'vivid' | 'night'
+  primary: string
+  primaryLight: string
+  sidebarBg: string
+  pageBg: string
+  headerBg: string
+  navActiveBg: string
+  navActiveIcon: string
+  sidebarBorderColor: string
+  sidebarGradientFrom: string
+  sidebarGradientTo: string
+  swatchFrom: string
+  swatchTo: string
+}
+
+export const ALL_THEMES: ColorTheme[] = [
+  // ─────── WOMEN'S VIVID ───────
+  {
+    id: 'rose-vivid', name: 'Rose Glow', category: 'women', variant: 'vivid',
+    primary: '#E91E8C', primaryLight: '#F472B6',
+    sidebarBg: '#1E0535', sidebarGradientFrom: '#2D0A4E', sidebarGradientTo: '#1A0230',
+    pageBg: '#180228', headerBg: '#1E0535',
+    navActiveBg: 'rgba(233,30,140,0.22)', navActiveIcon: '#F472B6',
+    sidebarBorderColor: 'rgba(233,30,140,0.15)',
+    swatchFrom: '#E91E8C', swatchTo: '#9C27B0',
+  },
+  {
+    id: 'violet-vivid', name: 'Violet Dream', category: 'women', variant: 'vivid',
+    primary: '#6366F1', primaryLight: '#A78BFA',
+    sidebarBg: '#120D3B', sidebarGradientFrom: '#1E1560', sidebarGradientTo: '#0E0A2A',
+    pageBg: '#0C0828', headerBg: '#120D3B',
+    navActiveBg: 'rgba(99,102,241,0.22)', navActiveIcon: '#A78BFA',
+    sidebarBorderColor: 'rgba(99,102,241,0.15)',
+    swatchFrom: '#6366F1', swatchTo: '#312E8F',
+  },
+  {
+    id: 'teal-vivid', name: 'Teal Wave', category: 'women', variant: 'vivid',
+    primary: '#0D9488', primaryLight: '#2DD4BF',
+    sidebarBg: '#032A26', sidebarGradientFrom: '#044038', sidebarGradientTo: '#021C18',
+    pageBg: '#021A16', headerBg: '#032A26',
+    navActiveBg: 'rgba(13,148,136,0.22)', navActiveIcon: '#2DD4BF',
+    sidebarBorderColor: 'rgba(13,148,136,0.15)',
+    swatchFrom: '#0D9488', swatchTo: '#065F50',
+  },
+  // ─────── WOMEN'S NIGHT ───────
+  {
+    id: 'rose-night', name: 'Rose Night', category: 'women', variant: 'night',
+    primary: '#E91E8C', primaryLight: '#F472B6',
+    sidebarBg: '#0A0010', sidebarGradientFrom: '#0E0018', sidebarGradientTo: '#060008',
+    pageBg: '#050007', headerBg: '#0A0010',
+    navActiveBg: 'rgba(233,30,140,0.14)', navActiveIcon: '#F472B6',
+    sidebarBorderColor: 'rgba(233,30,140,0.09)',
+    swatchFrom: '#3D0020', swatchTo: '#0A0010',
+  },
+  {
+    id: 'violet-night', name: 'Violet Night', category: 'women', variant: 'night',
+    primary: '#6366F1', primaryLight: '#A78BFA',
+    sidebarBg: '#07031A', sidebarGradientFrom: '#0C0726', sidebarGradientTo: '#040210',
+    pageBg: '#030110', headerBg: '#07031A',
+    navActiveBg: 'rgba(99,102,241,0.14)', navActiveIcon: '#A78BFA',
+    sidebarBorderColor: 'rgba(99,102,241,0.09)',
+    swatchFrom: '#1E1B4B', swatchTo: '#07031A',
+  },
+  {
+    id: 'teal-night', name: 'Teal Night', category: 'women', variant: 'night',
+    primary: '#0D9488', primaryLight: '#2DD4BF',
+    sidebarBg: '#020D0B', sidebarGradientFrom: '#041410', sidebarGradientTo: '#010806',
+    pageBg: '#010706', headerBg: '#020D0B',
+    navActiveBg: 'rgba(13,148,136,0.14)', navActiveIcon: '#2DD4BF',
+    sidebarBorderColor: 'rgba(13,148,136,0.09)',
+    swatchFrom: '#134E4A', swatchTo: '#020D0B',
+  },
+  // ─────── MEN'S VIVID ───────
+  {
+    id: 'amber-vivid', name: 'Amber Blaze', category: 'men', variant: 'vivid',
+    primary: '#F59E0B', primaryLight: '#FCD34D',
+    sidebarBg: '#1C1000', sidebarGradientFrom: '#2C1A00', sidebarGradientTo: '#110900',
+    pageBg: '#140B00', headerBg: '#1C1000',
+    navActiveBg: 'rgba(245,158,11,0.22)', navActiveIcon: '#FCD34D',
+    sidebarBorderColor: 'rgba(245,158,11,0.15)',
+    swatchFrom: '#F59E0B', swatchTo: '#B45309',
+  },
+  {
+    id: 'crimson-vivid', name: 'Crimson Fire', category: 'men', variant: 'vivid',
+    primary: '#EF4444', primaryLight: '#F87171',
+    sidebarBg: '#1A0404', sidebarGradientFrom: '#280808', sidebarGradientTo: '#100202',
+    pageBg: '#120202', headerBg: '#1A0404',
+    navActiveBg: 'rgba(239,68,68,0.22)', navActiveIcon: '#F87171',
+    sidebarBorderColor: 'rgba(239,68,68,0.15)',
+    swatchFrom: '#EF4444', swatchTo: '#991B1B',
+  },
+  {
+    id: 'rust-vivid', name: 'Warm Spice', category: 'men', variant: 'vivid',
+    primary: '#F97316', primaryLight: '#FB923C',
+    sidebarBg: '#1A0900', sidebarGradientFrom: '#2A1200', sidebarGradientTo: '#100500',
+    pageBg: '#120600', headerBg: '#1A0900',
+    navActiveBg: 'rgba(249,115,22,0.22)', navActiveIcon: '#FB923C',
+    sidebarBorderColor: 'rgba(249,115,22,0.15)',
+    swatchFrom: '#F97316', swatchTo: '#C2410C',
+  },
+  // ─────── MEN'S NIGHT ───────
+  {
+    id: 'amber-night', name: 'Amber Night', category: 'men', variant: 'night',
+    primary: '#F59E0B', primaryLight: '#FCD34D',
+    sidebarBg: '#0A0700', sidebarGradientFrom: '#0F0B00', sidebarGradientTo: '#050300',
+    pageBg: '#060400', headerBg: '#0A0700',
+    navActiveBg: 'rgba(245,158,11,0.14)', navActiveIcon: '#FCD34D',
+    sidebarBorderColor: 'rgba(245,158,11,0.09)',
+    swatchFrom: '#78350F', swatchTo: '#0A0700',
+  },
+  {
+    id: 'crimson-night', name: 'Crimson Night', category: 'men', variant: 'night',
+    primary: '#EF4444', primaryLight: '#F87171',
+    sidebarBg: '#0A0202', sidebarGradientFrom: '#100303', sidebarGradientTo: '#060101',
+    pageBg: '#060101', headerBg: '#0A0202',
+    navActiveBg: 'rgba(239,68,68,0.14)', navActiveIcon: '#F87171',
+    sidebarBorderColor: 'rgba(239,68,68,0.09)',
+    swatchFrom: '#7F1D1D', swatchTo: '#0A0202',
+  },
+  {
+    id: 'rust-night', name: 'Spice Night', category: 'men', variant: 'night',
+    primary: '#F97316', primaryLight: '#FB923C',
+    sidebarBg: '#0A0400', sidebarGradientFrom: '#100600', sidebarGradientTo: '#060200',
+    pageBg: '#060200', headerBg: '#0A0400',
+    navActiveBg: 'rgba(249,115,22,0.14)', navActiveIcon: '#FB923C',
+    sidebarBorderColor: 'rgba(249,115,22,0.09)',
+    swatchFrom: '#7C2D12', swatchTo: '#0A0400',
+  },
+]
+
+const DEFAULT_COLOR_THEME_ID = 'violet-vivid'
+
+// ── Legacy Theme interface (used across all existing pages) ──
 export interface GlassVars {
   glassBg: string
   glassStrongBg: string
@@ -40,7 +178,6 @@ export interface Theme {
   cardGlass: string
   navGlass: string
   glassVars: GlassVars
-  // Backward-compatible aliases (old theme property names)
   gold: string
   goldL: string
   goldD: string
@@ -82,168 +219,72 @@ const DARK_GLASS_VARS: GlassVars = {
   scrollThumbHover: '#505864',
 }
 
-// Helper to add backward-compatible aliases to a base theme definition
-function withAliases(t: Omit<Theme, 'gold' | 'goldL' | 'goldD' | 'goldBg' | 'goldBg2' | 'glow' | 'textS' | 'textM' | 'bgS'>): Theme {
-  return {
-    ...t,
-    gold: t.accent,
-    goldL: t.accent,
-    goldD: t.accent,
-    goldBg: `${t.accent}14`,
-    goldBg2: `${t.accent}26`,
-    glow: `0 0 20px ${t.accent}26`,
-    textS: t.subtext,
-    textM: t.subtext,
-    bgS: t.surface,
-  }
-}
-
 const LIGHT_SHADOW = '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)'
 const LIGHT_SHADOW_L = '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)'
 const LIGHT_OVERLAY = 'rgba(0,0,0,0.4)'
-
 const DARK_SHADOW = '0 1px 2px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.3)'
 const DARK_SHADOW_L = '0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.4)'
 const DARK_OVERLAY = 'rgba(0,0,0,0.8)'
 
-const BASE_THEME_PROPS = {
-  shadow: LIGHT_SHADOW,
-  shadowL: LIGHT_SHADOW_L,
-  overlay: LIGHT_OVERLAY,
-  cardGlass: 'rgba(255,255,255,0.85)',
-  navGlass: 'rgba(255,255,255,0.9)',
-  glassVars: LIGHT_GLASS_VARS,
-  ok: '#16a34a',
-  okBg: 'rgba(22,163,74,0.08)',
-  warn: '#d97706',
-  warnBg: 'rgba(217,119,6,0.08)',
-  bad: '#dc2626',
-  badBg: 'rgba(220,38,38,0.08)',
-} as const
-
-const BASE_DARK_THEME_PROPS = {
-  shadow: DARK_SHADOW,
-  shadowL: DARK_SHADOW_L,
-  overlay: DARK_OVERLAY,
-  cardGlass: 'rgba(30,41,59,0.85)',
-  navGlass: 'rgba(30,41,59,0.9)',
-  glassVars: DARK_GLASS_VARS,
-  ok: '#22c55e',
-  okBg: 'rgba(34,197,94,0.15)',
-  warn: '#f59e0b',
-  warnBg: 'rgba(245,158,11,0.15)',
-  bad: '#ef4444',
-  badBg: 'rgba(239,68,68,0.15)',
-} as const
-
-// Helper function to create a dark variant of a light theme
-function makeDark(lightTheme: Theme): Theme {
-  // Dark color mappings for backgrounds and surfaces
-  const darkBg = '#0F172A'
-  const darkSurface = '#1E293B'
-  const darkCard = '#1E293B'
-  const darkText = '#F1F5F9'
-  const darkSubtext = '#94A3B8'
-  const darkBorder = '#334155'
-  const darkInput = '#1E293B'
-  const darkNav = '#1E293B'
-
+/** Build a full backward-compatible Theme from a V10 ColorTheme + isDark flag */
+function buildTheme(ct: ColorTheme, isDark: boolean): Theme {
+  const accent = ct.primary
+  if (isDark) {
+    return {
+      id: ct.id, name: ct.name,
+      bg: ct.pageBg,
+      surface: ct.sidebarBg,
+      card: ct.headerBg,
+      text: '#F1F5F9',
+      subtext: '#94A3B8',
+      accent,
+      border: ct.sidebarBorderColor,
+      input: ct.sidebarBg,
+      nav: ct.sidebarBg,
+      ok: '#22c55e', okBg: 'rgba(34,197,94,0.15)',
+      warn: '#f59e0b', warnBg: 'rgba(245,158,11,0.15)',
+      bad: '#ef4444', badBg: 'rgba(239,68,68,0.15)',
+      shadow: DARK_SHADOW, shadowL: DARK_SHADOW_L, overlay: DARK_OVERLAY,
+      cardGlass: 'rgba(30,41,59,0.85)', navGlass: 'rgba(30,41,59,0.9)',
+      glassVars: DARK_GLASS_VARS,
+      gold: accent, goldL: ct.primaryLight, goldD: accent,
+      goldBg: `${accent}14`, goldBg2: `${accent}26`,
+      glow: `0 0 20px ${accent}26`,
+      textS: '#94A3B8', textM: '#94A3B8', bgS: ct.sidebarBg,
+    }
+  }
+  // Light mode — use universal light backgrounds, accent from theme
   return {
-    ...lightTheme,
-    bg: darkBg,
-    surface: darkSurface,
-    card: darkCard,
-    text: darkText,
-    subtext: darkSubtext,
-    border: darkBorder,
-    input: darkInput,
-    nav: darkNav,
-    ...BASE_DARK_THEME_PROPS,
-    // Update backward-compatible aliases to use dark values
-    textS: darkSubtext,
-    textM: darkSubtext,
-    bgS: darkSurface,
-    goldBg: `${lightTheme.accent}14`,
-    goldBg2: `${lightTheme.accent}26`,
-    glow: `0 0 20px ${lightTheme.accent}26`,
+    id: ct.id, name: ct.name,
+    bg: '#F0F2FA',
+    surface: '#FFFFFF',
+    card: '#FFFFFF',
+    text: '#0F172A',
+    subtext: '#64748B',
+    accent,
+    border: '#E2E8F0',
+    input: '#FFFFFF',
+    nav: '#FFFFFF',
+    ok: '#16a34a', okBg: 'rgba(22,163,74,0.08)',
+    warn: '#d97706', warnBg: 'rgba(217,119,6,0.08)',
+    bad: '#dc2626', badBg: 'rgba(220,38,38,0.08)',
+    shadow: LIGHT_SHADOW, shadowL: LIGHT_SHADOW_L, overlay: LIGHT_OVERLAY,
+    cardGlass: 'rgba(255,255,255,0.85)', navGlass: 'rgba(255,255,255,0.9)',
+    glassVars: LIGHT_GLASS_VARS,
+    gold: accent, goldL: ct.primaryLight, goldD: accent,
+    goldBg: `${accent}14`, goldBg2: `${accent}26`,
+    glow: `0 0 20px ${accent}26`,
+    textS: '#64748B', textM: '#64748B', bgS: '#FFFFFF',
   }
 }
 
-export const THEMES: Record<string, Theme> = {
-  'ocean-blue': withAliases({
-    id: 'ocean-blue', name: 'Ocean Blue',
-    bg: '#EAF3FF', surface: '#FFFFFF', card: '#DCEBFF',
-    text: '#0F172A', subtext: '#475569', accent: '#2563EB',
-    border: '#B3D4FF', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'sage-green': withAliases({
-    id: 'sage-green', name: 'Sage Green',
-    bg: '#ECFDF5', surface: '#FFFFFF', card: '#D1FAE5',
-    text: '#022C22', subtext: '#065F46', accent: '#10B981',
-    border: '#A7F3D0', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'sunset-orange': withAliases({
-    id: 'sunset-orange', name: 'Sunset Orange',
-    bg: '#FFF7ED', surface: '#FFFFFF', card: '#FFEDD5',
-    text: '#431407', subtext: '#9A3412', accent: '#F97316',
-    border: '#FED7AA', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'rose-pink': withAliases({
-    id: 'rose-pink', name: 'Rose Pink',
-    bg: '#FFF1F2', surface: '#FFFFFF', card: '#FFE4E6',
-    text: '#4C0519', subtext: '#9F1239', accent: '#F43F5E',
-    border: '#FECDD3', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'lavender-purple': withAliases({
-    id: 'lavender-purple', name: 'Lavender Purple',
-    bg: '#F5F3FF', surface: '#FFFFFF', card: '#EDE9FE',
-    text: '#2E1065', subtext: '#6D28D9', accent: '#7C3AED',
-    border: '#DDD6FE', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'teal-mint': withAliases({
-    id: 'teal-mint', name: 'Teal Mint',
-    bg: '#F0FDFA', surface: '#FFFFFF', card: '#CCFBF1',
-    text: '#042F2E', subtext: '#0F766E', accent: '#14B8A6',
-    border: '#99F6E4', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'sand-beige': withAliases({
-    id: 'sand-beige', name: 'Sand Beige',
-    bg: '#FAF3E0', surface: '#FFFFFF', card: '#F5E6CC',
-    text: '#1F2937', subtext: '#6B7280', accent: '#D97706',
-    border: '#E5D5B0', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'sky-indigo': withAliases({
-    id: 'sky-indigo', name: 'Sky Indigo',
-    bg: '#EEF2FF', surface: '#FFFFFF', card: '#E0E7FF',
-    text: '#1E1B4B', subtext: '#4338CA', accent: '#6366F1',
-    border: '#C7D2FE', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'soft-gray': withAliases({
-    id: 'soft-gray', name: 'Soft Gray',
-    bg: '#F3F4F6', surface: '#FFFFFF', card: '#E5E7EB',
-    text: '#111827', subtext: '#6B7280', accent: '#3B82F6',
-    border: '#D1D5DB', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-  'cool-aqua': withAliases({
-    id: 'cool-aqua', name: 'Cool Aqua',
-    bg: '#ECFEFF', surface: '#FFFFFF', card: '#CFFAFE',
-    text: '#083344', subtext: '#155E75', accent: '#06B6D4',
-    border: '#A5F3FC', input: '#FFFFFF', nav: '#FFFFFF',
-    ...BASE_THEME_PROPS,
-  }),
-}
-
+// Build the THEMES record for backward compatibility (used by Settings page etc.)
+export const THEMES: Record<string, Theme> = Object.fromEntries(
+  ALL_THEMES.map(ct => [ct.id, buildTheme(ct, true)])
+)
 export const THEME_LIST = Object.values(THEMES)
 
+// ── Context ──
 type ThemeContextType = {
   theme: Theme
   themeId: string
@@ -251,98 +292,103 @@ type ThemeContextType = {
   allThemes: Theme[]
   isDark: boolean
   toggleDark: () => void
+  // V10 additions
+  currentTheme: ColorTheme
+  colorThemeId: string
+  setColorTheme: (id: string) => void
 }
 
-const defaultTheme = THEMES['ocean-blue']
+const defaultCT = ALL_THEMES.find(t => t.id === DEFAULT_COLOR_THEME_ID)!
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: defaultTheme,
-  themeId: 'ocean-blue',
+  theme: buildTheme(defaultCT, true),
+  themeId: DEFAULT_COLOR_THEME_ID,
   setThemeId: () => {},
   allThemes: THEME_LIST,
-  isDark: false,
+  isDark: true,
   toggleDark: () => {},
+  currentTheme: defaultCT,
+  colorThemeId: DEFAULT_COLOR_THEME_ID,
+  setColorTheme: () => {},
 })
 
 const THEME_ID_KEY = 'orca-theme-id'
 const DARK_MODE_KEY = 'orca-dark-mode'
+const COLOR_THEME_KEY = 'orca-color-theme'
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [themeId, setThemeIdState] = useState<string>('ocean-blue')
-  const [isDarkMode, setIsDarkModeState] = useState<boolean>(false)
+  const [colorThemeId, setColorThemeIdState] = useState<string>(DEFAULT_COLOR_THEME_ID)
+  const [isDarkMode, setIsDarkModeState] = useState<boolean>(true) // V10 default: dark
 
-  const baseTheme = THEMES[themeId] || THEMES['ocean-blue']
-  const theme = isDarkMode ? makeDark(baseTheme) : baseTheme
+  const currentTheme = ALL_THEMES.find(t => t.id === colorThemeId) ?? defaultCT
+  const theme = buildTheme(currentTheme, isDarkMode)
 
-  const setThemeId = (id: string) => {
-    if (THEMES[id]) {
-      setThemeIdState(id)
+  const setColorTheme = (id: string) => {
+    if (ALL_THEMES.find(t => t.id === id)) {
+      setColorThemeIdState(id)
       try {
-        localStorage.setItem(THEME_ID_KEY, id)
-        window.dispatchEvent(new StorageEvent('storage', { key: THEME_ID_KEY, newValue: id }))
+        localStorage.setItem(COLOR_THEME_KEY, id)
+        localStorage.setItem(THEME_ID_KEY, id) // backward compat
         window.dispatchEvent(new CustomEvent('orca-theme-changed', { detail: { themeId: id } }))
       } catch {}
-      if (typeof console !== 'undefined') console.log('[ORCA Theme] Theme changed to:', id)
     }
   }
 
+  // Alias for backward compatibility
+  const setThemeId = setColorTheme
+
   const toggleDark = () => {
-    const newDarkMode = !isDarkMode
-    setIsDarkModeState(newDarkMode)
+    const newDark = !isDarkMode
+    setIsDarkModeState(newDark)
     try {
-      localStorage.setItem(DARK_MODE_KEY, newDarkMode ? 'true' : 'false')
-      window.dispatchEvent(new CustomEvent('orca-dark-mode-changed', { detail: { isDark: newDarkMode } }))
+      localStorage.setItem(DARK_MODE_KEY, newDark ? 'true' : 'false')
+      window.dispatchEvent(new CustomEvent('orca-dark-mode-changed', { detail: { isDark: newDark } }))
     } catch {}
-    if (typeof console !== 'undefined') console.log('[ORCA Theme] Dark mode changed to:', newDarkMode)
   }
 
+  // Hydrate from localStorage on mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(THEME_ID_KEY)
-      if (saved && THEMES[saved]) {
-        setThemeIdState(saved)
-        if (typeof console !== 'undefined') console.log('[ORCA Theme] Loaded theme:', saved)
-      } else {
-        setThemeIdState('ocean-blue')
-        if (typeof console !== 'undefined') console.log('[ORCA Theme] Using default theme: ocean-blue')
+      // Color theme
+      const savedColor = localStorage.getItem(COLOR_THEME_KEY) || localStorage.getItem(THEME_ID_KEY)
+      if (savedColor && ALL_THEMES.find(t => t.id === savedColor)) {
+        setColorThemeIdState(savedColor)
       }
-
-      const savedDarkMode = localStorage.getItem(DARK_MODE_KEY)
-      if (savedDarkMode === 'true') {
-        setIsDarkModeState(true)
-        if (typeof console !== 'undefined') console.log('[ORCA Theme] Dark mode enabled')
+      // Dark mode (default true for V10)
+      const savedDark = localStorage.getItem(DARK_MODE_KEY)
+      if (savedDark !== null) {
+        setIsDarkModeState(savedDark !== 'false')
       }
     } catch {}
   }, [])
 
+  // Cross-tab sync
   useEffect(() => {
     const storageHandler = (e: StorageEvent) => {
-      if (e.key === THEME_ID_KEY && e.newValue && THEMES[e.newValue]) {
-        setThemeIdState(e.newValue)
+      if ((e.key === COLOR_THEME_KEY || e.key === THEME_ID_KEY) && e.newValue && ALL_THEMES.find(t => t.id === e.newValue!)) {
+        setColorThemeIdState(e.newValue)
       }
       if (e.key === DARK_MODE_KEY && e.newValue !== null) {
-        setIsDarkModeState(e.newValue === 'true')
+        setIsDarkModeState(e.newValue !== 'false')
       }
     }
     const localWriteHandler = (e: any) => {
       const key = e?.detail?.key || ''
-      if (key === THEME_ID_KEY) {
+      if (key === COLOR_THEME_KEY || key === THEME_ID_KEY) {
         try {
-          const saved = localStorage.getItem(THEME_ID_KEY)
-          if (saved && THEMES[saved]) {
-            setThemeIdState(saved)
-          }
+          const saved = localStorage.getItem(COLOR_THEME_KEY) || localStorage.getItem(THEME_ID_KEY)
+          if (saved && ALL_THEMES.find(t => t.id === saved)) setColorThemeIdState(saved)
         } catch {}
       }
       if (key === DARK_MODE_KEY) {
         try {
           const saved = localStorage.getItem(DARK_MODE_KEY)
-          setIsDarkModeState(saved === 'true')
+          setIsDarkModeState(saved !== 'false')
         } catch {}
       }
     }
     const darkModeChangedHandler = (e: any) => {
-      setIsDarkModeState(e?.detail?.isDark ?? false)
+      setIsDarkModeState(e?.detail?.isDark ?? true)
     }
     window.addEventListener('storage', storageHandler)
     window.addEventListener('orca-local-write', localWriteHandler)
@@ -354,22 +400,31 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Apply theme to DOM
   useEffect(() => {
     const root = document.documentElement
 
-    // Add or remove dark class
     if (isDarkMode) {
       root.classList.add('dark')
     } else {
       root.classList.remove('dark')
     }
 
+    // V10 CSS custom properties for sidebar/gradients
+    root.style.setProperty('--theme-primary', currentTheme.primary)
+    root.style.setProperty('--theme-primary-light', currentTheme.primaryLight)
+    root.style.setProperty('--theme-sidebar-bg', currentTheme.sidebarBg)
+    root.style.setProperty('--theme-page-bg', currentTheme.pageBg)
+    root.style.setProperty('--theme-nav-active-bg', currentTheme.navActiveBg)
+    root.style.setProperty('--theme-nav-active-icon', currentTheme.navActiveIcon)
+    root.style.setProperty('--theme-sidebar-border', currentTheme.sidebarBorderColor)
+
+    // Legacy CSS custom properties
     root.style.setProperty('--body-bg', theme.bg)
     root.style.setProperty('--body-text', theme.text)
     root.style.setProperty('--card-bg', theme.card)
     root.style.setProperty('--card-border', theme.border)
     root.style.setProperty('--divider-color', theme.border)
-
     root.style.setProperty('--surface-bg', theme.surface)
     root.style.setProperty('--surface-card', theme.card)
     root.style.setProperty('--surface-elevated', theme.surface)
@@ -385,18 +440,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty('--gold-deep', theme.accent)
     root.style.setProperty('--nav-bg', theme.nav)
     root.style.setProperty('--input-bg', theme.input)
-
     root.style.setProperty('--ok-color', theme.ok)
     root.style.setProperty('--ok-bg', theme.okBg)
     root.style.setProperty('--warn-color', theme.warn)
     root.style.setProperty('--warn-bg', theme.warnBg)
     root.style.setProperty('--bad-color', theme.bad)
     root.style.setProperty('--bad-bg', theme.badBg)
-
     root.style.setProperty('--shadow', theme.shadow)
     root.style.setProperty('--shadow-lg', theme.shadowL)
     root.style.setProperty('--overlay', theme.overlay)
-
     root.style.setProperty('--glass-bg', theme.glassVars.glassBg)
     root.style.setProperty('--glass-strong-bg', theme.glassVars.glassStrongBg)
     root.style.setProperty('--glass-subtle-bg', theme.glassVars.glassSubtleBg)
@@ -414,14 +466,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.body.style.setProperty('color', theme.text, 'important')
     root.style.setProperty('background-color', theme.bg, 'important')
     root.style.setProperty('color', theme.text, 'important')
-
     document.body.style.backgroundColor = theme.bg
     document.body.style.color = theme.text
 
     const metaThemeColor = document.querySelector('meta[name="theme-color"]')
-    if (metaThemeColor) {
-      metaThemeColor.setAttribute('content', theme.bg)
-    }
+    if (metaThemeColor) metaThemeColor.setAttribute('content', theme.bg)
 
     let styleEl = document.getElementById('orca-theme-override') as HTMLStyleElement | null
     if (!styleEl) {
@@ -435,12 +484,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         color: ${theme.text} !important;
       }
     `
-
-    root.setAttribute('data-theme', themeId)
-  }, [theme, themeId, isDarkMode])
+    root.setAttribute('data-theme', colorThemeId)
+  }, [theme, colorThemeId, isDarkMode, currentTheme])
 
   return (
-    <ThemeContext.Provider value={{ theme, themeId, setThemeId, allThemes: THEME_LIST, isDark: isDarkMode, toggleDark }}>
+    <ThemeContext.Provider value={{
+      theme, themeId: colorThemeId, setThemeId,
+      allThemes: THEME_LIST, isDark: isDarkMode, toggleDark,
+      currentTheme, colorThemeId, setColorTheme,
+    }}>
       {children}
     </ThemeContext.Provider>
   )

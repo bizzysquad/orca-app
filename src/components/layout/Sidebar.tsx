@@ -13,6 +13,8 @@ import {
   ClipboardList,
   X,
   Shield,
+  ChevronRight,
+  LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
@@ -34,7 +36,7 @@ interface SidebarProps {
 
 export default function Sidebar({ userName = 'User', open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const { theme } = useTheme()
+  const { theme, currentTheme, isDark } = useTheme()
   const { data } = useOrcaData()
 
   // Custom logo from admin
@@ -46,10 +48,8 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
     return () => window.removeEventListener('orca-logo-updated', handler)
   }, [])
 
-  // Use OrcaData name (most up-to-date, editable in Settings) > server-passed userName > fallback
   const resolvedName = (data.user?.name && data.user.name.trim()) ? data.user.name : userName
 
-  // Icon and route lookup by nav id
   const navMeta: Record<string, { icon: React.ElementType; href: string; emoji: string; defaultLabel: string }> = {
     dashboard: { icon: LayoutDashboard, href: '/dashboard', emoji: '🏠', defaultLabel: 'Dashboard' },
     'smart-stack': { icon: BarChart3, href: '/smart-stack', emoji: '📊', defaultLabel: 'Smart Stack' },
@@ -60,7 +60,6 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
     admin: { icon: Shield, href: '/admin', emoji: '🔐', defaultLabel: 'Admin' },
   }
 
-  // Read admin nav config from localStorage for custom labels, order, visibility
   const [adminNav, setAdminNav] = useState<any[] | null>(null)
   useEffect(() => {
     const loadNav = () => {
@@ -79,11 +78,9 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
     }
   }, [])
 
-  // Build final nav items: admin config (ordered, filtered, renamed) merged with icon/route metadata
   const isAdmin = data.user?.email === 'mckiveja@gmail.com'
   const navItems: NavItem[] = (() => {
     if (adminNav && adminNav.length > 0) {
-      // Ensure required nav items are present even if saved config is missing them
       let merged = [...adminNav]
       const requiredIds = Object.keys(navMeta)
       requiredIds.forEach(id => {
@@ -102,97 +99,57 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         })
         .filter(Boolean) as NavItem[]
     }
-    // Fallback: default hardcoded nav
     return Object.entries(navMeta)
       .filter(([id]) => (id !== 'admin' || isAdmin) && id !== 'settings')
       .map(([id, meta]) => ({
-        id,
-        name: meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji,
+        id, name: meta.defaultLabel, icon: meta.icon, href: meta.href, emoji: meta.emoji,
       }))
   })()
 
-  // Navigation groups based on Figma design
-  const navGroups: Record<string, NavItem[]> = {
-    main: navItems.filter(item => item.id === 'dashboard'),
-    finance: navItems.filter(item => ['smart-stack', 'bill-boss'].includes(item.id)),
-    community: navItems.filter(item => item.id === 'stack-circle'),
-    tools: navItems.filter(item => item.id === 'task-list'),
-  }
+  const navGroups = [
+    { label: 'MAIN', items: navItems.filter(item => item.id === 'dashboard') },
+    { label: 'FINANCE', items: navItems.filter(item => ['smart-stack', 'bill-boss'].includes(item.id)) },
+    { label: 'COMMUNITY', items: navItems.filter(item => item.id === 'stack-circle') },
+    { label: 'PRODUCTIVITY', items: navItems.filter(item => item.id === 'task-list') },
+  ]
 
   const adminItem = isAdmin && navMeta.admin ? {
-    id: 'admin',
-    name: navMeta.admin.defaultLabel,
-    icon: navMeta.admin.icon,
-    href: navMeta.admin.href,
-    emoji: navMeta.admin.emoji,
+    id: 'admin', name: navMeta.admin.defaultLabel, icon: navMeta.admin.icon, href: navMeta.admin.href, emoji: navMeta.admin.emoji,
   } : null
 
   const settingsItem = navMeta.settings ? {
-    id: 'settings',
-    name: navMeta.settings.defaultLabel,
-    icon: navMeta.settings.icon,
-    href: navMeta.settings.href,
-    emoji: navMeta.settings.emoji,
+    id: 'settings', name: navMeta.settings.defaultLabel, icon: navMeta.settings.icon, href: navMeta.settings.href, emoji: navMeta.settings.emoji,
   } : null
 
-  const isActive = (href: string) => {
+  const isActivePath = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     return pathname.startsWith(href)
   }
 
   const initials = resolvedName.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2) || 'U'
 
-  // Render a nav item
   const renderNavItem = (item: NavItem) => {
-    const active = isActive(item.href)
+    const active = isActivePath(item.href)
     const Icon = item.icon
     return (
       <Link
         key={item.href}
         href={item.href}
         onClick={onClose}
-        className={cn(
-          'relative flex items-center gap-3',
-          'px-4 py-3 rounded-xl',
-          'transition-all duration-300 ease-out',
-          'text-sm font-medium',
-        )}
+        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
         style={{
-          color: active ? theme.gold : theme.textS,
-          backgroundColor: active ? theme.goldBg2 : 'transparent',
+          background: active ? currentTheme.navActiveBg : 'transparent',
+          fontWeight: active ? 600 : 400,
+          color: active ? '#FFFFFF' : '#94A3B8',
         }}
       >
-        {active && (
-          <div
-            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
-            style={{ backgroundColor: theme.gold }}
-          />
-        )}
         <Icon
-          size={18}
-          strokeWidth={active ? 2 : 1.5}
-          className="flex-shrink-0"
+          className="w-4 h-4 flex-shrink-0"
+          style={{ color: active ? currentTheme.navActiveIcon : '#475569' }}
         />
-        <span className="truncate">{item.name}</span>
+        <span className="flex-1 truncate">{item.name}</span>
+        {active && <ChevronRight className="w-3 h-3" style={{ color: currentTheme.navActiveIcon }} />}
       </Link>
-    )
-  }
-
-  // Render a nav group section
-  const renderNavGroup = (label: string, items: NavItem[]) => {
-    if (!items || items.length === 0) return null
-    return (
-      <div key={label} className="space-y-1">
-        <p
-          className="text-[10px] font-semibold uppercase tracking-[1.5px] px-4 pt-4 pb-2"
-          style={{ color: theme.textM }}
-        >
-          {label}
-        </p>
-        <div className="space-y-1">
-          {items.map(item => renderNavItem(item))}
-        </div>
-      </div>
     )
   }
 
@@ -201,8 +158,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
       {/* Mobile backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-40 backdrop-blur-sm md:hidden"
-          style={{ backgroundColor: theme.overlay }}
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
           onClick={onClose}
         />
       )}
@@ -212,95 +168,80 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         className={cn(
           'fixed left-0 top-0 bottom-0 z-50',
           'w-[240px]',
-          'border-r',
           'flex flex-col',
-          'pt-6 pb-6',
           'transition-transform duration-300 ease-out',
           open ? 'translate-x-0' : '-translate-x-full',
-          'md:translate-x-0'
+          'lg:translate-x-0'
         )}
         style={{
-          backgroundColor: theme.nav,
-          borderColor: `${theme.border}66`,
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          background: `linear-gradient(180deg, ${currentTheme.sidebarGradientFrom} 0%, ${currentTheme.sidebarGradientTo} 100%)`,
+          flexShrink: 0,
         }}
       >
-        {/* Logo and Brand */}
-        <div className="flex items-center justify-between px-5 mb-8 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            {customLogo ? (
-              <img src={customLogo} alt="ORCA" width={40} height={40} className="rounded-xl object-contain" style={{ boxShadow: `0 4px 12px ${theme.gold}33` }} />
-            ) : (
-              <Image src="/logo.svg" alt="ORCA" width={40} height={40} className="rounded-xl" style={{ boxShadow: `0 4px 12px ${theme.gold}33` }} />
-            )}
-            <div className="flex flex-col">
-              <h1 className="font-black text-base tracking-[-1px]" style={{ color: theme.gold }}>ORCA</h1>
-              <p className="text-[10px] tracking-[2px] uppercase" style={{ color: theme.textS }}>Financial Control</p>
-            </div>
+        {/* Logo */}
+        <div className="flex items-center gap-3 px-4 py-4" style={{ borderBottom: `1px solid ${currentTheme.sidebarBorderColor}` }}>
+          {customLogo ? (
+            <img src={customLogo} alt="ORCA" className="w-9 h-9 rounded-xl object-cover flex-shrink-0" style={{ boxShadow: `0 0 12px ${currentTheme.primary}44` }} />
+          ) : (
+            <Image src="/logo.svg" alt="ORCA" width={36} height={36} className="rounded-xl object-cover flex-shrink-0" style={{ boxShadow: `0 0 12px ${currentTheme.primary}44` }} />
+          )}
+          <div className="min-w-0">
+            <div style={{ color: currentTheme.primaryLight, fontWeight: 900, fontSize: 14, letterSpacing: '0.06em' }}>ORCA</div>
+            <div style={{ color: '#475569', fontSize: 9, letterSpacing: '0.1em', fontWeight: 600 }}>FINANCIAL CONTROL</div>
           </div>
-          <button
-            onClick={onClose}
-            className="md:hidden p-1.5 rounded-lg transition-colors"
-            style={{ color: theme.textS }}
-          >
-            <X size={20} />
+          <button className="ml-auto lg:hidden p-1 rounded-lg text-slate-400 hover:text-white flex-shrink-0" onClick={onClose}>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3">
-          {/* Main Group */}
-          {renderNavGroup('MAIN', navGroups.main)}
-
-          {/* Finance Group */}
-          {renderNavGroup('FINANCE', navGroups.finance)}
-
-          {/* Community Group */}
-          {renderNavGroup('COMMUNITY', navGroups.community)}
-
-          {/* Tools Group */}
-          {renderNavGroup('TOOLS', navGroups.tools)}
-
-          {/* Admin Group (if user is admin) */}
-          {adminItem && (
-            <div className="space-y-1">
-              <p
-                className="text-[10px] font-semibold uppercase tracking-[1.5px] px-4 pt-4 pb-2"
-                style={{ color: theme.textM }}
-              >
-                ADMIN
-              </p>
-              <div className="space-y-1">
-                {renderNavItem(adminItem)}
+        <nav className="flex-1 px-3 py-5 overflow-y-auto" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {navGroups.map(group => {
+            if (!group.items || group.items.length === 0) return null
+            return (
+              <div key={group.label}>
+                <div className="px-3 mb-1.5" style={{ color: `${currentTheme.primaryLight}55`, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em' }}>
+                  {group.label}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {group.items.map(item => renderNavItem(item))}
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })}
         </nav>
 
-        {/* Settings and User Profile at Bottom */}
-        <div className="pt-4 px-3 flex-shrink-0 space-y-2" style={{ borderTop: `1px solid ${theme.border}99` }}>
-          {/* Settings Link */}
-          {settingsItem && (
-            <div className="space-y-1">
-              {renderNavItem(settingsItem)}
-            </div>
-          )}
+        {/* Bottom nav: Settings + Admin */}
+        <div className="px-3 py-3" style={{ borderTop: `1px solid ${currentTheme.sidebarBorderColor}`, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {settingsItem && renderNavItem(settingsItem)}
 
-          {/* User Profile */}
-          <div
-            className="flex items-center gap-3 px-4 py-3 rounded-xl"
-            style={{ backgroundColor: `${theme.border}20` }}
-          >
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: `linear-gradient(135deg, ${theme.gold}, ${theme.goldD})` }}
+          {adminItem && (
+            <Link
+              href={adminItem.href}
+              onClick={onClose}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
+              style={{
+                background: isActivePath(adminItem.href) ? 'rgba(245,158,11,0.15)' : 'transparent',
+                fontWeight: isActivePath(adminItem.href) ? 600 : 400,
+                color: isActivePath(adminItem.href) ? '#FBBF24' : '#94A3B8',
+              }}
             >
-              <span className="font-bold text-xs" style={{ color: theme.bg }}>{initials}</span>
+              <Shield className="w-4 h-4 flex-shrink-0" style={{ color: isActivePath(adminItem.href) ? '#F59E0B' : '#475569' }} />
+              <span className="flex-1">Admin Panel</span>
+              <span className="ml-auto px-1.5 py-0.5 rounded text-[9px]" style={{ background: 'rgba(245,158,11,0.2)', color: '#F59E0B', fontWeight: 700 }}>ADMIN</span>
+            </Link>
+          )}
+        </div>
+
+        {/* User profile */}
+        <div className="px-4 py-3" style={{ borderTop: `1px solid ${currentTheme.sidebarBorderColor}` }}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: currentTheme.primary, fontSize: 11, fontWeight: 800 }}>
+              {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate" style={{ color: theme.text }}>{resolvedName}</p>
-              <p className="text-[10px] truncate" style={{ color: theme.textM }}>Active</p>
+              <div className="text-white truncate" style={{ fontSize: 13, fontWeight: 600 }}>{resolvedName}</div>
+              <div className="truncate" style={{ color: '#475569', fontSize: 10 }}>{data.user?.email || 'Active'}</div>
             </div>
           </div>
         </div>

@@ -1016,24 +1016,24 @@ export default function SmartStackPage() {
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen flex items-center justify-center">
-        <div>Loading...</div>
+      <div className="w-full min-h-full flex items-center justify-center">
+        <div style={{ color: theme.textS }}>Loading...</div>
       </div>
     )
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-x-hidden max-w-full">
-      <div className="max-w-3xl mx-auto w-full min-w-0">
+    <div className="w-full min-h-full p-4 sm:p-6 lg:p-8 overflow-x-hidden max-w-full">
+      <div className="max-w-5xl mx-auto w-full min-w-0">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-6"
         >
-          <h1 style={{ color: theme.text }} className="text-4xl font-bold mb-2">
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>
             Smart Stack
           </h1>
-          <p style={{ color: theme.textM }} className="text-lg">
+          <p className="text-sm mt-0.5" style={{ color: theme.textM }}>
             Complete financial management at a glance
           </p>
         </motion.div>
