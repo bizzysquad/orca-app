@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createBrowserClient } from '@supabase/ssr'
-import { useTheme, buildTheme, ALL_THEMES } from '@/context/ThemeContext'
+import { useTheme } from '@/context/ThemeContext'
 import {
   Shield,
   Users,
@@ -54,8 +54,6 @@ import {
   ShoppingCart,
   Calendar,
   Check,
-  Sun,
-  Moon,
 } from 'lucide-react'
 
 // Color constants (fallbacks only — component uses theme-aware values)
@@ -203,7 +201,7 @@ export default function AdminPage() {
 
   // Admin has its own local theme state that doesn't affect the global site theme
   const [adminThemeId, setAdminThemeIdState] = useState<string>('ocean-blue')
-  const [adminDarkMode, setAdminDarkMode] = useState(true)
+  const adminTheme = allThemes.find(t => t.id === adminThemeId) || allThemes[0]
 
   useEffect(() => {
     try {
@@ -212,29 +210,10 @@ export default function AdminPage() {
     } catch {}
   }, [])
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('orca-admin-dark-mode')
-      if (saved !== null) setAdminDarkMode(saved !== 'false')
-    } catch {}
-  }, [])
-
   const setAdminThemeId = (id: string) => {
     setAdminThemeIdState(id)
     try { localStorage.setItem('orca-admin-panel-theme', id) } catch {}
   }
-
-  const toggleAdminDarkMode = () => {
-    setAdminDarkMode(prev => {
-      const next = !prev
-      try { localStorage.setItem('orca-admin-dark-mode', String(next)) } catch {}
-      return next
-    })
-  }
-
-  // Build the admin theme with the dark/light flag
-  const adminColorTheme = ALL_THEMES.find(ct => ct.id === adminThemeId) || ALL_THEMES[0]
-  const adminTheme = buildTheme(adminColorTheme, adminDarkMode)
 
   // Theme-aware color constants — these map to the admin's chosen theme
   // The admin panel has its own theme independent of the user's global theme choice.
@@ -1061,14 +1040,6 @@ export default function AdminPage() {
               <a href="/dashboard" style={{ color: TEXT_SECONDARY, borderColor: BORDER_COLOR }} className="px-4 py-2 rounded-xl border text-sm hover:opacity-80 transition-opacity">
                 ← Back to App
               </a>
-              <button
-                onClick={toggleAdminDarkMode}
-                className="px-3 py-2 rounded-xl border text-sm hover:opacity-80 transition-all flex items-center gap-2"
-                style={{ borderColor: BORDER_COLOR, color: TEXT_SECONDARY, backgroundColor: `${GOLD}15` }}
-              >
-                {adminDarkMode ? <Sun size={14} /> : <Moon size={14} />}
-                {adminDarkMode ? 'Light' : 'Dark'}
-              </button>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}

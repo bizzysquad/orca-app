@@ -787,29 +787,6 @@ export default function DashboardPage() {
       } catch {}
     }
 
-    // Add vacation date blocks from Stack Circle vacation entries
-    if (typeof window !== 'undefined') {
-      try {
-        const savedGroups = localStorage.getItem('orca-stack-circle-groups')
-        if (savedGroups) {
-          const allGroups = JSON.parse(savedGroups)
-          allGroups.forEach((g: any) => {
-            if (g.entryType === 'vacation' && g.trip?.startDate && g.trip?.endDate) {
-              const tripStart = new Date(g.trip.startDate + 'T00:00:00')
-              const tripEnd = new Date(g.trip.endDate + 'T00:00:00')
-              const cursor = new Date(tripStart)
-              while (cursor <= tripEnd) {
-                if (cursor.getMonth() === calMonth && cursor.getFullYear() === calYear) {
-                  events.push({ date: cursor.getDate(), type: 'dayoff', label: `Vacation: ${g.customName || g.name || 'Trip'}` })
-                }
-                cursor.setDate(cursor.getDate() + 1)
-              }
-            }
-          })
-        }
-      } catch {}
-    }
-
     // Fallback: add group date from context if exists
     if (group?.date) {
       const groupDate = new Date(group.date + 'T00:00:00')

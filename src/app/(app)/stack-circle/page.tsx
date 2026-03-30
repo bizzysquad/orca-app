@@ -216,6 +216,13 @@ export default function StackCirclePage() {
   const [editingGroupName, setEditingGroupName] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState('');
 
+  // Trip details editing state
+  const [editingTrip, setEditingTrip] = useState(false);
+  const [editTripStart, setEditTripStart] = useState('');
+  const [editTripEnd, setEditTripEnd] = useState('');
+  const [editTripFlight, setEditTripFlight] = useState('');
+  const [editTripHotel, setEditTripHotel] = useState('');
+
   // Trip checklist management
   const [tripChecklistItems, setTripChecklistItems] = useState<ChecklistItem[]>([]);
   const [newChecklistText, setNewChecklistText] = useState('');
@@ -271,12 +278,12 @@ export default function StackCirclePage() {
   const allPaidUtils = roommates.members.every((m) => m.paidUtilities);
   const allPaid = allPaidRent && allPaidUtils;
 
-  // Invite link - using orcafin.app/invite/{group-name-slug}
+  // Invite link - using orcafin.app/invite/{group-name-slug}?code={code}
   const groupNameSlug = toSlug(
     currentGroup?.customName || currentGroup?.name || ''
   );
   const inviteLink = currentGroup
-    ? `https://orcafin.app/invite/${groupNameSlug}`
+    ? `https://orcafin.app/invite/${groupNameSlug}?code=${currentGroup.code}`
     : '';
 
   // Handlers for groups
@@ -399,17 +406,43 @@ export default function StackCirclePage() {
 
   const handleCopyLink = () => {
     if (inviteLink) {
-      navigator.clipboard.writeText(inviteLink).catch(() => {});
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(inviteLink).then(() => {
+          setCopiedLink(true);
+          setTimeout(() => setCopiedLink(false), 2000);
+        }).catch(() => {
+          // Fallback
+          const textArea = document.createElement('textarea');
+          textArea.value = inviteLink;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          setCopiedLink(true);
+          setTimeout(() => setCopiedLink(false), 2000);
+        });
+      }
     }
   };
 
   const handleCopyCode = () => {
     if (currentGroup?.code) {
-      navigator.clipboard.writeText(currentGroup.code).catch(() => {});
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentGroup.code).then(() => {
+          setCopiedLink(true);
+          setTimeout(() => setCopiedLink(false), 2000);
+        }).catch(() => {
+          // Fallback
+          const textArea = document.createElement('textarea');
+          textArea.value = currentGroup.code;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          setCopiedLink(true);
+          setTimeout(() => setCopiedLink(false), 2000);
+        });
+      }
     }
   };
 
@@ -426,6 +459,29 @@ export default function StackCirclePage() {
       setGroups(updatedGroups);
       setEditingGroupName(false);
     }
+  };
+
+  const handleSaveTripEdit = () => {
+    if (!currentGroup || !currentGroup.trip) return;
+    const start = new Date(editTripStart);
+    const end = new Date(editTripEnd);
+    const duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+    const updatedGroups = groups.map(g =>
+      g.id === currentGroup.id ? {
+        ...g,
+        trip: {
+          ...g.trip!,
+          startDate: editTripStart,
+          endDate: editTripEnd,
+          duration: duration > 0 ? duration : g.trip!.duration,
+          flight: editTripFlight || undefined,
+          hotel: editTripHotel || undefined,
+        }
+      } : g
+    );
+    setGroups(updatedGroups);
+    setEditingTrip(false);
   };
 
   const handleAddMoney = () => {
@@ -982,60 +1038,169 @@ export default function StackCirclePage() {
                       borderColor: tealBorder,
                     }}
                   >
-                    <h3
-                      className="font-bold text-base sm:text-lg mb-4 flex items-center gap-2"
-                      style={{ color: theme.text }}
-                    >
-                      <Plane className="w-5 h-5" style={{ color: teal }} />
-                      Trip Details
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs font-medium" style={{ color: theme.textS }}>Departure</p>
-                        <p className="text-sm font-semibold" style={{ color: theme.text }}>
-                          {currentGroup.trip.startDate
-                            ? new Date(currentGroup.trip.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                            : 'Not set'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium" style={{ color: theme.textS }}>Return</p>
-                        <p className="text-sm font-semibold" style={{ color: theme.text }}>
-                          {currentGroup.trip.endDate
-                            ? new Date(currentGroup.trip.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                            : 'Not set'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium" style={{ color: theme.textS }}>Duration</p>
-                        <p className="text-sm font-semibold" style={{ color: theme.text }}>
-                          {currentGroup.trip.duration} day{currentGroup.trip.duration !== 1 ? 's' : ''}
-                        </p>
-                      </div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3
+                        className="font-bold text-base sm:text-lg flex items-center gap-2"
+                        style={{ color: theme.text }}
+                      >
+                        <Plane className="w-5 h-5" style={{ color: teal }} />
+                        Trip Details
+                      </h3>
+                      {!editingTrip && (
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            setEditingTrip(true);
+                            setEditTripStart(currentGroup.trip?.startDate || '');
+                            setEditTripEnd(currentGroup.trip?.endDate || '');
+                            setEditTripFlight(currentGroup.trip?.flight || '');
+                            setEditTripHotel(currentGroup.trip?.hotel || '');
+                          }}
+                          className="p-2 rounded-lg hover:opacity-70 transition-opacity"
+                          style={{ color: teal }}
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </motion.button>
+                      )}
                     </div>
 
-                    {/* Flight & Hotel Info */}
-                    {(currentGroup.trip.flight || currentGroup.trip.hotel) && (
-                      <div className="mt-4 pt-4 border-t" style={{ borderColor: theme.border }}>
-                        {currentGroup.trip.flight && (
-                          <div className="flex gap-3 mb-3">
-                            <Plane className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: teal }} />
-                            <div>
-                              <p className="text-xs font-medium" style={{ color: theme.textS }}>Flight</p>
-                              <p className="text-sm" style={{ color: theme.text }}>{currentGroup.trip.flight}</p>
-                            </div>
+                    {editingTrip ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-medium mb-1" style={{ color: theme.textS }}>Departure</p>
+                            <input
+                              type="date"
+                              value={editTripStart}
+                              onChange={(e) => setEditTripStart(e.target.value)}
+                              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                              style={{
+                                backgroundColor: theme.bg,
+                                borderColor: theme.border,
+                                color: theme.text,
+                              }}
+                            />
                           </div>
-                        )}
-                        {currentGroup.trip.hotel && (
-                          <div className="flex gap-3">
-                            <Hotel className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: teal }} />
-                            <div>
-                              <p className="text-xs font-medium" style={{ color: theme.textS }}>Hotel</p>
-                              <p className="text-sm" style={{ color: theme.text }}>{currentGroup.trip.hotel}</p>
-                            </div>
+                          <div>
+                            <p className="text-xs font-medium mb-1" style={{ color: theme.textS }}>Return</p>
+                            <input
+                              type="date"
+                              value={editTripEnd}
+                              onChange={(e) => setEditTripEnd(e.target.value)}
+                              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                              style={{
+                                backgroundColor: theme.bg,
+                                borderColor: theme.border,
+                                color: theme.text,
+                              }}
+                            />
                           </div>
-                        )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-medium mb-1" style={{ color: theme.textS }}>Flight</p>
+                            <input
+                              type="text"
+                              value={editTripFlight}
+                              onChange={(e) => setEditTripFlight(e.target.value)}
+                              placeholder="e.g., AA123"
+                              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                              style={{
+                                backgroundColor: theme.bg,
+                                borderColor: theme.border,
+                                color: theme.text,
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium mb-1" style={{ color: theme.textS }}>Hotel</p>
+                            <input
+                              type="text"
+                              value={editTripHotel}
+                              onChange={(e) => setEditTripHotel(e.target.value)}
+                              placeholder="e.g., Hilton Downtown"
+                              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                              style={{
+                                backgroundColor: theme.bg,
+                                borderColor: theme.border,
+                                color: theme.text,
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={handleSaveTripEdit}
+                            className="flex-1 py-2 rounded-lg font-semibold text-sm transition-colors"
+                            style={{ backgroundColor: teal, color: '#fff' }}
+                          >
+                            Save
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setEditingTrip(false)}
+                            className="flex-1 py-2 rounded-lg font-semibold text-sm border transition-colors"
+                            style={{ borderColor: theme.border, color: theme.text }}
+                          >
+                            Cancel
+                          </motion.button>
+                        </div>
                       </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-medium" style={{ color: theme.textS }}>Departure</p>
+                            <p className="text-sm font-semibold" style={{ color: theme.text }}>
+                              {currentGroup.trip.startDate
+                                ? new Date(currentGroup.trip.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                : 'Not set'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium" style={{ color: theme.textS }}>Return</p>
+                            <p className="text-sm font-semibold" style={{ color: theme.text }}>
+                              {currentGroup.trip.endDate
+                                ? new Date(currentGroup.trip.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                : 'Not set'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium" style={{ color: theme.textS }}>Duration</p>
+                            <p className="text-sm font-semibold" style={{ color: theme.text }}>
+                              {currentGroup.trip.duration} day{currentGroup.trip.duration !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Flight & Hotel Info */}
+                        {(currentGroup.trip.flight || currentGroup.trip.hotel) && (
+                          <div className="mt-4 pt-4 border-t" style={{ borderColor: theme.border }}>
+                            {currentGroup.trip.flight && (
+                              <div className="flex gap-3 mb-3">
+                                <Plane className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: teal }} />
+                                <div>
+                                  <p className="text-xs font-medium" style={{ color: theme.textS }}>Flight</p>
+                                  <p className="text-sm" style={{ color: theme.text }}>{currentGroup.trip.flight}</p>
+                                </div>
+                              </div>
+                            )}
+                            {currentGroup.trip.hotel && (
+                              <div className="flex gap-3">
+                                <Hotel className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: teal }} />
+                                <div>
+                                  <p className="text-xs font-medium" style={{ color: theme.textS }}>Hotel</p>
+                                  <p className="text-sm" style={{ color: theme.text }}>{currentGroup.trip.hotel}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </motion.div>
                 )}
@@ -2328,6 +2493,84 @@ export default function StackCirclePage() {
           </>
         )}
       </motion.div>
+
+      {/* Invite Share Modal */}
+      <AnimatePresence>
+        {showInviteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+            onClick={() => setShowInviteModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl p-6"
+              style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-lg" style={{ color: theme.text }}>Share Invite</h3>
+                <button onClick={() => setShowInviteModal(false)} className="p-1.5 rounded-lg hover:opacity-70" style={{ color: theme.textM }}>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-sm mb-4" style={{ color: theme.textM }}>
+                Share the invite link or code with friends to join <strong style={{ color: theme.text }}>{currentGroup?.customName || currentGroup?.name}</strong>
+              </p>
+
+              {/* Invite Link */}
+              <div className="rounded-xl p-3 mb-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                <p className="text-xs mb-1 font-semibold" style={{ color: theme.textS }}>Invite Link</p>
+                <p className="text-sm font-mono truncate" style={{ color: teal }}>{inviteLink}</p>
+              </div>
+
+              {/* Invite Code */}
+              <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                <p className="text-xs mb-1 font-semibold" style={{ color: theme.textS }}>Invite Code</p>
+                <p className="text-lg font-bold tracking-wider" style={{ color: teal }}>{currentGroup?.code}</p>
+              </div>
+
+              {/* Share buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => { handleCopyLink(); setShowInviteModal(false); }}
+                  className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  style={{ backgroundColor: teal, color: '#fff' }}
+                >
+                  <Copy className="w-4 h-4" /> Copy Link
+                </button>
+                <button
+                  onClick={() => { handleCopyCode(); setShowInviteModal(false); }}
+                  className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  style={{ backgroundColor: theme.bg, color: teal, border: `1px solid ${theme.border}` }}
+                >
+                  <Copy className="w-4 h-4" /> Copy Code
+                </button>
+                <button
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({ title: `Join ${currentGroup?.customName || currentGroup?.name}`, text: `Join our group on ORCA! Use code: ${currentGroup?.code}`, url: inviteLink }).catch(() => {});
+                    } else {
+                      handleCopyLink();
+                    }
+                    setShowInviteModal(false);
+                  }}
+                  className="col-span-2 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  style={{ backgroundColor: `${teal}15`, color: teal, border: `1px solid ${teal}30` }}
+                >
+                  <Share2 className="w-4 h-4" /> Share via Device
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

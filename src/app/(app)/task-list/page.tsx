@@ -98,14 +98,7 @@ const syncTasksToCalendars = (tasks: Task[]) => {
 }
 
 export default function TaskListPage() {
-  const { theme, currentTheme } = useTheme()
-
-  // Override todo category color with current theme
-  const themedCategoryConfig = {
-    ...categoryConfig,
-    todo: { ...categoryConfig.todo, color: currentTheme.primary, bg: `${currentTheme.primary}15` },
-  }
-
+  const { theme } = useTheme()
   const [activeCategory, setActiveCategory] = useState<TaskCategory>('todo')
   const [tasks, setTasks] = useState<Task[]>(loadInitialTasks)
   const [notes, setNotes] = useState<Note[]>(loadInitialNotes)
@@ -232,7 +225,7 @@ export default function TaskListPage() {
 
       {/* Category cards - 4 column grid with per-category colors */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        {(Object.entries(themedCategoryConfig) as [TaskCategory, typeof categoryConfig[TaskCategory]][]).map(([key, cfg]) => {
+        {(Object.entries(categoryConfig) as [TaskCategory, typeof categoryConfig[TaskCategory]][]).map(([key, cfg]) => {
           const active = activeCategory === key
           const Icon = cfg.icon
           const count = getCategoryCount(key)
@@ -286,14 +279,14 @@ export default function TaskListPage() {
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm" style={{ fontWeight: 600, color: '#0F172A' }}>Overall Progress</span>
-            <span className="text-sm" style={{ color: currentTheme.primary, fontWeight: 700 }}>
+            <span className="text-sm" style={{ color: '#6366F1', fontWeight: 700 }}>
               {totalCompleted}/{totalTasks} completed
             </span>
           </div>
           <div className="rounded-full overflow-hidden" style={{ height: 8, background: '#F1F5F9' }}>
             <div
               className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${currentTheme.primary} 0%, #8B5CF6 100%)` }}
+              style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #6366F1 0%, #8B5CF6 100%)' }}
             />
           </div>
           <div className="text-xs mt-1.5" style={{ color: '#94A3B8' }}>{pct}% complete</div>
@@ -312,9 +305,9 @@ export default function TaskListPage() {
             >
               <div
                 className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
-                style={{ background: themedCategoryConfig.notes.bg }}
+                style={{ background: categoryConfig.notes.bg }}
               >
-                <StickyNote className="w-6 h-6" style={{ color: themedCategoryConfig.notes.color }} />
+                <StickyNote className="w-6 h-6" style={{ color: categoryConfig.notes.color }} />
               </div>
               <p className="text-sm" style={{ color: '#94A3B8' }}>
                 Add a note
@@ -442,7 +435,7 @@ export default function TaskListPage() {
               <button
                 onClick={addTask}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
-                style={{ background: currentTheme.primary, color: '#fff', fontWeight: 700 }}
+                style={{ background: '#6366F1', color: '#fff', fontWeight: 700 }}
               >
                 <Plus className="w-4 h-4" />
                 Add
@@ -491,11 +484,11 @@ export default function TaskListPage() {
               >
                 <div
                   className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
-                  style={{ background: themedCategoryConfig[activeCategory].bg }}
+                  style={{ background: categoryConfig[activeCategory].bg }}
                 >
                   {(() => {
-                    const Icon = themedCategoryConfig[activeCategory].icon
-                    return <Icon className="w-6 h-6" style={{ color: themedCategoryConfig[activeCategory].color }} />
+                    const Icon = categoryConfig[activeCategory].icon
+                    return <Icon className="w-6 h-6" style={{ color: categoryConfig[activeCategory].color }} />
                   })()}
                 </div>
                 <p className="text-sm" style={{ color: '#94A3B8' }}>

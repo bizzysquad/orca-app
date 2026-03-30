@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Edit3, Home, Phone, Car, CreditCard, Heart, Utensils, BookOpen, Zap, Scissors } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -248,6 +248,8 @@ export default function BillBossPage() {
   const [collapsedSplits, setCollapsedSplits] = useState<Record<string, boolean>>({})
   const [partialPayId, setPartialPayId] = useState<string | null>(null)
   const [partialPayAmount, setPartialPayAmount] = useState('')
+
+  const addBillFormRef = useRef<HTMLDivElement>(null)
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -680,12 +682,22 @@ export default function BillBossPage() {
             <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Manage your monthly bills</p>
           </div>
           <button
-            onClick={() => { if (editingBillId) handleCancelEdit(); else setShowAddForm(!showAddForm) }}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90 active:scale-95 shrink-0"
-            style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
+            onClick={() => {
+              if (editingBillId) {
+                handleCancelEdit();
+              } else {
+                setShowAddForm(prev => {
+                  if (!prev) {
+                    setTimeout(() => addBillFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                  }
+                  return !prev;
+                });
+              }
+            }}
+            className="shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
+            style={{ backgroundColor: '#fff', color: currentTheme.primary }}
           >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">{editingBillId ? 'Cancel Edit' : 'Add Bill'}</span>
+            {editingBillId ? 'Cancel Edit' : 'Add Bill'}
           </button>
         </div>
       </motion.div>
@@ -806,6 +818,7 @@ export default function BillBossPage() {
         <AnimatePresence>
           {showAddForm && (
             <motion.div
+              ref={addBillFormRef}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
@@ -1151,15 +1164,15 @@ export default function BillBossPage() {
                   key={bill.id}
                   variants={item}
                   transition={{ delay: idx * 0.03 }}
-                  className="flex items-center gap-4 px-5 py-4"
+                  className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4"
                   style={{ borderColor: theme.border }}
                 >
                   {/* Icon Badge */}
                   <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                    className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: `${iconConfig.color}20` }}
                   >
-                    <Icon className="w-5 h-5" style={{ color: iconConfig.color }} />
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: iconConfig.color }} />
                   </div>
                   {/* Name + Category */}
                   <div className="flex-1 min-w-0">
@@ -1170,40 +1183,40 @@ export default function BillBossPage() {
                     </p>
                   </div>
                   {/* Amount */}
-                  <p className="text-sm font-bold flex-shrink-0" style={{ color: '#EF4444' }}>–{fmt(bill.amount)}</p>
+                  <p className="text-xs sm:text-sm font-bold flex-shrink-0 truncate max-w-[80px] sm:max-w-none" style={{ color: '#EF4444' }}>–{fmt(bill.amount)}</p>
                   {/* Quick actions */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => handlePayFull(bill.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      className="p-1 sm:p-1.5 rounded-lg transition-colors hover:opacity-80"
                       style={{ backgroundColor: currentTheme.primary }}
                       title="Pay"
                     >
-                      <Check size={14} style={{ color: '#fff' }} />
+                      <Check size={12} className="sm:w-4 sm:h-4" style={{ color: '#fff' }} />
                     </button>
                     <button
                       onClick={() => setSplitModalBillId(bill.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      className="p-1 sm:p-1.5 rounded-lg transition-colors hover:opacity-80"
                       style={{ backgroundColor: `${currentTheme.primary}20` }}
                       title="Split"
                     >
-                      <Scissors size={14} style={{ color: currentTheme.primary }} />
+                      <Scissors size={12} className="sm:w-4 sm:h-4" style={{ color: currentTheme.primary }} />
                     </button>
                     <button
                       onClick={() => handleStartEdit(bill.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      className="p-1 sm:p-1.5 rounded-lg transition-colors hover:opacity-80"
                       style={{ backgroundColor: `${theme.gold}20` }}
                       title="Edit"
                     >
-                      <Edit3 size={14} style={{ color: theme.gold }} />
+                      <Edit3 size={12} className="sm:w-4 sm:h-4" style={{ color: theme.gold }} />
                     </button>
                     <button
                       onClick={() => handleDeleteBill(bill.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      className="p-1 sm:p-1.5 rounded-lg transition-colors hover:opacity-80"
                       style={{ backgroundColor: `${theme.bad}20` }}
                       title="Delete"
                     >
-                      <Trash2 size={14} style={{ color: theme.bad }} />
+                      <Trash2 size={12} className="sm:w-4 sm:h-4" style={{ color: theme.bad }} />
                     </button>
                   </div>
                 </motion.div>

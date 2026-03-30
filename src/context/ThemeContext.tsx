@@ -227,7 +227,7 @@ const DARK_SHADOW_L = '0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.4)'
 const DARK_OVERLAY = 'rgba(0,0,0,0.8)'
 
 /** Build a full backward-compatible Theme from a V10 ColorTheme + isDark flag */
-export function buildTheme(ct: ColorTheme, isDark: boolean): Theme {
+function buildTheme(ct: ColorTheme, isDark: boolean): Theme {
   const accent = ct.primary
   if (isDark) {
     return {
