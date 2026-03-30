@@ -64,7 +64,11 @@ function LoginPageInner() {
   const [forgotPasswordError, setForgotPasswordError] = useState('')
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false)
 
-  // Check for success message from signup redirect
+  // Invite flow: returnTo + invite banner
+  const returnTo = searchParams.get('returnTo') || ''
+  const isInviteFlow = searchParams.get('invite') === '1'
+
+  // Check for success message from signup redirect, and handle invite context
   useEffect(() => {
     const message = searchParams.get('message')
     if (message === 'account-created') {
@@ -79,7 +83,12 @@ function LoginPageInner() {
       setSuccessMessage('Please check your email for a verification link, then sign in.')
       setIsSignUp(false)
     }
-  }, [searchParams])
+
+    // Store returnTo in sessionStorage so it survives email-verify flow
+    if (returnTo) {
+      try { sessionStorage.setItem('orca-invite-returnto', returnTo) } catch {}
+    }
+  }, [searchParams, returnTo])
 
   // Forgot password handler
   const handleForgotPassword = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -153,8 +162,16 @@ function LoginPageInner() {
         return
       }
 
-      // Success - redirect to dashboard
-      router.push('/dashboard')
+      // Success - redirect to returnTo (invite flow) or dashboard
+      const storedReturnTo = returnTo || (() => {
+        try { return sessionStorage.getItem('orca-invite-returnto') || '' } catch { return '' }
+      })()
+      if (storedReturnTo) {
+        try { sessionStorage.removeItem('orca-invite-returnto') } catch {}
+        router.push(storedReturnTo)
+      } else {
+        router.push('/dashboard')
+      }
       router.refresh()
     } catch {
       setError('An unexpected error occurred. Please try again.')
@@ -203,8 +220,11 @@ function LoginPageInner() {
         return
       }
 
-      // Success - show message and redirect to login
-      setSuccessMessage('Account created! Please check your email to verify, then sign in.')
+      // Success - show message and switch to sign-in tab
+      const inviteMsg = (returnTo || (() => { try { return sessionStorage.getItem('orca-invite-returnto') || '' } catch { return '' } })())
+        ? ' After verifying, sign in here to complete joining your group.'
+        : ''
+      setSuccessMessage(`Account created! Please check your email to verify, then sign in.${inviteMsg}`)
       setIsSignUp(false)
       setEmail('')
       setPassword('')
@@ -521,6 +541,17 @@ function LoginPageInner() {
                   {isSignUp ? 'Join thousands taking control of their finances' : 'Sign in to your financial command center'}
                 </p>
               </div>
+
+              {/* Invite banner */}
+              {isInviteFlow && !successMessage && (
+                <div
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-4"
+                  style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.35)' }}
+                >
+                  <Users size={16} style={{ color: '#A5B4FC', flexShrink: 0 }} />
+                  <span style={{ color: '#C7D2FE' }}>You were invited to a Stack Circle group. Sign in or create an account to join.</span>
+                </div>
+              )}
 
               {/* Success Message */}
               {successMessage && (

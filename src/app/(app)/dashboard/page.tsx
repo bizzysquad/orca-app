@@ -686,9 +686,45 @@ export default function DashboardPage() {
     const events: CalendarEvent[] = []
 
     bills.forEach(bill => {
-      const d = new Date(bill.due + 'T00:00:00')
-      if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
-        events.push({ date: d.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+      if (!bill.due) return
+      const baseDate = new Date(bill.due + 'T00:00:00')
+      const recurrence = bill.recurrence || 'none'
+      const monthStart = new Date(calYear, calMonth, 1)
+      const monthEnd = new Date(calYear, calMonth + 1, 0)
+
+      if (recurrence === 'one-time' || recurrence === 'custom') {
+        // One-time or custom: show only in the exact due month/year
+        if (baseDate.getMonth() === calMonth && baseDate.getFullYear() === calYear) {
+          events.push({ date: baseDate.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+        }
+      } else if (recurrence === 'monthly') {
+        // Monthly: same day each month (clamped to month length)
+        const day = Math.min(baseDate.getDate(), monthEnd.getDate())
+        const candidate = new Date(calYear, calMonth, day)
+        if (candidate >= baseDate) {
+          events.push({ date: candidate.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+        }
+      } else if (recurrence === 'yearly') {
+        // Yearly: same month and day each year
+        if (baseDate.getMonth() === calMonth && calYear >= baseDate.getFullYear()) {
+          const day = Math.min(baseDate.getDate(), monthEnd.getDate())
+          events.push({ date: day, type: 'bill', label: bill.name, amount: bill.amount })
+        }
+      } else if (recurrence === 'weekly') {
+        // Weekly: step from base date into the viewed month
+        const intervalDays = 7
+        const cursor = new Date(baseDate)
+        if (cursor < monthStart) {
+          const daysGap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
+          cursor.setDate(cursor.getDate() + daysGap)
+        }
+        while (cursor > monthEnd) cursor.setDate(cursor.getDate() - intervalDays)
+        while (cursor <= monthEnd) {
+          if (cursor >= monthStart && cursor >= baseDate) {
+            events.push({ date: cursor.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+          }
+          cursor.setDate(cursor.getDate() + intervalDays)
+        }
       }
     })
 
@@ -780,6 +816,29 @@ export default function DashboardPage() {
                   }
                   cursor.setDate(cursor.getDate() + intervalDays)
                 }
+              }
+            }
+          })
+        }
+      } catch {}
+    }
+
+    // Add vacation date blocks from Stack Circle vacation entries
+    if (typeof window !== 'undefined') {
+      try {
+        const savedGroups = localStorage.getItem('orca-stack-circle-groups')
+        if (savedGroups) {
+          const allGroups = JSON.parse(savedGroups)
+          allGroups.forEach((g: any) => {
+            if (g.entryType === 'vacation' && g.trip?.startDate && g.trip?.endDate) {
+              const tripStart = new Date(g.trip.startDate + 'T00:00:00')
+              const tripEnd = new Date(g.trip.endDate + 'T00:00:00')
+              const cursor = new Date(tripStart)
+              while (cursor <= tripEnd) {
+                if (cursor.getMonth() === calMonth && cursor.getFullYear() === calYear) {
+                  events.push({ date: cursor.getDate(), type: 'dayoff', label: `Vacation: ${g.customName || g.name || 'Trip'}` })
+                }
+                cursor.setDate(cursor.getDate() + 1)
               }
             }
           })

@@ -78,7 +78,7 @@ function toIncomingPayments(entries: PaymentEntry[]) {
 }
 
 // ============== PROJECTION CALCULATOR COMPONENT ==============
-function ProjectionCalculator({ theme }: { theme: any }) {
+function ProjectionCalculator({ theme, currentTheme }: { theme: any; currentTheme: any }) {
   const [goalAmount, setGoalAmount] = useState('')
   const [currentSaved, setCurrentSaved] = useState('')
   const [timeframe, setTimeframe] = useState('')
@@ -111,8 +111,8 @@ function ProjectionCalculator({ theme }: { theme: any }) {
   return (
     <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-5">
       <div className="flex items-center gap-3 mb-5">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `#0891B220` }}>
-          <Target size={20} style={{ color: '#0891B2' }} />
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${currentTheme.primary}20` }}>
+          <Target size={20} style={{ color: currentTheme.primary }} />
         </div>
         <div>
           <h3 style={{ color: theme.text }} className="font-bold text-base">Projection Calculator</h3>
@@ -186,7 +186,7 @@ function ProjectionCalculator({ theme }: { theme: any }) {
           onClick={calculate}
           className="w-full py-2.5 rounded-xl font-bold text-sm"
           style={{
-            backgroundColor: '#0891B2',
+            backgroundColor: currentTheme.primary,
             color: '#fff',
           }}
         >
@@ -204,13 +204,13 @@ function ProjectionCalculator({ theme }: { theme: any }) {
               Based on your income and bills this month, you need to set aside:
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `#0891B220` }}>
+              <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `${currentTheme.primary}20` }}>
                 <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Week</p>
-                <p style={{ color: '#0891B2' }} className="text-lg font-bold">{fmt(result.perWeek)}</p>
+                <p style={{ color: currentTheme.primary }} className="text-lg font-bold">{fmt(result.perWeek)}</p>
               </div>
-              <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `#0891B220` }}>
+              <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `${currentTheme.primary}20` }}>
                 <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Day</p>
-                <p style={{ color: '#0891B2' }} className="text-lg font-bold">{fmt(result.perDay)}</p>
+                <p style={{ color: currentTheme.primary }} className="text-lg font-bold">{fmt(result.perDay)}</p>
               </div>
             </div>
           </motion.div>
@@ -303,6 +303,31 @@ export default function SmartStackPage() {
     return '';
   });
 
+  // Splitter month navigation
+  const now = new Date();
+  const [splitterMonth, setSplitterMonth] = useState(now.getMonth());
+  const [splitterYear, setSplitterYear] = useState(now.getFullYear());
+
+  const handleSplitterPrevMonth = () => {
+    setSplitterMonth(prev => {
+      if (prev === 0) {
+        setSplitterYear(y => y - 1);
+        return 11;
+      }
+      return prev - 1;
+    });
+  };
+
+  const handleSplitterNextMonth = () => {
+    setSplitterMonth(prev => {
+      if (prev === 11) {
+        setSplitterYear(y => y + 1);
+        return 0;
+      }
+      return prev + 1;
+    });
+  };
+
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -336,6 +361,7 @@ export default function SmartStackPage() {
   const [customPeriodEnd, setCustomPeriodEnd] = useState('');
 
   const [weekendWorkDays, setWeekendWorkDays] = useState<string[]>([]);
+  const [weekendsEnabled, setWeekendsEnabled] = useState(true);
 
   const handleBudgetLock = () => {
     if (!budgetLocked) {
@@ -478,9 +504,13 @@ export default function SmartStackPage() {
       const dateStr = d.toISOString().split('T')[0];
       const dayOfWeek = d.getDay();
       const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
-      const isWeekendWork = isWknd && weekendWorkDays.includes(dateStr);
 
-      if (!isWknd || isWeekendWork) {
+      // A weekend day counts as scheduled if:
+      // - weekendsEnabled is true (global toggle), OR
+      // - the specific date is in weekendWorkDays (individual override)
+      const isScheduled = !isWknd || weekendsEnabled || weekendWorkDays.includes(dateStr);
+
+      if (isScheduled) {
         totalScheduledDays++;
         if (!daysOff.some((off) => off.date === dateStr)) {
           workDays++;
@@ -491,7 +521,7 @@ export default function SmartStackPage() {
 
     if (totalScheduledDays === 0) return effectiveNetIncome;
     return effectiveNetIncome * (workDays / totalScheduledDays);
-  }, [effectiveNetIncome, effectivePeriod, daysOff, weekendWorkDays]);
+  }, [effectiveNetIncome, effectivePeriod, daysOff, weekendWorkDays, weekendsEnabled]);
 
   const checkAmount = projectedCheckAmount;
 
@@ -517,13 +547,24 @@ export default function SmartStackPage() {
       const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
 
       if (isWknd) {
-        const isMarkedWorking = weekendWorkDays.includes(dateStr);
-        const isMarkedOff = daysOff.some((d) => d.date === dateStr);
-
-        if (!isMarkedWorking && !isMarkedOff) {
-          setWeekendWorkDays(prev => [...prev, dateStr]);
-        } else if (isMarkedWorking && !isMarkedOff) {
-          setWeekendWorkDays(prev => prev.filter(d => d !== dateStr));
+        if (weekendsEnabled) {
+          // When weekends globally enabled, toggle day off like any weekday
+          setDaysOff((prev) => {
+            const exists = prev.find((d) => d.date === dateStr);
+            if (exists) {
+              return prev.filter((d) => d.date !== dateStr);
+            } else {
+              return [...prev, { date: dateStr }];
+            }
+          });
+        } else {
+          // When weekends globally disabled, toggle individual override
+          const isMarkedWorking = weekendWorkDays.includes(dateStr);
+          if (isMarkedWorking) {
+            setWeekendWorkDays(prev => prev.filter(d => d !== dateStr));
+          } else {
+            setWeekendWorkDays(prev => [...prev, dateStr]);
+          }
         }
       } else {
         setDaysOff((prev) => {
@@ -563,8 +604,8 @@ export default function SmartStackPage() {
         className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full"
       >
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `#0891B220` }}>
-            <BarChart3 size={20} style={{ color: '#0891B2' }} />
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${currentTheme.primary}20` }}>
+            <BarChart3 size={20} style={{ color: currentTheme.primary }} />
           </div>
           <div>
             <h3 style={{ color: theme.text }} className="text-base font-bold">Check Projector</h3>
@@ -590,13 +631,13 @@ export default function SmartStackPage() {
 
           <div>
             <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide mb-2">Frequency</p>
-            <div className="flex gap-2 rounded-2xl p-1" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}>
+            <div className="flex gap-2 rounded-2xl p-1" style={{ backgroundColor: `${currentTheme.primary}20`, border: `1px solid ${currentTheme.primary}` }}>
               <button
                 onClick={() => setProjFreq('weekly')}
                 className="flex-1 py-3 rounded-2xl text-sm transition-all font-bold"
                 style={{
-                  backgroundColor: projFreq === 'weekly' ? '#0891B2' : 'transparent',
-                  color: projFreq === 'weekly' ? '#fff' : '#0891B2',
+                  backgroundColor: projFreq === 'weekly' ? currentTheme.primary : 'transparent',
+                  color: projFreq === 'weekly' ? '#fff' : currentTheme.primaryLight,
                 }}
               >
                 Weekly
@@ -605,8 +646,8 @@ export default function SmartStackPage() {
                 onClick={() => setProjFreq('biweekly')}
                 className="flex-1 py-3 rounded-2xl text-sm transition-all font-bold"
                 style={{
-                  backgroundColor: projFreq === 'biweekly' ? '#0891B2' : 'transparent',
-                  color: projFreq === 'biweekly' ? '#fff' : '#0891B2',
+                  backgroundColor: projFreq === 'biweekly' ? currentTheme.primary : 'transparent',
+                  color: projFreq === 'biweekly' ? '#fff' : currentTheme.primaryLight,
                 }}
               >
                 Bi-Weekly
@@ -615,10 +656,10 @@ export default function SmartStackPage() {
           </div>
 
           <div className="flex items-center gap-2 max-w-full">
-            <div className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 flex-wrap max-w-full" style={{ backgroundColor: `#0891B220`, color: '#0891B2', border: `1px solid #0891B2` }}>
+            <div className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 flex-wrap max-w-full" style={{ backgroundColor: `${currentTheme.primary}20`, color: currentTheme.primary, border: `1px solid ${currentTheme.primary}` }}>
               <span>📅</span>
               <span className="truncate">{effectivePeriod.label}</span>
-              <span className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap" style={{ background: '#0891B2', color: '#fff', fontWeight: 700 }}>Current</span>
+              <span className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap" style={{ background: currentTheme.primary, color: '#fff', fontWeight: 700 }}>Current</span>
             </div>
           </div>
 
@@ -627,29 +668,44 @@ export default function SmartStackPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="min-w-0">
                 <label className="block text-xs mb-1" style={{ color: theme.textM }}>Start Date</label>
-                <input type="date" value={customPeriodStart} onChange={(e) => setCustomPeriodStart(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm outline-none box-border" style={{
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
-                  color: theme.text,
-                  border: `1px solid ${theme.border}`,
-                }} />
+                <CalendarPicker value={customPeriodStart} onChange={setCustomPeriodStart} placeholder="Select start date" theme={theme} showQuickSelect={false} />
               </div>
               <div className="min-w-0">
-                <label className="block text-xs mb-1" style={{ color: theme.textM }}>Last Date</label>
-                <input type="date" value={customPeriodEnd} onChange={(e) => setCustomPeriodEnd(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm outline-none box-border" style={{
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
-                  color: theme.text,
-                  border: `1px solid ${theme.border}`,
-                }} />
+                <label className="block text-xs mb-1" style={{ color: theme.textM }}>End Date</label>
+                <CalendarPicker value={customPeriodEnd} onChange={setCustomPeriodEnd} placeholder="Select end date" theme={theme} showQuickSelect={false} />
               </div>
             </div>
+            {customPeriodStart && customPeriodEnd && (
+              <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                <span className="text-xs" style={{ color: theme.textM }}>Custom period active</span>
+                <button onClick={() => { setCustomPeriodStart(''); setCustomPeriodEnd(''); }}
+                  className="text-xs px-2 py-1 rounded-lg" style={{ color: '#EF4444', backgroundColor: isDark ? '#2D0A0A' : '#FEF2F2' }}>
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Pay Period Calendar</div>
-              <div className="text-xs" style={{ color: theme.textM }}>Click to mark days off</div>
+              <div className="text-xs" style={{ color: theme.textM }}>Click to toggle days on/off</div>
+            </div>
+
+            {/* Weekend toggle */}
+            <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+              <div>
+                <span className="text-xs font-semibold" style={{ color: theme.text }}>Include Weekends</span>
+                <span className="text-xs ml-1.5" style={{ color: theme.textM }}>({weekendsEnabled ? 'on' : 'off'})</span>
+              </div>
+              <button
+                onClick={() => setWeekendsEnabled(prev => !prev)}
+                className="relative w-11 h-6 rounded-full transition-colors"
+                style={{ backgroundColor: weekendsEnabled ? currentTheme.primary : theme.border }}
+              >
+                <div className="absolute top-0.5 rounded-full w-5 h-5 bg-white shadow transition-transform"
+                  style={{ transform: weekendsEnabled ? 'translateX(22px)' : 'translateX(2px)' }} />
+              </button>
             </div>
 
             <div className="grid grid-cols-7 gap-1 mb-2">
@@ -664,6 +720,9 @@ export default function SmartStackPage() {
                   const off = day && isDayOff(day);
                   const wk = day && isWeekend(day);
                   const wkWork = day && isWeekendWorking(day);
+                  // A day is "active" (scheduled to work) if it's a weekday, or weekend with global toggle on, or individually overridden
+                  const isActive = day && (!wk || weekendsEnabled || wkWork);
+                  const isOff = off || (wk && !weekendsEnabled && !wkWork);
 
                   return (
                     <button
@@ -672,21 +731,21 @@ export default function SmartStackPage() {
                       className="flex flex-col items-center justify-center rounded-xl transition-all"
                       style={{
                         height: 52,
-                        backgroundColor: day ? (off ? (theme.bg) : wk ? (theme.bg) : `#0891B220`) : 'transparent',
-                        border: day ? `1px solid ${off ? theme.border : wk ? theme.border : '#0891B2'}` : 'none',
-                        opacity: day && wk && !wkWork ? 0.5 : 1,
-                        cursor: day && (wk && !wkWork) ? 'default' : day ? 'pointer' : 'default',
+                        backgroundColor: day ? (isOff ? theme.bg : isActive ? `${currentTheme.primary}20` : theme.bg) : 'transparent',
+                        border: day ? `1px solid ${isOff ? theme.border : isActive ? currentTheme.primary : theme.border}` : 'none',
+                        opacity: 1,
+                        cursor: day ? 'pointer' : 'default',
                       }}
                     >
                       {day && (
                         <>
                           <span className="text-xs" style={{ color: theme.textM, fontWeight: 500 }}>{day.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2)}</span>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: off ? theme.textM : wk ? theme.textM : '#0891B2' }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM }}>
                             {day.getDate()}
                           </span>
-                          {!wk && (
-                            <span className="text-xs" style={{ color: off ? theme.textM : '#0891B2', fontSize: 9 }}>{off ? 'off' : 'on'}</span>
-                          )}
+                          <span className="text-xs" style={{ color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM, fontSize: 9 }}>
+                            {isOff ? 'off' : isActive ? 'on' : 'off'}
+                          </span>
                         </>
                       )}
                     </button>
@@ -696,9 +755,9 @@ export default function SmartStackPage() {
             </div>
           </div>
 
-          <div className="rounded-xl p-4" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}>
+          <div className="rounded-xl p-4" style={{ backgroundColor: `${currentTheme.primary}20`, border: `1px solid ${currentTheme.primary}` }}>
             <div className="text-xs mb-1" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Projected Check Amount</div>
-            <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: '#0891B2' }}>${projectedCheckAmount.toFixed(2)}</div>
+            <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: currentTheme.primary }}>${projectedCheckAmount.toFixed(2)}</div>
             <div className="text-xs mt-1 break-words" style={{ color: theme.textM }}>Based on ${effectiveNetIncome.toFixed(2)} net income · {Math.round((projectedCheckAmount / effectiveNetIncome) * 7)} work days</div>
           </div>
         </div>
@@ -734,8 +793,8 @@ export default function SmartStackPage() {
         {projectionMode === 'payment' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `#0891B220` }}>
-                <Wallet className="w-5 h-5" style={{ color: '#0891B2' }} />
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${currentTheme.primary}20` }}>
+                <Wallet className="w-5 h-5" style={{ color: currentTheme.primary }} />
               </div>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Incoming Payments</h2>
@@ -779,7 +838,7 @@ export default function SmartStackPage() {
                   {(['none', 'weekly', 'biweekly', 'monthly'] as const).map(r => (
                     <button key={r} onClick={() => setNewPaymentRecurrence(r)}
                       className="px-3 py-1.5 rounded-lg text-xs capitalize transition-all"
-                      style={{ backgroundColor: newPaymentRecurrence === r ? '#0891B2' : (theme.border), color: newPaymentRecurrence === r ? '#fff' : theme.textM, fontWeight: newPaymentRecurrence === r ? 700 : 400 }}>
+                      style={{ backgroundColor: newPaymentRecurrence === r ? currentTheme.primary : (theme.border), color: newPaymentRecurrence === r ? '#fff' : theme.textM, fontWeight: newPaymentRecurrence === r ? 700 : 400 }}>
                       {r.replace('-', '‑')}
                     </button>
                   ))}
@@ -809,7 +868,7 @@ export default function SmartStackPage() {
                 )}
                 <button
                   className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
-                  style={{ backgroundColor: editingPaymentId ? currentTheme.primary : '#0891B2', color: '#fff' }}
+                  style={{ backgroundColor: editingPaymentId ? currentTheme.primary : currentTheme.primary, color: '#fff' }}
                   onClick={() => {
                     const amt = parseFloat(newPaymentAmount);
                     if (!amt || amt <= 0 || !newPaymentDate || !newPaymentDesc.trim()) {
@@ -885,7 +944,7 @@ export default function SmartStackPage() {
                       setNewPaymentDate(p.date);
                       setNewPaymentDesc(p.description);
                       setNewPaymentRecurrence(p.recurrence || 'none');
-                    }} className="p-1.5 rounded-lg hover:opacity-80 transition-all" style={{ color: '#0891B2' }}>
+                    }} className="p-1.5 rounded-lg hover:opacity-80 transition-all" style={{ color: currentTheme.primary }}>
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button title="Delete payment" onClick={() => {
@@ -906,27 +965,94 @@ export default function SmartStackPage() {
 
         {/* ── SPLITTER — always shown below Incoming Payments ─── */}
         {projectionMode === 'payment' && (() => {
-          const now = new Date()
-          const splitterMonthIdx = now.getMonth()
-          const splitterYear = now.getFullYear()
           const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
-          const daysInMonth = new Date(splitterYear, splitterMonthIdx + 1, 0).getDate()
+          const daysInMonth = new Date(splitterYear, splitterMonth + 1, 0).getDate()
 
-          // Auto income from payment entries for current month
-          const autoIncome = paymentEntries
-            .filter(p => {
-              const d = new Date(p.date + 'T00:00:00')
-              return d.getMonth() === splitterMonthIdx && d.getFullYear() === splitterYear && p.status !== 'received'
-            })
-            .reduce((sum, p) => sum + p.amount, 0)
+          // Helper: expand recurring payments into a given month
+          function getRecurringAmountForMonth(entries: PaymentEntry[], monthIdx: number, year: number): number {
+            let total = 0;
+            const monthStart = new Date(year, monthIdx, 1);
+            const monthEnd = new Date(year, monthIdx + 1, 0);
 
-          // Auto bills from Bill Boss
-          const autoBills = (data.bills || [])
-            .filter((b: any) => {
-              const d = new Date((b.due || '') + 'T00:00:00')
-              return d.getMonth() === splitterMonthIdx && d.getFullYear() === splitterYear && b.status !== 'paid'
-            })
-            .reduce((sum: number, b: any) => sum + b.amount, 0)
+            entries.forEach(p => {
+              const baseDate = new Date(p.date + 'T00:00:00');
+
+              if (!p.recurrence || p.recurrence === 'none') {
+                // One-time: exact month match
+                if (baseDate.getMonth() === monthIdx && baseDate.getFullYear() === year) {
+                  total += p.amount;
+                }
+              } else if (p.recurrence === 'monthly') {
+                // Monthly: occurs once per month if base date <= month end
+                if (baseDate <= monthEnd) {
+                  total += p.amount;
+                }
+              } else {
+                // Weekly (7) or biweekly (14)
+                const interval = p.recurrence === 'weekly' ? 7 : 14;
+                const cursor = new Date(baseDate);
+                // Fast-forward near the month
+                if (cursor < monthStart) {
+                  const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * interval)) * interval;
+                  cursor.setDate(cursor.getDate() + gap);
+                }
+                while (cursor <= monthEnd) {
+                  if (cursor >= monthStart && cursor >= baseDate) {
+                    total += p.amount;
+                  }
+                  cursor.setDate(cursor.getDate() + interval);
+                }
+              }
+            });
+
+            return total;
+          }
+
+          // Helper: expand recurring bills into a given month
+          function getRecurringBillsForMonth(bills: any[], monthIdx: number, year: number): number {
+            let total = 0;
+            const monthStart = new Date(year, monthIdx, 1);
+            const monthEnd = new Date(year, monthIdx + 1, 0);
+
+            bills.forEach(b => {
+              const baseDate = new Date((b.due || '') + 'T00:00:00');
+
+              if (!b.recurrence || b.recurrence === 'none') {
+                // One-time: exact month match
+                if (baseDate.getMonth() === monthIdx && baseDate.getFullYear() === year) {
+                  total += b.amount;
+                }
+              } else if (b.recurrence === 'monthly') {
+                // Monthly: occurs once per month if base date <= month end
+                if (baseDate <= monthEnd) {
+                  total += b.amount;
+                }
+              } else {
+                // Weekly (7) or biweekly (14)
+                const interval = b.recurrence === 'weekly' ? 7 : 14;
+                const cursor = new Date(baseDate);
+                // Fast-forward near the month
+                if (cursor < monthStart) {
+                  const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * interval)) * interval;
+                  cursor.setDate(cursor.getDate() + gap);
+                }
+                while (cursor <= monthEnd) {
+                  if (cursor >= monthStart && cursor >= baseDate) {
+                    total += b.amount;
+                  }
+                  cursor.setDate(cursor.getDate() + interval);
+                }
+              }
+            });
+
+            return total;
+          }
+
+          // Auto income from payment entries (including recurring) for selected month
+          const autoIncome = getRecurringAmountForMonth(paymentEntries, splitterMonth, splitterYear)
+
+          // Auto bills from Bill Boss (including recurring) for selected month
+          const autoBills = getRecurringBillsForMonth(data.bills || [], splitterMonth, splitterYear)
 
           // Use auto or manual based on toggle
           const monthlyIncome = splitterIncomeMode === 'manual' ? (parseFloat(manualIncome) || 0) : autoIncome
@@ -951,10 +1077,10 @@ export default function SmartStackPage() {
           )
 
           return (
-            <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+            <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
               <div className="flex items-center gap-3 mb-5">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `#0891B220` }}>
-                  <TrendingUp className="w-5 h-5" style={{ color: '#0891B2' }} />
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${currentTheme.primary}20` }}>
+                  <TrendingUp className="w-5 h-5" style={{ color: currentTheme.primary }} />
                 </div>
                 <div>
                   <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Splitter</h2>
@@ -962,9 +1088,15 @@ export default function SmartStackPage() {
                 </div>
               </div>
 
-              {/* Month label */}
-              <div className="flex items-center justify-center mb-5">
-                <span style={{ fontWeight: 700, color: theme.text, fontSize: 15 }}>{monthNames[splitterMonthIdx]} {splitterYear}</span>
+              {/* Month label with navigation */}
+              <div className="flex items-center justify-center gap-4 mb-5">
+                <button onClick={handleSplitterPrevMonth} className="p-1.5 rounded-lg hover:opacity-70 transition-opacity" style={{ backgroundColor: theme.border }}>
+                  <ChevronLeft className="w-4 h-4" style={{ color: theme.text }} />
+                </button>
+                <span style={{ fontWeight: 700, color: theme.text, fontSize: 15, minWidth: 150, textAlign: 'center' }}>{monthNames[splitterMonth]} {splitterYear}</span>
+                <button onClick={handleSplitterNextMonth} className="p-1.5 rounded-lg hover:opacity-70 transition-opacity" style={{ backgroundColor: theme.border }}>
+                  <ChevronRight className="w-4 h-4" style={{ color: theme.text }} />
+                </button>
               </div>
 
               {/* Income vs Bills cards with Auto/Manual toggles */}
@@ -986,7 +1118,7 @@ export default function SmartStackPage() {
                         style={{ background: isDark ? '#064E3B' : '#DCFCE7', border: '1px solid #BBF7D0', color: '#16A34A', fontWeight: 800 }} />
                     </div>
                   ) : (
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#16A34A' }}>${monthlyIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#16A34A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>${monthlyIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                   )}
                   {splitterIncomeMode === 'auto' && monthlyIncome === 0 && <div className="text-xs mt-1" style={{ color: theme.textM }}>No payments found for this month</div>}
                 </div>
@@ -997,7 +1129,7 @@ export default function SmartStackPage() {
                     <ModeToggle mode={splitterBillsMode} setMode={setSplitterBillsMode} storageKey="orca-splitter-bills-mode" />
                   </div>
                   <div className="text-xs mb-1" style={{ color: theme.textM }}>
-                    {splitterBillsMode === 'auto' ? `From Bill Boss (${monthNames[splitterMonthIdx]} ${splitterYear})` : 'Custom amount'}
+                    {splitterBillsMode === 'auto' ? `From Bill Boss (${monthNames[splitterMonth]} ${splitterYear})` : 'Custom amount'}
                   </div>
                   {splitterBillsMode === 'manual' ? (
                     <div className="relative mt-1">
@@ -1009,7 +1141,7 @@ export default function SmartStackPage() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: '#EF4444' }}>−${monthlyBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#EF4444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>−${monthlyBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                       <div className="text-xs mt-1" style={{ color: theme.textM }}>{unpaidBillCount} unpaid bill{unpaidBillCount !== 1 ? 's' : ''}</div>
                     </>
                   )}
@@ -1035,22 +1167,22 @@ export default function SmartStackPage() {
                 ].map(s => (
                   <div key={s.label} className="rounded-xl p-3.5" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
                     <div className="text-xs mb-1" style={{ color: theme.textM, fontWeight: 600, textTransform: 'uppercase' }}>{s.label}</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: s.color }}>{s.val}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: s.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.val}</div>
                   </div>
                 ))}
               </div>
 
               {/* Per period breakdown */}
-              <div className="rounded-xl p-4" style={{ background: isDark ? '#164E63' : '#E0F9FC', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}` }}>
+              <div className="rounded-xl p-4" style={{ background: isDark ? '#164E63' : '#E0F9FC', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}`, overflow: 'hidden' }}>
                 <p className="text-sm mb-3" style={{ color: theme.textM }}>Based on your income and bills this month, you need to set aside:</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#155E75' : '#CFFAFE', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}` }}>
-                    <div className="text-xs mb-1" style={{ color: '#0891B2', fontWeight: 600 }}>Per Week</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#0891B2' }}>${perWeek.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#155E75' : '#CFFAFE', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}`, overflow: 'hidden' }}>
+                    <div className="text-xs mb-1" style={{ color: currentTheme.primary, fontWeight: 600 }}>Per Week</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: currentTheme.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${perWeek.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   </div>
-                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#052E16' : '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#052E16' : '#F0FDF4', border: '1px solid #BBF7D0', overflow: 'hidden' }}>
                     <div className="text-xs mb-1" style={{ color: '#10B981', fontWeight: 600 }}>Per Day</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#059669' }}>${perDay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#059669', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${perDay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   </div>
                 </div>
               </div>
@@ -1060,7 +1192,7 @@ export default function SmartStackPage() {
 
         {projectionMode === 'check' && renderCheckProjectionWithCalendar()}
 
-        {projectionMode === 'calculator' && <ProjectionCalculator theme={theme} />}
+        {projectionMode === 'calculator' && <ProjectionCalculator theme={theme} currentTheme={currentTheme} />}
       </motion.div>
     );
   };
@@ -1125,7 +1257,7 @@ export default function SmartStackPage() {
         {savingsViewMode === 'list' && savingsAccounts.map(acct => (
           <motion.div key={acct.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0891B2', letterSpacing: '0.06em' }}>{acct.name}</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: currentTheme.primary, letterSpacing: '0.06em' }}>{acct.name}</h3>
               <button onClick={() => {
                 setSavingsAccounts(prev => prev.filter(a => a.id !== acct.id));
                 setLocalSynced('orca-savings-accounts', JSON.stringify(savingsAccounts.filter(a => a.id !== acct.id)));
@@ -1133,7 +1265,7 @@ export default function SmartStackPage() {
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
-            <div className="text-xl sm:text-[26px] mb-4 break-words" style={{ fontWeight: 900, color: '#0891B2' }}>${acct.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+            <div className="text-xl sm:text-[26px] mb-4 break-words" style={{ fontWeight: 900, color: currentTheme.primary }}>${acct.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
 
             <div className="mb-3">
               <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 600 }}>Edit Balance</label>
@@ -1188,7 +1320,7 @@ export default function SmartStackPage() {
                     setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
                   }}
                     className="py-2 rounded-xl text-sm transition-all hover:opacity-90 font-bold"
-                    style={{ backgroundColor: `#0891B220`, color: '#0891B2', border: `1px solid #0891B2` }}>
+                    style={{ backgroundColor: `${currentTheme.primary}20`, color: currentTheme.primary, border: `1px solid ${currentTheme.primary}` }}>
                     +${amt}
                   </button>
                 ))}
@@ -1225,14 +1357,14 @@ export default function SmartStackPage() {
                     }
                   }}
                   className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-                  style={{ backgroundColor: '#0891B2' }}>
+                  style={{ backgroundColor: currentTheme.primary }}>
                   Add
                 </button>
               </div>
             </div>
 
             <button className="w-full py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-all font-bold"
-              style={{ backgroundColor: '#16A34A', color: '#fff' }}>
+              style={{ backgroundColor: currentTheme.primary, color: '#fff' }}>
               ✓ Saved!
             </button>
           </motion.div>
