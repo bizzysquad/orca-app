@@ -65,6 +65,15 @@ interface GroupActivity {
   date: string;
 }
 
+interface TripDetails {
+  duration: number;       // number of days
+  startDate: string;
+  endDate: string;
+  flight?: string;
+  hotel?: string;
+  packingList: string[];
+}
+
 interface Group {
   id: string;
   name: string;
@@ -76,6 +85,9 @@ interface Group {
   code: string;
   members: GroupMember[];
   activity: GroupActivity[];
+  entryType?: 'savings' | 'vacation';  // default is 'savings'
+  purpose?: string;                     // what they're saving for
+  trip?: TripDetails;                   // vacation details
 }
 
 const containerVariants = {
@@ -113,7 +125,7 @@ const generateInviteCode = (): string => {
 };
 
 export default function StackCirclePage() {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, currentTheme } = useTheme();
   const { data: orcaData, loading } = useOrcaData();
 
   // Load roommate data from localStorage (no demo data)
@@ -144,6 +156,16 @@ export default function StackCirclePage() {
   const [newGroupGoal, setNewGroupGoal] = useState('');
   const [newGroupTarget, setNewGroupTarget] = useState('');
   const [newGroupDate, setNewGroupDate] = useState('');
+  const [newEntryType, setNewEntryType] = useState<'savings' | 'vacation'>('savings');
+  const [newPurpose, setNewPurpose] = useState('');
+  // Vacation-specific fields
+  const [newTripDuration, setNewTripDuration] = useState('');
+  const [newTripStart, setNewTripStart] = useState('');
+  const [newTripEnd, setNewTripEnd] = useState('');
+  const [newTripFlight, setNewTripFlight] = useState('');
+  const [newTripHotel, setNewTripHotel] = useState('');
+  const [newPackingItem, setNewPackingItem] = useState('');
+  const [newPackingList, setNewPackingList] = useState<string[]>([]);
 
   // Other state
   const [activeTab, setActiveTab] = useState<'group' | 'roommates'>('group');
@@ -226,6 +248,15 @@ export default function StackCirclePage() {
       newGroupDate &&
       !isNaN(Number(newGroupTarget))
     ) {
+      const tripDetails: TripDetails | undefined = newEntryType === 'vacation' ? {
+        duration: parseInt(newTripDuration) || 0,
+        startDate: newTripStart,
+        endDate: newTripEnd,
+        flight: newTripFlight || undefined,
+        hotel: newTripHotel || undefined,
+        packingList: newPackingList,
+      } : undefined;
+
       const newGroup: Group = {
         id: gid(),
         name: newGroupName,
@@ -234,6 +265,9 @@ export default function StackCirclePage() {
         current: 0,
         date: newGroupDate,
         code: generateInviteCode(),
+        entryType: newEntryType,
+        purpose: newPurpose || undefined,
+        trip: tripDetails,
         members: [
           {
             id: gid(),
@@ -248,7 +282,7 @@ export default function StackCirclePage() {
           {
             id: gid(),
             user: 'You',
-            msg: `Created group "${newGroupName}"`,
+            msg: `Created ${newEntryType === 'vacation' ? 'trip' : 'savings goal'} "${newGroupName}"`,
             date: new Date().toLocaleDateString(),
           },
         ],
@@ -257,11 +291,52 @@ export default function StackCirclePage() {
       setGroups([...groups, newGroup]);
       setCurrentGroupId(newGroup.id);
 
+      // If vacation, sync to Task List as a checklist and block calendar dates
+      if (newEntryType === 'vacation' && newTripStart && newTripEnd) {
+        try {
+          // Create tasks from packing list
+          const existingTasks = JSON.parse(localStorage.getItem('orca-tasks') || '[]');
+          const vacationTasks = newPackingList.map(item => ({
+            id: gid(),
+            text: `[${newGroupName}] ${item}`,
+            completed: false,
+            category: 'todo',
+            priority: 'medium',
+            dueDate: newTripStart,
+            createdAt: new Date().toISOString(),
+            starred: false,
+          }));
+          // Add a trip prep task
+          vacationTasks.unshift({
+            id: gid(),
+            text: `Prepare for trip: ${newGroupName}`,
+            completed: false,
+            category: 'todo',
+            priority: 'high',
+            dueDate: newTripStart,
+            createdAt: new Date().toISOString(),
+            starred: true,
+          });
+          const updatedTasks = [...existingTasks, ...vacationTasks];
+          setLocalSynced('orca-tasks', JSON.stringify(updatedTasks));
+          window.dispatchEvent(new CustomEvent('orca-tasks-updated'));
+        } catch {}
+      }
+
       // Reset form
       setNewGroupName('');
       setNewGroupGoal('');
       setNewGroupTarget('');
       setNewGroupDate('');
+      setNewEntryType('savings');
+      setNewPurpose('');
+      setNewTripDuration('');
+      setNewTripStart('');
+      setNewTripEnd('');
+      setNewTripFlight('');
+      setNewTripHotel('');
+      setNewPackingItem('');
+      setNewPackingList([]);
       setShowCreateGroupForm(false);
     }
   };
@@ -444,10 +519,10 @@ export default function StackCirclePage() {
   const displayGroupName =
     currentGroup?.customName || currentGroup?.name || 'Stack Circle';
 
-  // Teal color scheme from Figma
-  const teal = '#0891B2';
-  const tealLight = isDark ? '#164E63' : '#E0F9FC';
-  const tealBorder = isDark ? '#0E7490' : '#A5F3FC';
+  // Theme-aware accent colors
+  const teal = currentTheme.primary;
+  const tealLight = isDark ? `${currentTheme.primary}20` : `${currentTheme.primary}12`;
+  const tealBorder = isDark ? `${currentTheme.primary}50` : `${currentTheme.primary}30`;
 
   if (loading) {
     return (
@@ -649,8 +724,8 @@ export default function StackCirclePage() {
                   variants={itemVariants}
                   className="rounded-2xl border p-4 sm:p-8 text-center transition-colors"
                   style={{
-                    backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF',
-                    borderColor: '#C7D2FE',
+                    backgroundColor: isDark ? `${currentTheme.primary}20` : `${currentTheme.primary}10`,
+                    borderColor: `${currentTheme.primary}40`,
                   }}
                 >
                   {/* Editable Group Name */}
@@ -672,11 +747,11 @@ export default function StackCirclePage() {
                             );
                           }}
                           className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                          style={{ backgroundColor: '#EEF2FF' }}
+                          style={{ backgroundColor: `${currentTheme.primary}15` }}
                         >
                           <Edit3
                             className="w-4 h-4"
-                            style={{ color: '#6366F1' }}
+                            style={{ color: currentTheme.primary }}
                           />
                         </button>
                       </div>
@@ -693,7 +768,7 @@ export default function StackCirclePage() {
                           style={{
                             backgroundColor: theme.card,
                             color: theme.text,
-                            border: `1px solid #6366F1`,
+                            border: `1px solid ${currentTheme.primary}`,
                           }}
                           autoFocus
                         />
@@ -701,7 +776,7 @@ export default function StackCirclePage() {
                           onClick={handleSaveGroupName}
                           className="px-4 py-2 rounded-xl font-bold text-sm transition-colors"
                           style={{
-                            backgroundColor: '#6366F1',
+                            backgroundColor: currentTheme.primary,
                             color: '#fff',
                           }}
                         >
@@ -725,9 +800,9 @@ export default function StackCirclePage() {
                   <div className="flex items-center justify-center mb-4">
                     <div className="relative" style={{ width: 140, height: 140 }}>
                       <svg width="140" height="140" viewBox="0 0 140 140">
-                        <circle cx="70" cy="70" r="60" fill="none" stroke="#C7D2FE" strokeWidth="10" />
+                        <circle cx="70" cy="70" r="60" fill="none" stroke={`${currentTheme.primary}40`} strokeWidth="10" />
                         <motion.circle
-                          cx="70" cy="70" r="60" fill="none" stroke="#6366F1" strokeWidth="10"
+                          cx="70" cy="70" r="60" fill="none" stroke={currentTheme.primary} strokeWidth="10"
                           strokeLinecap="round"
                           transform="rotate(-90 70 70)"
                           initial={{ strokeDasharray: '0 377' }}
@@ -737,7 +812,7 @@ export default function StackCirclePage() {
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <div style={{ fontSize: 28, fontWeight: 900, color: '#4F46E5', lineHeight: 1 }}>{fmt(currentGroup.current)}</div>
-                        <div className="text-xs mt-1" style={{ color: '#6366F1' }}>saved</div>
+                        <div className="text-xs mt-1" style={{ color: currentTheme.primary }}>saved</div>
                       </div>
                     </div>
                   </div>
@@ -752,7 +827,7 @@ export default function StackCirclePage() {
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm mb-4" style={{ background: '#E0E7FF', color: '#4F46E5' }}>
                       <Calendar size={14} />
                       Trip Date: {new Date(currentGroup.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}
-                      <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: '#6366F1', color: '#fff', fontWeight: 700 }}>
+                      <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: currentTheme.primary, color: '#fff', fontWeight: 700 }}>
                         {(() => {
                           const now = new Date();
                           const target = new Date(currentGroup.date + 'T00:00:00');
@@ -766,11 +841,11 @@ export default function StackCirclePage() {
                   {/* Progress Bar */}
                   <div
                     className="w-full rounded-full overflow-hidden mb-4"
-                    style={{ height: 6, backgroundColor: '#C7D2FE' }}
+                    style={{ height: 6, backgroundColor: `${currentTheme.primary}40` }}
                   >
                     <motion.div
                       className="h-full rounded-full"
-                      style={{ backgroundColor: '#6366F1' }}
+                      style={{ backgroundColor: currentTheme.primary }}
                       initial={{ width: 0 }}
                       animate={{
                         width: `${Math.min(
@@ -833,8 +908,8 @@ export default function StackCirclePage() {
                   <div
                     className="rounded-xl p-3 mb-4 text-xs"
                     style={{
-                      backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF',
-                      color: '#6366F1',
+                      backgroundColor: isDark ? `${currentTheme.primary}20` : `${currentTheme.primary}10`,
+                      color: currentTheme.primary,
                     }}
                   >
                     <p>
@@ -1035,7 +1110,7 @@ export default function StackCirclePage() {
                         borderColor: theme.border,
                       }}
                     >
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm flex-shrink-0" style={{ backgroundColor: '#6366F1', color: '#fff', fontWeight: 700 }}>
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm flex-shrink-0" style={{ backgroundColor: currentTheme.primary, color: '#fff', fontWeight: 700 }}>
                         {member.name[0]}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1046,12 +1121,12 @@ export default function StackCirclePage() {
                         )}
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p style={{ fontWeight: 800, color: '#6366F1', fontSize: 15 }}>{fmt(member.balance)}</p>
+                        <p style={{ fontWeight: 800, color: currentTheme.primary, fontSize: 15 }}>{fmt(member.balance)}</p>
                         <span
                           className="inline-block text-xs px-2 py-0.5 rounded-full mt-1"
                           style={{
-                            backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF',
-                            color: '#6366F1',
+                            backgroundColor: isDark ? `${currentTheme.primary}20` : `${currentTheme.primary}10`,
+                            color: currentTheme.primary,
                             fontWeight: 600,
                           }}
                         >
@@ -1270,7 +1345,7 @@ export default function StackCirclePage() {
                   style={{
                     backgroundColor: theme.bg,
                     border: `1px dashed ${isDark ? '#475569' : '#CBD5E1'}`,
-                    color: '#6366F1',
+                    color: currentTheme.primary,
                     fontWeight: 700,
                   }}
                 >
@@ -1293,111 +1368,139 @@ export default function StackCirclePage() {
                         borderColor: tealBorder,
                       }}
                     >
-                      <h3
-                        className="font-bold text-base sm:text-lg mb-6"
-                        style={{ color: theme.text }}
-                      >
-                        Create New Group
+                      <h3 className="font-bold text-base sm:text-lg mb-4" style={{ color: theme.text }}>
+                        Create New Entry
                       </h3>
+
+                      {/* Entry Type Selector */}
+                      <div className="flex gap-2 mb-5">
+                        {([{ key: 'savings', label: 'Savings Goal', icon: '🎯' }, { key: 'vacation', label: 'Trip / Vacation', icon: '✈️' }] as const).map(opt => (
+                          <button key={opt.key} onClick={() => setNewEntryType(opt.key)}
+                            className="flex-1 py-3 rounded-xl text-sm font-bold transition-all"
+                            style={{ background: newEntryType === opt.key ? teal : theme.bg, color: newEntryType === opt.key ? '#fff' : theme.textM, border: `1px solid ${newEntryType === opt.key ? teal : theme.border}` }}>
+                            {opt.icon} {opt.label}
+                          </button>
+                        ))}
+                      </div>
+
                       <div className="space-y-3 sm:space-y-4">
                         <div>
-                          <label
-                            className="block text-xs sm:text-sm font-medium mb-2"
-                            style={{ color: theme.text }}
-                          >
-                            Group Name
+                          <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
+                            {newEntryType === 'vacation' ? 'Trip Name' : 'Group Name'}
                           </label>
-                          <input
-                            type="text"
-                            placeholder="e.g., Home Renovation"
-                            value={newGroupName}
-                            onChange={(e) =>
-                              setNewGroupName(e.target.value)
-                            }
+                          <input type="text" placeholder={newEntryType === 'vacation' ? 'e.g., Hawaii 2026' : 'e.g., Home Renovation'}
+                            value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
                             className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                            style={{
-                              backgroundColor: theme.bg,
-                              borderColor: theme.border,
-                              color: theme.text,
-                            }}
-                          />
+                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
                         </div>
 
                         <div>
-                          <label
-                            className="block text-xs sm:text-sm font-medium mb-2"
-                            style={{ color: theme.text }}
-                          >
-                            Goal Description
+                          <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
+                            {newEntryType === 'vacation' ? 'Trip Description' : 'What are you saving for?'}
                           </label>
-                          <input
-                            type="text"
-                            placeholder="e.g., Save for kitchen remodel"
-                            value={newGroupGoal}
-                            onChange={(e) =>
-                              setNewGroupGoal(e.target.value)
-                            }
+                          <input type="text" placeholder={newEntryType === 'vacation' ? 'e.g., Family beach vacation' : 'e.g., Save for kitchen remodel'}
+                            value={newGroupGoal} onChange={(e) => setNewGroupGoal(e.target.value)}
                             className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                            style={{
-                              backgroundColor: theme.bg,
-                              borderColor: theme.border,
-                              color: theme.text,
-                            }}
-                          />
+                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
                         </div>
+
+                        {/* Purpose / Contributors (Savings Goal) */}
+                        {newEntryType === 'savings' && (
+                          <div>
+                            <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Purpose (optional)</label>
+                            <input type="text" placeholder="e.g., Emergency fund, group gift"
+                              value={newPurpose} onChange={(e) => setNewPurpose(e.target.value)}
+                              className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
+                              style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                           <div>
-                            <label
-                              className="block text-xs sm:text-sm font-medium mb-2"
-                              style={{ color: theme.text }}
-                            >
-                              Target Amount
+                            <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
+                              {newEntryType === 'vacation' ? 'Trip Budget' : 'Target Amount'}
                             </label>
-                            <input
-                              type="number"
-                              placeholder="$0.00"
-                              value={newGroupTarget}
-                              onChange={(e) =>
-                                setNewGroupTarget(e.target.value)
-                              }
+                            <input type="number" placeholder="$0.00" value={newGroupTarget} onChange={(e) => setNewGroupTarget(e.target.value)}
                               className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                              style={{
-                                backgroundColor: theme.bg,
-                                borderColor: theme.border,
-                                color: theme.text,
-                              }}
-                            />
+                              style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
                           </div>
                           <div>
-                            <label
-                              className="block text-xs sm:text-sm font-medium mb-2"
-                              style={{ color: theme.text }}
-                            >
-                              Target Date
-                            </label>
-                            <CalendarPicker
-                              value={newGroupDate}
-                              onChange={setNewGroupDate}
-                              placeholder="Select target date"
-                              theme={theme}
-                              showQuickSelect={false}
-                            />
+                            <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Target Date</label>
+                            <CalendarPicker value={newGroupDate} onChange={setNewGroupDate} placeholder="Select target date" theme={theme} showQuickSelect={false} />
                           </div>
                         </div>
+
+                        {/* Vacation-specific fields */}
+                        {newEntryType === 'vacation' && (
+                          <div className="space-y-3 pt-2" style={{ borderTop: `1px solid ${theme.border}` }}>
+                            <p className="text-xs font-bold" style={{ color: teal, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Trip Details</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Duration (days)</label>
+                                <input type="number" placeholder="7" value={newTripDuration} onChange={e => setNewTripDuration(e.target.value)}
+                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Start Date</label>
+                                <input type="date" value={newTripStart} onChange={e => setNewTripStart(e.target.value)}
+                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>End Date</label>
+                                <input type="date" value={newTripEnd} onChange={e => setNewTripEnd(e.target.value)}
+                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Flight Info (optional)</label>
+                                <input type="text" placeholder="e.g., UA 234, 8:00 AM departure" value={newTripFlight} onChange={e => setNewTripFlight(e.target.value)}
+                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Hotel (optional)</label>
+                                <input type="text" placeholder="e.g., Hilton Waikiki Beach" value={newTripHotel} onChange={e => setNewTripHotel(e.target.value)}
+                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                              </div>
+                            </div>
+
+                            {/* Packing checklist */}
+                            <div>
+                              <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Packing Checklist</label>
+                              <div className="flex gap-2 mb-2">
+                                <input type="text" placeholder="Add item..." value={newPackingItem} onChange={e => setNewPackingItem(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter' && newPackingItem.trim()) { setNewPackingList(prev => [...prev, newPackingItem.trim()]); setNewPackingItem(''); } }}
+                                  className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                                <button onClick={() => { if (newPackingItem.trim()) { setNewPackingList(prev => [...prev, newPackingItem.trim()]); setNewPackingItem(''); } }}
+                                  className="px-3 py-2 rounded-xl text-sm font-bold" style={{ backgroundColor: teal, color: '#fff' }}>
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {newPackingList.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {newPackingList.map((item, i) => (
+                                    <span key={i} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs" style={{ background: `${teal}15`, color: teal, fontWeight: 600 }}>
+                                      {item}
+                                      <button onClick={() => setNewPackingList(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 hover:opacity-70">
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           onClick={handleCreateGroup}
                           className="w-full font-bold px-4 sm:px-6 py-2 sm:py-3 rounded-2xl text-sm transition-shadow"
-                          style={{
-                            backgroundColor: teal,
-                            color: '#fff',
-                          }}
+                          style={{ backgroundColor: teal, color: '#fff' }}
                         >
                           <Plus className="w-4 sm:w-5 h-4 sm:h-5 inline mr-2" />
-                          Create Group
+                          {newEntryType === 'vacation' ? 'Create Trip' : 'Create Group'}
                         </motion.button>
                       </div>
                     </motion.div>

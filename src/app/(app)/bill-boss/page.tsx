@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Edit3, Home, Phone, Car, CreditCard, Heart, Utensils, BookOpen, Zap } from 'lucide-react'
+import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Edit3, Home, Phone, Car, CreditCard, Heart, Utensils, BookOpen, Zap, Scissors } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
 import { getRecurringBillDates } from '@/lib/income-engine'
@@ -231,7 +231,7 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
 
 export default function BillBossPage() {
   const { data, setData, loading } = useOrcaData()
-  const { theme } = useTheme()
+  const { theme, isDark, currentTheme } = useTheme()
 
   const [bills, setBills] = useState<Bill[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
@@ -599,7 +599,8 @@ export default function BillBossPage() {
     persistBills(bills.filter(b => b.id !== billId))
   }
 
-  // Handler: Apply split
+  // Handler: Apply split with configurable day intervals
+  const [splitDayInterval, setSplitDayInterval] = useState(7)
   const handleApplySplit = (billId: string, numPayments: number) => {
     persistBills(bills.map(b => {
       if (b.id !== billId) return b
@@ -610,7 +611,7 @@ export default function BillBossPage() {
 
       for (let i = 0; i < numPayments; i++) {
         const paymentDate = new Date(dueDate)
-        paymentDate.setDate(paymentDate.getDate() + i * 7)
+        paymentDate.setDate(paymentDate.getDate() + i * splitDayInterval)
 
         alloc.push({
           id: gid(),
@@ -623,6 +624,7 @@ export default function BillBossPage() {
       return { ...b, alloc }
     }))
     setSplitModalBillId(null)
+    setSplitDayInterval(7) // reset
   }
 
   // Handler: Mark payment as paid
@@ -758,7 +760,7 @@ export default function BillBossPage() {
           <button
             onClick={() => setViewMode('list')}
             style={{
-              backgroundColor: viewMode === 'list' ? '#6366F1' : theme.card,
+              backgroundColor: viewMode === 'list' ? currentTheme.primary : theme.card,
               color: viewMode === 'list' ? '#fff' : theme.text,
               borderColor: theme.border,
             }}
@@ -769,7 +771,7 @@ export default function BillBossPage() {
           <button
             onClick={() => setViewMode('compact')}
             style={{
-              backgroundColor: viewMode === 'compact' ? '#6366F1' : theme.card,
+              backgroundColor: viewMode === 'compact' ? currentTheme.primary : theme.card,
               color: viewMode === 'compact' ? '#fff' : theme.text,
               borderColor: theme.border,
             }}
@@ -1165,10 +1167,18 @@ export default function BillBossPage() {
                     <button
                       onClick={() => handlePayFull(bill.id)}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: `#6366F1` }}
+                      style={{ backgroundColor: currentTheme.primary }}
                       title="Pay"
                     >
                       <Check size={14} style={{ color: '#fff' }} />
+                    </button>
+                    <button
+                      onClick={() => setSplitModalBillId(bill.id)}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ backgroundColor: `${currentTheme.primary}20` }}
+                      title="Split"
+                    >
+                      <Scissors size={14} style={{ color: currentTheme.primary }} />
                     </button>
                     <button
                       onClick={() => handleStartEdit(bill.id)}
@@ -1465,12 +1475,26 @@ export default function BillBossPage() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleApplySplit(splitModalBillId, num)}
-                    style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                    style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
                     className="px-4 py-3.5 rounded-xl font-bold hover:opacity-90 transition-colors"
                   >
                     {num} Payments
                   </motion.button>
                 ))}
+              </div>
+
+              {/* Day interval selector */}
+              <div className="pt-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                <p className="text-xs mb-2" style={{ color: theme.textM, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Days between payments</p>
+                <div className="flex gap-2 flex-wrap">
+                  {[{ val: 7, label: 'Weekly' }, { val: 14, label: 'Biweekly' }, { val: 10, label: '10 days' }, { val: 30, label: 'Monthly' }].map(opt => (
+                    <button key={opt.val} onClick={() => setSplitDayInterval(opt.val)}
+                      className="px-3 py-1.5 rounded-lg text-xs transition-all"
+                      style={{ backgroundColor: splitDayInterval === opt.val ? currentTheme.primary : theme.border, color: splitDayInterval === opt.val ? '#fff' : theme.textM, fontWeight: splitDayInterval === opt.val ? 700 : 400 }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </motion.div>
           </motion.div>

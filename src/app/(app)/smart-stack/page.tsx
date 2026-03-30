@@ -262,6 +262,7 @@ export default function SmartStackPage() {
   const [newAccountName, setNewAccountName] = useState('');
   const [projectionMode, setProjectionMode] = useState<'payment' | 'check' | 'calculator'>('payment');
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
+  const [savingsViewMode, setSavingsViewMode] = useState<'list' | 'compact'>('list');
 
   const [customSavingsAmount, setCustomSavingsAmount] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -272,6 +273,32 @@ export default function SmartStackPage() {
   const [customSpendingCash, setCustomSpendingCash] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       try { return localStorage.getItem('orca-splitter-spending') || '' } catch {}
+    }
+    return '';
+  });
+
+  // Splitter mode: auto pulls from data, manual lets user type custom values
+  const [splitterIncomeMode, setSplitterIncomeMode] = useState<'auto' | 'manual'>(() => {
+    if (typeof window !== 'undefined') {
+      try { return (localStorage.getItem('orca-splitter-income-mode') as 'auto' | 'manual') || 'auto' } catch {}
+    }
+    return 'auto';
+  });
+  const [splitterBillsMode, setSplitterBillsMode] = useState<'auto' | 'manual'>(() => {
+    if (typeof window !== 'undefined') {
+      try { return (localStorage.getItem('orca-splitter-bills-mode') as 'auto' | 'manual') || 'auto' } catch {}
+    }
+    return 'auto';
+  });
+  const [manualIncome, setManualIncome] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try { return localStorage.getItem('orca-splitter-manual-income') || '' } catch {}
+    }
+    return '';
+  });
+  const [manualBills, setManualBills] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try { return localStorage.getItem('orca-splitter-manual-bills') || '' } catch {}
     }
     return '';
   });
@@ -682,7 +709,7 @@ export default function SmartStackPage() {
   const renderIncomeTab = () => {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}>
+        <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `${currentTheme.primary}20`, border: `1px solid ${currentTheme.primary}` }}>
           {[
             { key: 'payment', label: 'Incoming Payments', icon: Wallet },
             { key: 'check', label: 'Check Projection', icon: BarChart3 },
@@ -693,8 +720,8 @@ export default function SmartStackPage() {
               onClick={() => setProjectionMode(key as typeof projectionMode)}
               className="flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 sm:px-2 text-[10px] sm:text-xs rounded-2xl transition-all min-w-0"
               style={{
-                backgroundColor: projectionMode === key ? '#0891B2' : 'transparent',
-                color: projectionMode === key ? '#fff' : '#0891B2',
+                backgroundColor: projectionMode === key ? currentTheme.primary : 'transparent',
+                color: projectionMode === key ? '#fff' : currentTheme.primaryLight,
                 fontWeight: projectionMode === key ? 700 : 500,
               }}
             >
@@ -763,38 +790,64 @@ export default function SmartStackPage() {
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />{paymentFormError}
                 </div>
               )}
-              <button
-                className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
-                style={{ backgroundColor: '#0891B2', color: '#fff' }}
-                onClick={() => {
-                  const amt = parseFloat(newPaymentAmount);
-                  if (!amt || amt <= 0 || !newPaymentDate || !newPaymentDesc.trim()) {
-                    setPaymentFormError(!newPaymentAmount ? 'Enter an amount' : !newPaymentDate ? 'Pick a date' : !newPaymentDesc.trim() ? 'Add a description' : 'Enter a valid amount');
-                    return;
-                  }
-                  setPaymentFormError('');
-                  const entry: PaymentEntry = {
-                    id: crypto.randomUUID(),
-                    amount: amt,
-                    date: newPaymentDate,
-                    description: newPaymentDesc.trim(),
-                    recurrence: newPaymentRecurrence,
-                    status: 'expected',
-                  };
-                  const updated = [...paymentEntries, entry];
-                  setPaymentEntries(updated);
-                  setLocalSynced('orca-payment-entries', JSON.stringify(updated));
-                  // Also push into OrcaDataContext so dashboard picks it up immediately
-                  setData(prev => ({ ...prev, incomingPayments: toIncomingPayments(updated) }));
-                  // Reset form
-                  setNewPaymentAmount('');
-                  setNewPaymentDate('');
-                  setNewPaymentDesc('');
-                  setNewPaymentRecurrence('none');
-                }}
-              >
-                <Plus className="w-4 h-4" />Add Payment
-              </button>
+              <div className="flex gap-2">
+                {editingPaymentId && (
+                  <button
+                    className="py-2.5 px-4 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
+                    style={{ backgroundColor: theme.border, color: theme.textM }}
+                    onClick={() => {
+                      setEditingPaymentId(null);
+                      setNewPaymentAmount('');
+                      setNewPaymentDate('');
+                      setNewPaymentDesc('');
+                      setNewPaymentRecurrence('none');
+                      setPaymentFormError('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
+                  style={{ backgroundColor: editingPaymentId ? currentTheme.primary : '#0891B2', color: '#fff' }}
+                  onClick={() => {
+                    const amt = parseFloat(newPaymentAmount);
+                    if (!amt || amt <= 0 || !newPaymentDate || !newPaymentDesc.trim()) {
+                      setPaymentFormError(!newPaymentAmount ? 'Enter an amount' : !newPaymentDate ? 'Pick a date' : !newPaymentDesc.trim() ? 'Add a description' : 'Enter a valid amount');
+                      return;
+                    }
+                    setPaymentFormError('');
+
+                    let updated: PaymentEntry[];
+                    if (editingPaymentId) {
+                      // Update existing payment
+                      updated = paymentEntries.map(e => e.id === editingPaymentId ? { ...e, amount: amt, date: newPaymentDate, description: newPaymentDesc.trim(), recurrence: newPaymentRecurrence } : e);
+                    } else {
+                      // Add new payment
+                      const entry: PaymentEntry = {
+                        id: crypto.randomUUID(),
+                        amount: amt,
+                        date: newPaymentDate,
+                        description: newPaymentDesc.trim(),
+                        recurrence: newPaymentRecurrence,
+                        status: 'expected',
+                      };
+                      updated = [...paymentEntries, entry];
+                    }
+                    setPaymentEntries(updated);
+                    setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                    setData(prev => ({ ...prev, incomingPayments: toIncomingPayments(updated) }));
+                    // Reset form
+                    setEditingPaymentId(null);
+                    setNewPaymentAmount('');
+                    setNewPaymentDate('');
+                    setNewPaymentDesc('');
+                    setNewPaymentRecurrence('none');
+                  }}
+                >
+                  {editingPaymentId ? <><Edit3 className="w-4 h-4" />Update Payment</> : <><Plus className="w-4 h-4" />Add Payment</>}
+                </button>
+              </div>
             </div>
 
             <div className="text-xs mb-3" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scheduled Payments</div>
@@ -826,6 +879,15 @@ export default function SmartStackPage() {
                         <Check className="w-3.5 h-3.5" />
                       </button>
                     )}
+                    <button title="Edit payment" onClick={() => {
+                      setEditingPaymentId(p.id);
+                      setNewPaymentAmount(String(p.amount));
+                      setNewPaymentDate(p.date);
+                      setNewPaymentDesc(p.description);
+                      setNewPaymentRecurrence(p.recurrence || 'none');
+                    }} className="p-1.5 rounded-lg hover:opacity-80 transition-all" style={{ color: '#0891B2' }}>
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
                     <button title="Delete payment" onClick={() => {
                       const updated = paymentEntries.filter(e => e.id !== p.id);
                       setPaymentEntries(updated);
@@ -850,27 +912,43 @@ export default function SmartStackPage() {
           const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
           const daysInMonth = new Date(splitterYear, splitterMonthIdx + 1, 0).getDate()
 
-          // Monthly income from payment entries for current month
-          const monthlyIncome = paymentEntries
+          // Auto income from payment entries for current month
+          const autoIncome = paymentEntries
             .filter(p => {
               const d = new Date(p.date + 'T00:00:00')
               return d.getMonth() === splitterMonthIdx && d.getFullYear() === splitterYear && p.status !== 'received'
             })
             .reduce((sum, p) => sum + p.amount, 0)
 
-          // Monthly bills from Bill Boss
-          const monthlyBills = (data.bills || [])
+          // Auto bills from Bill Boss
+          const autoBills = (data.bills || [])
             .filter((b: any) => {
               const d = new Date((b.due || '') + 'T00:00:00')
               return d.getMonth() === splitterMonthIdx && d.getFullYear() === splitterYear && b.status !== 'paid'
             })
             .reduce((sum: number, b: any) => sum + b.amount, 0)
 
+          // Use auto or manual based on toggle
+          const monthlyIncome = splitterIncomeMode === 'manual' ? (parseFloat(manualIncome) || 0) : autoIncome
+          const monthlyBills = splitterBillsMode === 'manual' ? (parseFloat(manualBills) || 0) : autoBills
+
           const unpaidBillCount = (data.bills || []).filter((b: any) => b.status !== 'paid').length
           const afterBills = Math.max(0, monthlyIncome - monthlyBills)
           const billPct = monthlyIncome > 0 ? Math.min(100, Math.round((monthlyBills / monthlyIncome) * 100)) : 0
           const perWeek = monthlyBills / (daysInMonth / 7)
           const perDay = monthlyBills / daysInMonth
+
+          const ModeToggle = ({ mode, setMode, storageKey }: { mode: 'auto' | 'manual'; setMode: (m: 'auto' | 'manual') => void; storageKey: string }) => (
+            <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
+              {(['auto', 'manual'] as const).map(m => (
+                <button key={m} onClick={() => { setMode(m); try { localStorage.setItem(storageKey, m) } catch {} }}
+                  className="px-3 py-1 text-xs capitalize transition-all"
+                  style={{ background: mode === m ? currentTheme.primary : 'transparent', color: mode === m ? '#fff' : theme.textM, fontWeight: mode === m ? 700 : 400 }}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          )
 
           return (
             <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
@@ -889,26 +967,52 @@ export default function SmartStackPage() {
                 <span style={{ fontWeight: 700, color: theme.text, fontSize: 15 }}>{monthNames[splitterMonthIdx]} {splitterYear}</span>
               </div>
 
-              {/* Income vs Bills cards */}
+              {/* Income vs Bills cards with Auto/Manual toggles */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
                 <div className="rounded-xl p-4" style={{ background: isDark ? '#052E16' : '#F0FDF4', border: '1px solid #BBF7D0' }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs" style={{ color: '#16A34A', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Monthly Income</span>
-                    <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: '#0891B2', color: '#fff', fontWeight: 600 }}>Auto</span>
+                    <ModeToggle mode={splitterIncomeMode} setMode={setSplitterIncomeMode} storageKey="orca-splitter-income-mode" />
                   </div>
-                  <div className="text-xs mb-1" style={{ color: theme.textM }}>From Incoming Payments</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#16A34A' }}>${monthlyIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-                  {monthlyIncome === 0 && <div className="text-xs mt-1" style={{ color: theme.textM }}>No payments found for this month</div>}
+                  <div className="text-xs mb-1" style={{ color: theme.textM }}>
+                    {splitterIncomeMode === 'auto' ? 'From Incoming Payments' : 'Custom amount'}
+                  </div>
+                  {splitterIncomeMode === 'manual' ? (
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#16A34A', fontWeight: 700 }}>$</span>
+                      <input type="number" placeholder="0.00" value={manualIncome}
+                        onChange={e => { setManualIncome(e.target.value); try { localStorage.setItem('orca-splitter-manual-income', e.target.value) } catch {} }}
+                        className="w-full pl-7 pr-3 py-2 rounded-lg text-lg outline-none"
+                        style={{ background: isDark ? '#064E3B' : '#DCFCE7', border: '1px solid #BBF7D0', color: '#16A34A', fontWeight: 800 }} />
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#16A34A' }}>${monthlyIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  )}
+                  {splitterIncomeMode === 'auto' && monthlyIncome === 0 && <div className="text-xs mt-1" style={{ color: theme.textM }}>No payments found for this month</div>}
                 </div>
 
                 <div className="rounded-xl p-4" style={{ background: isDark ? '#2D0A0A' : '#FEF2F2', border: '1px solid #FECACA' }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs" style={{ color: '#EF4444', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Monthly Bills</span>
-                    <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: '#0891B2', color: '#fff', fontWeight: 600 }}>Bill Boss</span>
+                    <ModeToggle mode={splitterBillsMode} setMode={setSplitterBillsMode} storageKey="orca-splitter-bills-mode" />
                   </div>
-                  <div className="text-xs mb-1" style={{ color: theme.textM }}>From Bill Boss ({monthNames[splitterMonthIdx]} {splitterYear})</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#EF4444' }}>−${monthlyBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-                  <div className="text-xs mt-1" style={{ color: theme.textM }}>{unpaidBillCount} unpaid bill{unpaidBillCount !== 1 ? 's' : ''}</div>
+                  <div className="text-xs mb-1" style={{ color: theme.textM }}>
+                    {splitterBillsMode === 'auto' ? `From Bill Boss (${monthNames[splitterMonthIdx]} ${splitterYear})` : 'Custom amount'}
+                  </div>
+                  {splitterBillsMode === 'manual' ? (
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#EF4444', fontWeight: 700 }}>$</span>
+                      <input type="number" placeholder="0.00" value={manualBills}
+                        onChange={e => { setManualBills(e.target.value); try { localStorage.setItem('orca-splitter-manual-bills', e.target.value) } catch {} }}
+                        className="w-full pl-7 pr-3 py-2 rounded-lg text-lg outline-none"
+                        style={{ background: isDark ? '#450A0A' : '#FEE2E2', border: '1px solid #FECACA', color: '#EF4444', fontWeight: 800 }} />
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#EF4444' }}>−${monthlyBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                      <div className="text-xs mt-1" style={{ color: theme.textM }}>{unpaidBillCount} unpaid bill{unpaidBillCount !== 1 ? 's' : ''}</div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -966,16 +1070,59 @@ export default function SmartStackPage() {
 
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-        <div className="rounded-2xl p-5" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}>
+        <div className="rounded-2xl p-5" style={{ backgroundColor: `${currentTheme.primary}20`, border: `1px solid ${currentTheme.primary}` }}>
           <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4" style={{ color: '#0891B2' }} />
-            <span className="text-sm" style={{ fontWeight: 700, color: '#0891B2' }}>Total Savings</span>
+            <Target className="w-4 h-4" style={{ color: currentTheme.primary }} />
+            <span className="text-sm" style={{ fontWeight: 700, color: currentTheme.primary }}>Total Savings</span>
           </div>
-          <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: '#0891B2' }}>${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: currentTheme.primary }}>${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           <div className="text-xs mt-1" style={{ color: theme.textM }}>{savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}</div>
         </div>
 
-        {savingsAccounts.map(acct => (
+        {/* List / Compact Toggle */}
+        <div className="flex gap-2">
+          {(['list', 'compact'] as const).map(mode => (
+            <button key={mode} onClick={() => setSavingsViewMode(mode)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all capitalize"
+              style={{ backgroundColor: savingsViewMode === mode ? currentTheme.primary : theme.card, color: savingsViewMode === mode ? '#fff' : theme.text, border: `1px solid ${savingsViewMode === mode ? currentTheme.primary : theme.border}` }}>
+              {mode} View
+            </button>
+          ))}
+        </div>
+
+        {/* Compact View */}
+        {savingsViewMode === 'compact' && savingsAccounts.length > 0 && (
+          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
+            {savingsAccounts.map((acct, i) => (
+              <div key={acct.id} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: i < savingsAccounts.length - 1 ? `1px solid ${theme.border}` : 'none', background: theme.card }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${currentTheme.primary}20` }}>
+                  <Target className="w-4 h-4" style={{ color: currentTheme.primary }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold truncate" style={{ color: theme.text }}>{acct.name}</div>
+                  {acct.goal > 0 && <div className="text-xs" style={{ color: theme.textM }}>Goal: ${acct.goal.toLocaleString()}</div>}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div style={{ fontSize: 15, fontWeight: 800, color: currentTheme.primary }}>${acct.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  {acct.goal > 0 && (
+                    <div className="w-20 mt-1 rounded-full overflow-hidden" style={{ height: 4, background: `${currentTheme.primary}20` }}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, (acct.amount / acct.goal) * 100)}%`, background: currentTheme.primary }} />
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => {
+                  setSavingsAccounts(prev => prev.filter(a => a.id !== acct.id));
+                  setLocalSynced('orca-savings-accounts', JSON.stringify(savingsAccounts.filter(a => a.id !== acct.id)));
+                }} className="p-1.5 rounded-lg hover:opacity-80 transition-all flex-shrink-0" style={{ color: '#EF4444' }}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* List View */}
+        {savingsViewMode === 'list' && savingsAccounts.map(acct => (
           <motion.div key={acct.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0891B2', letterSpacing: '0.06em' }}>{acct.name}</h3>
@@ -1092,7 +1239,7 @@ export default function SmartStackPage() {
         ))}
 
         <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `2px dashed ${theme.border}` }}>
-          <h3 className="text-sm mb-3" style={{ fontWeight: 700, color: theme.textM }}>Add Savings Account</h3>
+          <h3 className="text-sm mb-3" style={{ fontWeight: 700, color: theme.textM }}>Add Account</h3>
           <div className="flex gap-2">
             <input type="text" placeholder="Account name (e.g., Emergency Fund)" value={newAccountName} onChange={e => setNewAccountName(e.target.value)}
               className="flex-1 px-4 py-3 rounded-xl text-sm outline-none" style={{
@@ -1117,7 +1264,7 @@ export default function SmartStackPage() {
               }
             }}
               className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all hover:opacity-90 font-bold"
-              style={{ backgroundColor: '#0891B2', color: '#fff' }}>
+              style={{ backgroundColor: currentTheme.primary, color: '#fff' }}>
               <Plus className="w-5 h-5" />
             </button>
           </div>
@@ -1151,7 +1298,7 @@ export default function SmartStackPage() {
         </motion.div>
 
         <div
-          style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}
+          style={{ backgroundColor: `${currentTheme.primary}20`, border: `1px solid ${currentTheme.primary}` }}
           className="rounded-2xl p-1 mb-8 flex gap-2"
         >
           {(['income', 'savings'] as Tab[]).map((tab) => (
@@ -1161,8 +1308,8 @@ export default function SmartStackPage() {
               whileTap={{ scale: 0.98 }}
               onClick={() => setActiveTab(tab)}
               style={{
-                backgroundColor: activeTab === tab ? '#0891B2' : 'transparent',
-                color: activeTab === tab ? '#fff' : '#0891B2',
+                backgroundColor: activeTab === tab ? currentTheme.primary : 'transparent',
+                color: activeTab === tab ? '#fff' : currentTheme.primaryLight,
               }}
               className="flex-1 py-3 rounded-2xl font-bold capitalize transition-all"
             >
