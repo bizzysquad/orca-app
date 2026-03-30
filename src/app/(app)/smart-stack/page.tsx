@@ -303,6 +303,31 @@ export default function SmartStackPage() {
     return '';
   });
 
+  // Splitter month navigation
+  const now = new Date();
+  const [splitterMonth, setSplitterMonth] = useState(now.getMonth());
+  const [splitterYear, setSplitterYear] = useState(now.getFullYear());
+
+  const handleSplitterPrevMonth = () => {
+    setSplitterMonth(prev => {
+      if (prev === 0) {
+        setSplitterYear(y => y - 1);
+        return 11;
+      }
+      return prev - 1;
+    });
+  };
+
+  const handleSplitterNextMonth = () => {
+    setSplitterMonth(prev => {
+      if (prev === 11) {
+        setSplitterYear(y => y + 1);
+        return 0;
+      }
+      return prev + 1;
+    });
+  };
+
   const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -906,27 +931,94 @@ export default function SmartStackPage() {
 
         {/* ── SPLITTER — always shown below Incoming Payments ─── */}
         {projectionMode === 'payment' && (() => {
-          const now = new Date()
-          const splitterMonthIdx = now.getMonth()
-          const splitterYear = now.getFullYear()
           const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
-          const daysInMonth = new Date(splitterYear, splitterMonthIdx + 1, 0).getDate()
+          const daysInMonth = new Date(splitterYear, splitterMonth + 1, 0).getDate()
 
-          // Auto income from payment entries for current month
-          const autoIncome = paymentEntries
-            .filter(p => {
-              const d = new Date(p.date + 'T00:00:00')
-              return d.getMonth() === splitterMonthIdx && d.getFullYear() === splitterYear && p.status !== 'received'
-            })
-            .reduce((sum, p) => sum + p.amount, 0)
+          // Helper: expand recurring payments into a given month
+          function getRecurringAmountForMonth(entries: PaymentEntry[], monthIdx: number, year: number): number {
+            let total = 0;
+            const monthStart = new Date(year, monthIdx, 1);
+            const monthEnd = new Date(year, monthIdx + 1, 0);
 
-          // Auto bills from Bill Boss
-          const autoBills = (data.bills || [])
-            .filter((b: any) => {
-              const d = new Date((b.due || '') + 'T00:00:00')
-              return d.getMonth() === splitterMonthIdx && d.getFullYear() === splitterYear && b.status !== 'paid'
-            })
-            .reduce((sum: number, b: any) => sum + b.amount, 0)
+            entries.forEach(p => {
+              const baseDate = new Date(p.date + 'T00:00:00');
+
+              if (!p.recurrence || p.recurrence === 'none') {
+                // One-time: exact month match
+                if (baseDate.getMonth() === monthIdx && baseDate.getFullYear() === year) {
+                  total += p.amount;
+                }
+              } else if (p.recurrence === 'monthly') {
+                // Monthly: occurs once per month if base date <= month end
+                if (baseDate <= monthEnd) {
+                  total += p.amount;
+                }
+              } else {
+                // Weekly (7) or biweekly (14)
+                const interval = p.recurrence === 'weekly' ? 7 : 14;
+                const cursor = new Date(baseDate);
+                // Fast-forward near the month
+                if (cursor < monthStart) {
+                  const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * interval)) * interval;
+                  cursor.setDate(cursor.getDate() + gap);
+                }
+                while (cursor <= monthEnd) {
+                  if (cursor >= monthStart && cursor >= baseDate) {
+                    total += p.amount;
+                  }
+                  cursor.setDate(cursor.getDate() + interval);
+                }
+              }
+            });
+
+            return total;
+          }
+
+          // Helper: expand recurring bills into a given month
+          function getRecurringBillsForMonth(bills: any[], monthIdx: number, year: number): number {
+            let total = 0;
+            const monthStart = new Date(year, monthIdx, 1);
+            const monthEnd = new Date(year, monthIdx + 1, 0);
+
+            bills.forEach(b => {
+              const baseDate = new Date((b.due || '') + 'T00:00:00');
+
+              if (!b.recurrence || b.recurrence === 'none') {
+                // One-time: exact month match
+                if (baseDate.getMonth() === monthIdx && baseDate.getFullYear() === year) {
+                  total += b.amount;
+                }
+              } else if (b.recurrence === 'monthly') {
+                // Monthly: occurs once per month if base date <= month end
+                if (baseDate <= monthEnd) {
+                  total += b.amount;
+                }
+              } else {
+                // Weekly (7) or biweekly (14)
+                const interval = b.recurrence === 'weekly' ? 7 : 14;
+                const cursor = new Date(baseDate);
+                // Fast-forward near the month
+                if (cursor < monthStart) {
+                  const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * interval)) * interval;
+                  cursor.setDate(cursor.getDate() + gap);
+                }
+                while (cursor <= monthEnd) {
+                  if (cursor >= monthStart && cursor >= baseDate) {
+                    total += b.amount;
+                  }
+                  cursor.setDate(cursor.getDate() + interval);
+                }
+              }
+            });
+
+            return total;
+          }
+
+          // Auto income from payment entries (including recurring) for selected month
+          const autoIncome = getRecurringAmountForMonth(paymentEntries, splitterMonth, splitterYear)
+
+          // Auto bills from Bill Boss (including recurring) for selected month
+          const autoBills = getRecurringBillsForMonth(data.bills || [], splitterMonth, splitterYear)
 
           // Use auto or manual based on toggle
           const monthlyIncome = splitterIncomeMode === 'manual' ? (parseFloat(manualIncome) || 0) : autoIncome
@@ -951,7 +1043,7 @@ export default function SmartStackPage() {
           )
 
           return (
-            <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+            <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${currentTheme.primary}20` }}>
                   <TrendingUp className="w-5 h-5" style={{ color: currentTheme.primary }} />
@@ -962,9 +1054,15 @@ export default function SmartStackPage() {
                 </div>
               </div>
 
-              {/* Month label */}
-              <div className="flex items-center justify-center mb-5">
-                <span style={{ fontWeight: 700, color: theme.text, fontSize: 15 }}>{monthNames[splitterMonthIdx]} {splitterYear}</span>
+              {/* Month label with navigation */}
+              <div className="flex items-center justify-center gap-4 mb-5">
+                <button onClick={handleSplitterPrevMonth} className="p-1.5 rounded-lg hover:opacity-70 transition-opacity" style={{ backgroundColor: theme.border }}>
+                  <ChevronLeft className="w-4 h-4" style={{ color: theme.text }} />
+                </button>
+                <span style={{ fontWeight: 700, color: theme.text, fontSize: 15, minWidth: 150, textAlign: 'center' }}>{monthNames[splitterMonth]} {splitterYear}</span>
+                <button onClick={handleSplitterNextMonth} className="p-1.5 rounded-lg hover:opacity-70 transition-opacity" style={{ backgroundColor: theme.border }}>
+                  <ChevronRight className="w-4 h-4" style={{ color: theme.text }} />
+                </button>
               </div>
 
               {/* Income vs Bills cards with Auto/Manual toggles */}
@@ -986,7 +1084,7 @@ export default function SmartStackPage() {
                         style={{ background: isDark ? '#064E3B' : '#DCFCE7', border: '1px solid #BBF7D0', color: '#16A34A', fontWeight: 800 }} />
                     </div>
                   ) : (
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#16A34A' }}>${monthlyIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#16A34A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>${monthlyIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                   )}
                   {splitterIncomeMode === 'auto' && monthlyIncome === 0 && <div className="text-xs mt-1" style={{ color: theme.textM }}>No payments found for this month</div>}
                 </div>
@@ -997,7 +1095,7 @@ export default function SmartStackPage() {
                     <ModeToggle mode={splitterBillsMode} setMode={setSplitterBillsMode} storageKey="orca-splitter-bills-mode" />
                   </div>
                   <div className="text-xs mb-1" style={{ color: theme.textM }}>
-                    {splitterBillsMode === 'auto' ? `From Bill Boss (${monthNames[splitterMonthIdx]} ${splitterYear})` : 'Custom amount'}
+                    {splitterBillsMode === 'auto' ? `From Bill Boss (${monthNames[splitterMonth]} ${splitterYear})` : 'Custom amount'}
                   </div>
                   {splitterBillsMode === 'manual' ? (
                     <div className="relative mt-1">
@@ -1009,7 +1107,7 @@ export default function SmartStackPage() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: '#EF4444' }}>−${monthlyBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#EF4444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>−${monthlyBills.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                       <div className="text-xs mt-1" style={{ color: theme.textM }}>{unpaidBillCount} unpaid bill{unpaidBillCount !== 1 ? 's' : ''}</div>
                     </>
                   )}
@@ -1035,22 +1133,22 @@ export default function SmartStackPage() {
                 ].map(s => (
                   <div key={s.label} className="rounded-xl p-3.5" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
                     <div className="text-xs mb-1" style={{ color: theme.textM, fontWeight: 600, textTransform: 'uppercase' }}>{s.label}</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: s.color }}>{s.val}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: s.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.val}</div>
                   </div>
                 ))}
               </div>
 
               {/* Per period breakdown */}
-              <div className="rounded-xl p-4" style={{ background: isDark ? '#164E63' : '#E0F9FC', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}` }}>
+              <div className="rounded-xl p-4" style={{ background: isDark ? '#164E63' : '#E0F9FC', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}`, overflow: 'hidden' }}>
                 <p className="text-sm mb-3" style={{ color: theme.textM }}>Based on your income and bills this month, you need to set aside:</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#155E75' : '#CFFAFE', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}` }}>
+                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#155E75' : '#CFFAFE', border: `1px solid ${isDark ? '#0E7490' : '#A5F3FC'}`, overflow: 'hidden' }}>
                     <div className="text-xs mb-1" style={{ color: currentTheme.primary, fontWeight: 600 }}>Per Week</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: currentTheme.primary }}>${perWeek.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: currentTheme.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${perWeek.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   </div>
-                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#052E16' : '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                  <div className="rounded-xl p-3.5 text-center" style={{ background: isDark ? '#052E16' : '#F0FDF4', border: '1px solid #BBF7D0', overflow: 'hidden' }}>
                     <div className="text-xs mb-1" style={{ color: '#10B981', fontWeight: 600 }}>Per Day</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#059669' }}>${perDay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#059669', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${perDay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   </div>
                 </div>
               </div>
