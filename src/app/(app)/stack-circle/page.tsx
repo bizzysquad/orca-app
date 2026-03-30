@@ -167,6 +167,19 @@ export default function StackCirclePage() {
   const [newPackingItem, setNewPackingItem] = useState('');
   const [newPackingList, setNewPackingList] = useState<string[]>([]);
 
+  // Auto-calculate trip duration when start/end dates change
+  useEffect(() => {
+    if (newTripStart && newTripEnd) {
+      const start = new Date(newTripStart);
+      const end = new Date(newTripEnd);
+      const diffTime = end.getTime() - start.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) {
+        setNewTripDuration(String(diffDays));
+      }
+    }
+  }, [newTripStart, newTripEnd]);
+
   // Other state
   const [activeTab, setActiveTab] = useState<'group' | 'roommates'>('group');
   const [addMoneyAmount, setAddMoneyAmount] = useState('');
@@ -1436,19 +1449,20 @@ export default function StackCirclePage() {
                             <p className="text-xs font-bold" style={{ color: teal, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Trip Details</p>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Duration (days)</label>
-                                <input type="number" placeholder="7" value={newTripDuration} onChange={e => setNewTripDuration(e.target.value)}
-                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Start Date</label>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Departure Date</label>
                                 <input type="date" value={newTripStart} onChange={e => setNewTripStart(e.target.value)}
                                   className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
                               </div>
                               <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>End Date</label>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Return Date</label>
                                 <input type="date" value={newTripEnd} onChange={e => setNewTripEnd(e.target.value)}
                                   className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Duration{newTripStart && newTripEnd ? ' (auto)' : ' (days)'}</label>
+                                <input type="number" placeholder="7" value={newTripDuration} onChange={e => { if (!newTripStart || !newTripEnd) setNewTripDuration(e.target.value) }}
+                                  readOnly={!!(newTripStart && newTripEnd)}
+                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: newTripStart && newTripEnd ? theme.border : theme.bg, borderColor: theme.border, color: theme.text, opacity: newTripStart && newTripEnd ? 0.7 : 1 }} />
                               </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
