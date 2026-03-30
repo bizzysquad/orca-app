@@ -17,6 +17,12 @@ import {
   UserPlus,
   ChevronDown,
   Calendar,
+  Plane,
+  Hotel,
+  ListChecks,
+  Tag,
+  Circle,
+  CheckCircle2,
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, pct, gid } from '@/lib/utils';
@@ -65,13 +71,20 @@ interface GroupActivity {
   date: string;
 }
 
+interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  category: string; // 'packing' | 'documents' | 'expenses' | 'other'
+}
+
 interface TripDetails {
   duration: number;       // number of days
   startDate: string;
   endDate: string;
   flight?: string;
   hotel?: string;
-  packingList: string[];
+  packingList: ChecklistItem[];
 }
 
 interface Group {
@@ -165,7 +178,21 @@ export default function StackCirclePage() {
   const [newTripFlight, setNewTripFlight] = useState('');
   const [newTripHotel, setNewTripHotel] = useState('');
   const [newPackingItem, setNewPackingItem] = useState('');
-  const [newPackingList, setNewPackingList] = useState<string[]>([]);
+  const [newPackingList, setNewPackingList] = useState<ChecklistItem[]>([]);
+  const [newPackingCategory, setNewPackingCategory] = useState<string>('packing');
+
+  // Auto-calculate trip duration when start/end dates change
+  useEffect(() => {
+    if (newTripStart && newTripEnd) {
+      const start = new Date(newTripStart);
+      const end = new Date(newTripEnd);
+      const diffTime = end.getTime() - start.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) {
+        setNewTripDuration(String(diffDays));
+      }
+    }
+  }, [newTripStart, newTripEnd]);
 
   // Other state
   const [activeTab, setActiveTab] = useState<'group' | 'roommates'>('group');
@@ -188,6 +215,12 @@ export default function StackCirclePage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [editingGroupName, setEditingGroupName] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState('');
+
+  // Trip checklist management
+  const [tripChecklistItems, setTripChecklistItems] = useState<ChecklistItem[]>([]);
+  const [newChecklistText, setNewChecklistText] = useState('');
+  const [newChecklistCategory, setNewChecklistCategory] = useState('packing');
+  const [checklistFilter, setChecklistFilter] = useState<string>('All');
 
   // Load groups from localStorage on mount
   useEffect(() => {
@@ -221,6 +254,13 @@ export default function StackCirclePage() {
   useEffect(() => {
     if (currentGroup) {
       setGroupNameInput(currentGroup.customName || currentGroup.name || '');
+      // Load trip checklist if it's a vacation
+      if (currentGroup.entryType === 'vacation' && currentGroup.trip?.packingList) {
+        setTripChecklistItems(currentGroup.trip.packingList);
+      } else {
+        setTripChecklistItems([]);
+      }
+      setChecklistFilter('All');
     }
   }, [currentGroup]);
 
@@ -298,7 +338,7 @@ export default function StackCirclePage() {
           const existingTasks = JSON.parse(localStorage.getItem('orca-tasks') || '[]');
           const vacationTasks = newPackingList.map(item => ({
             id: gid(),
-            text: `[${newGroupName}] ${item}`,
+            text: `[${newGroupName}] ${item.text}`,
             completed: false,
             category: 'todo',
             priority: 'medium',
@@ -337,6 +377,7 @@ export default function StackCirclePage() {
       setNewTripHotel('');
       setNewPackingItem('');
       setNewPackingList([]);
+      setNewPackingCategory('packing');
       setShowCreateGroupForm(false);
     }
   };
@@ -518,6 +559,68 @@ export default function StackCirclePage() {
 
   const displayGroupName =
     currentGroup?.customName || currentGroup?.name || 'Stack Circle';
+
+  // Trip checklist handlers
+  const handleAddChecklistItem = () => {
+    if (newChecklistText.trim() && currentGroup) {
+      const newItem: ChecklistItem = {
+        id: gid(),
+        text: newChecklistText.trim(),
+        completed: false,
+        category: newChecklistCategory,
+      };
+      const updatedItems = [...tripChecklistItems, newItem];
+      setTripChecklistItems(updatedItems);
+      setNewChecklistText('');
+
+      // Update group data
+      const updatedGroups = groups.map((g) =>
+        g.id === currentGroup.id
+          ? {
+              ...g,
+              trip: g.trip ? { ...g.trip, packingList: updatedItems } : undefined,
+            }
+          : g
+      );
+      setGroups(updatedGroups);
+    }
+  };
+
+  const handleToggleChecklistItem = (itemId: string) => {
+    const updatedItems = tripChecklistItems.map((item) =>
+      item.id === itemId ? { ...item, completed: !item.completed } : item
+    );
+    setTripChecklistItems(updatedItems);
+
+    if (currentGroup) {
+      const updatedGroups = groups.map((g) =>
+        g.id === currentGroup.id
+          ? {
+              ...g,
+              trip: g.trip ? { ...g.trip, packingList: updatedItems } : undefined,
+            }
+          : g
+      );
+      setGroups(updatedGroups);
+    }
+  };
+
+  const handleDeleteChecklistItem = (itemId: string) => {
+    const updatedItems = tripChecklistItems.filter((item) => item.id !== itemId);
+    setTripChecklistItems(updatedItems);
+
+    if (currentGroup) {
+      const updatedGroups = groups.map((g) =>
+        g.id === currentGroup.id
+          ? {
+              ...g,
+              trip: g.trip ? { ...g.trip, packingList: updatedItems } : undefined,
+            }
+          : g
+      );
+      setGroups(updatedGroups);
+    }
+  };
 
   // Theme-aware accent colors
   const teal = currentTheme.primary;
@@ -734,7 +837,7 @@ export default function StackCirclePage() {
                       <div className="flex items-center gap-3">
                         <h2
                           className="text-lg sm:text-2xl"
-                          style={{ fontWeight: 800, color: '#4F46E5' }}
+                          style={{ fontWeight: 800, color: currentTheme.primary }}
                         >
                           {displayGroupName}
                         </h2>
@@ -811,7 +914,7 @@ export default function StackCirclePage() {
                         />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <div style={{ fontSize: 28, fontWeight: 900, color: '#4F46E5', lineHeight: 1 }}>{fmt(currentGroup.current)}</div>
+                        <div style={{ fontSize: 28, fontWeight: 900, color: currentTheme.primary, lineHeight: 1 }}>{fmt(currentGroup.current)}</div>
                         <div className="text-xs mt-1" style={{ color: currentTheme.primary }}>saved</div>
                       </div>
                     </div>
@@ -819,14 +922,14 @@ export default function StackCirclePage() {
 
                   <div className="flex items-center justify-center gap-1 mb-3">
                     <span className="text-sm" style={{ color: theme.textM }}>Target:</span>
-                    <span style={{ fontWeight: 700, color: '#4F46E5', fontSize: 15 }}>{fmt(currentGroup.target)}</span>
+                    <span style={{ fontWeight: 700, color: currentTheme.primary, fontSize: 15 }}>{fmt(currentGroup.target)}</span>
                     <span className="text-sm" style={{ color: theme.textM }}>· {pct(currentGroup.current, currentGroup.target)}%</span>
                   </div>
 
                   {currentGroup.date && (
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm mb-4" style={{ background: '#E0E7FF', color: '#4F46E5' }}>
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm mb-4" style={{ background: isDark ? `${currentTheme.primary}20` : `${currentTheme.primary}12`, color: currentTheme.primary }}>
                       <Calendar size={14} />
-                      Trip Date: {new Date(currentGroup.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}
+                      {currentGroup.entryType === 'vacation' ? 'Trip Date' : 'Target Date'}: {new Date(currentGroup.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}
                       <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: currentTheme.primary, color: '#fff', fontWeight: 700 }}>
                         {(() => {
                           const now = new Date();
@@ -865,9 +968,77 @@ export default function StackCirclePage() {
                     style={{ backgroundColor: 'rgba(255,255,255,0.6)' }}
                   >
                     <span className="text-xs" style={{ color: theme.textS }}>Invite Code:</span>
-                    <span style={{ fontWeight: 800, color: '#4F46E5', letterSpacing: '0.1em' }}>{currentGroup.code}</span>
+                    <span style={{ fontWeight: 800, color: currentTheme.primary, letterSpacing: '0.1em' }}>{currentGroup.code}</span>
                   </div>
                 </motion.div>
+
+                {/* Trip Details Card - Only for vacation groups */}
+                {currentGroup.entryType === 'vacation' && currentGroup.trip && (
+                  <motion.div
+                    variants={itemVariants}
+                    className="rounded-2xl border p-3 sm:p-6 transition-colors"
+                    style={{
+                      backgroundColor: theme.card,
+                      borderColor: tealBorder,
+                    }}
+                  >
+                    <h3
+                      className="font-bold text-base sm:text-lg mb-4 flex items-center gap-2"
+                      style={{ color: theme.text }}
+                    >
+                      <Plane className="w-5 h-5" style={{ color: teal }} />
+                      Trip Details
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-medium" style={{ color: theme.textS }}>Departure</p>
+                        <p className="text-sm font-semibold" style={{ color: theme.text }}>
+                          {currentGroup.trip.startDate
+                            ? new Date(currentGroup.trip.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : 'Not set'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium" style={{ color: theme.textS }}>Return</p>
+                        <p className="text-sm font-semibold" style={{ color: theme.text }}>
+                          {currentGroup.trip.endDate
+                            ? new Date(currentGroup.trip.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : 'Not set'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium" style={{ color: theme.textS }}>Duration</p>
+                        <p className="text-sm font-semibold" style={{ color: theme.text }}>
+                          {currentGroup.trip.duration} day{currentGroup.trip.duration !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Flight & Hotel Info */}
+                    {(currentGroup.trip.flight || currentGroup.trip.hotel) && (
+                      <div className="mt-4 pt-4 border-t" style={{ borderColor: theme.border }}>
+                        {currentGroup.trip.flight && (
+                          <div className="flex gap-3 mb-3">
+                            <Plane className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: teal }} />
+                            <div>
+                              <p className="text-xs font-medium" style={{ color: theme.textS }}>Flight</p>
+                              <p className="text-sm" style={{ color: theme.text }}>{currentGroup.trip.flight}</p>
+                            </div>
+                          </div>
+                        )}
+                        {currentGroup.trip.hotel && (
+                          <div className="flex gap-3">
+                            <Hotel className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: teal }} />
+                            <div>
+                              <p className="text-xs font-medium" style={{ color: theme.textS }}>Hotel</p>
+                              <p className="text-sm" style={{ color: theme.text }}>{currentGroup.trip.hotel}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
 
                 {/* Invite Link Card */}
                 <motion.div
@@ -1044,6 +1215,163 @@ export default function StackCirclePage() {
                     </div>
                   </div>
                 </motion.div>
+
+                {/* Trip Checklist - Only show for vacation groups */}
+                {currentGroup.entryType === 'vacation' && (
+                  <motion.div
+                    variants={itemVariants}
+                    className="rounded-2xl border p-3 sm:p-6 transition-colors"
+                    style={{
+                      backgroundColor: theme.card,
+                      borderColor: tealBorder,
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3
+                        className="font-bold text-base sm:text-lg flex items-center gap-2"
+                        style={{ color: theme.text }}
+                      >
+                        <ListChecks className="w-5 h-5" style={{ color: teal }} />
+                        Trip Checklist
+                      </h3>
+                      {tripChecklistItems.length > 0 && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: tealLight, color: teal, fontWeight: 600 }}>
+                          {tripChecklistItems.filter(i => i.completed).length}/{tripChecklistItems.length}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Category Filter */}
+                    {tripChecklistItems.length > 0 && (
+                      <div className="flex gap-2 mb-4 flex-wrap">
+                        {['All', 'packing', 'documents', 'expenses', 'other'].map((cat) => (
+                          <button
+                            key={cat}
+                            onClick={() => setChecklistFilter(cat)}
+                            className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
+                            style={{
+                              backgroundColor: checklistFilter === cat ? teal : theme.bg,
+                              color: checklistFilter === cat ? '#fff' : theme.textM,
+                              border: `1px solid ${checklistFilter === cat ? teal : theme.border}`,
+                            }}
+                          >
+                            {cat === 'All' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add Item */}
+                    <div className="flex gap-2 mb-4">
+                      <input
+                        type="text"
+                        placeholder="Add checklist item..."
+                        value={newChecklistText}
+                        onChange={(e) => setNewChecklistText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleAddChecklistItem();
+                          }
+                        }}
+                        className="flex-1 border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
+                        style={{
+                          backgroundColor: theme.bg,
+                          borderColor: theme.border,
+                          color: theme.text,
+                        }}
+                      />
+                      <select
+                        value={newChecklistCategory}
+                        onChange={(e) => setNewChecklistCategory(e.target.value)}
+                        className="border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none"
+                        style={{
+                          backgroundColor: theme.bg,
+                          borderColor: theme.border,
+                          color: theme.text,
+                        }}
+                      >
+                        <option value="packing">Packing</option>
+                        <option value="documents">Documents</option>
+                        <option value="expenses">Expenses</option>
+                        <option value="other">Other</option>
+                      </select>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handleAddChecklistItem}
+                        className="font-bold px-4 sm:px-6 py-2 sm:py-3 rounded-2xl text-sm transition-shadow whitespace-nowrap"
+                        style={{
+                          backgroundColor: teal,
+                          color: '#fff',
+                        }}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </motion.button>
+                    </div>
+
+                    {/* Checklist Items */}
+                    {tripChecklistItems.length > 0 ? (
+                      <div className="space-y-2">
+                        {tripChecklistItems
+                          .filter((item) => checklistFilter === 'All' || item.category === checklistFilter)
+                          .map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+                              style={{
+                                backgroundColor: theme.bg,
+                                opacity: item.completed ? 0.6 : 1,
+                              }}
+                            >
+                              <button
+                                onClick={() => handleToggleChecklistItem(item.id)}
+                                className="flex-shrink-0 transition-transform hover:scale-110"
+                              >
+                                {item.completed ? (
+                                  <CheckCircle2 className="w-5 h-5" style={{ color: teal }} />
+                                ) : (
+                                  <Circle className="w-5 h-5" style={{ color: theme.textM }} />
+                                )}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="inline-block text-xs px-2 py-1 rounded-md font-medium"
+                                    style={{
+                                      backgroundColor: isDark ? `${teal}20` : `${teal}10`,
+                                      color: teal,
+                                    }}
+                                  >
+                                    {item.category.charAt(0).toUpperCase() + item.category.slice(1)}
+                                  </span>
+                                  <p
+                                    className={`text-sm ${item.completed ? 'line-through' : ''}`}
+                                    style={{
+                                      color: item.completed ? theme.textS : theme.text,
+                                    }}
+                                  >
+                                    {item.text}
+                                  </p>
+                                </div>
+                              </div>
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleDeleteChecklistItem(item.id)}
+                                className="flex-shrink-0 text-sm transition-colors hover:opacity-70"
+                              >
+                                <Trash2 className="w-4 h-4" style={{ color: theme.textS }} />
+                              </motion.button>
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-center py-4" style={{ color: theme.textS }}>
+                        No checklist items yet
+                      </p>
+                    )}
+                  </motion.div>
+                )}
 
                 {/* Add Money Card */}
                 <motion.div
@@ -1222,97 +1550,139 @@ export default function StackCirclePage() {
                   }}
                 >
                   <h3
-                    className="font-bold text-base sm:text-lg mb-6"
+                    className="font-bold text-base sm:text-lg mb-4"
                     style={{ color: theme.text }}
                   >
                     Create Your First Group
                   </h3>
+
+                  {/* Entry Type Selector */}
+                  <div className="flex gap-2 mb-5">
+                    {([{ key: 'savings', label: 'Group Savings', icon: '🎯' }, { key: 'vacation', label: 'Group Trip', icon: '✈️' }] as const).map(opt => (
+                      <button key={opt.key} onClick={() => setNewEntryType(opt.key)}
+                        className="flex-1 py-3 rounded-xl text-sm font-bold transition-all"
+                        style={{ background: newEntryType === opt.key ? teal : theme.bg, color: newEntryType === opt.key ? '#fff' : theme.textM, border: `1px solid ${newEntryType === opt.key ? teal : theme.border}` }}>
+                        {opt.icon} {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="space-y-3 sm:space-y-4">
                     <div>
-                      <label
-                        className="block text-xs sm:text-sm font-medium mb-2"
-                        style={{ color: theme.text }}
-                      >
-                        Group Name
+                      <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
+                        {newEntryType === 'vacation' ? 'Trip Name' : 'Group Name'}
                       </label>
-                      <input
-                        type="text"
-                        placeholder="e.g., Vacation Fund"
-                        value={newGroupName}
-                        onChange={(e) =>
-                          setNewGroupName(e.target.value)
-                        }
+                      <input type="text" placeholder={newEntryType === 'vacation' ? 'e.g., Hawaii 2026' : 'e.g., Home Renovation'}
+                        value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
                         className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                        style={{
-                          backgroundColor: theme.bg,
-                          borderColor: theme.border,
-                          color: theme.text,
-                        }}
-                      />
+                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
                     </div>
 
                     <div>
-                      <label
-                        className="block text-xs sm:text-sm font-medium mb-2"
-                        style={{ color: theme.text }}
-                      >
-                        Goal Description
+                      <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
+                        {newEntryType === 'vacation' ? 'Trip Description' : 'What are you saving for?'}
                       </label>
-                      <input
-                        type="text"
-                        placeholder="e.g., Beach trip next summer"
-                        value={newGroupGoal}
-                        onChange={(e) =>
-                          setNewGroupGoal(e.target.value)
-                        }
+                      <input type="text" placeholder={newEntryType === 'vacation' ? 'e.g., Family beach vacation' : 'e.g., Save for kitchen remodel'}
+                        value={newGroupGoal} onChange={(e) => setNewGroupGoal(e.target.value)}
                         className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                        style={{
-                          backgroundColor: theme.bg,
-                          borderColor: theme.border,
-                          color: theme.text,
-                        }}
-                      />
+                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
                     </div>
+
+                    {/* Purpose / Contributors (Savings Goal) */}
+                    {newEntryType === 'savings' && (
+                      <div>
+                        <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Purpose (optional)</label>
+                        <input type="text" placeholder="e.g., Emergency fund, group gift"
+                          value={newPurpose} onChange={(e) => setNewPurpose(e.target.value)}
+                          className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
+                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
-                        <label
-                          className="block text-xs sm:text-sm font-medium mb-2"
-                          style={{ color: theme.text }}
-                        >
-                          Target Amount
+                        <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
+                          {newEntryType === 'vacation' ? 'Trip Budget' : 'Target Amount'}
                         </label>
-                        <input
-                          type="number"
-                          placeholder="$0.00"
-                          value={newGroupTarget}
-                          onChange={(e) =>
-                            setNewGroupTarget(e.target.value)
-                          }
+                        <input type="number" placeholder="$0.00" value={newGroupTarget} onChange={(e) => setNewGroupTarget(e.target.value)}
                           className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                          style={{
-                            backgroundColor: theme.bg,
-                            borderColor: theme.border,
-                            color: theme.text,
-                          }}
-                        />
+                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
                       </div>
                       <div>
-                        <label
-                          className="block text-xs sm:text-sm font-medium mb-2"
-                          style={{ color: theme.text }}
-                        >
-                          Target Date
-                        </label>
-                        <CalendarPicker
-                          value={newGroupDate}
-                          onChange={setNewGroupDate}
-                          placeholder="Target Date"
-                          theme={theme}
-                          showQuickSelect={false}
-                        />
+                        <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Target Date</label>
+                        <CalendarPicker value={newGroupDate} onChange={setNewGroupDate} placeholder="Select target date" theme={theme} showQuickSelect={false} />
                       </div>
                     </div>
+
+                    {/* Vacation-specific fields */}
+                    {newEntryType === 'vacation' && (
+                      <div className="space-y-3 pt-2" style={{ borderTop: `1px solid ${theme.border}` }}>
+                        <p className="text-xs font-bold" style={{ color: teal, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Trip Details</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Departure Date</label>
+                            <input type="date" value={newTripStart} onChange={e => setNewTripStart(e.target.value)}
+                              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Return Date</label>
+                            <input type="date" value={newTripEnd} onChange={e => setNewTripEnd(e.target.value)}
+                              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Duration{newTripStart && newTripEnd ? ' (auto)' : ' (days)'}</label>
+                            <input type="number" placeholder="7" value={newTripDuration} onChange={e => { if (!newTripStart || !newTripEnd) setNewTripDuration(e.target.value) }}
+                              readOnly={!!(newTripStart && newTripEnd)}
+                              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: newTripStart && newTripEnd ? theme.border : theme.bg, borderColor: theme.border, color: theme.text, opacity: newTripStart && newTripEnd ? 0.7 : 1 }} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Flight Info (optional)</label>
+                            <input type="text" placeholder="e.g., UA 234, 8:00 AM departure" value={newTripFlight} onChange={e => setNewTripFlight(e.target.value)}
+                              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Hotel (optional)</label>
+                            <input type="text" placeholder="e.g., Hilton Waikiki Beach" value={newTripHotel} onChange={e => setNewTripHotel(e.target.value)}
+                              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                          </div>
+                        </div>
+
+                        {/* Packing checklist */}
+                        <div>
+                          <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Packing Checklist</label>
+                          <div className="flex gap-2 mb-2">
+                            <input type="text" placeholder="Add item..." value={newPackingItem} onChange={e => setNewPackingItem(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter' && newPackingItem.trim()) { setNewPackingList(prev => [...prev, { id: gid(), text: newPackingItem.trim(), completed: false, category: newPackingCategory }]); setNewPackingItem(''); } }}
+                              className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                            <select value={newPackingCategory} onChange={e => setNewPackingCategory(e.target.value)}
+                              className="border rounded-xl px-2 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}>
+                              <option value="packing">Packing</option>
+                              <option value="documents">Documents</option>
+                              <option value="expenses">Expenses</option>
+                              <option value="other">Other</option>
+                            </select>
+                            <button onClick={() => { if (newPackingItem.trim()) { setNewPackingList(prev => [...prev, { id: gid(), text: newPackingItem.trim(), completed: false, category: newPackingCategory }]); setNewPackingItem(''); } }}
+                              className="px-3 py-2 rounded-xl text-sm font-bold" style={{ backgroundColor: teal, color: '#fff' }}>
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {newPackingList.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {newPackingList.map((item) => (
+                                <span key={item.id} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs" style={{ background: `${teal}15`, color: teal, fontWeight: 600 }}>
+                                  <span className="text-xs">[{item.category}]</span> {item.text}
+                                  <button onClick={() => setNewPackingList(prev => prev.filter(i => i.id !== item.id))} className="ml-0.5 hover:opacity-70">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <motion.button
                       whileHover={{ scale: 1.05 }}
@@ -1325,7 +1695,7 @@ export default function StackCirclePage() {
                       }}
                     >
                       <Plus className="w-4 sm:w-5 h-4 sm:h-5 inline mr-2" />
-                      Create Group
+                      {newEntryType === 'vacation' ? 'Create Trip' : 'Create Group'}
                     </motion.button>
                   </div>
                 </motion.div>
@@ -1374,7 +1744,7 @@ export default function StackCirclePage() {
 
                       {/* Entry Type Selector */}
                       <div className="flex gap-2 mb-5">
-                        {([{ key: 'savings', label: 'Savings Goal', icon: '🎯' }, { key: 'vacation', label: 'Trip / Vacation', icon: '✈️' }] as const).map(opt => (
+                        {([{ key: 'savings', label: 'Group Savings', icon: '🎯' }, { key: 'vacation', label: 'Group Trip', icon: '✈️' }] as const).map(opt => (
                           <button key={opt.key} onClick={() => setNewEntryType(opt.key)}
                             className="flex-1 py-3 rounded-xl text-sm font-bold transition-all"
                             style={{ background: newEntryType === opt.key ? teal : theme.bg, color: newEntryType === opt.key ? '#fff' : theme.textM, border: `1px solid ${newEntryType === opt.key ? teal : theme.border}` }}>
@@ -1436,19 +1806,20 @@ export default function StackCirclePage() {
                             <p className="text-xs font-bold" style={{ color: teal, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Trip Details</p>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Duration (days)</label>
-                                <input type="number" placeholder="7" value={newTripDuration} onChange={e => setNewTripDuration(e.target.value)}
-                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Start Date</label>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Departure Date</label>
                                 <input type="date" value={newTripStart} onChange={e => setNewTripStart(e.target.value)}
                                   className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
                               </div>
                               <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>End Date</label>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Return Date</label>
                                 <input type="date" value={newTripEnd} onChange={e => setNewTripEnd(e.target.value)}
                                   className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Duration{newTripStart && newTripEnd ? ' (auto)' : ' (days)'}</label>
+                                <input type="number" placeholder="7" value={newTripDuration} onChange={e => { if (!newTripStart || !newTripEnd) setNewTripDuration(e.target.value) }}
+                                  readOnly={!!(newTripStart && newTripEnd)}
+                                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: newTripStart && newTripEnd ? theme.border : theme.bg, borderColor: theme.border, color: theme.text, opacity: newTripStart && newTripEnd ? 0.7 : 1 }} />
                               </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1469,19 +1840,26 @@ export default function StackCirclePage() {
                               <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Packing Checklist</label>
                               <div className="flex gap-2 mb-2">
                                 <input type="text" placeholder="Add item..." value={newPackingItem} onChange={e => setNewPackingItem(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter' && newPackingItem.trim()) { setNewPackingList(prev => [...prev, newPackingItem.trim()]); setNewPackingItem(''); } }}
+                                  onKeyDown={e => { if (e.key === 'Enter' && newPackingItem.trim()) { setNewPackingList(prev => [...prev, { id: gid(), text: newPackingItem.trim(), completed: false, category: newPackingCategory }]); setNewPackingItem(''); } }}
                                   className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                                <button onClick={() => { if (newPackingItem.trim()) { setNewPackingList(prev => [...prev, newPackingItem.trim()]); setNewPackingItem(''); } }}
+                                <select value={newPackingCategory} onChange={e => setNewPackingCategory(e.target.value)}
+                                  className="border rounded-xl px-2 py-2 text-sm focus:outline-none" style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}>
+                                  <option value="packing">Packing</option>
+                                  <option value="documents">Documents</option>
+                                  <option value="expenses">Expenses</option>
+                                  <option value="other">Other</option>
+                                </select>
+                                <button onClick={() => { if (newPackingItem.trim()) { setNewPackingList(prev => [...prev, { id: gid(), text: newPackingItem.trim(), completed: false, category: newPackingCategory }]); setNewPackingItem(''); } }}
                                   className="px-3 py-2 rounded-xl text-sm font-bold" style={{ backgroundColor: teal, color: '#fff' }}>
                                   <Plus className="w-4 h-4" />
                                 </button>
                               </div>
                               {newPackingList.length > 0 && (
                                 <div className="flex flex-wrap gap-2">
-                                  {newPackingList.map((item, i) => (
-                                    <span key={i} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs" style={{ background: `${teal}15`, color: teal, fontWeight: 600 }}>
-                                      {item}
-                                      <button onClick={() => setNewPackingList(prev => prev.filter((_, idx) => idx !== i))} className="ml-0.5 hover:opacity-70">
+                                  {newPackingList.map((item) => (
+                                    <span key={item.id} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs" style={{ background: `${teal}15`, color: teal, fontWeight: 600 }}>
+                                      <span className="text-xs">[{item.category}]</span> {item.text}
+                                      <button onClick={() => setNewPackingList(prev => prev.filter(i => i.id !== item.id))} className="ml-0.5 hover:opacity-70">
                                         <X className="w-3 h-3" />
                                       </button>
                                     </span>
