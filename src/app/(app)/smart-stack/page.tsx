@@ -64,6 +64,19 @@ interface PaymentEntry {
   status?: 'expected' | 'received';
 }
 
+/** Convert local PaymentEntry[] → OrcaData-compatible IncomingPayment[] */
+function toIncomingPayments(entries: PaymentEntry[]) {
+  return entries.map(p => ({
+    id: p.id,
+    amount: p.amount,
+    date: p.date,
+    description: p.description,
+    type: (p.recurrence && p.recurrence !== 'none' ? 'recurring' : 'one-time') as 'one-time' | 'recurring',
+    recurrence: (p.recurrence && p.recurrence !== 'none' ? p.recurrence : undefined) as 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | undefined,
+    status: (p.status || 'expected') as 'expected' | 'received' | 'overdue',
+  }));
+}
+
 // ============== PROJECTION CALCULATOR COMPONENT ==============
 function ProjectionCalculator({ theme }: { theme: any }) {
   const [goalAmount, setGoalAmount] = useState('')
@@ -276,6 +289,7 @@ export default function SmartStackPage() {
   const [newPaymentDate, setNewPaymentDate] = useState('');
   const [newPaymentDesc, setNewPaymentDesc] = useState('');
   const [newPaymentRecurrence, setNewPaymentRecurrence] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none');
+  const [paymentFormError, setPaymentFormError] = useState('');
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
 
   const [customHours, setCustomHours] = useState<Record<string, number>>({});
@@ -744,8 +758,41 @@ export default function SmartStackPage() {
                   ))}
                 </div>
               </div>
-              <button className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
-                style={{ backgroundColor: '#0891B2', color: '#fff' }}>
+              {paymentFormError && (
+                <div className="text-xs mb-2 flex items-center gap-1.5" style={{ color: '#EF4444' }}>
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />{paymentFormError}
+                </div>
+              )}
+              <button
+                className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
+                style={{ backgroundColor: '#0891B2', color: '#fff' }}
+                onClick={() => {
+                  const amt = parseFloat(newPaymentAmount);
+                  if (!amt || amt <= 0 || !newPaymentDate || !newPaymentDesc.trim()) {
+                    setPaymentFormError(!newPaymentAmount ? 'Enter an amount' : !newPaymentDate ? 'Pick a date' : !newPaymentDesc.trim() ? 'Add a description' : 'Enter a valid amount');
+                    return;
+                  }
+                  setPaymentFormError('');
+                  const entry: PaymentEntry = {
+                    id: crypto.randomUUID(),
+                    amount: amt,
+                    date: newPaymentDate,
+                    description: newPaymentDesc.trim(),
+                    recurrence: newPaymentRecurrence,
+                    status: 'expected',
+                  };
+                  const updated = [...paymentEntries, entry];
+                  setPaymentEntries(updated);
+                  setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                  // Also push into OrcaDataContext so dashboard picks it up immediately
+                  setData(prev => ({ ...prev, incomingPayments: toIncomingPayments(updated) }));
+                  // Reset form
+                  setNewPaymentAmount('');
+                  setNewPaymentDate('');
+                  setNewPaymentDesc('');
+                  setNewPaymentRecurrence('none');
+                }}
+              >
                 <Plus className="w-4 h-4" />Add Payment
               </button>
             </div>
@@ -754,17 +801,43 @@ export default function SmartStackPage() {
             {paymentEntries.length === 0 ? (
               <div className="text-sm" style={{ color: theme.textM }}>No payments scheduled</div>
             ) : (
-              paymentEntries.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-3.5 rounded-xl transition-all hover:opacity-90" style={{ border: `1px solid ${theme.border}` }}>
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#10B981' }} />
-                  <div className="flex-1">
-                    <div className="text-sm" style={{ fontWeight: 700, color: theme.text }}>{p.description}</div>
-                    <div className="text-xs" style={{ color: theme.textM }}>{p.date} · {p.recurrence || 'One-time'}</div>
+              <div className="space-y-2">
+              {paymentEntries.map(p => (
+                <div key={p.id} className="flex items-center gap-2 sm:gap-3 p-3 sm:p-3.5 rounded-xl transition-all" style={{ border: `1px solid ${theme.border}` }}>
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.status === 'received' ? '#6B7280' : '#10B981' }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate" style={{ fontWeight: 700, color: theme.text }}>{p.description}</div>
+                    <div className="text-xs" style={{ color: theme.textM }}>{p.date} · {p.recurrence && p.recurrence !== 'none' ? p.recurrence.replace('-', '‑') : 'One‑time'}</div>
                   </div>
-                  <span className="px-2 py-1 rounded-full text-xs" style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontWeight: 600 }}>Expected</span>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#10B981' }}>+${p.amount.toFixed(2)}</div>
+                  <span className="px-2 py-1 rounded-full text-[10px] sm:text-xs flex-shrink-0" style={{
+                    backgroundColor: p.status === 'received' ? '#E5E7EB' : '#DCFCE7',
+                    color: p.status === 'received' ? '#6B7280' : '#16A34A',
+                    fontWeight: 600,
+                  }}>{p.status === 'received' ? 'Received' : 'Expected'}</span>
+                  <div className="flex-shrink-0" style={{ fontSize: 15, fontWeight: 800, color: p.status === 'received' ? '#6B7280' : '#10B981' }}>+${p.amount.toFixed(2)}</div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    {p.status !== 'received' && (
+                      <button title="Mark received" onClick={() => {
+                        const updated = paymentEntries.map(e => e.id === p.id ? { ...e, status: 'received' as const } : e);
+                        setPaymentEntries(updated);
+                        setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                        setData(prev => ({ ...prev, incomingPayments: toIncomingPayments(updated) }));
+                      }} className="p-1.5 rounded-lg hover:opacity-80 transition-all" style={{ color: '#10B981' }}>
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button title="Delete payment" onClick={() => {
+                      const updated = paymentEntries.filter(e => e.id !== p.id);
+                      setPaymentEntries(updated);
+                      setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                      setData(prev => ({ ...prev, incomingPayments: toIncomingPayments(updated) }));
+                    }} className="p-1.5 rounded-lg hover:opacity-80 transition-all" style={{ color: '#EF4444' }}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              ))
+              ))}
+              </div>
             )}
           </motion.div>
         )}
