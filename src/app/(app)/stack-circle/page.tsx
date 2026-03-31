@@ -274,14 +274,12 @@ export default function StackCirclePage() {
 
   // Handlers for groups
   const handleCreateGroup = () => {
-    if (
-      newGroupName &&
-      newGroupGoal &&
-      newGroupTarget &&
-      newGroupDate &&
-      !isNaN(Number(newGroupTarget))
-    ) {
-      const tripDetails: TripDetails | undefined = newEntryType === 'vacation' ? {
+    // For trips: only name is required. For savings: name + goal + target required.
+    const isVacation = newEntryType === 'vacation';
+    const savingsValid = newGroupName && newGroupGoal && newGroupTarget && !isNaN(Number(newGroupTarget));
+    const tripValid = newGroupName.trim().length > 0;
+    if (isVacation ? tripValid : savingsValid) {
+      const tripDetails: TripDetails | undefined = isVacation ? {
         duration: parseInt(newTripDuration) || 0,
         startDate: newTripStart,
         endDate: newTripEnd,
@@ -292,11 +290,11 @@ export default function StackCirclePage() {
 
       const newGroup: Group = {
         id: gid(),
-        name: newGroupName,
-        goal: newGroupGoal,
-        target: Number(newGroupTarget),
+        name: newGroupName.trim(),
+        goal: newGroupGoal || newGroupName.trim(),
+        target: Number(newGroupTarget) || 0,
         current: 0,
-        date: newGroupDate,
+        date: newGroupDate || new Date().toLocaleDateString(),
         code: generateInviteCode(),
         entryType: newEntryType,
         purpose: newPurpose || undefined,
@@ -361,7 +359,7 @@ export default function StackCirclePage() {
       setNewGroupGoal('');
       setNewGroupTarget('');
       setNewGroupDate('');
-      setNewEntryType('savings');
+      // Keep newEntryType as-is so next creation defaults to same tab type
       setNewPurpose('');
       setNewTripDuration('');
       setNewTripStart('');
@@ -781,25 +779,6 @@ export default function StackCirclePage() {
         {/* TRIP TAB */}
         {activeTab === 'trip' && (
           <>
-            {/* View mode toggle */}
-            <motion.div variants={itemVariants} className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: theme.textS }}>View:</span>
-              {(['list', 'compact'] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setTripViewMode(mode)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all"
-                  style={{
-                    backgroundColor: tripViewMode === mode ? teal : theme.bg,
-                    color: tripViewMode === mode ? '#fff' : theme.textM,
-                    border: `1px solid ${tripViewMode === mode ? teal : theme.border}`,
-                  }}
-                >
-                  {mode === 'list' ? '☰ List' : '⊞ Compact'}
-                </button>
-              ))}
-            </motion.div>
-
             {/* Join a Group */}
             <motion.div
               variants={itemVariants}
@@ -919,7 +898,7 @@ export default function StackCirclePage() {
                 const isCollapsed = collapsedGroups.has(group.id);
                 return (
                 <motion.div key={group.id} variants={itemVariants}
-                  className={`rounded-2xl border transition-all ${tripViewMode === 'compact' ? 'p-3' : 'p-4 sm:p-5'}`}
+                  className="rounded-2xl border transition-all p-4 sm:p-5"
                   style={{ backgroundColor: currentGroupId === group.id ? `${teal}10` : theme.card, borderColor: currentGroupId === group.id ? teal : theme.border }}
                 >
                   <div className="flex items-center justify-between cursor-pointer" onClick={() => setCurrentGroupId(group.id)}>
@@ -929,21 +908,26 @@ export default function StackCirclePage() {
                       </div>
                       <div>
                         <p className="font-bold text-sm" style={{ color: theme.text }}>{group.customName || group.name}</p>
-                        {tripViewMode === 'list' && !isCollapsed && (
+                        {!isCollapsed && (
                           <p className="text-xs" style={{ color: theme.textM }}>{group.trip?.startDate || 'No date set'} · {group.members.length} member{group.members.length !== 1 ? 's' : ''}</p>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {tripViewMode === 'list' && !isCollapsed && (
+                      {!isCollapsed && group.target > 0 && (
                         <div className="text-right">
                           <p className="text-xs font-bold" style={{ color: teal }}>{fmt(group.current)} / {fmt(group.target)}</p>
                           <p className="text-xs" style={{ color: theme.textM }}>{Math.round((group.current / group.target) * 100) || 0}%</p>
                         </div>
                       )}
-                      <button onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(group.id); }}
-                        className="p-1.5 rounded-lg transition-transform" style={{ color: theme.textS }}>
-                        <ChevronDown className="w-4 h-4 transition-transform" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }} />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(group.id); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all"
+                        style={{ backgroundColor: tealLight, color: teal }}
+                        title={isCollapsed ? 'Expand' : 'Minimize'}
+                      >
+                        <ChevronDown className="w-3.5 h-3.5" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                        {isCollapsed ? 'Expand' : 'Minimize'}
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}
                         className="p-1.5 rounded-lg" style={{ color: theme.bad }}>
@@ -951,7 +935,7 @@ export default function StackCirclePage() {
                       </button>
                     </div>
                   </div>
-                  {tripViewMode === 'list' && !isCollapsed && (
+                  {!isCollapsed && group.target > 0 && (
                     <div className="mt-3">
                       <div className="w-full rounded-full h-1.5" style={{ backgroundColor: theme.border }}>
                         <div className="h-1.5 rounded-full" style={{ width: `${Math.min((group.current / group.target) * 100, 100)}%`, backgroundColor: teal }} />
@@ -1629,25 +1613,6 @@ export default function StackCirclePage() {
         {/* SAVINGS TAB */}
         {activeTab === 'savings' && (
           <>
-            {/* View mode toggle */}
-            <motion.div variants={itemVariants} className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: theme.textS }}>View:</span>
-              {(['list', 'compact'] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setSavingsViewMode(mode)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all"
-                  style={{
-                    backgroundColor: savingsViewMode === mode ? teal : theme.bg,
-                    color: savingsViewMode === mode ? '#fff' : theme.textM,
-                    border: `1px solid ${savingsViewMode === mode ? teal : theme.border}`,
-                  }}
-                >
-                  {mode === 'list' ? '☰ List' : '⊞ Compact'}
-                </button>
-              ))}
-            </motion.div>
-
             {/* Join a Group - always visible at top */}
             <motion.div
               variants={itemVariants}
@@ -1773,7 +1738,7 @@ export default function StackCirclePage() {
                 const isCollapsed = collapsedGroups.has(group.id);
                 return (
                 <motion.div key={group.id} variants={itemVariants}
-                  className={`rounded-2xl border transition-all ${savingsViewMode === 'compact' ? 'p-3' : 'p-4 sm:p-5'}`}
+                  className="rounded-2xl border transition-all p-4 sm:p-5"
                   style={{ backgroundColor: currentGroupId === group.id ? `${teal}10` : theme.card, borderColor: currentGroupId === group.id ? teal : theme.border }}
                 >
                   <div className="flex items-center justify-between cursor-pointer" onClick={() => setCurrentGroupId(group.id)}>
@@ -1783,21 +1748,26 @@ export default function StackCirclePage() {
                       </div>
                       <div>
                         <p className="font-bold text-sm" style={{ color: theme.text }}>{group.customName || group.name}</p>
-                        {savingsViewMode === 'list' && !isCollapsed && (
+                        {!isCollapsed && (
                           <p className="text-xs" style={{ color: theme.textM }}>{group.members.length} member{group.members.length !== 1 ? 's' : ''}</p>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {savingsViewMode === 'list' && !isCollapsed && (
+                      {!isCollapsed && (
                         <div className="text-right">
                           <p className="text-xs font-bold" style={{ color: teal }}>{fmt(group.current)} / {fmt(group.target)}</p>
                           <p className="text-xs" style={{ color: theme.textM }}>{Math.round((group.current / group.target) * 100) || 0}%</p>
                         </div>
                       )}
-                      <button onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(group.id); }}
-                        className="p-1.5 rounded-lg" style={{ color: theme.textS }}>
-                        <ChevronDown className="w-4 h-4 transition-transform" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }} />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(group.id); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all"
+                        style={{ backgroundColor: tealLight, color: teal }}
+                        title={isCollapsed ? 'Expand' : 'Minimize'}
+                      >
+                        <ChevronDown className="w-3.5 h-3.5" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                        {isCollapsed ? 'Expand' : 'Minimize'}
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}
                         className="p-1.5 rounded-lg" style={{ color: theme.bad }}>
@@ -1805,7 +1775,7 @@ export default function StackCirclePage() {
                       </button>
                     </div>
                   </div>
-                  {savingsViewMode === 'list' && !isCollapsed && (
+                  {!isCollapsed && (
                     <div className="mt-3">
                       <div className="w-full rounded-full h-1.5" style={{ backgroundColor: theme.border }}>
                         <div className="h-1.5 rounded-full" style={{ width: `${Math.min((group.current / group.target) * 100, 100)}%`, backgroundColor: teal }} />
