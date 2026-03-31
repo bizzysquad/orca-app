@@ -1,7 +1,7 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, DollarSign, Target, Heart,
   Lock, Edit3, Plus, Trash2, Pause, Play, LineChart,
@@ -454,6 +454,10 @@ export default function SmartStackPage() {
 
   const [projFreq, setProjFreq] = useState<'weekly' | 'biweekly'>('biweekly');
   const [projPeriodIndex, setProjPeriodIndex] = useState(0);
+  const [checkStep, setCheckStep] = useState<1 | 2 | 3>(1);
+  const [projLocked, setProjLocked] = useState(false);
+  const [projWeekOfMonth, setProjWeekOfMonth] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [projMonth, setProjMonth] = useState<number>(new Date().getMonth());
 
   const payPeriods = useMemo(() => {
     const today = new Date();
@@ -548,7 +552,6 @@ export default function SmartStackPage() {
 
       if (isWknd) {
         if (weekendsEnabled) {
-          // When weekends globally enabled, toggle day off like any weekday
           setDaysOff((prev) => {
             const exists = prev.find((d) => d.date === dateStr);
             if (exists) {
@@ -558,7 +561,6 @@ export default function SmartStackPage() {
             }
           });
         } else {
-          // When weekends globally disabled, toggle individual override
           const isMarkedWorking = weekendWorkDays.includes(dateStr);
           if (isMarkedWorking) {
             setWeekendWorkDays(prev => prev.filter(d => d !== dateStr));
@@ -596,6 +598,15 @@ export default function SmartStackPage() {
       return weekendWorkDays.includes(dateStr);
     };
 
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const WEEK_OPTIONS = [
+      { value: 1, label: '1st Week' },
+      { value: 2, label: '2nd Week' },
+      { value: 3, label: '3rd Week' },
+      { value: 4, label: '4th Week' },
+      { value: 5, label: 'Last Week' },
+    ];
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -603,164 +614,510 @@ export default function SmartStackPage() {
         style={{ backgroundColor: theme.card, borderColor: theme.border }}
         className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full"
       >
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${currentTheme.primary}20` }}>
-            <BarChart3 size={20} style={{ color: currentTheme.primary }} />
+        {/* Header with step indicator */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${currentTheme.primary}20` }}>
+              <BarChart3 size={20} style={{ color: currentTheme.primary }} />
+            </div>
+            <div>
+              <h3 style={{ color: theme.text }} className="text-base font-bold">Check Projector</h3>
+              <p style={{ color: theme.textM }} className="text-xs">Step {projLocked ? '✓ Complete' : checkStep} of 3</p>
+            </div>
           </div>
-          <div>
-            <h3 style={{ color: theme.text }} className="text-base font-bold">Check Projector</h3>
-          </div>
+          {projLocked && (
+            <button
+              onClick={() => {
+                setProjLocked(false);
+                setCheckStep(1);
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg font-bold"
+              style={{ backgroundColor: `${currentTheme.primary}20`, color: currentTheme.primary }}
+            >
+              Edit
+            </button>
+          )}
         </div>
 
-        <div className="space-y-4">
-          <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-xl p-4 space-y-2">
-            <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide">Net Income</p>
-            <div className="relative">
-              <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2">$</span>
-              <input
-                type="number"
-                value={inlineNetIncome}
-                onChange={(e) => handleNetIncomeChange(e.target.value)}
-                placeholder="e.g., 3820"
-                style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                className="w-full border rounded-xl pl-7 pr-3 py-2.5 text-sm font-semibold outline-none"
-              />
-            </div>
-            <p style={{ color: theme.textM }} className="text-xs">Your take-home pay per pay period</p>
-          </div>
-
-          <div>
-            <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide mb-2">Frequency</p>
-            <div className="flex gap-2 rounded-2xl p-1" style={{ backgroundColor: `${currentTheme.primary}20`, border: `1px solid ${currentTheme.primary}` }}>
-              <button
-                onClick={() => setProjFreq('weekly')}
-                className="flex-1 py-3 rounded-2xl text-sm transition-all font-bold"
-                style={{
-                  backgroundColor: projFreq === 'weekly' ? currentTheme.primary : 'transparent',
-                  color: projFreq === 'weekly' ? '#fff' : currentTheme.primaryLight,
-                }}
-              >
-                Weekly
-              </button>
-              <button
-                onClick={() => setProjFreq('biweekly')}
-                className="flex-1 py-3 rounded-2xl text-sm transition-all font-bold"
-                style={{
-                  backgroundColor: projFreq === 'biweekly' ? currentTheme.primary : 'transparent',
-                  color: projFreq === 'biweekly' ? '#fff' : currentTheme.primaryLight,
-                }}
-              >
-                Bi-Weekly
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 max-w-full">
-            <div className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 flex-wrap max-w-full" style={{ backgroundColor: `${currentTheme.primary}20`, color: currentTheme.primary, border: `1px solid ${currentTheme.primary}` }}>
-              <span>📅</span>
-              <span className="truncate">{effectivePeriod.label}</span>
-              <span className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap" style={{ background: currentTheme.primary, color: '#fff', fontWeight: 700 }}>Current</span>
-            </div>
-          </div>
-
-          <div className="rounded-xl p-4" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-            <div className="text-xs mb-3" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Custom Pay Period (Optional)</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="min-w-0">
-                <label className="block text-xs mb-1" style={{ color: theme.textM }}>Start Date</label>
-                <CalendarPicker value={customPeriodStart} onChange={setCustomPeriodStart} placeholder="Select start date" theme={theme} showQuickSelect={false} />
+        {/* Step progress dots */}
+        {!projLocked && (
+          <div className="flex items-center gap-2 mb-5">
+            {[1, 2, 3].map((s) => (
+              <div key={s} className="flex items-center gap-2">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+                  style={{
+                    backgroundColor: checkStep >= s ? currentTheme.primary : theme.bg,
+                    color: checkStep >= s ? '#fff' : theme.textM,
+                    border: `2px solid ${checkStep >= s ? currentTheme.primary : theme.border}`,
+                  }}
+                >
+                  {s}
+                </div>
+                {s < 3 && (
+                  <div
+                    className="h-0.5 w-8"
+                    style={{ backgroundColor: checkStep > s ? currentTheme.primary : theme.border }}
+                  />
+                )}
               </div>
-              <div className="min-w-0">
-                <label className="block text-xs mb-1" style={{ color: theme.textM }}>End Date</label>
-                <CalendarPicker value={customPeriodEnd} onChange={setCustomPeriodEnd} placeholder="Select end date" theme={theme} showQuickSelect={false} />
-              </div>
-            </div>
-            {customPeriodStart && customPeriodEnd && (
-              <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: `1px solid ${theme.border}` }}>
-                <span className="text-xs" style={{ color: theme.textM }}>Custom period active</span>
-                <button onClick={() => { setCustomPeriodStart(''); setCustomPeriodEnd(''); }}
-                  className="text-xs px-2 py-1 rounded-lg" style={{ color: '#EF4444', backgroundColor: isDark ? '#2D0A0A' : '#FEF2F2' }}>
-                  Clear
-                </button>
-              </div>
-            )}
+            ))}
+            <span className="text-xs ml-1" style={{ color: theme.textM }}>
+              {checkStep === 1 ? 'Schedule' : checkStep === 2 ? 'Work Days' : 'Income'}
+            </span>
           </div>
+        )}
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Pay Period Calendar</div>
-              <div className="text-xs" style={{ color: theme.textM }}>Click to toggle days on/off</div>
-            </div>
-
-            {/* Weekend toggle */}
-            <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+        <AnimatePresence mode="wait">
+          {/* ======= STEP 1: Schedule Setup ======= */}
+          {!projLocked && checkStep === 1 && (
+            <motion.div
+              key="step1"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-4"
+            >
               <div>
-                <span className="text-xs font-semibold" style={{ color: theme.text }}>Include Weekends</span>
-                <span className="text-xs ml-1.5" style={{ color: theme.textM }}>({weekendsEnabled ? 'on' : 'off'})</span>
+                <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide mb-2">
+                  Pay Frequency
+                </p>
+                <div
+                  className="flex gap-2 rounded-2xl p-1"
+                  style={{ backgroundColor: `${currentTheme.primary}20`, border: `1px solid ${currentTheme.primary}` }}
+                >
+                  <button
+                    onClick={() => setProjFreq('weekly')}
+                    className="flex-1 py-3 rounded-2xl text-sm transition-all font-bold"
+                    style={{
+                      backgroundColor: projFreq === 'weekly' ? currentTheme.primary : 'transparent',
+                      color: projFreq === 'weekly' ? '#fff' : currentTheme.primaryLight,
+                    }}
+                  >
+                    Weekly
+                  </button>
+                  <button
+                    onClick={() => setProjFreq('biweekly')}
+                    className="flex-1 py-3 rounded-2xl text-sm transition-all font-bold"
+                    style={{
+                      backgroundColor: projFreq === 'biweekly' ? currentTheme.primary : 'transparent',
+                      color: projFreq === 'biweekly' ? '#fff' : currentTheme.primaryLight,
+                    }}
+                  >
+                    Bi-Weekly
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => setWeekendsEnabled(prev => !prev)}
-                className="relative w-11 h-6 rounded-full transition-colors"
-                style={{ backgroundColor: weekendsEnabled ? currentTheme.primary : theme.border }}
-              >
-                <div className="absolute top-0.5 rounded-full w-5 h-5 bg-white shadow transition-transform"
-                  style={{ transform: weekendsEnabled ? 'translateX(22px)' : 'translateX(2px)' }} />
-              </button>
-            </div>
 
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                <div key={d} className="text-center text-xs py-1" style={{ color: theme.textM, fontWeight: 600 }}>{d}</div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7 gap-1">
-              {Array.from({ length: Math.ceil(paddedDays.length / 7) }).map((_, week) =>
-                paddedDays.slice(week * 7, (week + 1) * 7).map((day, dayIdx) => {
-                  const off = day && isDayOff(day);
-                  const wk = day && isWeekend(day);
-                  const wkWork = day && isWeekendWorking(day);
-                  // A day is "active" (scheduled to work) if it's a weekday, or weekend with global toggle on, or individually overridden
-                  const isActive = day && (!wk || weekendsEnabled || wkWork);
-                  const isOff = off || (wk && !weekendsEnabled && !wkWork);
-
-                  return (
+              <div>
+                <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide mb-2">
+                  Which Week of the Month?
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {WEEK_OPTIONS.map((opt) => (
                     <button
-                      key={`${week}-${dayIdx}`}
-                      onClick={() => day && toggleDayOff(day)}
-                      className="flex flex-col items-center justify-center rounded-xl transition-all"
+                      key={opt.value}
+                      onClick={() => setProjWeekOfMonth(opt.value as 1 | 2 | 3 | 4 | 5)}
+                      className="px-3 py-2 rounded-xl text-xs font-bold transition-all"
                       style={{
-                        height: 52,
-                        backgroundColor: day ? (isOff ? theme.bg : isActive ? `${currentTheme.primary}20` : theme.bg) : 'transparent',
-                        border: day ? `1px solid ${isOff ? theme.border : isActive ? currentTheme.primary : theme.border}` : 'none',
-                        opacity: 1,
-                        cursor: day ? 'pointer' : 'default',
+                        backgroundColor: projWeekOfMonth === opt.value ? currentTheme.primary : theme.bg,
+                        color: projWeekOfMonth === opt.value ? '#fff' : theme.textM,
+                        border: `1px solid ${projWeekOfMonth === opt.value ? currentTheme.primary : theme.border}`,
                       }}
                     >
-                      {day && (
-                        <>
-                          <span className="text-xs" style={{ color: theme.textM, fontWeight: 500 }}>{day.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2)}</span>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM }}>
-                            {day.getDate()}
-                          </span>
-                          <span className="text-xs" style={{ color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM, fontSize: 9 }}>
-                            {isOff ? 'off' : isActive ? 'on' : 'off'}
-                          </span>
-                        </>
-                      )}
+                      {opt.label}
                     </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
+                  ))}
+                </div>
+              </div>
 
-          <div className="rounded-xl p-4" style={{ backgroundColor: `${currentTheme.primary}20`, border: `1px solid ${currentTheme.primary}` }}>
-            <div className="text-xs mb-1" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Projected Check Amount</div>
-            <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: currentTheme.primary }}>${projectedCheckAmount.toFixed(2)}</div>
-            <div className="text-xs mt-1 break-words" style={{ color: theme.textM }}>Based on ${effectiveNetIncome.toFixed(2)} net income · {Math.round((projectedCheckAmount / effectiveNetIncome) * 7)} work days</div>
-          </div>
-        </div>
+              <div>
+                <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide mb-2">
+                  Which Month?
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {MONTHS.map((m, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setProjMonth(i)}
+                      className="py-2 rounded-xl text-xs font-bold transition-all"
+                      style={{
+                        backgroundColor: projMonth === i ? currentTheme.primary : theme.bg,
+                        color: projMonth === i ? '#fff' : theme.textM,
+                        border: `1px solid ${projMonth === i ? currentTheme.primary : theme.border}`,
+                      }}
+                    >
+                      {m.slice(0, 3)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setCheckStep(2)}
+                className="w-full py-3 rounded-2xl text-sm font-bold transition-all"
+                style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
+              >
+                Next: Work Days
+              </button>
+            </motion.div>
+          )}
+
+          {/* ======= STEP 2: Work Days & Hours ======= */}
+          {!projLocked && checkStep === 2 && (
+            <motion.div
+              key="step2"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-4"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide">
+                    Pay Period Calendar
+                  </p>
+                  <p style={{ color: theme.textM }} className="text-xs">Tap to toggle days</p>
+                </div>
+
+                {/* Weekend toggle */}
+                <div
+                  className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-3"
+                  style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}
+                >
+                  <span className="text-xs font-semibold" style={{ color: theme.text }}>
+                    Include Weekends
+                  </span>
+                  <button
+                    onClick={() => setWeekendsEnabled((prev) => !prev)}
+                    className="relative w-11 h-6 rounded-full transition-colors"
+                    style={{ backgroundColor: weekendsEnabled ? currentTheme.primary : theme.border }}
+                  >
+                    <div
+                      className="absolute top-0.5 rounded-full w-5 h-5 bg-white shadow transition-transform"
+                      style={{
+                        transform: weekendsEnabled ? 'translateX(22px)' : 'translateX(2px)',
+                      }}
+                    />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                    <div
+                      key={d}
+                      className="text-center text-xs py-1"
+                      style={{ color: theme.textM, fontWeight: 600 }}
+                    >
+                      {d}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({ length: Math.ceil(paddedDays.length / 7) }).map((_, week) =>
+                    paddedDays.slice(week * 7, (week + 1) * 7).map((day, dayIdx) => {
+                      const off = day && isDayOff(day);
+                      const wk = day && isWeekend(day);
+                      const wkWork = day && isWeekendWorking(day);
+                      const isActive = day && (!wk || weekendsEnabled || wkWork);
+                      const isOff = off || (wk && !weekendsEnabled && !wkWork);
+
+                      return (
+                        <button
+                          key={`${week}-${dayIdx}`}
+                          onClick={() => day && toggleDayOff(day)}
+                          className="flex flex-col items-center justify-center rounded-xl transition-all"
+                          style={{
+                            height: 52,
+                            backgroundColor: day
+                              ? isOff
+                                ? theme.bg
+                                : isActive
+                                ? `${currentTheme.primary}20`
+                                : theme.bg
+                              : 'transparent',
+                            border: day
+                              ? `1px solid ${isOff ? theme.border : isActive ? currentTheme.primary : theme.border}`
+                              : 'none',
+                            cursor: day ? 'pointer' : 'default',
+                          }}
+                        >
+                          {day && (
+                            <>
+                              <span
+                                className="text-xs"
+                                style={{ color: theme.textM, fontWeight: 500 }}
+                              >
+                                {day.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2)}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 15,
+                                  fontWeight: 700,
+                                  color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM,
+                                }}
+                              >
+                                {day.getDate()}
+                              </span>
+                              <span
+                                className="text-xs"
+                                style={{
+                                  color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM,
+                                  fontSize: 9,
+                                }}
+                              >
+                                {isOff ? 'off' : isActive ? 'on' : 'off'}
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCheckStep(1)}
+                  className="flex-1 py-3 rounded-2xl text-sm font-bold transition-all"
+                  style={{
+                    backgroundColor: theme.bg,
+                    color: theme.textM,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                >
+                  Back
+                </button>
+                <button
+                  onClick={() => setCheckStep(3)}
+                  className="flex-1 py-3 rounded-2xl text-sm font-bold transition-all"
+                  style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
+                >
+                  Next: Income
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ======= STEP 3: Income & Lock ======= */}
+          {!projLocked && checkStep === 3 && (
+            <motion.div
+              key="step3"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-4"
+            >
+              <div
+                style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                className="border rounded-xl p-4 space-y-2"
+              >
+                <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide">
+                  Take-Home Net Income
+                </p>
+                <div className="relative">
+                  <span style={{ color: theme.textM }} className="absolute left-3 top-1/2 -translate-y-1/2">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    value={inlineNetIncome}
+                    onChange={(e) => handleNetIncomeChange(e.target.value)}
+                    placeholder="e.g., 3820"
+                    style={{
+                      backgroundColor: theme.bg,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    }}
+                    className="w-full border rounded-xl pl-7 pr-3 py-2.5 text-sm font-semibold outline-none"
+                  />
+                </div>
+                <p style={{ color: theme.textM }} className="text-xs">Your take-home pay per pay period</p>
+              </div>
+
+              {/* Preview */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: `${currentTheme.primary}15`, border: `1px solid ${currentTheme.primary}40` }}
+              >
+                <p
+                  className="text-xs font-bold uppercase tracking-wide mb-1"
+                  style={{ color: theme.textM }}
+                >
+                  Projected Amount
+                </p>
+                <p className="text-3xl font-black" style={{ color: currentTheme.primary }}>
+                  ${projectedCheckAmount.toFixed(2)}
+                </p>
+                <p className="text-xs mt-1" style={{ color: theme.textM }}>
+                  Based on ${effectiveNetIncome.toFixed(2)} net income
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCheckStep(2)}
+                  className="flex-1 py-3 rounded-2xl text-sm font-bold transition-all"
+                  style={{
+                    backgroundColor: theme.bg,
+                    color: theme.textM,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                >
+                  Back
+                </button>
+                <button
+                  onClick={() => setProjLocked(true)}
+                  className="flex-1 py-3 rounded-2xl text-sm font-bold transition-all"
+                  style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
+                >
+                  Lock In
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ======= LOCKED VIEW: Show result + live calendar ======= */}
+          {projLocked && (
+            <motion.div key="locked" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+              {/* Big projected amount */}
+              <div
+                className="rounded-xl p-5 text-center"
+                style={{
+                  backgroundColor: `${currentTheme.primary}20`,
+                  border: `2px solid ${currentTheme.primary}`,
+                }}
+              >
+                <p
+                  className="text-xs font-bold uppercase tracking-wide mb-2"
+                  style={{ color: theme.textM }}
+                >
+                  Projected Check Amount
+                </p>
+                <p className="text-[40px] font-black leading-none" style={{ color: currentTheme.primary }}>
+                  ${projectedCheckAmount.toFixed(2)}
+                </p>
+                <p className="text-xs mt-2" style={{ color: theme.textM }}>
+                  {MONTHS[projMonth]} · {projFreq === 'weekly' ? 'Weekly' : 'Bi-Weekly'} · Net $
+                  {effectiveNetIncome.toFixed(2)}
+                </p>
+              </div>
+
+              {/* Summary */}
+              <div
+                className="rounded-xl p-3 space-y-2"
+                style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}
+              >
+                <div className="flex justify-between text-xs">
+                  <span style={{ color: theme.textM }}>Pay Period</span>
+                  <span style={{ color: theme.text }} className="font-bold">
+                    {effectivePeriod.label}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span style={{ color: theme.textM }}>Frequency</span>
+                  <span style={{ color: theme.text }} className="font-bold capitalize">
+                    {projFreq}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span style={{ color: theme.textM }}>Work Days</span>
+                  <span style={{ color: theme.text }} className="font-bold">
+                    {Math.round(
+                      (projectedCheckAmount / effectiveNetIncome) * (projFreq === 'weekly' ? 5 : 10)
+                    )}{' '}
+                    days
+                  </span>
+                </div>
+              </div>
+
+              {/* Live calendar - click to toggle day off */}
+              <div>
+                <p
+                  className="text-xs font-bold uppercase tracking-wide mb-2"
+                  style={{ color: theme.textS }}
+                >
+                  Tap a day to adjust
+                </p>
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                    <div
+                      key={d}
+                      className="text-center text-xs py-1"
+                      style={{ color: theme.textM, fontWeight: 600 }}
+                    >
+                      {d}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({ length: Math.ceil(paddedDays.length / 7) }).map((_, week) =>
+                    paddedDays.slice(week * 7, (week + 1) * 7).map((day, dayIdx) => {
+                      const off = day && isDayOff(day);
+                      const wk = day && isWeekend(day);
+                      const wkWork = day && isWeekendWorking(day);
+                      const isActive = day && (!wk || weekendsEnabled || wkWork);
+                      const isOff = off || (wk && !weekendsEnabled && !wkWork);
+
+                      return (
+                        <button
+                          key={`${week}-${dayIdx}`}
+                          onClick={() => day && toggleDayOff(day)}
+                          className="flex flex-col items-center justify-center rounded-xl transition-all"
+                          style={{
+                            height: 52,
+                            backgroundColor: day
+                              ? isOff
+                                ? theme.bg
+                                : isActive
+                                ? `${currentTheme.primary}20`
+                                : theme.bg
+                              : 'transparent',
+                            border: day
+                              ? `1px solid ${isOff ? theme.border : isActive ? currentTheme.primary : theme.border}`
+                              : 'none',
+                            cursor: day ? 'pointer' : 'default',
+                          }}
+                        >
+                          {day && (
+                            <>
+                              <span
+                                className="text-xs"
+                                style={{ color: theme.textM, fontWeight: 500 }}
+                              >
+                                {day.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2)}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 15,
+                                  fontWeight: 700,
+                                  color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM,
+                                }}
+                              >
+                                {day.getDate()}
+                              </span>
+                              <span
+                                className="text-xs"
+                                style={{
+                                  color: isOff ? theme.textM : isActive ? currentTheme.primary : theme.textM,
+                                  fontSize: 9,
+                                }}
+                              >
+                                {isOff ? 'off' : isActive ? 'on' : 'off'}
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   };
