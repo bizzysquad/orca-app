@@ -8,11 +8,8 @@ import {
   MapPin,
   X,
   Trash2,
-  Link2,
   Copy,
   Check,
-  Share2,
-  ExternalLink,
   Edit3,
   UserPlus,
   ChevronDown,
@@ -123,16 +120,7 @@ const itemVariants = {
   },
 };
 
-// Helper: Convert group name to slug for invite URL
-const toSlug = (name: string): string => {
-  return name
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
-};
-
-// Helper: Generate invite code
+// Helper: Generate group code
 const generateInviteCode = (): string => {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
@@ -211,8 +199,9 @@ export default function StackCirclePage() {
     try { setLocalSynced('orca-roommates', JSON.stringify(updated)); } catch {}
   };
 
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState('');
   const [editingGroupName, setEditingGroupName] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState('');
 
@@ -278,13 +267,6 @@ export default function StackCirclePage() {
   const allPaidUtils = roommates.members.every((m) => m.paidUtilities);
   const allPaid = allPaidRent && allPaidUtils;
 
-  // Invite link - using orcafin.app/invite/{group-name-slug}?code={code}
-  const groupNameSlug = toSlug(
-    currentGroup?.customName || currentGroup?.name || ''
-  );
-  const inviteLink = currentGroup
-    ? `https://orcafin.app/invite/${groupNameSlug}?code=${currentGroup.code}`
-    : '';
 
   // Handlers for groups
   const handleCreateGroup = () => {
@@ -404,46 +386,52 @@ export default function StackCirclePage() {
     setShowGroupSelector(false);
   };
 
-  const handleCopyLink = () => {
-    if (inviteLink) {
+  const handleCopyCode = () => {
+    if (currentGroup?.code) {
+      const code = currentGroup.code;
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(inviteLink).then(() => {
-          setCopiedLink(true);
-          setTimeout(() => setCopiedLink(false), 2000);
+        navigator.clipboard.writeText(code).then(() => {
+          setCopiedCode(true);
+          setTimeout(() => setCopiedCode(false), 2000);
         }).catch(() => {
-          // Fallback
           const textArea = document.createElement('textarea');
-          textArea.value = inviteLink;
+          textArea.value = code;
           document.body.appendChild(textArea);
           textArea.select();
           document.execCommand('copy');
           document.body.removeChild(textArea);
-          setCopiedLink(true);
-          setTimeout(() => setCopiedLink(false), 2000);
+          setCopiedCode(true);
+          setTimeout(() => setCopiedCode(false), 2000);
         });
       }
     }
   };
 
-  const handleCopyCode = () => {
-    if (currentGroup?.code) {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(currentGroup.code).then(() => {
-          setCopiedLink(true);
-          setTimeout(() => setCopiedLink(false), 2000);
-        }).catch(() => {
-          // Fallback
-          const textArea = document.createElement('textarea');
-          textArea.value = currentGroup.code;
-          document.body.appendChild(textArea);
-          textArea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textArea);
-          setCopiedLink(true);
-          setTimeout(() => setCopiedLink(false), 2000);
-        });
-      }
+  const handleJoinGroup = () => {
+    if (!joinCode.trim()) {
+      setJoinError('Please enter a group code');
+      return;
     }
+    const target = groups.find(g => g.code === joinCode.trim().toUpperCase());
+    if (!target) {
+      setJoinError('Invalid code. Please check and try again.');
+      return;
+    }
+    if (!target.members.some(m => m.name === 'You')) {
+      const updated = groups.map(g =>
+        g.id === target.id
+          ? {
+              ...g,
+              members: [...g.members, { id: gid(), name: 'You', role: 'member', target: g.target, contrib: 0, balance: 0, joinedAt: new Date().toLocaleDateString() }],
+              activity: [{ id: gid(), user: 'You', msg: 'Joined the group via group code', date: new Date().toLocaleDateString() }, ...g.activity],
+            }
+          : g
+      );
+      setGroups(updated);
+    }
+    setCurrentGroupId(target.id);
+    setJoinCode('');
+    setJoinError('');
   };
 
   const handleSaveGroupName = () => {
@@ -763,6 +751,45 @@ export default function StackCirclePage() {
         {/* GROUP SAVINGS TAB */}
         {activeTab === 'group' && (
           <>
+            {/* Join a Group - always visible at top */}
+            <motion.div
+              variants={itemVariants}
+              className="rounded-2xl border p-3 sm:p-5 transition-colors"
+              style={{ backgroundColor: theme.card, borderColor: tealBorder }}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 rounded-2xl" style={{ backgroundColor: tealLight }}>
+                  <UserPlus className="w-5 h-5" style={{ color: teal }} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base" style={{ color: theme.text }}>Join a Group</h3>
+                  <p className="text-xs" style={{ color: theme.textS }}>Enter a group code to join an existing circle</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter 6-character code"
+                  value={joinCode}
+                  onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setJoinError(''); }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleJoinGroup()}
+                  className="flex-1 border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors font-mono tracking-widest"
+                  style={{ backgroundColor: theme.bg, borderColor: joinError ? '#EF4444' : theme.border, color: theme.text }}
+                  maxLength={6}
+                />
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleJoinGroup}
+                  className="font-bold px-4 sm:px-6 py-2 sm:py-3 rounded-2xl text-sm transition-shadow whitespace-nowrap"
+                  style={{ backgroundColor: teal, color: '#fff' }}
+                >
+                  Join Group
+                </motion.button>
+              </div>
+              {joinError && <p className="text-xs mt-2 font-medium" style={{ color: '#EF4444' }}>{joinError}</p>}
+            </motion.div>
+
             {/* Group Selector */}
             {groups.length > 0 && (
               <motion.div
@@ -1205,181 +1232,82 @@ export default function StackCirclePage() {
                   </motion.div>
                 )}
 
-                {/* Invite Link Card */}
+                {/* Share Group Code Card */}
                 <motion.div
                   variants={itemVariants}
                   className="rounded-2xl border p-3 sm:p-6 transition-colors"
-                  style={{
-                    backgroundColor: theme.card,
-                    borderColor: tealBorder,
-                  }}
+                  style={{ backgroundColor: theme.card, borderColor: tealBorder }}
                 >
                   <div className="flex items-center gap-3 mb-4">
-                    <div
-                      className="p-2 rounded-2xl"
-                      style={{ backgroundColor: tealLight }}
-                    >
-                      <Share2
-                        className="w-5 h-5"
-                        style={{ color: teal }}
-                      />
+                    <div className="p-2 rounded-2xl" style={{ backgroundColor: tealLight }}>
+                      <UserPlus className="w-5 h-5" style={{ color: teal }} />
                     </div>
                     <div>
-                      <h3
-                        className="font-bold text-base sm:text-lg"
-                        style={{ color: theme.text }}
-                      >
-                        Invite Friends
-                      </h3>
-                      <p
-                        className="text-sm"
-                        style={{ color: theme.textS }}
-                      >
-                        Share a link to join your circle
-                      </p>
+                      <h3 className="font-bold text-base sm:text-lg" style={{ color: theme.text }}>Invite Members</h3>
+                      <p className="text-sm" style={{ color: theme.textS }}>Share your group code to invite friends</p>
                     </div>
                   </div>
 
-                  {/* Info about new vs existing users */}
-                  <div
-                    className="rounded-xl p-3 mb-4 text-xs"
-                    style={{
-                      backgroundColor: isDark ? `${currentTheme.primary}20` : `${currentTheme.primary}10`,
-                      color: currentTheme.primary,
-                    }}
-                  >
-                    <p>
-                      <strong>New users:</strong> Will see a sign-up flow
-                    </p>
-                    <p>
-                      <strong>Existing users:</strong>{' '}
-                      Will be prompted to log in and auto-join
-                    </p>
-                  </div>
-
-                  {/* Invite Link Display */}
-                  <div
-                    className="border rounded-2xl p-3 sm:p-4 mb-4 transition-colors"
-                    style={{
-                      backgroundColor: theme.bg,
-                      borderColor: tealBorder,
-                    }}
-                  >
-                    <p
-                      className="text-xs mb-2 font-semibold uppercase tracking-wider"
-                      style={{ color: theme.textS }}
-                    >
-                      Invite Link
-                    </p>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-                      <div
-                        className="flex-1 min-w-0 border rounded-2xl px-2 sm:px-4 py-2 sm:py-2.5 font-mono text-xs sm:text-sm truncate transition-colors"
-                        style={{
-                          backgroundColor: theme.card,
-                          borderColor: tealBorder,
-                          color: teal,
-                        }}
-                      >
-                        {inviteLink}
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={handleCopyLink}
-                        className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all whitespace-nowrap"
-                        style={{
-                          backgroundColor: copiedLink
-                            ? theme.ok
-                            : teal,
-                          color: '#fff',
-                        }}
-                      >
-                        {copiedLink ? (
-                          <>
-                            <Check className="w-3 sm:w-4 h-3 sm:h-4" />
-                            <span className="hidden sm:inline">Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 sm:w-4 h-3 sm:h-4" />
-                            <span className="hidden sm:inline">Copy</span>
-                          </>
-                        )}
-                      </motion.button>
-                    </div>
-                  </div>
-
-                  {/* Quick Share Buttons */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                  {/* Large code display */}
+                  <div className="rounded-2xl p-4 sm:p-6 mb-4 text-center" style={{ backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF', border: '1.5px solid #C7D2FE' }}>
+                    <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6366F1', opacity: 0.7 }}>Group Code</p>
+                    <div className="text-3xl sm:text-4xl font-black tracking-[0.2em] mb-4" style={{ color: '#4F46E5' }}>{currentGroup.code}</div>
                     <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
                       onClick={handleCopyCode}
-                      className="py-2 sm:py-3 rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors font-medium hover:opacity-80 border"
-                      style={{
-                        backgroundColor: theme.card,
-                        borderColor: tealBorder,
-                        color: theme.text,
-                      }}
+                      className="inline-flex items-center gap-2 px-6 py-2.5 rounded-2xl font-bold text-sm transition-all"
+                      style={{ backgroundColor: copiedCode ? '#10B981' : teal, color: '#fff' }}
                     >
-                      <Copy
-                        className="w-3 sm:w-4 h-3 sm:h-4"
-                        style={{ color: teal }}
-                      />
-                      <span className="truncate">Copy Code: {currentGroup.code}</span>
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setShowInviteModal(true)}
-                      className="py-2 sm:py-3 rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors font-medium hover:opacity-80 border"
-                      style={{
-                        backgroundColor: theme.card,
-                        borderColor: tealBorder,
-                        color: theme.text,
-                      }}
-                    >
-                      <Link2
-                        className="w-3 sm:w-4 h-3 sm:h-4"
-                        style={{ color: teal }}
-                      />
-                      Share via...
+                      {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {copiedCode ? 'Code Copied!' : 'Copy Code'}
                     </motion.button>
                   </div>
 
-                  {/* Link Settings */}
-                  <div
-                    className="mt-4 pt-4 border-t"
-                    style={{ borderColor: theme.border }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p
-                          className="text-sm font-medium"
-                          style={{ color: theme.textM }}
-                        >
-                          Link expires in
-                        </p>
-                        <p className="text-xs" style={{ color: theme.textS }}>
-                          Anyone with the link can join
-                        </p>
-                      </div>
-                      <select
-                        className="rounded-2xl px-3 py-2 text-sm focus:outline-none transition-colors border"
-                        style={{
-                          backgroundColor: theme.bg,
-                          borderColor: tealBorder,
-                          color: theme.text,
-                        }}
-                      >
-                        <option>7 days</option>
-                        <option>24 hours</option>
-                        <option>1 hour</option>
-                        <option>Never</option>
-                      </select>
-                    </div>
+                  <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: isDark ? tealLight : '#E0F9FC', color: teal }}>
+                    <strong>How it works:</strong> Share this 6-character code with friends. They open Stack Circle, tap <strong>Join Group</strong>, enter the code, and they're in instantly.
                   </div>
                 </motion.div>
+
+                {/* Join Group Card */}
+                <motion.div
+                  variants={itemVariants}
+                  className="rounded-2xl border p-3 sm:p-5 transition-colors"
+                  style={{ backgroundColor: theme.card, borderColor: tealBorder }}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-2xl" style={{ backgroundColor: tealLight }}>
+                      <UserPlus className="w-5 h-5" style={{ color: teal }} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm sm:text-base" style={{ color: theme.text }}>Join Another Group</h3>
+                      <p className="text-xs" style={{ color: theme.textS }}>Enter a group code to join an existing circle</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter 6-character code"
+                      value={joinCode}
+                      onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setJoinError(''); }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleJoinGroup()}
+                      className="flex-1 border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors font-mono tracking-widest"
+                      style={{ backgroundColor: theme.bg, borderColor: joinError ? '#EF4444' : theme.border, color: theme.text }}
+                      maxLength={6}
+                    />
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleJoinGroup}
+                      className="font-bold px-4 sm:px-6 py-2 sm:py-3 rounded-2xl text-sm transition-shadow whitespace-nowrap"
+                      style={{ backgroundColor: teal, color: '#fff' }}
+                    >
+                      Join Group
+                    </motion.button>
+                  </div>
+                  {joinError && <p className="text-xs mt-2 font-medium" style={{ color: '#EF4444' }}>{joinError}</p>}
+                </motion.div>
+
 
                 {/* Trip Checklist - Only show for vacation groups */}
                 {currentGroup.entryType === 'vacation' && (
@@ -2494,83 +2422,6 @@ export default function StackCirclePage() {
         )}
       </motion.div>
 
-      {/* Invite Share Modal */}
-      <AnimatePresence>
-        {showInviteModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-            onClick={() => setShowInviteModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md rounded-2xl p-6"
-              style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-lg" style={{ color: theme.text }}>Share Invite</h3>
-                <button onClick={() => setShowInviteModal(false)} className="p-1.5 rounded-lg hover:opacity-70" style={{ color: theme.textM }}>
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <p className="text-sm mb-4" style={{ color: theme.textM }}>
-                Share the invite link or code with friends to join <strong style={{ color: theme.text }}>{currentGroup?.customName || currentGroup?.name}</strong>
-              </p>
-
-              {/* Invite Link */}
-              <div className="rounded-xl p-3 mb-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                <p className="text-xs mb-1 font-semibold" style={{ color: theme.textS }}>Invite Link</p>
-                <p className="text-sm font-mono truncate" style={{ color: teal }}>{inviteLink}</p>
-              </div>
-
-              {/* Invite Code */}
-              <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                <p className="text-xs mb-1 font-semibold" style={{ color: theme.textS }}>Invite Code</p>
-                <p className="text-lg font-bold tracking-wider" style={{ color: teal }}>{currentGroup?.code}</p>
-              </div>
-
-              {/* Share buttons */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => { handleCopyLink(); setShowInviteModal(false); }}
-                  className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                  style={{ backgroundColor: teal, color: '#fff' }}
-                >
-                  <Copy className="w-4 h-4" /> Copy Link
-                </button>
-                <button
-                  onClick={() => { handleCopyCode(); setShowInviteModal(false); }}
-                  className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                  style={{ backgroundColor: theme.bg, color: teal, border: `1px solid ${theme.border}` }}
-                >
-                  <Copy className="w-4 h-4" /> Copy Code
-                </button>
-                <button
-                  onClick={() => {
-                    if (navigator.share) {
-                      navigator.share({ title: `Join ${currentGroup?.customName || currentGroup?.name}`, text: `Join our group on ORCA! Use code: ${currentGroup?.code}`, url: inviteLink }).catch(() => {});
-                    } else {
-                      handleCopyLink();
-                    }
-                    setShowInviteModal(false);
-                  }}
-                  className="col-span-2 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                  style={{ backgroundColor: `${teal}15`, color: teal, border: `1px solid ${teal}30` }}
-                >
-                  <Share2 className="w-4 h-4" /> Share via Device
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
