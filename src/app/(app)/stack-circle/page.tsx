@@ -901,13 +901,19 @@ export default function StackCirclePage() {
                   className="rounded-2xl border transition-all p-4 sm:p-5"
                   style={{ backgroundColor: currentGroupId === group.id ? `${teal}10` : theme.card, borderColor: currentGroupId === group.id ? teal : theme.border }}
                 >
-                  <div className="flex items-center justify-between cursor-pointer" onClick={() => setCurrentGroupId(group.id)}>
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: tealLight }}>
                         <Plane className="w-4 h-4" style={{ color: teal }} />
                       </div>
                       <div>
-                        <p className="font-bold text-sm" style={{ color: theme.text }}>{group.customName || group.name}</p>
+                        <button
+                          className="font-bold text-sm text-left hover:opacity-75 transition-opacity"
+                          style={{ color: theme.text }}
+                          onClick={() => setCurrentGroupId(group.id)}
+                        >
+                          {group.customName || group.name}
+                        </button>
                         {!isCollapsed && (
                           <p className="text-xs" style={{ color: theme.textM }}>{group.trip?.startDate || 'No date set'} · {group.members.length} member{group.members.length !== 1 ? 's' : ''}</p>
                         )}
@@ -921,15 +927,14 @@ export default function StackCirclePage() {
                         </div>
                       )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(group.id); }}
+                        onClick={() => toggleGroupCollapse(group.id)}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all"
                         style={{ backgroundColor: tealLight, color: teal }}
-                        title={isCollapsed ? 'Expand' : 'Minimize'}
                       >
                         <ChevronDown className="w-3.5 h-3.5" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
                         {isCollapsed ? 'Expand' : 'Minimize'}
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}
+                      <button onClick={() => handleDeleteGroup(group.id)}
                         className="p-1.5 rounded-lg" style={{ color: theme.bad }}>
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1741,13 +1746,19 @@ export default function StackCirclePage() {
                   className="rounded-2xl border transition-all p-4 sm:p-5"
                   style={{ backgroundColor: currentGroupId === group.id ? `${teal}10` : theme.card, borderColor: currentGroupId === group.id ? teal : theme.border }}
                 >
-                  <div className="flex items-center justify-between cursor-pointer" onClick={() => setCurrentGroupId(group.id)}>
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: tealLight }}>
                         <Users className="w-4 h-4" style={{ color: teal }} />
                       </div>
                       <div>
-                        <p className="font-bold text-sm" style={{ color: theme.text }}>{group.customName || group.name}</p>
+                        <button
+                          className="font-bold text-sm text-left hover:opacity-75 transition-opacity"
+                          style={{ color: theme.text }}
+                          onClick={() => setCurrentGroupId(group.id)}
+                        >
+                          {group.customName || group.name}
+                        </button>
                         {!isCollapsed && (
                           <p className="text-xs" style={{ color: theme.textM }}>{group.members.length} member{group.members.length !== 1 ? 's' : ''}</p>
                         )}
@@ -1761,15 +1772,14 @@ export default function StackCirclePage() {
                         </div>
                       )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(group.id); }}
+                        onClick={() => toggleGroupCollapse(group.id)}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all"
                         style={{ backgroundColor: tealLight, color: teal }}
-                        title={isCollapsed ? 'Expand' : 'Minimize'}
                       >
                         <ChevronDown className="w-3.5 h-3.5" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
                         {isCollapsed ? 'Expand' : 'Minimize'}
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}
+                      <button onClick={() => handleDeleteGroup(group.id)}
                         className="p-1.5 rounded-lg" style={{ color: theme.bad }}>
                         <Trash2 className="w-4 h-4" />
                       </button>
