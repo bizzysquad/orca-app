@@ -839,6 +839,71 @@ export default function StackCirclePage() {
               {joinError && <p className="text-xs mt-2 font-medium" style={{ color: '#EF4444' }}>{joinError}</p>}
             </motion.div>
 
+            {/* Create Group Trip Button */}
+            <motion.div variants={itemVariants}>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => { setShowCreateGroupForm(!showCreateGroupForm); setNewEntryType('vacation'); }}
+                className="w-full px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: theme.bg,
+                  border: `1px dashed ${isDark ? '#475569' : '#CBD5E1'}`,
+                  color: teal,
+                  fontWeight: 700,
+                }}
+              >
+                <Plus className="w-4 sm:w-5 h-4 sm:h-5" />
+                {showCreateGroupForm ? 'Cancel' : 'Create Group Trip'}
+              </motion.button>
+
+              <AnimatePresence>
+                {showCreateGroupForm && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="rounded-2xl border p-4 sm:p-5 transition-colors mt-4"
+                    style={{ backgroundColor: theme.card, borderColor: tealBorder }}
+                  >
+                    <h3 className="font-bold text-base mb-4" style={{ color: theme.text }}>New Group Trip</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Trip Name</label>
+                        <input type="text" placeholder="e.g., Hawaii 2026"
+                          value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
+                          className="w-full border rounded-2xl px-3 py-2.5 text-sm focus:outline-none transition-colors"
+                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Budget (optional)</label>
+                          <input type="number" placeholder="$0.00" value={newGroupTarget} onChange={(e) => setNewGroupTarget(e.target.value)}
+                            className="w-full border rounded-2xl px-3 py-2.5 text-sm focus:outline-none transition-colors"
+                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Target Date (optional)</label>
+                          <CalendarPicker value={newGroupDate} onChange={setNewGroupDate} placeholder="Select date" theme={theme} showQuickSelect={false} />
+                        </div>
+                      </div>
+                      <p className="text-xs" style={{ color: theme.textS }}>Trip details (departure, hotel, packing list, etc.) can be added after creation.</p>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => { setNewEntryType('vacation'); handleCreateGroup(); }}
+                        className="w-full font-bold px-4 py-2.5 rounded-2xl text-sm transition-shadow"
+                        style={{ backgroundColor: teal, color: '#fff' }}
+                      >
+                        <Plus className="w-4 h-4 inline mr-2" />
+                        Create Trip
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+
             {/* Trip Groups List */}
             {(() => {
               const tripGroups = groups.filter(g => g.entryType === 'vacation');
@@ -895,122 +960,6 @@ export default function StackCirclePage() {
                   )}
                 </motion.div>
               );});
-            })()}
-
-            {/* Group Selector - for selecting active group details view */}
-            {(() => {
-              const tripGroups = groups.filter(g => g.entryType === 'vacation');
-              return tripGroups.length > 0 && (
-              <motion.div
-                variants={itemVariants}
-                className="relative"
-              >
-                <button
-                  onClick={() => setShowGroupSelector(!showGroupSelector)}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border transition-colors"
-                  style={{
-                    backgroundColor: theme.card,
-                    borderColor: tealBorder,
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5" style={{ color: teal }} />
-                    <div className="text-left">
-                      <p className="text-xs" style={{ color: theme.textS }}>
-                        Active Group
-                      </p>
-                      <p
-                        className="font-semibold"
-                        style={{ color: theme.text }}
-                      >
-                        {displayGroupName}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronDown
-                    className="w-5 h-5"
-                    style={{
-                      color: theme.textM,
-                      transform: showGroupSelector
-                        ? 'rotate(180deg)'
-                        : 'rotate(0deg)',
-                    }}
-                  />
-                </button>
-
-                {/* Group Dropdown Menu */}
-                <AnimatePresence>
-                  {showGroupSelector && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute top-full mt-2 w-full z-40 rounded-2xl border shadow-lg"
-                      style={{
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                      }}
-                    >
-                      <div className="max-h-64 overflow-y-auto">
-                        {tripGroups.map((group) => (
-                          <div key={group.id}>
-                            <button
-                              onClick={() => handleSelectGroup(group.id)}
-                              className="w-full text-left px-4 py-3 border-b hover:opacity-80 transition-opacity flex items-center justify-between group"
-                              style={{
-                                borderColor: theme.border,
-                                backgroundColor:
-                                  currentGroupId === group.id
-                                    ? theme.border
-                                    : 'transparent',
-                              }}
-                            >
-                              <div>
-                                <p
-                                  className="font-semibold"
-                                  style={{ color: theme.text }}
-                                >
-                                  {group.customName || group.name}
-                                </p>
-                                <p
-                                  className="text-xs"
-                                  style={{ color: theme.textS }}
-                                >
-                                  {fmt(group.current)} / {fmt(group.target)}
-                                </p>
-                              </div>
-                              {currentGroupId === group.id && (
-                                <Check
-                                  className="w-4 h-4"
-                                  style={{ color: teal }}
-                                />
-                              )}
-                            </button>
-
-                            {/* Delete button for each group */}
-                            {currentGroupId === group.id && (
-                              <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => handleDeleteGroup(group.id)}
-                                className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors hover:opacity-80 border-b"
-                                style={{
-                                  color: theme.bad,
-                                  borderColor: theme.border,
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                Delete Group
-                              </motion.button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
             })()}
 
             {currentGroup && currentGroup.entryType === 'vacation' ? (
@@ -1673,96 +1622,7 @@ export default function StackCirclePage() {
                     </motion.div>
                   )}
               </>
-            ) : (
-              <motion.div
-                variants={itemVariants}
-                className="text-center py-10 px-4 rounded-2xl"
-              >
-                <p className="text-base font-semibold mb-1" style={{ color: theme.textM }}>No group trips yet</p>
-                <p className="text-sm" style={{ color: theme.textS }}>Create or join a group trip to get started.</p>
-              </motion.div>
-            )}
-
-            {/* Create Group Trip Button (always visible) */}
-            {(
-              <motion.div
-                variants={itemVariants}
-              >
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => { setShowCreateGroupForm(!showCreateGroupForm); setNewEntryType('vacation'); }}
-                  className="w-full px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2"
-                  style={{
-                    backgroundColor: theme.bg,
-                    border: `1px dashed ${isDark ? '#475569' : '#CBD5E1'}`,
-                    color: teal,
-                    fontWeight: 700,
-                  }}
-                >
-                  <Plus className="w-4 sm:w-5 h-4 sm:h-5" />
-                  {showCreateGroupForm
-                    ? 'Cancel'
-                    : 'Create Group Trip'}
-                </motion.button>
-
-                {/* Create Group Form - Only show if explicitly opened */}
-                <AnimatePresence>
-                  {showCreateGroupForm && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="rounded-2xl border p-4 sm:p-5 transition-colors mt-4"
-                      style={{
-                        backgroundColor: theme.card,
-                        borderColor: tealBorder,
-                      }}
-                    >
-                      <h3 className="font-bold text-base mb-4" style={{ color: theme.text }}>
-                        New Group Trip
-                      </h3>
-
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Trip Name</label>
-                          <input type="text" placeholder="e.g., Hawaii 2026"
-                            value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
-                            className="w-full border rounded-2xl px-3 py-2.5 text-sm focus:outline-none transition-colors"
-                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Budget (optional)</label>
-                            <input type="number" placeholder="$0.00" value={newGroupTarget} onChange={(e) => setNewGroupTarget(e.target.value)}
-                              className="w-full border rounded-2xl px-3 py-2.5 text-sm focus:outline-none transition-colors"
-                              style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Target Date (optional)</label>
-                            <CalendarPicker value={newGroupDate} onChange={setNewGroupDate} placeholder="Select date" theme={theme} showQuickSelect={false} />
-                          </div>
-                        </div>
-
-                        <p className="text-xs" style={{ color: theme.textS }}>Trip details (departure, hotel, packing list, etc.) can be added after creation.</p>
-
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => { setNewEntryType('vacation'); handleCreateGroup(); }}
-                          className="w-full font-bold px-4 py-2.5 rounded-2xl text-sm transition-shadow"
-                          style={{ backgroundColor: teal, color: '#fff' }}
-                        >
-                          <Plus className="w-4 h-4 inline mr-2" />
-                          Create Trip
-                        </motion.button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            )}
+            ) : null}
           </>
         )}
 
@@ -1827,6 +1687,77 @@ export default function StackCirclePage() {
               {joinError && <p className="text-xs mt-2 font-medium" style={{ color: '#EF4444' }}>{joinError}</p>}
             </motion.div>
 
+            {/* Create Group Savings Button */}
+            <motion.div variants={itemVariants}>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => { setShowCreateGroupForm(!showCreateGroupForm); setNewEntryType('savings'); }}
+                className="w-full px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: theme.bg,
+                  border: `1px dashed ${isDark ? '#475569' : '#CBD5E1'}`,
+                  color: teal,
+                  fontWeight: 700,
+                }}
+              >
+                <Plus className="w-4 sm:w-5 h-4 sm:h-5" />
+                {showCreateGroupForm ? 'Cancel' : 'Create Group Savings'}
+              </motion.button>
+
+              <AnimatePresence>
+                {showCreateGroupForm && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="rounded-2xl border p-4 sm:p-5 transition-colors mt-4"
+                    style={{ backgroundColor: theme.card, borderColor: tealBorder }}
+                  >
+                    <h3 className="font-bold text-base mb-4" style={{ color: theme.text }}>New Savings Group</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Group Name</label>
+                        <input type="text" placeholder="e.g., Home Renovation"
+                          value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
+                          className="w-full border rounded-2xl px-3 py-2.5 text-sm focus:outline-none transition-colors"
+                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>What are you saving for?</label>
+                        <input type="text" placeholder="e.g., Save for kitchen remodel"
+                          value={newGroupGoal} onChange={(e) => setNewGroupGoal(e.target.value)}
+                          className="w-full border rounded-2xl px-3 py-2.5 text-sm focus:outline-none transition-colors"
+                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Target Amount</label>
+                          <input type="number" placeholder="$0.00" value={newGroupTarget} onChange={(e) => setNewGroupTarget(e.target.value)}
+                            className="w-full border rounded-2xl px-3 py-2.5 text-sm focus:outline-none transition-colors"
+                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1.5" style={{ color: theme.textM }}>Target Date</label>
+                          <CalendarPicker value={newGroupDate} onChange={setNewGroupDate} placeholder="Select date" theme={theme} showQuickSelect={false} />
+                        </div>
+                      </div>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => { setNewEntryType('savings'); handleCreateGroup(); }}
+                        className="w-full font-bold px-4 py-2.5 rounded-2xl text-sm transition-shadow"
+                        style={{ backgroundColor: teal, color: '#fff' }}
+                      >
+                        <Plus className="w-4 h-4 inline mr-2" />
+                        Create Group
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+
             {/* Savings Groups List */}
             {(() => {
               const savingsGroups = groups.filter(g => g.entryType !== 'vacation');
@@ -1883,122 +1814,6 @@ export default function StackCirclePage() {
                   )}
                 </motion.div>
               );});
-            })()}
-
-            {/* Group Selector - for selecting active group details view */}
-            {(() => {
-              const savingsGroups = groups.filter(g => g.entryType !== 'vacation');
-              return savingsGroups.length > 0 && (
-              <motion.div
-                variants={itemVariants}
-                className="relative"
-              >
-                <button
-                  onClick={() => setShowGroupSelector(!showGroupSelector)}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border transition-colors"
-                  style={{
-                    backgroundColor: theme.card,
-                    borderColor: tealBorder,
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5" style={{ color: teal }} />
-                    <div className="text-left">
-                      <p className="text-xs" style={{ color: theme.textS }}>
-                        Active Group
-                      </p>
-                      <p
-                        className="font-semibold"
-                        style={{ color: theme.text }}
-                      >
-                        {displayGroupName}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronDown
-                    className="w-5 h-5"
-                    style={{
-                      color: theme.textM,
-                      transform: showGroupSelector
-                        ? 'rotate(180deg)'
-                        : 'rotate(0deg)',
-                    }}
-                  />
-                </button>
-
-                {/* Group Dropdown Menu */}
-                <AnimatePresence>
-                  {showGroupSelector && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute top-full mt-2 w-full z-40 rounded-2xl border shadow-lg"
-                      style={{
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                      }}
-                    >
-                      <div className="max-h-64 overflow-y-auto">
-                        {savingsGroups.map((group) => (
-                          <div key={group.id}>
-                            <button
-                              onClick={() => handleSelectGroup(group.id)}
-                              className="w-full text-left px-4 py-3 border-b hover:opacity-80 transition-opacity flex items-center justify-between group"
-                              style={{
-                                borderColor: theme.border,
-                                backgroundColor:
-                                  currentGroupId === group.id
-                                    ? theme.border
-                                    : 'transparent',
-                              }}
-                            >
-                              <div>
-                                <p
-                                  className="font-semibold"
-                                  style={{ color: theme.text }}
-                                >
-                                  {group.customName || group.name}
-                                </p>
-                                <p
-                                  className="text-xs"
-                                  style={{ color: theme.textS }}
-                                >
-                                  {fmt(group.current)} / {fmt(group.target)}
-                                </p>
-                              </div>
-                              {currentGroupId === group.id && (
-                                <Check
-                                  className="w-4 h-4"
-                                  style={{ color: teal }}
-                                />
-                              )}
-                            </button>
-
-                            {/* Delete button for each group */}
-                            {currentGroupId === group.id && (
-                              <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => handleDeleteGroup(group.id)}
-                                className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors hover:opacity-80 border-b"
-                                style={{
-                                  color: theme.bad,
-                                  borderColor: theme.border,
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                Delete Group
-                              </motion.button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
             })()}
 
             {currentGroup && currentGroup.entryType !== 'vacation' ? (
@@ -2238,120 +2053,6 @@ export default function StackCirclePage() {
               </>
             ) : null}
 
-            {/* Create Group Section for Savings */}
-            <motion.div
-              variants={itemVariants}
-            >
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => { setShowCreateGroupForm(!showCreateGroupForm); setNewEntryType('savings'); }}
-                className="w-full px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2"
-                style={{
-                  backgroundColor: theme.bg,
-                  border: `1px dashed ${isDark ? '#475569' : '#CBD5E1'}`,
-                  color: teal,
-                  fontWeight: 700,
-                }}
-              >
-                <Plus className="w-4 sm:w-5 h-4 sm:h-5" />
-                {showCreateGroupForm
-                  ? 'Cancel'
-                  : 'Create Another Group'}
-              </motion.button>
-
-              {/* Create Group Form - Only show if explicitly opened */}
-              <AnimatePresence>
-                {showCreateGroupForm && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="rounded-2xl border p-3 sm:p-6 transition-colors mt-4"
-                    style={{
-                      backgroundColor: theme.card,
-                      borderColor: tealBorder,
-                    }}
-                  >
-                    <h3 className="font-bold text-base sm:text-lg mb-4" style={{ color: theme.text }}>
-                      {activeTab === 'savings' ? 'Create New Group' : 'Create New Entry'}
-                    </h3>
-
-                    {/* Entry Type Selector - Hidden on savings tab */}
-                    {activeTab !== 'savings' && (
-                    <div className="flex gap-2 mb-5">
-                      {([{ key: 'savings', label: 'Group Savings' }, { key: 'vacation', label: 'Group Trip' }] as const).map(opt => (
-                        <button key={opt.key} onClick={() => setNewEntryType(opt.key)}
-                          className="flex-1 py-3 rounded-xl text-sm font-bold transition-all"
-                          style={{ background: newEntryType === opt.key ? teal : theme.bg, color: newEntryType === opt.key ? '#fff' : theme.textM, border: `1px solid ${newEntryType === opt.key ? teal : theme.border}` }}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                    )}
-
-                    <div className="space-y-3 sm:space-y-4">
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
-                          {newEntryType === 'vacation' ? 'Trip Name' : 'Group Name'}
-                        </label>
-                        <input type="text" placeholder={newEntryType === 'vacation' ? 'e.g., Hawaii 2026' : 'e.g., Home Renovation'}
-                          value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
-                          className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
-                          {newEntryType === 'vacation' ? 'Trip Description' : 'What are you saving for?'}
-                        </label>
-                        <input type="text" placeholder={newEntryType === 'vacation' ? 'e.g., Family beach vacation' : 'e.g., Save for kitchen remodel'}
-                          value={newGroupGoal} onChange={(e) => setNewGroupGoal(e.target.value)}
-                          className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                      </div>
-
-                      {/* Purpose / Contributors (Savings Goal) */}
-                      {newEntryType === 'savings' && (
-                        <div>
-                          <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Purpose (optional)</label>
-                          <input type="text" placeholder="e.g., Emergency fund, group gift"
-                            value={newPurpose} onChange={(e) => setNewPurpose(e.target.value)}
-                            className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                        <div>
-                          <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>
-                            {newEntryType === 'vacation' ? 'Trip Budget' : 'Target Amount'}
-                          </label>
-                          <input type="number" placeholder="$0.00" value={newGroupTarget} onChange={(e) => setNewGroupTarget(e.target.value)}
-                            className="w-full border rounded-2xl px-3 py-2 sm:py-3 text-sm focus:outline-none transition-colors"
-                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }} />
-                        </div>
-                        <div>
-                          <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Target Date</label>
-                          <CalendarPicker value={newGroupDate} onChange={setNewGroupDate} placeholder="Select target date" theme={theme} showQuickSelect={false} />
-                        </div>
-                      </div>
-
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={handleCreateGroup}
-                        className="w-full font-bold px-4 sm:px-6 py-2 sm:py-3 rounded-2xl text-sm transition-shadow"
-                        style={{ backgroundColor: teal, color: '#fff' }}
-                      >
-                        <Plus className="w-4 sm:w-5 h-4 sm:h-5 inline mr-2" />
-                        {newEntryType === 'vacation' ? 'Create Trip' : 'Create Group'}
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
           </>
         )}
 
