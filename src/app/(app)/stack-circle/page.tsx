@@ -290,7 +290,7 @@ export default function StackCirclePage() {
         return next;
       });
       // Auto-expand new group
-      setExpandedGroupIds(prev => new Set([...prev, newGroup.id]));
+      setExpandedGroupIds(prev => new Set(Array.from(prev).concat(newGroup.id)));
 
       // Reset form
       setNewGroupName('');
@@ -407,7 +407,7 @@ export default function StackCirclePage() {
       return;
     }
     if (targetGroup.members.some(m => m.name === 'You')) {
-      setExpandedGroupIds(prev => new Set([...prev, targetGroup.id]));
+      setExpandedGroupIds(prev => new Set(Array.from(prev).concat(targetGroup.id)));
       setJoinCode('');
       setJoinError('');
       return;
@@ -422,7 +422,7 @@ export default function StackCirclePage() {
         : g
     );
     setGroups(updatedGroups);
-    setExpandedGroupIds(prev => new Set([...prev, targetGroup.id]));
+    setExpandedGroupIds(prev => new Set(Array.from(prev).concat(targetGroup.id)));
     setJoinCode('');
     setJoinError('');
   };
