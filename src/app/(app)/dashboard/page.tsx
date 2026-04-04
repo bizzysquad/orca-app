@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
   DollarSign, Receipt, Palmtree, Calendar,
-  GripVertical, Pin, PinOff, PiggyBank, Wallet,
+  Pin, PinOff, PiggyBank, Wallet,
   TrendingUp, ArrowUpRight, ArrowDownRight, CreditCard,
   Bell,
 } from 'lucide-react'
@@ -905,6 +905,9 @@ export default function DashboardPage() {
     return true
   })
 
+  // Amount masking helper — replaces values with bullets when amounts are hidden
+  const m = (val: number) => showMetrics ? fmt(val) : '••••'
+
   const toggleMetrics = () => {
     setShowMetrics((prev: boolean) => {
       const next = !prev
@@ -914,7 +917,6 @@ export default function DashboardPage() {
   }
 
   // Drag and drop handlers
-  const [isReordering, setIsReordering] = useState(false)
   const [pinnedSections, setPinnedSections] = useState<string[]>([])
 
   // Load pinned sections from localStorage
@@ -999,7 +1001,7 @@ export default function DashboardPage() {
     switch (sectionId) {
       case 'financial-cards':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             {/* Metrics header with hide/show toggle */}
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: theme.textS }}>Metrics</p>
@@ -1011,18 +1013,9 @@ export default function DashboardPage() {
                 style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.textM }}
               >
                 {showMetrics ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                {showMetrics ? 'Hide' : 'Show'}
+                {showMetrics ? 'Hide Amounts' : 'Show Amounts'}
               </motion.button>
             </div>
-            <AnimatePresence>
-            {showMetrics && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              className="overflow-hidden"
-            >
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Next Payment Card */}
               <Link href="/smart-stack">
@@ -1035,7 +1028,7 @@ export default function DashboardPage() {
                     <ArrowUpRight className="w-4 h-4" style={{ color: '#10B981' }} />
                   </div>
                   <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
-                    {nextIncomingPayment ? `+${fmt(nextIncomingPayment.amount)}` : '$0.00'}
+                    {nextIncomingPayment ? `+${m(nextIncomingPayment.amount)}` : '$0.00'}
                   </div>
                   <div className="text-sm mt-1" style={{ color: theme.textS }}>
                     {nextIncomingPayment
@@ -1056,11 +1049,11 @@ export default function DashboardPage() {
                     <ArrowDownRight className="w-4 h-4" style={{ color: '#EF4444' }} />
                   </div>
                   <div style={{ fontSize: 28, fontWeight: 800, color: '#EF4444' }}>
-                    {nextBill ? `−${fmt(nextBill.amount)}` : '$0.00'}
+                    {nextBill ? `−${m(nextBill.amount)}` : '$0.00'}
                   </div>
                   <div className="text-sm mt-1" style={{ color: theme.textS }}>
                     {nextBill
-                      ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${fmt(billsDueThisWeek)} this week`
+                      ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${m(billsDueThisWeek)} this week`
                       : 'All paid up'}
                   </div>
                 </div>
@@ -1077,7 +1070,7 @@ export default function DashboardPage() {
                     <ArrowUpRight className="w-4 h-4" style={{ color: '#6366F1' }} />
                   </div>
                   <div style={{ fontSize: 28, fontWeight: 800, color: '#6366F1' }}>
-                    {fmt(totalSavings)}
+                    {m(totalSavings)}
                   </div>
                   <div className="text-sm mt-1" style={{ color: theme.textS }}>
                     Across all accounts
@@ -1085,9 +1078,6 @@ export default function DashboardPage() {
                 </div>
               </Link>
             </motion.div>
-            </motion.div>
-            )}
-            </AnimatePresence>
           </DraggableSection>
         )
 
@@ -1096,14 +1086,14 @@ export default function DashboardPage() {
 
       case 'calendar':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <MonthlyCalendar events={calendarEvents} month={calMonth} year={calYear} onMonthChange={handleMonthChange} onDayClick={setSelectedDay} selectedDay={selectedDay} theme={theme} />
           </DraggableSection>
         )
 
       case 'credit-score':
         return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <Link href="/settings?tab=financial">
               <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
                 <div className="flex items-center justify-between mb-4">
@@ -1130,7 +1120,7 @@ export default function DashboardPage() {
 
       case 'stack-circle':
         return group ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <Link href="/stack-circle">
               <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
                 <div className="flex items-center justify-between mb-4">
@@ -1150,11 +1140,11 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-xs" style={{ color: theme.textM }}>Saved</p>
-                    <p className="text-lg font-bold" style={{ color: '#10B981' }}>{fmt(stackCircleStats.totalSaved)}</p>
+                    <p className="text-lg font-bold" style={{ color: '#10B981' }}>{m(stackCircleStats.totalSaved)}</p>
                   </div>
                   <div>
                     <p className="text-xs" style={{ color: theme.textM }}>Goal</p>
-                    <p className="text-lg font-bold" style={{ color: '#6366F1' }}>{fmt(stackCircleStats.totalTarget)}</p>
+                    <p className="text-lg font-bold" style={{ color: '#6366F1' }}>{m(stackCircleStats.totalTarget)}</p>
                   </div>
                 </div>
                 {/* Progress bar */}
@@ -1198,31 +1188,15 @@ export default function DashboardPage() {
         className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-5xl mx-auto w-full"
       >
         {/* Welcome Message */}
-        <motion.div variants={fadeUp} className="flex items-start justify-between gap-3">
-          <div className="space-y-1 min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-5xl font-bold truncate" style={{ color: theme.text }}>
-              {firstName
-                ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName}`
-                : 'Welcome back'}
-            </h1>
-            <p className="text-lg" style={{ color: theme.textS }}>
-              Here's your financial snapshot
-            </p>
-          </div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setIsReordering(!isReordering)}
-            style={{
-              backgroundColor: isReordering ? '#6366F1' : theme.card,
-              color: isReordering ? '#fff' : theme.textM,
-              borderColor: isReordering ? '#6366F1' : theme.border,
-            }}
-            className="border rounded-lg px-3 py-2 text-sm font-medium flex items-center gap-2 mt-2 shrink-0"
-          >
-            <GripVertical size={14} />
-            {isReordering ? 'Done' : 'Reorder'}
-          </motion.button>
+        <motion.div variants={fadeUp} className="space-y-1">
+          <h1 className="text-2xl sm:text-5xl font-bold truncate" style={{ color: theme.text }}>
+            {firstName
+              ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName}`
+              : 'Welcome back'}
+          </h1>
+          <p className="text-lg" style={{ color: theme.textS }}>
+            Here's your financial snapshot
+          </p>
         </motion.div>
 
         {/* Safe to Spend Hero Card */}
@@ -1233,9 +1207,9 @@ export default function DashboardPage() {
                 <span className="text-sm opacity-70">Safe to Spend</span>
                 <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
               </div>
-              <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>{fmt(safeToSpend.amount)}</div>
+              <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>{m(safeToSpend.amount)}</div>
               <div className="text-sm opacity-60 mt-1">
-                {safeToSpendView === 'daily' ? fmt(safeToSpend.daily) : safeToSpendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.amount)} / {safeToSpendView} available
+                {safeToSpendView === 'daily' ? m(safeToSpend.daily) : safeToSpendView === 'weekly' ? m(safeToSpend.weekly) : m(safeToSpend.amount)} / {safeToSpendView} available
               </div>
               <div className="flex gap-2 mt-4">
                 {['daily', 'weekly', 'monthly'].map(v => (
@@ -1250,15 +1224,15 @@ export default function DashboardPage() {
               <div className="text-xs opacity-60 uppercase tracking-widest mb-3" style={{ fontWeight: 700 }}>How it's calculated</div>
               <div className="flex justify-between items-center text-sm">
                 <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#34D399' }} /><span className="opacity-80">Incoming</span></div>
-                <span style={{ color: '#34D399', fontWeight: 700 }}>+{fmt(safeToSpend.totalIncome)}</span>
+                <span style={{ color: '#34D399', fontWeight: 700 }}>+{m(safeToSpend.totalIncome)}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#F87171' }} /><span className="opacity-80">Bills Reserved</span></div>
-                <span style={{ color: '#F87171', fontWeight: 700 }}>−{fmt(safeToSpend.totalBills)}</span>
+                <span style={{ color: '#F87171', fontWeight: 700 }}>−{m(safeToSpend.totalBills)}</span>
               </div>
               <div className="pt-2 flex justify-between items-center text-sm" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
                 <span style={{ fontWeight: 700 }}>Safe to Spend</span>
-                <span style={{ fontWeight: 800 }}>{fmt(safeToSpend.amount)}</span>
+                <span style={{ fontWeight: 800 }}>{m(safeToSpend.amount)}</span>
               </div>
             </div>
           </div>
