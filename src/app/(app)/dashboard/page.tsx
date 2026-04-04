@@ -9,7 +9,7 @@ import {
   DollarSign, Receipt, Palmtree, Calendar,
   GripVertical, Pin, PinOff, PiggyBank, Wallet,
   TrendingUp, ArrowUpRight, ArrowDownRight, CreditCard,
-  Bell, Zap,
+  Bell,
 } from 'lucide-react'
 
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -251,7 +251,7 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
   )
 }
 
-function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, isLast, isReordering, isPinned, onTogglePin, theme, accent }: {
+function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, isLast, isReordering, isPinned, onTogglePin, theme }: {
   id: string
   children: React.ReactNode
   index: number
@@ -263,14 +263,11 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
   isPinned: boolean
   onTogglePin: (id: string) => void
   theme: any
-  accent?: string
 }) {
-  const ac = accent || '#6366F1'
   const sectionLabels: Record<string, string> = {
-    'next-payment': 'Next Payment',
-    'bills-due': 'Bills Due',
-    'total-saved': 'Total Saved',
-    'safe-to-spend': 'Safe to Spend',
+    'financial-cards': 'Financial Overview',
+    'spend-paycheck': 'Spending & Income',
+    'rent-tracker': 'Rent Tracker',
     'calendar': 'Calendar',
     'credit-score': 'Credit Score',
     'stack-circle': 'Stack Circle',
@@ -288,9 +285,9 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
             whileTap={{ scale: 0.85 }}
             onClick={() => onTogglePin(id)}
             style={{
-              backgroundColor: isPinned ? `${ac}30` : theme.border,
-              color: isPinned ? ac : theme.textM,
-              borderColor: isPinned ? ac : theme.border,
+              backgroundColor: isPinned ? '#6366F130' : theme.border,
+              color: isPinned ? '#6366F1' : theme.textM,
+              borderColor: isPinned ? '#6366F1' : theme.border,
             }}
             className="w-8 h-8 rounded-lg flex items-center justify-center border"
             title={isPinned ? 'Unpin from top' : 'Pin to top'}
@@ -304,7 +301,7 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
                 onClick={() => onMoveUp(index)}
                 disabled={isFirst}
                 style={{
-                  backgroundColor: isFirst ? theme.border : ac,
+                  backgroundColor: isFirst ? theme.border : '#6366F1',
                   color: isFirst ? theme.textM : '#fff',
                 }}
                 className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
@@ -316,7 +313,7 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
                 onClick={() => onMoveDown(index)}
                 disabled={isLast}
                 style={{
-                  backgroundColor: isLast ? theme.border : ac,
+                  backgroundColor: isLast ? theme.border : '#6366F1',
                   color: isLast ? theme.textM : '#fff',
                 }}
                 className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
@@ -327,11 +324,11 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
           )}
           <span style={{ color: theme.textS }} className="text-sm font-medium">
             {sectionLabels[id] || id}
-            {isPinned && <span style={{ color: ac }} className="ml-2 text-xs font-bold">PINNED</span>}
+            {isPinned && <span style={{ color: '#6366F1' }} className="ml-2 text-xs font-bold">PINNED</span>}
           </span>
         </motion.div>
       )}
-      <div style={isReordering ? { borderColor: isPinned ? `${ac}60` : `${ac}40`, borderWidth: 1, borderStyle: isPinned ? 'solid' : 'dashed', borderRadius: 12, padding: 4 } : {}}>
+      <div style={isReordering ? { borderColor: isPinned ? '#6366F160' : '#6366F140', borderWidth: 1, borderStyle: isPinned ? 'solid' : 'dashed', borderRadius: 12, padding: 4 } : {}}>
         {children}
       </div>
     </motion.div>
@@ -339,7 +336,7 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
 }
 
 export default function DashboardPage() {
-  const { theme, isDark, currentTheme } = useTheme()
+  const { theme } = useTheme()
   const { data, loading } = useOrcaData()
   const { user, income, goals, groups } = data
   const group = groups[0] || null
@@ -412,10 +409,8 @@ export default function DashboardPage() {
   const [selectedWeekDay, setSelectedWeekDay] = useState<Date | null>(null)
   const [safeToSpendView, setSafeToSpendView] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
   const [sectionOrder, setSectionOrder] = useState<string[]>([
-    'next-payment',
-    'bills-due',
-    'total-saved',
-    'safe-to-spend',
+    'financial-cards',
+    'spend-paycheck',
     'calendar',
     'credit-score',
     'stack-circle',
@@ -423,30 +418,21 @@ export default function DashboardPage() {
 
   // Load section order from localStorage — merge in any new sections that were added
   useEffect(() => {
-    const defaultSections = ['next-payment', 'bills-due', 'total-saved', 'safe-to-spend', 'calendar', 'credit-score', 'stack-circle']
+    const defaultSections = ['financial-cards', 'spend-paycheck', 'calendar', 'credit-score', 'stack-circle']
     const saved = localStorage.getItem('orca-dashboard-order')
     if (saved) {
       try {
-        const parsed: string[] = JSON.parse(saved)
-        // Migrate old grouped section names to new individual sections
-        let migrated = [...parsed]
-        if (migrated.includes('financial-cards')) {
-          const idx = migrated.indexOf('financial-cards')
-          migrated.splice(idx, 1, 'next-payment', 'bills-due', 'total-saved')
-        }
-        if (migrated.includes('spend-paycheck')) {
-          const idx = migrated.indexOf('spend-paycheck')
-          migrated.splice(idx, 1, 'safe-to-spend')
-        }
-        // Filter to only valid sections
-        migrated = migrated.filter(s => defaultSections.includes(s))
+        // Filter out any removed sections (e.g. task-list was removed from dashboard)
+        const parsed: string[] = JSON.parse(saved).filter((s: string) => defaultSections.includes(s))
         // Find any sections that exist in defaults but not in saved order
-        const missing = defaultSections.filter(s => !migrated.includes(s))
+        const missing = defaultSections.filter(s => !parsed.includes(s))
         if (missing.length > 0) {
-          migrated = [...migrated, ...missing]
+          const merged = [...parsed, ...missing]
+          setSectionOrder(merged)
+          localStorage.setItem('orca-dashboard-order', JSON.stringify(merged))
+        } else {
+          setSectionOrder(parsed)
         }
-        setSectionOrder(migrated)
-        localStorage.setItem('orca-dashboard-order', JSON.stringify(migrated))
       } catch (e) {
         // Keep default order if parsing fails
       }
@@ -686,45 +672,9 @@ export default function DashboardPage() {
     const events: CalendarEvent[] = []
 
     bills.forEach(bill => {
-      if (!bill.due) return
-      const baseDate = new Date(bill.due + 'T00:00:00')
-      const recurrence = bill.recurrence || 'none'
-      const monthStart = new Date(calYear, calMonth, 1)
-      const monthEnd = new Date(calYear, calMonth + 1, 0)
-
-      if (recurrence === 'one-time' || recurrence === 'custom') {
-        // One-time or custom: show only in the exact due month/year
-        if (baseDate.getMonth() === calMonth && baseDate.getFullYear() === calYear) {
-          events.push({ date: baseDate.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
-        }
-      } else if (recurrence === 'monthly') {
-        // Monthly: same day each month (clamped to month length)
-        const day = Math.min(baseDate.getDate(), monthEnd.getDate())
-        const candidate = new Date(calYear, calMonth, day)
-        if (candidate >= baseDate) {
-          events.push({ date: candidate.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
-        }
-      } else if (recurrence === 'yearly') {
-        // Yearly: same month and day each year
-        if (baseDate.getMonth() === calMonth && calYear >= baseDate.getFullYear()) {
-          const day = Math.min(baseDate.getDate(), monthEnd.getDate())
-          events.push({ date: day, type: 'bill', label: bill.name, amount: bill.amount })
-        }
-      } else if (recurrence === 'weekly') {
-        // Weekly: step from base date into the viewed month
-        const intervalDays = 7
-        const cursor = new Date(baseDate)
-        if (cursor < monthStart) {
-          const daysGap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
-          cursor.setDate(cursor.getDate() + daysGap)
-        }
-        while (cursor > monthEnd) cursor.setDate(cursor.getDate() - intervalDays)
-        while (cursor <= monthEnd) {
-          if (cursor >= monthStart && cursor >= baseDate) {
-            events.push({ date: cursor.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
-          }
-          cursor.setDate(cursor.getDate() + intervalDays)
-        }
+      const d = new Date(bill.due + 'T00:00:00')
+      if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
+        events.push({ date: d.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
       }
     })
 
@@ -816,29 +766,6 @@ export default function DashboardPage() {
                   }
                   cursor.setDate(cursor.getDate() + intervalDays)
                 }
-              }
-            }
-          })
-        }
-      } catch {}
-    }
-
-    // Add vacation date blocks from Stack Circle vacation entries
-    if (typeof window !== 'undefined') {
-      try {
-        const savedGroups = localStorage.getItem('orca-stack-circle-groups')
-        if (savedGroups) {
-          const allGroups = JSON.parse(savedGroups)
-          allGroups.forEach((g: any) => {
-            if (g.entryType === 'vacation' && g.trip?.startDate && g.trip?.endDate) {
-              const tripStart = new Date(g.trip.startDate + 'T00:00:00')
-              const tripEnd = new Date(g.trip.endDate + 'T00:00:00')
-              const cursor = new Date(tripStart)
-              while (cursor <= tripEnd) {
-                if (cursor.getMonth() === calMonth && cursor.getFullYear() === calYear) {
-                  events.push({ date: cursor.getDate(), type: 'dayoff', label: `Vacation: ${g.customName || g.name || 'Trip'}` })
-                }
-                cursor.setDate(cursor.getDate() + 1)
               }
             }
           })
@@ -969,6 +896,23 @@ export default function DashboardPage() {
       .slice(0, 5)
   }, [calendarEvents])
 
+  // Metrics dashboard hide/show
+  const [showMetrics, setShowMetrics] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('orca-dashboard-show-metrics')
+      return saved === null ? true : saved === 'true'
+    }
+    return true
+  })
+
+  const toggleMetrics = () => {
+    setShowMetrics((prev: boolean) => {
+      const next = !prev
+      localStorage.setItem('orca-dashboard-show-metrics', String(next))
+      return next
+    })
+  }
+
   // Drag and drop handlers
   const [isReordering, setIsReordering] = useState(false)
   const [pinnedSections, setPinnedSections] = useState<string[]>([])
@@ -1052,123 +996,132 @@ export default function DashboardPage() {
   }, [user?.creditScore, user?.creditScoreTransUnion, user?.creditScoreEquifax, user?.creditScoreExperian])
 
   const renderSection = (sectionId: string, index: number) => {
-    const dsProps = { index, onMoveUp: handleMoveUp, onMoveDown: handleMoveDown, isFirst: index === 0, isLast: index === sortedSectionOrder.length - 1, isReordering, isPinned: pinnedSections.includes(sectionId), onTogglePin: handleTogglePin, theme, accent: currentTheme.primary }
     switch (sectionId) {
-      case 'next-payment':
+      case 'financial-cards':
         return (
-          <DraggableSection key={sectionId} id={sectionId} {...dsProps}>
-            <Link href="/smart-stack">
-              <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                    <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
-                    Next Payment
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
+            {/* Metrics header with hide/show toggle */}
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: theme.textS }}>Metrics</p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={toggleMetrics}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.textM }}
+              >
+                {showMetrics ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {showMetrics ? 'Hide' : 'Show'}
+              </motion.button>
+            </div>
+            <AnimatePresence>
+            {showMetrics && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="overflow-hidden"
+            >
+            <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Next Payment Card */}
+              <Link href="/smart-stack">
+                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                      <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
+                      Next Payment
+                    </div>
+                    <ArrowUpRight className="w-4 h-4" style={{ color: '#10B981' }} />
                   </div>
-                  <ArrowUpRight className="w-4 h-4" style={{ color: '#10B981' }} />
+                  <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
+                    {nextIncomingPayment ? `+${fmt(nextIncomingPayment.amount)}` : '$0.00'}
+                  </div>
+                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                    {nextIncomingPayment
+                      ? `${nextIncomingPayment.description || 'Income'} · ${new Date(nextIncomingPayment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${daysTo(nextIncomingPayment.date)}d`
+                      : 'No upcoming payments'}
+                  </div>
                 </div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
-                  {nextIncomingPayment ? `+${fmt(nextIncomingPayment.amount)}` : '$0.00'}
+              </Link>
+
+              {/* Bills Due Card */}
+              <Link href="/bill-boss">
+                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                      <Receipt className="w-4 h-4" style={{ color: '#EF4444' }} />
+                      Bills Due
+                    </div>
+                    <ArrowDownRight className="w-4 h-4" style={{ color: '#EF4444' }} />
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: '#EF4444' }}>
+                    {nextBill ? `−${fmt(nextBill.amount)}` : '$0.00'}
+                  </div>
+                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                    {nextBill
+                      ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${fmt(billsDueThisWeek)} this week`
+                      : 'All paid up'}
+                  </div>
                 </div>
-                <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                  {nextIncomingPayment
-                    ? `${nextIncomingPayment.description || 'Income'} · ${new Date(nextIncomingPayment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${daysTo(nextIncomingPayment.date)}d`
-                    : 'No upcoming payments'}
+              </Link>
+
+              {/* Total Saved Card */}
+              <Link href="/smart-stack?tab=savings">
+                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                      <PiggyBank className="w-4 h-4" style={{ color: '#6366F1' }} />
+                      Total Saved
+                    </div>
+                    <ArrowUpRight className="w-4 h-4" style={{ color: '#6366F1' }} />
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: '#6366F1' }}>
+                    {fmt(totalSavings)}
+                  </div>
+                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                    Across all accounts
+                  </div>
                 </div>
-              </motion.div>
-            </Link>
+              </Link>
+            </motion.div>
+            </motion.div>
+            )}
+            </AnimatePresence>
           </DraggableSection>
         )
 
-      case 'bills-due':
-        return (
-          <DraggableSection key={sectionId} id={sectionId} {...dsProps}>
-            <Link href="/bill-boss">
-              <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                    <Receipt className="w-4 h-4" style={{ color: '#EF4444' }} />
-                    Bills Due
-                  </div>
-                  <ArrowDownRight className="w-4 h-4" style={{ color: '#EF4444' }} />
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#EF4444' }}>
-                  {nextBill ? `−${fmt(nextBill.amount)}` : '$0.00'}
-                </div>
-                <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                  {nextBill
-                    ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${fmt(billsDueThisWeek)} this week`
-                    : 'All paid up'}
-                </div>
-              </motion.div>
-            </Link>
-          </DraggableSection>
-        )
-
-      case 'total-saved':
-        return (
-          <DraggableSection key={sectionId} id={sectionId} {...dsProps}>
-            <Link href="/smart-stack?tab=savings">
-              <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                    <PiggyBank className="w-4 h-4" style={{ color: currentTheme.primary }} />
-                    Total Saved
-                  </div>
-                  <ArrowUpRight className="w-4 h-4" style={{ color: currentTheme.primary }} />
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: currentTheme.primary }}>
-                  {fmt(totalSavings)}
-                </div>
-                <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                  Across all accounts
-                </div>
-              </motion.div>
-            </Link>
-          </DraggableSection>
-        )
-
-      case 'safe-to-spend':
+      case 'spend-paycheck':
         return null
 
       case 'calendar':
         return (
-          <DraggableSection key={sectionId} id={sectionId} {...dsProps}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <MonthlyCalendar events={calendarEvents} month={calMonth} year={calYear} onMonthChange={handleMonthChange} onDayClick={setSelectedDay} selectedDay={selectedDay} theme={theme} />
           </DraggableSection>
         )
 
       case 'credit-score':
         return (
-          <DraggableSection key={sectionId} id={sectionId} {...dsProps}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <Link href="/settings?tab=financial">
               <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-base font-bold" style={{ color: theme.text }}>Credit Score</h3>
                   <Link href="/settings?tab=financial" onClick={(e) => e.stopPropagation()}>
-                    <button className="text-xs hover:opacity-80" style={{ color: currentTheme.primary }}>Update</button>
+                    <button className="text-xs hover:opacity-80" style={{ color: '#6366F1' }}>Update</button>
                   </Link>
                 </div>
                 <div className="flex items-center gap-4">
                   <CreditScoreRing score={userCreditScore} limit={850} theme={theme} />
-                  {(() => {
-                    let statusLabel = 'Poor'
-                    let statusColor = '#ef4444'
-                    if (userCreditScore >= 800) { statusLabel = 'Excellent'; statusColor = '#22c55e' }
-                    else if (userCreditScore >= 740) { statusLabel = 'Very Good'; statusColor = '#22c55e' }
-                    else if (userCreditScore >= 670) { statusLabel = 'Good'; statusColor = '#f59e0b' }
-                    else if (userCreditScore >= 580) { statusLabel = 'Fair'; statusColor = '#f59e0b' }
-                    const util = user?.utilization || 0
-                    return (
-                      <div>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: statusColor }}>{statusLabel}</div>
-                        <div className="text-xs mt-0.5" style={{ color: theme.textS }}>{util}% utilization</div>
-                        <div className="text-xs mt-1" style={{ color: theme.textS }}>Range: 300–850</div>
-                        <div className="mt-2 rounded-full overflow-hidden" style={{ height: 5, background: theme.border, width: 120 }}>
-                          <div className="h-full rounded-full" style={{ width: `${(userCreditScore / 850) * 100}%`, background: `linear-gradient(90deg, #EF4444, #F59E0B, #10B981)` }} />
-                        </div>
-                      </div>
-                    )
-                  })()}
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>Fair</div>
+                    <div className="text-xs mt-0.5" style={{ color: theme.textS }}>34% utilization</div>
+                    <div className="text-xs mt-1" style={{ color: theme.textS }}>Range: 300–850</div>
+                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 5, background: theme.border, width: 120 }}>
+                      <div className="h-full rounded-full" style={{ width: `${(userCreditScore / 850) * 100}%`, background: '#F59E0B' }} />
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             </Link>
@@ -1177,18 +1130,19 @@ export default function DashboardPage() {
 
       case 'stack-circle':
         return group ? (
-          <DraggableSection key={sectionId} id={sectionId} {...dsProps}>
+          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={isReordering} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <Link href="/stack-circle">
               <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <Users size={18} style={{ color: currentTheme.primary }} />
+                    <Users size={18} style={{ color: '#6366F1' }} />
                     <p className="text-base font-semibold" style={{ color: theme.text }}>Stack Circle</p>
                   </div>
-                  <span className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ backgroundColor: `${currentTheme.primary}15`, color: currentTheme.primary }}>
+                  <span className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ backgroundColor: '#6366F115', color: '#6366F1' }}>
                     {stackCircleStats.totalGroups} group{stackCircleStats.totalGroups !== 1 ? 's' : ''}
                   </span>
                 </div>
+                {/* Aggregate stats */}
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div>
                     <p className="text-xs" style={{ color: theme.textM }}>Members</p>
@@ -1200,18 +1154,20 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-xs" style={{ color: theme.textM }}>Goal</p>
-                    <p className="text-lg font-bold" style={{ color: currentTheme.primary }}>{fmt(stackCircleStats.totalTarget)}</p>
+                    <p className="text-lg font-bold" style={{ color: '#6366F1' }}>{fmt(stackCircleStats.totalTarget)}</p>
                   </div>
                 </div>
+                {/* Progress bar */}
                 {stackCircleStats.totalTarget > 0 && (
-                  <ProgressBar current={stackCircleStats.totalSaved} target={stackCircleStats.totalTarget} color={currentTheme.primary} theme={theme} />
+                  <ProgressBar current={stackCircleStats.totalSaved} target={stackCircleStats.totalTarget} color="#6366F1" theme={theme} />
                 )}
+                {/* Show first group name */}
                 {group && (
                   <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${theme.border}40` }}>
                     <p className="text-sm font-medium" style={{ color: theme.textS }}>{group.name}</p>
                     <div className="flex items-center gap-1.5">
-                      <code className="text-xs font-mono" style={{ color: currentTheme.primary }}>{group.code}</code>
-                      <Copy size={12} style={{ color: currentTheme.primary }} />
+                      <code className="text-xs font-mono" style={{ color: '#6366F1' }}>{group.code}</code>
+                      <Copy size={12} style={{ color: '#6366F1' }} />
                     </div>
                   </div>
                 )}
@@ -1227,66 +1183,59 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-full flex items-center justify-center">
-        <div style={{ color: theme.textS }}>Loading...</div>
+      <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div>Loading...</div>
       </div>
     )
   }
 
   return (
-    <div className="w-full min-h-full overflow-x-hidden max-w-full">
+    <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }} className="overflow-x-hidden max-w-full">
       <motion.div
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.08 } } }}
-        className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-5"
+        className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-5xl mx-auto w-full"
       >
-        {/* Welcome Message — V10 style */}
-        <motion.div variants={fadeUp} className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>
+        {/* Welcome Message */}
+        <motion.div variants={fadeUp} className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-5xl font-bold truncate" style={{ color: theme.text }}>
               {firstName
-                ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName} 👋`
-                : 'Welcome back 👋'}
+                ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName}`
+                : 'Welcome back'}
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: theme.textS }}>
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · Here's your financial snapshot
+            <p className="text-lg" style={{ color: theme.textS }}>
+              Here's your financial snapshot
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Link href="/bill-boss" className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:opacity-90 transition-all" style={{ background: isDark ? `${currentTheme.primary}20` : `${currentTheme.primary}10`, color: currentTheme.primary, fontWeight: 600 }}>
-              <Zap className="w-4 h-4" />Quick Pay
-            </Link>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setIsReordering(!isReordering)}
-              style={{
-                backgroundColor: isReordering ? currentTheme.primary : theme.card,
-                color: isReordering ? '#fff' : theme.textM,
-                borderColor: isReordering ? currentTheme.primary : theme.border,
-              }}
-              className="border rounded-lg px-3 py-2 text-sm font-medium flex items-center gap-2 shrink-0"
-            >
-              <GripVertical size={14} />
-              {isReordering ? 'Done' : 'Reorder'}
-            </motion.button>
-          </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsReordering(!isReordering)}
+            style={{
+              backgroundColor: isReordering ? '#6366F1' : theme.card,
+              color: isReordering ? '#fff' : theme.textM,
+              borderColor: isReordering ? '#6366F1' : theme.border,
+            }}
+            className="border rounded-lg px-3 py-2 text-sm font-medium flex items-center gap-2 mt-2 shrink-0"
+          >
+            <GripVertical size={14} />
+            {isReordering ? 'Done' : 'Reorder'}
+          </motion.button>
         </motion.div>
 
         {/* Safe to Spend Hero Card */}
-        <motion.div variants={fadeUp} className="rounded-2xl p-5 sm:p-6" style={{ background: `linear-gradient(135deg, ${currentTheme.primary} 0%, ${currentTheme.sidebarGradientTo || currentTheme.primary} 100%)`, color: '#fff' }}>
+        <motion.div variants={fadeUp} className="rounded-2xl p-5 sm:p-6" style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: '#fff' }}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm opacity-70">Safe to Spend</span>
                 <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
               </div>
-              <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>
-                {safeToSpendView === 'daily' ? fmt(safeToSpend.daily) : safeToSpendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.amount)}
-              </div>
+              <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>{fmt(safeToSpend.amount)}</div>
               <div className="text-sm opacity-60 mt-1">
-                {fmt(safeToSpendView === 'daily' ? safeToSpend.daily : safeToSpendView === 'weekly' ? safeToSpend.weekly : safeToSpend.amount)} / {safeToSpendView} available
+                {safeToSpendView === 'daily' ? fmt(safeToSpend.daily) : safeToSpendView === 'weekly' ? fmt(safeToSpend.weekly) : fmt(safeToSpend.amount)} / {safeToSpendView} available
               </div>
               <div className="flex gap-2 mt-4">
                 {['daily', 'weekly', 'monthly'].map(v => (
