@@ -1870,7 +1870,19 @@ export default function AdminPage() {
 
                 {/* Budget Categories */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ backgroundColor: BG_CARD, borderColor: BORDER_COLOR }} className="rounded-2xl border p-5 hover:shadow-md transition-shadow">
-                  <h2 className="text-xs uppercase tracking-wider font-bold mb-4" style={{ color: GOLD }}>Budget Categories</h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xs uppercase tracking-wider font-bold" style={{ color: GOLD }}>Budget Categories</h2>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setBudgetCategories([...budgetCategories].sort((a, b) => a.localeCompare(b)))}
+                      style={{ backgroundColor: `${GOLD}22`, borderColor: `${GOLD}44`, color: GOLD }}
+                      className="px-3 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1"
+                      title="Sort categories A → Z"
+                    >
+                      A→Z
+                    </motion.button>
+                  </div>
                   <div className="flex flex-wrap gap-2 mb-4">
                     {budgetCategories.map((cat) => (
                       <span key={cat} style={{ backgroundColor: `${GOLD}22`, borderColor: `${GOLD}44`, color: GOLD }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm border">

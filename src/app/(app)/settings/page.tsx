@@ -17,11 +17,9 @@ import {
   AlertTriangle,
   Info,
   ChevronRight,
-  Moon,
-  Sun,
 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
-import { useTheme, ALL_THEMES } from '@/context/ThemeContext'
+import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
 
 type SettingsTab = 'account' | 'financial' | 'appearance' | 'privacy'
@@ -37,7 +35,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const { data, setData, loading } = useOrcaData()
   const user = data.user
-  const { theme, themeId, setThemeId, allThemes, isDark, toggleDark, currentTheme, colorThemeId, setColorTheme } = useTheme()
+  const { theme, themeId, setThemeId, allThemes } = useTheme()
 
   // Tab navigation — read from URL query param if present
   const searchParams = useSearchParams()
@@ -66,10 +64,6 @@ export default function SettingsPage() {
   const [scoreTransUnion, setScoreTransUnion] = useState(String(user.creditScoreTransUnion || ''))
   const [scoreEquifax, setScoreEquifax] = useState(String(user.creditScoreEquifax || ''))
   const [scoreExperian, setScoreExperian] = useState(String(user.creditScoreExperian || ''))
-
-  // Utilization & credit limit
-  const [utilization, setUtilization] = useState(String(user.utilization || ''))
-  const [creditLimit, setCreditLimit] = useState(String(user.creditLimit || ''))
 
   // Auto-calculate average credit score from bureau scores
   const averageCreditScore = useMemo(() => {
@@ -117,8 +111,6 @@ export default function SettingsPage() {
       creditScoreTransUnion: parseInt(scoreTransUnion) || 0,
       creditScoreEquifax: parseInt(scoreEquifax) || 0,
       creditScoreExperian: parseInt(scoreExperian) || 0,
-      utilization: parseFloat(utilization) || 0,
-      creditLimit: parseFloat(creditLimit) || 0,
     }
     setData(prev => ({ ...prev, user: updatedUser }))
     try { setLocalSynced('orca-user-settings', JSON.stringify(updatedUser)) } catch {}
@@ -152,22 +144,21 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-full flex items-center justify-center">
-        <div style={{ color: theme.textS }}>Loading...</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: theme.bg }}>
+        <div style={{ color: theme.text }}>Loading...</div>
       </div>
     )
   }
 
   return (
-    <div className="w-full min-h-full">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Settings</h1>
-          <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Manage your account, preferences, and data</p>
-        </div>
+    <div className="min-h-screen pb-24 w-full max-w-full overflow-x-hidden" style={{ backgroundColor: theme.bg }}>
+      {/* Header */}
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full">
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Settings</h1>
+        <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Manage your account, preferences, and data</p>
+      </div>
 
-        <div className="flex flex-col sm:flex-row gap-6">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full flex flex-col sm:flex-row gap-6">
         {/* Sidebar nav */}
         <div className="sm:w-52 flex-shrink-0">
           <div
@@ -182,16 +173,15 @@ export default function SettingsPage() {
                   onClick={() => setActiveTab(key as SettingsTab)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all mb-0.5"
                   style={{
-                    background: active ? currentTheme.navActiveBg : 'transparent',
-                    color: active ? currentTheme.primaryLight : theme.textM,
+                    background: active ? '#6366F1' : 'transparent',
+                    color: active ? '#fff' : theme.textM,
                     fontWeight: active ? 700 : 400,
                     textAlign: 'left',
-                    border: active ? `1px solid ${currentTheme.sidebarBorderColor}` : '1px solid transparent',
                   }}
                 >
-                  <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? currentTheme.navActiveIcon : theme.textM }} />
+                  <Icon className="w-4 h-4 flex-shrink-0" />
                   {label}
-                  {active && <ChevronRight className="w-4 h-4 ml-auto opacity-70" style={{ color: currentTheme.navActiveIcon }} />}
+                  {active && <ChevronRight className="w-4 h-4 ml-auto opacity-70" />}
                 </button>
               )
             })}
@@ -210,7 +200,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-4 mb-6">
                   <div
                     className="w-14 h-14 rounded-2xl flex items-center justify-center text-white flex-shrink-0"
-                    style={{ background: currentTheme.primary, fontSize: 22, fontWeight: 800 }}
+                    style={{ background: '#6366F1', fontSize: 22, fontWeight: 800 }}
                   >
                     {editName?.charAt(0)?.toUpperCase() || 'U'}
                   </div>
@@ -246,7 +236,7 @@ export default function SettingsPage() {
                         <button
                           onClick={handleSaveName}
                           className="px-4 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all"
-                          style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
+                          style={{ backgroundColor: '#6366F1', color: '#fff' }}
                         >
                           <Check className="w-4 h-4" />
                         </button>
@@ -281,7 +271,7 @@ export default function SettingsPage() {
                         <button
                           onClick={handleSaveEmail}
                           className="px-4 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all"
-                          style={{ backgroundColor: currentTheme.primary, color: '#fff' }}
+                          style={{ backgroundColor: '#6366F1', color: '#fff' }}
                         >
                           <Check className="w-4 h-4" />
                         </button>
@@ -434,46 +424,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                  {/* Utilization & Credit Limit */}
-                  <div className="grid grid-cols-2 gap-3 pt-2 mt-2" style={{ borderTop: `1px solid ${theme.border}` }}>
-                    <div>
-                      <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                        Utilization %
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          placeholder="e.g. 34"
-                          value={utilization}
-                          onChange={(e) => setUtilization(e.target.value)}
-                          className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: theme.textM }}>%</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                        Credit Limit
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: theme.textM }}>$</span>
-                        <input
-                          type="number"
-                          placeholder="e.g. 12000"
-                          value={creditLimit}
-                          onChange={(e) => setCreditLimit(e.target.value)}
-                          className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm outline-none"
-                          style={{ background: theme.input, border: `1px solid ${theme.border}`, color: theme.text }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
                 <button
                   onClick={handleSaveSettings}
                   className="mt-5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
-                  style={{ background: currentTheme.primary, color: '#fff', fontWeight: 700 }}
+                  style={{ background: '#6366F1', color: '#fff', fontWeight: 700 }}
                 >
                   <Save className="w-4 h-4" />
                   {saved ? 'Saved!' : 'Save Credit Scores'}
@@ -482,157 +436,51 @@ export default function SettingsPage() {
             </>
           )}
 
-          {/* Appearance Tab — V10 Theme Picker */}
+          {/* Appearance Tab */}
           {activeTab === 'appearance' && (
-            <div className="space-y-5">
-              {/* Dark / Light mode toggle */}
-              <div className="rounded-2xl p-5 sm:p-6" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: theme.text }} className="mb-1">Display Mode</h2>
-                <p className="text-sm mb-4" style={{ color: theme.textM }}>Choose between dark and light backgrounds</p>
-                <div className="flex gap-3">
-                  {[
-                    { label: 'Dark Mode', icon: Moon, value: true },
-                    { label: 'Light Mode', icon: Sun, value: false },
-                  ].map(({ label, icon: ModeIcon, value }) => {
-                    const modeActive = isDark === value
-                    return (
-                      <button
-                        key={label}
-                        onClick={() => { if (!modeActive) toggleDark() }}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm transition-all"
-                        style={{
-                          background: modeActive ? currentTheme.navActiveBg : (isDark ? currentTheme.pageBg : '#F8FAFC'),
-                          border: `2px solid ${modeActive ? currentTheme.primary : theme.border}`,
-                          color: modeActive ? currentTheme.primaryLight : theme.textM,
-                          fontWeight: modeActive ? 700 : 400,
-                        }}
-                      >
-                        <ModeIcon className="w-4 h-4" />
-                        {label}
-                        {modeActive && <Check className="w-3.5 h-3.5 ml-1" />}
-                      </button>
-                    )
-                  })}
-                </div>
+            <div className="rounded-2xl p-5 sm:p-6" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+              <h2 style={{ fontSize: 17, fontWeight: 700, color: theme.text }} className="mb-2">Appearance</h2>
+              <p className="text-sm mb-5" style={{ color: theme.textM }}>Choose a theme that matches your style</p>
+
+              <div className="text-xs mb-3" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Theme
               </div>
-
-              {/* Women's Themes */}
-              <div className="rounded-2xl p-5 sm:p-6" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span style={{ fontSize: 17 }}>💜</span>
-                  <h2 style={{ fontSize: 17, fontWeight: 700, color: theme.text }}>Themes for Women</h2>
-                </div>
-                <p className="text-sm mb-4" style={{ color: theme.textM }}>Vivid & Night variants</p>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {ALL_THEMES.filter(t => t.category === 'women').map((ct) => {
-                    const active = colorThemeId === ct.id
-                    return (
-                      <button
-                        key={ct.id}
-                        onClick={() => setColorTheme(ct.id)}
-                        className="relative flex flex-col items-start p-3 rounded-xl transition-all hover:scale-[1.02]"
-                        style={{
-                          background: active ? ct.navActiveBg : (isDark ? `${ct.sidebarBg}80` : '#F8FAFC'),
-                          border: `2px solid ${active ? ct.primary : (isDark ? 'rgba(255,255,255,0.06)' : '#E2E8F0')}`,
-                          boxShadow: active ? `0 0 16px ${ct.primary}33` : 'none',
-                        }}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {allThemes.map((t) => {
+                  const active = themeId === t.id
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setThemeId(t.id)}
+                      className="relative flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all hover:opacity-90"
+                      style={{
+                        background: active ? `${t.accent}12` : theme.input,
+                        border: `2px solid ${active ? t.accent : theme.border}`,
+                      }}
+                    >
+                      <div
+                        className="w-8 h-8 rounded-lg flex-shrink-0 relative overflow-hidden"
+                        style={{ background: t.accent }}
                       >
-                        {/* Gradient swatch */}
                         <div
-                          className="w-full h-10 rounded-lg mb-2.5 relative overflow-hidden flex-shrink-0"
-                          style={{ background: `linear-gradient(135deg, ${ct.swatchFrom}, ${ct.swatchTo})` }}
-                        >
-                          {ct.variant === 'night' && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <Moon className="w-3.5 h-3.5 text-white opacity-60" />
-                            </div>
-                          )}
-                          {active && (
-                            <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: '#fff' }}>
-                              <Check className="w-2.5 h-2.5" style={{ color: ct.primary }} />
-                            </div>
-                          )}
-                        </div>
-                        <span className="text-xs" style={{ fontWeight: 600, color: active ? ct.primaryLight : theme.text }}>
-                          {ct.name}
-                        </span>
-                        <span className="text-xs mt-0.5" style={{ color: theme.textM, fontSize: 10 }}>
-                          {ct.variant === 'vivid' ? '✨ Vivid' : '🌙 Night'}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Men's Themes */}
-              <div className="rounded-2xl p-5 sm:p-6" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span style={{ fontSize: 17 }}>🔥</span>
-                  <h2 style={{ fontSize: 17, fontWeight: 700, color: theme.text }}>Themes for Men</h2>
-                </div>
-                <p className="text-sm mb-4" style={{ color: theme.textM }}>Vivid & Night variants</p>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {ALL_THEMES.filter(t => t.category === 'men').map((ct) => {
-                    const active = colorThemeId === ct.id
-                    return (
-                      <button
-                        key={ct.id}
-                        onClick={() => setColorTheme(ct.id)}
-                        className="relative flex flex-col items-start p-3 rounded-xl transition-all hover:scale-[1.02]"
-                        style={{
-                          background: active ? ct.navActiveBg : (isDark ? `${ct.sidebarBg}80` : '#F8FAFC'),
-                          border: `2px solid ${active ? ct.primary : (isDark ? 'rgba(255,255,255,0.06)' : '#E2E8F0')}`,
-                          boxShadow: active ? `0 0 16px ${ct.primary}33` : 'none',
-                        }}
-                      >
-                        {/* Gradient swatch */}
+                          className="absolute bottom-0 right-0 w-4 h-4 rounded-tl-lg"
+                          style={{ background: t.border }}
+                        />
+                      </div>
+                      <span className="text-xs" style={{ fontWeight: 600, color: theme.text }}>
+                        {t.name}
+                      </span>
+                      {active && (
                         <div
-                          className="w-full h-10 rounded-lg mb-2.5 relative overflow-hidden flex-shrink-0"
-                          style={{ background: `linear-gradient(135deg, ${ct.swatchFrom}, ${ct.swatchTo})` }}
+                          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                          style={{ background: t.accent }}
                         >
-                          {ct.variant === 'night' && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <Moon className="w-3.5 h-3.5 text-white opacity-60" />
-                            </div>
-                          )}
-                          {active && (
-                            <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: '#fff' }}>
-                              <Check className="w-2.5 h-2.5" style={{ color: ct.primary }} />
-                            </div>
-                          )}
+                          <Check className="w-3 h-3 text-white" />
                         </div>
-                        <span className="text-xs" style={{ fontWeight: 600, color: active ? ct.primaryLight : theme.text }}>
-                          {ct.name}
-                        </span>
-                        <span className="text-xs mt-0.5" style={{ color: theme.textM, fontSize: 10 }}>
-                          {ct.variant === 'vivid' ? '✨ Vivid' : '🌙 Night'}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Current theme preview badge */}
-              <div
-                className="rounded-2xl p-4 flex items-center gap-3"
-                style={{ background: currentTheme.navActiveBg, border: `1px solid ${currentTheme.sidebarBorderColor}` }}
-              >
-                <div
-                  className="w-10 h-10 rounded-xl flex-shrink-0"
-                  style={{ background: `linear-gradient(135deg, ${currentTheme.swatchFrom}, ${currentTheme.swatchTo})` }}
-                />
-                <div>
-                  <div style={{ fontWeight: 700, color: currentTheme.primaryLight, fontSize: 14 }}>
-                    Active: {currentTheme.name}
-                  </div>
-                  <div style={{ color: theme.textM, fontSize: 12 }}>
-                    {currentTheme.variant === 'vivid' ? '✨ Vivid' : '🌙 Night'} · {currentTheme.category === 'women' ? "Women's" : "Men's"} Collection
-                  </div>
-                </div>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -696,7 +544,6 @@ export default function SettingsPage() {
             </>
           )}
         </div>
-      </div>
       </div>
 
       {/* Reset Data Confirmation Modal */}

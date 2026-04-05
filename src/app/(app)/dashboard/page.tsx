@@ -1200,7 +1200,7 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* Safe to Spend Hero Card */}
-        <motion.div variants={fadeUp} className="rounded-2xl p-5 sm:p-6" style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: '#fff' }}>
+        <motion.div variants={fadeUp} className="rounded-2xl p-5 sm:p-6" style={{ background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}DD 100%)`, color: '#fff' }}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
