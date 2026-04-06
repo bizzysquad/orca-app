@@ -99,8 +99,8 @@ function ProjectionCalculator({ theme }: { theme: any }) {
   return (
     <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-5">
       <div className="flex items-center gap-3 mb-5">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `#0891B220` }}>
-          <Target size={20} style={{ color: '#0891B2' }} />
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${theme.accent}20` }}>
+          <Target size={20} style={{ color: theme.accent }} />
         </div>
         <div>
           <h3 style={{ color: theme.text }} className="font-bold text-base">Projection Calculator</h3>
@@ -174,7 +174,7 @@ function ProjectionCalculator({ theme }: { theme: any }) {
           onClick={calculate}
           className="w-full py-2.5 rounded-xl font-bold text-sm"
           style={{
-            backgroundColor: '#0891B2',
+            backgroundColor: theme.accent,
             color: '#fff',
           }}
         >
@@ -192,13 +192,13 @@ function ProjectionCalculator({ theme }: { theme: any }) {
               Based on your income and bills this month, you need to set aside:
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `#0891B220` }}>
+              <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `${theme.accent}20` }}>
                 <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Week</p>
-                <p style={{ color: '#0891B2' }} className="text-lg font-bold">{fmt(result.perWeek)}</p>
+                <p style={{ color: theme.accent }} className="text-lg font-bold">{fmt(result.perWeek)}</p>
               </div>
-              <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `#0891B220` }}>
+              <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `${theme.accent}20` }}>
                 <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Day</p>
-                <p style={{ color: '#0891B2' }} className="text-lg font-bold">{fmt(result.perDay)}</p>
+                <p style={{ color: theme.accent }} className="text-lg font-bold">{fmt(result.perDay)}</p>
               </div>
             </div>
           </motion.div>
@@ -524,8 +524,8 @@ export default function SmartStackPage() {
         className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full"
       >
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `#0891B220` }}>
-            <BarChart3 size={20} style={{ color: '#0891B2' }} />
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${theme.accent}20` }}>
+            <BarChart3 size={20} style={{ color: theme.accent }} />
           </div>
           <div>
             <h3 style={{ color: theme.text }} className="text-base font-bold">Check Projector</h3>
@@ -551,13 +551,13 @@ export default function SmartStackPage() {
 
           <div>
             <p style={{ color: theme.textS }} className="text-xs font-bold uppercase tracking-wide mb-2">Frequency</p>
-            <div className="flex gap-2 rounded-2xl p-1" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}>
+            <div className="flex gap-2 rounded-2xl p-1" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
               <button
                 onClick={() => setProjFreq('weekly')}
                 className="flex-1 py-3 rounded-2xl text-sm transition-all font-bold"
                 style={{
-                  backgroundColor: projFreq === 'weekly' ? '#0891B2' : 'transparent',
-                  color: projFreq === 'weekly' ? '#fff' : '#0891B2',
+                  backgroundColor: projFreq === 'weekly' ? theme.accent : 'transparent',
+                  color: projFreq === 'weekly' ? '#fff' : theme.accent,
                 }}
               >
                 Weekly
@@ -566,8 +566,8 @@ export default function SmartStackPage() {
                 onClick={() => setProjFreq('biweekly')}
                 className="flex-1 py-3 rounded-2xl text-sm transition-all font-bold"
                 style={{
-                  backgroundColor: projFreq === 'biweekly' ? '#0891B2' : 'transparent',
-                  color: projFreq === 'biweekly' ? '#fff' : '#0891B2',
+                  backgroundColor: projFreq === 'biweekly' ? theme.accent : 'transparent',
+                  color: projFreq === 'biweekly' ? '#fff' : theme.accent,
                 }}
               >
                 Bi-Weekly
@@ -576,10 +576,10 @@ export default function SmartStackPage() {
           </div>
 
           <div className="flex items-center gap-2 max-w-full">
-            <div className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 flex-wrap max-w-full" style={{ backgroundColor: `#0891B220`, color: '#0891B2', border: `1px solid #0891B2` }}>
+            <div className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 flex-wrap max-w-full" style={{ backgroundColor: `${theme.accent}20`, color: theme.accent, border: `1px solid ${theme.accent}` }}>
               <span>📅</span>
               <span className="truncate">{effectivePeriod.label}</span>
-              <span className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap" style={{ background: '#0891B2', color: '#fff', fontWeight: 700 }}>Current</span>
+              <span className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap" style={{ background: theme.accent, color: '#fff', fontWeight: 700 }}>Current</span>
             </div>
           </div>
 
@@ -635,8 +635,8 @@ export default function SmartStackPage() {
                       className="flex flex-col items-center justify-center rounded-xl transition-all"
                       style={{
                         height: 52,
-                        backgroundColor: day ? (off ? (theme.bg) : wk ? (theme.bg) : `#0891B220`) : 'transparent',
-                        border: day ? `1px solid ${off ? theme.border : wk ? theme.border : '#0891B2'}` : 'none',
+                        backgroundColor: day ? (off ? (theme.bg) : wk ? (theme.bg) : `${theme.accent}20`) : 'transparent',
+                        border: day ? `1px solid ${off ? theme.border : wk ? theme.border : theme.accent}` : 'none',
                         opacity: day && wk && !wkWork ? 0.5 : 1,
                         cursor: day && (wk && !wkWork) ? 'default' : day ? 'pointer' : 'default',
                       }}
@@ -644,14 +644,14 @@ export default function SmartStackPage() {
                       {day && (
                         <>
                           <span className="text-xs" style={{ color: theme.textM, fontWeight: 500 }}>{day.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2)}</span>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: off ? theme.textM : wk ? theme.textM : '#0891B2' }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: off ? theme.textM : wk ? theme.textM : theme.accent }}>
                             {day.getDate()}
                           </span>
                           {!wk && !off && dayHours && (
-                            <span className="text-xs" style={{ color: '#0891B2', fontSize: 9 }}>{dayHours}h</span>
+                            <span className="text-xs" style={{ color: theme.accent, fontSize: 9 }}>{dayHours}h</span>
                           )}
                           {!wk && (
-                            <span className="text-xs" style={{ color: off ? theme.textM : '#0891B2', fontSize: 9 }}>{off ? 'off' : dayHours ? '' : 'on'}</span>
+                            <span className="text-xs" style={{ color: off ? theme.textM : theme.accent, fontSize: 9 }}>{off ? 'off' : dayHours ? '' : 'on'}</span>
                           )}
                         </>
                       )}
@@ -690,7 +690,7 @@ export default function SmartStackPage() {
                 <>
                   <div className="rounded-xl p-3 text-center" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
                     <div className="text-xs" style={{ color: theme.textM }}>Period Days</div>
-                    <div className="text-lg font-bold" style={{ color: '#0891B2' }}>{totalDays}</div>
+                    <div className="text-lg font-bold" style={{ color: theme.accent }}>{totalDays}</div>
                   </div>
                   <div className="rounded-xl p-3 text-center" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
                     <div className="text-xs" style={{ color: theme.textM }}>Working</div>
@@ -702,7 +702,7 @@ export default function SmartStackPage() {
                   </div>
                   <div className="rounded-xl p-3 text-center" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
                     <div className="text-xs" style={{ color: theme.textM }}>Total Hours</div>
-                    <div className="text-lg font-bold" style={{ color: '#0891B2' }}>{totalHours}</div>
+                    <div className="text-lg font-bold" style={{ color: theme.accent }}>{totalHours}</div>
                   </div>
                 </>
               );
@@ -730,7 +730,7 @@ export default function SmartStackPage() {
                   d3.setDate(d3.getDate() + 1);
                 }
                 return workDaysList.map(({ date: wd, dateStr: wds }) => (
-                  <div key={wds} className="rounded-xl p-2 text-center cursor-pointer transition-all hover:opacity-80" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}
+                  <div key={wds} className="rounded-xl p-2 text-center cursor-pointer transition-all hover:opacity-80" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}
                     onClick={() => { setEditingHoursDay(editingHoursDay === wds ? null : wds); setEditingHoursValue(String(customHours[wds] || 8)); }}
                   >
                     <div className="text-xs" style={{ color: theme.textM }}>{wd.toLocaleDateString('en-US', { weekday: 'short' })}</div>
@@ -757,14 +757,14 @@ export default function SmartStackPage() {
                           }
                         }}
                         className="w-full text-center text-sm font-bold mt-1 rounded-lg px-1 py-0.5 outline-none"
-                        style={{ backgroundColor: theme.card, color: '#0891B2', border: `1px solid #0891B2` }}
+                        style={{ backgroundColor: theme.card, color: theme.accent, border: `1px solid ${theme.accent}` }}
                         autoFocus
                         min="0"
                         max="24"
                         step="0.5"
                       />
                     ) : (
-                      <div className="text-sm font-bold mt-1" style={{ color: '#0891B2' }}>{customHours[wds] || 8}h</div>
+                      <div className="text-sm font-bold mt-1" style={{ color: theme.accent }}>{customHours[wds] || 8}h</div>
                     )}
                   </div>
                 ));
@@ -772,9 +772,9 @@ export default function SmartStackPage() {
             </div>
           </div>
 
-          <div className="rounded-xl p-4" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}>
+          <div className="rounded-xl p-4" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
             <div className="text-xs mb-1" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Projected Check Amount</div>
-            <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: '#0891B2' }}>${projectedCheckAmount.toFixed(2)}</div>
+            <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: theme.accent }}>${projectedCheckAmount.toFixed(2)}</div>
             <div className="text-xs mt-1 break-words" style={{ color: theme.textM }}>
               Based on ${effectiveNetIncome.toFixed(2)} net income · {(() => {
                 let wd = 0;
@@ -803,7 +803,7 @@ export default function SmartStackPage() {
   const renderIncomeTab = () => {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}>
+        <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
           {[
             { key: 'payment', label: 'Incoming Payments', icon: Wallet },
             { key: 'check', label: 'Check Projection', icon: BarChart3 },
@@ -814,8 +814,8 @@ export default function SmartStackPage() {
               onClick={() => setProjectionMode(key as typeof projectionMode)}
               className="flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 sm:px-2 text-[10px] sm:text-xs rounded-2xl transition-all min-w-0"
               style={{
-                backgroundColor: projectionMode === key ? '#0891B2' : 'transparent',
-                color: projectionMode === key ? '#fff' : '#0891B2',
+                backgroundColor: projectionMode === key ? theme.accent : 'transparent',
+                color: projectionMode === key ? '#fff' : theme.accent,
                 fontWeight: projectionMode === key ? 700 : 500,
               }}
             >
@@ -828,8 +828,8 @@ export default function SmartStackPage() {
         {projectionMode === 'payment' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `#0891B220` }}>
-                <Wallet className="w-5 h-5" style={{ color: '#0891B2' }} />
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${theme.accent}20` }}>
+                <Wallet className="w-5 h-5" style={{ color: theme.accent }} />
               </div>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Incoming Payments</h2>
@@ -873,7 +873,7 @@ export default function SmartStackPage() {
                   {(['none', 'weekly', 'biweekly', 'monthly'] as const).map(r => (
                     <button key={r} onClick={() => setNewPaymentRecurrence(r)}
                       className="px-3 py-1.5 rounded-lg text-xs capitalize transition-all"
-                      style={{ backgroundColor: newPaymentRecurrence === r ? '#0891B2' : (theme.border), color: newPaymentRecurrence === r ? '#fff' : theme.textM, fontWeight: newPaymentRecurrence === r ? 700 : 400 }}>
+                      style={{ backgroundColor: newPaymentRecurrence === r ? theme.accent : (theme.border), color: newPaymentRecurrence === r ? '#fff' : theme.textM, fontWeight: newPaymentRecurrence === r ? 700 : 400 }}>
                       {r.replace('-', '‑')}
                     </button>
                   ))}
@@ -900,7 +900,7 @@ export default function SmartStackPage() {
                   setNewPaymentRecurrence('none');
                 }}
                 className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
-                style={{ backgroundColor: '#0891B2', color: '#fff' }}>
+                style={{ backgroundColor: theme.accent, color: '#fff' }}>
                 <Plus className="w-4 h-4" />Add Payment
               </button>
             </div>
@@ -963,12 +963,12 @@ export default function SmartStackPage() {
 
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-        <div className="rounded-2xl p-5" style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}>
+        <div className="rounded-2xl p-5" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
           <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4" style={{ color: '#0891B2' }} />
-            <span className="text-sm" style={{ fontWeight: 700, color: '#0891B2' }}>Total Savings</span>
+            <Target className="w-4 h-4" style={{ color: theme.accent }} />
+            <span className="text-sm" style={{ fontWeight: 700, color: theme.accent }}>Total Savings</span>
           </div>
-          <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: '#0891B2' }}>${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: theme.accent }}>${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           <div className="text-xs mt-1" style={{ color: theme.textM }}>{savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}</div>
         </div>
 
@@ -984,13 +984,13 @@ export default function SmartStackPage() {
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0891B2', letterSpacing: '0.06em' }}>{acct.name}</h3>
-                  <div className="text-lg font-black" style={{ color: '#0891B2' }}>${acct.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: theme.accent, letterSpacing: '0.06em' }}>{acct.name}</h3>
+                  <div className="text-lg font-black" style={{ color: theme.accent }}>${acct.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                 </div>
                 {acct.goal > 0 && (
                   <div className="flex-1 min-w-0 max-w-[120px]">
                     <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: `${theme.border}` }}>
-                      <div className="h-full rounded-full" style={{ width: `${Math.min((acct.amount / acct.goal) * 100, 100)}%`, backgroundColor: '#0891B2' }} />
+                      <div className="h-full rounded-full" style={{ width: `${Math.min((acct.amount / acct.goal) * 100, 100)}%`, backgroundColor: theme.accent }} />
                     </div>
                     <p className="text-[10px] mt-0.5" style={{ color: theme.textM }}>{Math.round((acct.amount / acct.goal) * 100)}% of ${acct.goal.toLocaleString()}</p>
                   </div>
@@ -1066,7 +1066,7 @@ export default function SmartStackPage() {
                         setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
                       }}
                         className="py-2 rounded-xl text-sm transition-all hover:opacity-90 font-bold"
-                        style={{ backgroundColor: `#0891B220`, color: '#0891B2', border: `1px solid #0891B2` }}>
+                        style={{ backgroundColor: `${theme.accent}20`, color: theme.accent, border: `1px solid ${theme.accent}` }}>
                         +${amt}
                       </button>
                     ))}
@@ -1103,7 +1103,7 @@ export default function SmartStackPage() {
                         }
                       }}
                       className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-                      style={{ backgroundColor: '#0891B2' }}>
+                      style={{ backgroundColor: theme.accent }}>
                       Add
                     </button>
                   </div>
@@ -1144,7 +1144,7 @@ export default function SmartStackPage() {
               }
             }}
               className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all hover:opacity-90 font-bold"
-              style={{ backgroundColor: '#0891B2', color: '#fff' }}>
+              style={{ backgroundColor: theme.accent, color: '#fff' }}>
               <Plus className="w-5 h-5" />
             </button>
           </div>
@@ -1178,7 +1178,7 @@ export default function SmartStackPage() {
         </motion.div>
 
         <div
-          style={{ backgroundColor: `#0891B220`, border: `1px solid #0891B2` }}
+          style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}
           className="rounded-2xl p-1 mb-8 flex gap-2"
         >
           {(['income', 'savings'] as Tab[]).map((tab) => (
@@ -1188,8 +1188,8 @@ export default function SmartStackPage() {
               whileTap={{ scale: 0.98 }}
               onClick={() => setActiveTab(tab)}
               style={{
-                backgroundColor: activeTab === tab ? '#0891B2' : 'transparent',
-                color: activeTab === tab ? '#fff' : '#0891B2',
+                backgroundColor: activeTab === tab ? theme.accent : 'transparent',
+                color: activeTab === tab ? '#fff' : theme.accent,
               }}
               className="flex-1 py-3 rounded-2xl font-bold capitalize transition-all"
             >

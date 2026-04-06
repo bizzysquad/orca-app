@@ -14,7 +14,7 @@ import CalendarPicker from '@/components/CalendarPicker'
 
 // Category to icon mapping with Figma colors
 const CATEGORY_ICONS: Record<string, { Icon: React.ComponentType<any>, color: string }> = {
-  'Housing': { Icon: Home, color: '#6366F1' },
+  'Housing': { Icon: Home, color: theme.accent },
   'Transportation': { Icon: Car, color: '#F59E0B' },
   'Insurance': { Icon: AlertCircle, color: '#EC4899' },
   'Utilities': { Icon: Zap, color: '#8B5CF6' },
@@ -153,14 +153,14 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   return (
     <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-full box-border">
       <div className="flex items-center justify-between mb-6">
-        <button onClick={() => onMonthChange(-1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = '#6366F1'} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
+        <button onClick={() => onMonthChange(-1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.accent} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
           <ChevronLeft size={20} />
         </button>
         <div className="flex items-center gap-3">
-          <Calendar size={18} style={{ color: '#6366F1' }} />
+          <Calendar size={18} style={{ color: theme.accent }} />
           <h3 className="font-bold text-lg" style={{ color: theme.text }}>{monthName}</h3>
         </div>
-        <button onClick={() => onMonthChange(1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = '#6366F1'} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
+        <button onClick={() => onMonthChange(1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.accent} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
           <ChevronRight size={20} />
         </button>
       </div>
@@ -679,7 +679,7 @@ export default function BillBossPage() {
           <button
             onClick={() => { setShowAddForm(true); setTimeout(() => { const el = document.getElementById('bill-boss-add-form'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); }}
             className="shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
-            style={{ backgroundColor: '#6366F1', color: '#fff' }}
+            style={{ backgroundColor: theme.accent, color: '#fff' }}
           >
             Add Bill
           </button>
@@ -721,7 +721,7 @@ export default function BillBossPage() {
                 <button
                   onClick={() => handlePayFull(nextBillDue.id)}
                   className="shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
-                  style={{ backgroundColor: '#fff', color: '#6366F1' }}
+                  style={{ backgroundColor: '#fff', color: theme.accent }}
                 >
                   Pay Now
                 </button>
@@ -764,7 +764,7 @@ export default function BillBossPage() {
           <button
             onClick={() => setViewMode('list')}
             style={{
-              backgroundColor: viewMode === 'list' ? '#6366F1' : theme.card,
+              backgroundColor: viewMode === 'list' ? theme.accent : theme.card,
               color: viewMode === 'list' ? '#fff' : theme.text,
               borderColor: theme.border,
             }}
@@ -775,7 +775,7 @@ export default function BillBossPage() {
           <button
             onClick={() => setViewMode('compact')}
             style={{
-              backgroundColor: viewMode === 'compact' ? '#6366F1' : theme.card,
+              backgroundColor: viewMode === 'compact' ? theme.accent : theme.card,
               color: viewMode === 'compact' ? '#fff' : theme.text,
               borderColor: theme.border,
             }}
@@ -803,7 +803,7 @@ export default function BillBossPage() {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
                 className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
-                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
+                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.accent}40`}
                 onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
               />
 
@@ -815,7 +815,7 @@ export default function BillBossPage() {
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
                   className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
+                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.accent}40`}
                   onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
                 />
                 <CalendarPicker
@@ -831,7 +831,7 @@ export default function BillBossPage() {
                 onChange={(e) => setFormData({ ...formData, cat: e.target.value })}
                 style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
                 className="w-full px-5 py-3 border rounded-xl focus:outline-none focus:ring-2 font-medium"
-                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px #6366F140`}
+                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.accent}40`}
                 onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
               >
                 {CATEGORIES.map(cat => (
@@ -949,7 +949,7 @@ export default function BillBossPage() {
                 <button
                   onClick={editingBillId ? handleSaveEdit : handleAddBill}
                   disabled={!formData.name || !formData.amount || !formData.due}
-                  style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                  style={{ backgroundColor: theme.accent, color: '#fff' }}
                   className="flex-1 px-5 py-3 rounded-xl font-bold disabled:opacity-50 hover:opacity-90 transition-colors"
                 >
                   {editingBillId ? 'Update Bill' : 'Save Bill'}
@@ -1076,7 +1076,7 @@ export default function BillBossPage() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => handlePayFull(bill.id)}
-                        style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                        style={{ backgroundColor: theme.accent, color: '#fff' }}
                         className="flex-1 px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-colors"
                       >
                         Pay
@@ -1160,7 +1160,7 @@ export default function BillBossPage() {
                     <button
                       onClick={() => handlePayFull(bill.id)}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: `#6366F1` }}
+                      style={{ backgroundColor: theme.accent }}
                       title="Pay"
                     >
                       <Check size={14} style={{ color: '#fff' }} />
@@ -1408,7 +1408,7 @@ export default function BillBossPage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleApplyPartialPayment}
-                  style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                  style={{ backgroundColor: theme.accent, color: '#fff' }}
                   className="flex-1 px-5 py-3.5 rounded-xl font-bold hover:opacity-90 transition-colors"
                 >
                   Apply
@@ -1468,7 +1468,7 @@ export default function BillBossPage() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleApplySplit(splitModalBillId, num)}
-                    style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                    style={{ backgroundColor: theme.accent, color: '#fff' }}
                     className="px-4 py-3.5 rounded-xl font-bold hover:opacity-90 transition-colors"
                   >
                     {num} Payments
