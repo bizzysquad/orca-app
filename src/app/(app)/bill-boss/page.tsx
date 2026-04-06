@@ -237,8 +237,8 @@ export default function BillBossPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [splitModalBillId, setSplitModalBillId] = useState<string | null>(null)
   const [customCategory, setCustomCategory] = useState('')
-  const [calMonth, setCalMonth] = useState(2)
-  const [calYear, setCalYear] = useState(2026)
+  const [calMonth, setCalMonth] = useState(new Date().getMonth())
+  const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [rentReceipts, setRentReceipts] = useState<Record<string, string>>({})
   const [viewMode, setViewMode] = useState<'list' | 'compact'>('compact')
@@ -1094,7 +1094,7 @@ export default function BillBossPage() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => setSplitModalBillId(bill.id)}
-                        style={{ backgroundColor: theme.textS, color: theme.textM }}
+                        style={{ backgroundColor: '#F59E0B20', color: '#F59E0B' }}
                         className="px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-80 transition-colors"
                       >
                         Split
@@ -1164,6 +1164,14 @@ export default function BillBossPage() {
                       title="Pay"
                     >
                       <Check size={14} style={{ color: '#fff' }} />
+                    </button>
+                    <button
+                      onClick={() => setSplitModalBillId(bill.id)}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ backgroundColor: '#F59E0B20' }}
+                      title="Split Payment"
+                    >
+                      <ChevronRight size={14} style={{ color: '#F59E0B' }} />
                     </button>
                     <button
                       onClick={() => handleStartEdit(bill.id)}

@@ -7,7 +7,8 @@ import {
   Lock, Edit3, Plus, Trash2, Pause, Play, LineChart,
   AlertCircle, CheckCircle, Zap, Check, Calendar, Briefcase,
   Home, ExternalLink, Layers, ChevronLeft, ChevronRight,
-  Wallet, BarChart3, Calculator, Clock
+  Wallet, BarChart3, Calculator, Clock,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
@@ -249,6 +250,7 @@ export default function SmartStackPage() {
   const [newAccountName, setNewAccountName] = useState('');
   const [projectionMode, setProjectionMode] = useState<'payment' | 'check' | 'calculator'>('payment');
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
+  const [collapsedAccounts, setCollapsedAccounts] = useState<Record<string, boolean>>({});
 
   const [customSavingsAmount, setCustomSavingsAmount] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -877,7 +879,27 @@ export default function SmartStackPage() {
                   ))}
                 </div>
               </div>
-              <button className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
+              <button
+                onClick={() => {
+                  const amt = parseFloat(newPaymentAmount);
+                  if (!amt || !newPaymentDate) return;
+                  const newEntry: PaymentEntry = {
+                    id: Date.now().toString(),
+                    amount: amt,
+                    date: newPaymentDate,
+                    description: newPaymentDesc || 'Payment',
+                    recurrence: newPaymentRecurrence,
+                    status: 'expected',
+                  };
+                  const updated = [...paymentEntries, newEntry];
+                  setPaymentEntries(updated);
+                  setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                  setNewPaymentAmount('');
+                  setNewPaymentDate('');
+                  setNewPaymentDesc('');
+                  setNewPaymentRecurrence('none');
+                }}
+                className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all font-bold"
                 style={{ backgroundColor: '#0891B2', color: '#fff' }}>
                 <Plus className="w-4 h-4" />Add Payment
               </button>
@@ -888,14 +910,41 @@ export default function SmartStackPage() {
               <div className="text-sm" style={{ color: theme.textM }}>No payments scheduled</div>
             ) : (
               paymentEntries.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-3.5 rounded-xl transition-all hover:opacity-90" style={{ border: `1px solid ${theme.border}` }}>
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#10B981' }} />
-                  <div className="flex-1">
-                    <div className="text-sm" style={{ fontWeight: 700, color: theme.text }}>{p.description}</div>
+                <div key={p.id} className="flex items-center gap-3 p-3.5 rounded-xl mb-2 transition-all" style={{ border: `1px solid ${theme.border}`, opacity: p.status === 'received' ? 0.6 : 1 }}>
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.status === 'received' ? '#6B7280' : '#10B981' }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate" style={{ fontWeight: 700, color: theme.text }}>{p.description}</div>
                     <div className="text-xs" style={{ color: theme.textM }}>{p.date} · {p.recurrence || 'One-time'}</div>
                   </div>
-                  <span className="px-2 py-1 rounded-full text-xs" style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontWeight: 600 }}>Expected</span>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#10B981' }}>+${p.amount.toFixed(2)}</div>
+                  {p.status === 'received' ? (
+                    <span className="px-2 py-1 rounded-full text-xs flex-shrink-0" style={{ backgroundColor: '#F3F4F6', color: '#6B7280', fontWeight: 600 }}>Received</span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        const updated = paymentEntries.map(pe => pe.id === p.id ? { ...pe, status: 'received' as const } : pe);
+                        setPaymentEntries(updated);
+                        setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                      }}
+                      className="px-2 py-1 rounded-full text-xs flex-shrink-0 hover:opacity-80 transition-all"
+                      style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontWeight: 600 }}
+                    >
+                      Mark Received
+                    </button>
+                  )}
+                  <div className="flex-shrink-0 flex items-center gap-1.5">
+                    <div style={{ fontSize: 13, fontWeight: 800, color: p.status === 'received' ? '#6B7280' : '#10B981' }}>+${p.amount.toFixed(2)}</div>
+                    <button
+                      onClick={() => {
+                        const updated = paymentEntries.filter(pe => pe.id !== p.id);
+                        setPaymentEntries(updated);
+                        setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                      }}
+                      className="p-1 rounded-lg hover:opacity-80 transition-all"
+                      style={{ color: '#EF4444' }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -923,121 +972,151 @@ export default function SmartStackPage() {
           <div className="text-xs mt-1" style={{ color: theme.textM }}>{savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}</div>
         </div>
 
-        {savingsAccounts.map(acct => (
-          <motion.div key={acct.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0891B2', letterSpacing: '0.06em' }}>{acct.name}</h3>
-              <button onClick={() => {
-                setSavingsAccounts(prev => prev.filter(a => a.id !== acct.id));
-                setLocalSynced('orca-savings-accounts', JSON.stringify(savingsAccounts.filter(a => a.id !== acct.id)));
-              }} className="p-1.5 rounded-lg hover:bg-red-50 transition-all" style={{ color: '#EF4444' }}>
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="text-xl sm:text-[26px] mb-4 break-words" style={{ fontWeight: 900, color: '#0891B2' }}>${acct.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-
-            <div className="mb-3">
-              <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 600 }}>Edit Balance</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
-                <input type="number" value={acct.amount} onChange={e => {
-                  const updated = [...savingsAccounts];
-                  const idx = updated.findIndex(a => a.id === acct.id);
-                  updated[idx].amount = parseFloat(e.target.value) || 0;
-                  setSavingsAccounts(updated);
-                  setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                }}
-                  className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none" style={{
-                    backgroundColor: theme.bg,
-                    borderColor: theme.border,
-                    color: theme.text,
-                    border: `1px solid ${theme.border}`,
-                  }} />
-              </div>
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 600 }}>Savings Goal</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
-                <input type="text" placeholder="Set a goal (optional)" value={acct.goal} onChange={e => {
-                  const updated = [...savingsAccounts];
-                  const idx = updated.findIndex(a => a.id === acct.id);
-                  updated[idx].goal = parseFloat(e.target.value) || 0;
-                  setSavingsAccounts(updated);
-                  setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                }}
-                  className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none" style={{
-                    backgroundColor: theme.bg,
-                    borderColor: theme.border,
-                    color: theme.text,
-                    border: `1px solid ${theme.border}`,
-                  }} />
-              </div>
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-xs mb-2" style={{ color: theme.textM, fontWeight: 600 }}>Quick Add</label>
-              <div className="grid grid-cols-4 gap-2 mb-3">
-                {[10, 25, 50, 100].map(amt => (
-                  <button key={amt} onClick={() => {
-                    const updated = [...savingsAccounts];
-                    const idx = updated.findIndex(a => a.id === acct.id);
-                    updated[idx].amount += amt;
-                    updated[idx].saved = true;
-                    setSavingsAccounts(updated);
-                    setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                  }}
-                    className="py-2 rounded-xl text-sm transition-all hover:opacity-90 font-bold"
-                    style={{ backgroundColor: `#0891B220`, color: '#0891B2', border: `1px solid #0891B2` }}>
-                    +${amt}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
-                  <input
-                    type="number"
-                    placeholder="Custom amount"
-                    value={customAddAmounts[acct.id] || ''}
-                    onChange={e => setCustomAddAmounts(prev => ({ ...prev, [acct.id]: e.target.value }))}
-                    className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none"
-                    style={{
-                      backgroundColor: theme.bg,
-                      borderColor: theme.border,
-                      color: theme.text,
-                      border: `1px solid ${theme.border}`,
-                    }}
-                  />
+        {savingsAccounts.map(acct => {
+          const isCollapsed = !!collapsedAccounts[acct.id];
+          return (
+          <motion.div key={acct.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl overflow-hidden">
+            {/* Account Header — always visible */}
+            <div
+              className="flex items-center justify-between px-5 py-4 cursor-pointer"
+              style={{ borderBottom: isCollapsed ? 'none' : `1px solid ${theme.border}40` }}
+              onClick={() => setCollapsedAccounts(prev => ({ ...prev, [acct.id]: !prev[acct.id] }))}
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0891B2', letterSpacing: '0.06em' }}>{acct.name}</h3>
+                  <div className="text-lg font-black" style={{ color: '#0891B2' }}>${acct.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                 </div>
+                {acct.goal > 0 && (
+                  <div className="flex-1 min-w-0 max-w-[120px]">
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: `${theme.border}` }}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.min((acct.amount / acct.goal) * 100, 100)}%`, backgroundColor: '#0891B2' }} />
+                    </div>
+                    <p className="text-[10px] mt-0.5" style={{ color: theme.textM }}>{Math.round((acct.amount / acct.goal) * 100)}% of ${acct.goal.toLocaleString()}</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    const customAmount = parseFloat(customAddAmounts[acct.id] || '0');
-                    if (customAmount > 0) {
+                  onClick={(e) => { e.stopPropagation(); setSavingsAccounts(prev => prev.filter(a => a.id !== acct.id)); setLocalSynced('orca-savings-accounts', JSON.stringify(savingsAccounts.filter(a => a.id !== acct.id))); }}
+                  className="p-1.5 rounded-lg transition-all"
+                  style={{ color: '#EF4444' }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+                <div className="p-1.5 rounded-lg transition-all" style={{ color: theme.textM }}>
+                  {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                </div>
+              </div>
+            </div>
+
+            {/* Collapsible body */}
+            {!isCollapsed && (
+              <div className="p-5 space-y-3">
+                <div>
+                  <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 600 }}>Edit Balance</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
+                    <input type="number" value={acct.amount} onChange={e => {
                       const updated = [...savingsAccounts];
                       const idx = updated.findIndex(a => a.id === acct.id);
-                      updated[idx].amount += customAmount;
-                      updated[idx].saved = true;
+                      updated[idx].amount = parseFloat(e.target.value) || 0;
                       setSavingsAccounts(updated);
                       setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                      setCustomAddAmounts(prev => ({ ...prev, [acct.id]: '' }));
-                    }
-                  }}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-                  style={{ backgroundColor: '#0891B2' }}>
-                  Add
+                    }}
+                      className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none" style={{
+                        backgroundColor: theme.bg,
+                        borderColor: theme.border,
+                        color: theme.text,
+                        border: `1px solid ${theme.border}`,
+                      }} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 600 }}>Savings Goal</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
+                    <input type="text" placeholder="Set a goal (optional)" value={acct.goal} onChange={e => {
+                      const updated = [...savingsAccounts];
+                      const idx = updated.findIndex(a => a.id === acct.id);
+                      updated[idx].goal = parseFloat(e.target.value) || 0;
+                      setSavingsAccounts(updated);
+                      setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
+                    }}
+                      className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none" style={{
+                        backgroundColor: theme.bg,
+                        borderColor: theme.border,
+                        color: theme.text,
+                        border: `1px solid ${theme.border}`,
+                      }} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs mb-2" style={{ color: theme.textM, fontWeight: 600 }}>Quick Add</label>
+                  <div className="grid grid-cols-4 gap-2 mb-3">
+                    {[10, 25, 50, 100].map(amt => (
+                      <button key={amt} onClick={() => {
+                        const updated = [...savingsAccounts];
+                        const idx = updated.findIndex(a => a.id === acct.id);
+                        updated[idx].amount += amt;
+                        updated[idx].saved = true;
+                        setSavingsAccounts(updated);
+                        setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
+                      }}
+                        className="py-2 rounded-xl text-sm transition-all hover:opacity-90 font-bold"
+                        style={{ backgroundColor: `#0891B220`, color: '#0891B2', border: `1px solid #0891B2` }}>
+                        +${amt}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
+                      <input
+                        type="number"
+                        placeholder="Custom amount"
+                        value={customAddAmounts[acct.id] || ''}
+                        onChange={e => setCustomAddAmounts(prev => ({ ...prev, [acct.id]: e.target.value }))}
+                        className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none"
+                        style={{
+                          backgroundColor: theme.bg,
+                          borderColor: theme.border,
+                          color: theme.text,
+                          border: `1px solid ${theme.border}`,
+                        }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const customAmount = parseFloat(customAddAmounts[acct.id] || '0');
+                        if (customAmount > 0) {
+                          const updated = [...savingsAccounts];
+                          const idx = updated.findIndex(a => a.id === acct.id);
+                          updated[idx].amount += customAmount;
+                          updated[idx].saved = true;
+                          setSavingsAccounts(updated);
+                          setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
+                          setCustomAddAmounts(prev => ({ ...prev, [acct.id]: '' }));
+                        }
+                      }}
+                      className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
+                      style={{ backgroundColor: '#0891B2' }}>
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                <button className="w-full py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-all font-bold"
+                  style={{ backgroundColor: '#16A34A', color: '#fff' }}>
+                  ✓ Saved!
                 </button>
               </div>
-            </div>
-
-            <button className="w-full py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-all font-bold"
-              style={{ backgroundColor: '#16A34A', color: '#fff' }}>
-              ✓ Saved!
-            </button>
+            )}
           </motion.div>
-        ))}
+        )})}
 
         <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `2px dashed ${theme.border}` }}>
           <h3 className="text-sm mb-3" style={{ fontWeight: 700, color: theme.textM }}>Add Savings Account</h3>

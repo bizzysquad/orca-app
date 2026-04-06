@@ -85,6 +85,10 @@ interface TripData {
   startDate: string;
   endDate: string;
   itinerary: TripItinerary[];
+  airline?: string;
+  flightNumber?: string;
+  departureAirport?: string;
+  arrivalAirport?: string;
 }
 
 interface Group {
@@ -198,6 +202,10 @@ export default function StackCirclePage() {
   const [tripStartDates, setTripStartDates] = useState<Record<string, string>>({});
   const [tripEndDates, setTripEndDates] = useState<Record<string, string>>({});
   const [newItineraryTitles, setNewItineraryTitles] = useState<Record<string, string>>({});
+  const [tripAirlines, setTripAirlines] = useState<Record<string, string>>({});
+  const [tripFlightNumbers, setTripFlightNumbers] = useState<Record<string, string>>({});
+  const [tripDepartureAirports, setTripDepartureAirports] = useState<Record<string, string>>({});
+  const [tripArrivalAirports, setTripArrivalAirports] = useState<Record<string, string>>({});
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
 
@@ -359,7 +367,19 @@ export default function StackCirclePage() {
     if (!g) return;
     const updatedGroups = groups.map(gr =>
       gr.id === groupId
-        ? { ...gr, trip: { ...(gr.trip || { location: '', startDate: '', endDate: '', itinerary: [] }), location: tripLocations[groupId] || gr.trip?.location || '', startDate: tripStartDates[groupId] || gr.trip?.startDate || '', endDate: tripEndDates[groupId] || gr.trip?.endDate || '' } }
+        ? {
+            ...gr,
+            trip: {
+              ...(gr.trip || { location: '', startDate: '', endDate: '', itinerary: [] }),
+              location: tripLocations[groupId] ?? gr.trip?.location ?? '',
+              startDate: tripStartDates[groupId] ?? gr.trip?.startDate ?? '',
+              endDate: tripEndDates[groupId] ?? gr.trip?.endDate ?? '',
+              airline: tripAirlines[groupId] ?? gr.trip?.airline ?? '',
+              flightNumber: tripFlightNumbers[groupId] ?? gr.trip?.flightNumber ?? '',
+              departureAirport: tripDepartureAirports[groupId] ?? gr.trip?.departureAirport ?? '',
+              arrivalAirport: tripArrivalAirports[groupId] ?? gr.trip?.arrivalAirport ?? '',
+            }
+          }
         : gr
     );
     setGroups(updatedGroups);
@@ -628,7 +648,7 @@ export default function StackCirclePage() {
               color: activeTab === 'group' ? teal : theme.textS,
             }}
           >
-            Group Savings
+            My Circle
           </button>
           <button
             onClick={() => setActiveTab('roommates')}
@@ -932,8 +952,8 @@ export default function StackCirclePage() {
                               {/* Sub-Tabs */}
                               <div className="flex gap-1.5 rounded-xl p-1" style={{ backgroundColor: isDark ? `${theme.accent}26` : `${theme.accent}14`, border: `1px solid ${theme.accent}44` }}>
                                 {[
-                                  { key: 'savings', label: 'Group Savings' },
-                                  { key: 'tasks', label: 'Task List' },
+                                  { key: 'savings', label: 'My Circle' },
+                                  { key: 'tasks', label: 'Checklist' },
                                   { key: 'trip', label: 'Group Trip' },
                                 ].map(({ key, label }) => (
                                   <button
@@ -953,34 +973,27 @@ export default function StackCirclePage() {
                               {/* ── SAVINGS SUB-TAB ── */}
                               {subTab === 'savings' && (
                                 <div className="space-y-4">
-                                  {/* Invite Members */}
-                                  <div className="rounded-xl border p-3 sm:p-4 transition-colors" style={{ backgroundColor: theme.bg, borderColor: tealBorder }}>
-                                    <div className="flex items-center gap-2 mb-3">
-                                      <div className="p-1.5 rounded-xl" style={{ backgroundColor: tealLight }}>
-                                        <UserPlus className="w-4 h-4" style={{ color: teal }} />
+                                  {/* Invite Members — compact inline */}
+                                  <div className="flex items-center justify-between px-3 py-2 rounded-xl border" style={{ backgroundColor: theme.bg, borderColor: tealBorder }}>
+                                    <div className="flex items-center gap-2">
+                                      <div className="p-1 rounded-lg" style={{ backgroundColor: tealLight }}>
+                                        <UserPlus className="w-3.5 h-3.5" style={{ color: teal }} />
                                       </div>
                                       <div>
-                                        <h4 className="font-bold text-sm" style={{ color: theme.text }}>Invite Members</h4>
-                                        <p className="text-xs" style={{ color: theme.textS }}>Share your group code</p>
+                                        <span className="text-xs font-bold" style={{ color: theme.text }}>Invite Code: </span>
+                                        <code className="text-xs font-mono font-black tracking-[0.15em]" style={{ color: teal }}>{group.code}</code>
                                       </div>
                                     </div>
-                                    <div className="rounded-xl p-3 text-center mb-3" style={{ backgroundColor: isDark ? `${theme.accent}26` : `${theme.accent}14`, border: `1px solid ${theme.accent}44` }}>
-                                      <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: theme.accent, opacity: 0.7 }}>Group Code</p>
-                                      <div className="text-2xl sm:text-3xl font-black tracking-[0.2em] mb-3" style={{ color: theme.accent }}>{group.code}</div>
-                                      <motion.button
-                                        whileHover={{ scale: 1.04 }}
-                                        whileTap={{ scale: 0.96 }}
-                                        onClick={() => handleCopyCode(group)}
-                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all"
-                                        style={{ backgroundColor: isCopied ? '#10B981' : theme.accent, color: '#fff' }}
-                                      >
-                                        {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                        {isCopied ? 'Code Copied!' : 'Copy Code'}
-                                      </motion.button>
-                                    </div>
-                                    <div className="rounded-lg p-2.5 text-xs" style={{ backgroundColor: isDark ? '#164E63' : '#E0F9FC', color: teal }}>
-                                      <strong>How it works:</strong> Share this code with friends. They open Stack Circle, tap Join Group, enter the code, and they're in instantly.
-                                    </div>
+                                    <motion.button
+                                      whileHover={{ scale: 1.04 }}
+                                      whileTap={{ scale: 0.96 }}
+                                      onClick={() => handleCopyCode(group)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all"
+                                      style={{ backgroundColor: isCopied ? '#10B981' : teal, color: '#fff' }}
+                                    >
+                                      {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                      {isCopied ? 'Copied!' : 'Copy'}
+                                    </motion.button>
                                   </div>
 
                                   {/* Add Money */}
@@ -1062,7 +1075,7 @@ export default function StackCirclePage() {
                               {/* ── TASKS SUB-TAB ── */}
                               {subTab === 'tasks' && (
                                 <div className="rounded-xl border p-3 sm:p-4 transition-colors" style={{ backgroundColor: theme.bg, borderColor: tealBorder }}>
-                                  <h4 className="font-bold text-sm mb-3" style={{ color: theme.text }}>Trip Checklist</h4>
+                                  <h4 className="font-bold text-sm mb-3" style={{ color: theme.text }}>Checklist</h4>
                                   <div className="flex gap-2 mb-3">
                                     <input
                                       type="text"
@@ -1115,6 +1128,16 @@ export default function StackCirclePage() {
                                         {new Date(group.trip.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                         {group.trip.endDate && ` → ${new Date(group.trip.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
                                       </p>}
+                                      {(group.trip.airline || group.trip.flightNumber) && (
+                                        <p className="text-xs mt-1" style={{ color: theme.accent }}>
+                                          ✈️ {[group.trip.airline, group.trip.flightNumber].filter(Boolean).join(' · ')}
+                                        </p>
+                                      )}
+                                      {(group.trip.departureAirport || group.trip.arrivalAirport) && (
+                                        <p className="text-xs mt-0.5" style={{ color: theme.accent }}>
+                                          {group.trip.departureAirport}{group.trip.departureAirport && group.trip.arrivalAirport ? ' → ' : ''}{group.trip.arrivalAirport}
+                                        </p>
+                                      )}
                                     </div>
                                   )}
 
@@ -1123,7 +1146,7 @@ export default function StackCirclePage() {
                                     <h4 className="font-bold text-sm mb-3" style={{ color: theme.text }}>Trip Details</h4>
                                     <div className="space-y-3">
                                       <div>
-                                        <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Location</label>
+                                        <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Destination</label>
                                         <input
                                           type="text"
                                           placeholder="Where are you going?"
@@ -1135,7 +1158,7 @@ export default function StackCirclePage() {
                                       </div>
                                       <div className="grid grid-cols-2 gap-3">
                                         <div>
-                                          <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Start Date</label>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Depart Date</label>
                                           <input
                                             type="date"
                                             value={tripStartDates[group.id] ?? (group.trip?.startDate || '')}
@@ -1145,7 +1168,7 @@ export default function StackCirclePage() {
                                           />
                                         </div>
                                         <div>
-                                          <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>End Date</label>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Return Date</label>
                                           <input
                                             type="date"
                                             value={tripEndDates[group.id] ?? (group.trip?.endDate || '')}
@@ -1155,59 +1178,84 @@ export default function StackCirclePage() {
                                           />
                                         </div>
                                       </div>
-                                      <motion.button
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => handleSaveTripDetails(group.id)}
-                                        className="w-full font-bold px-4 py-2 rounded-xl text-sm transition-shadow"
-                                        style={{ backgroundColor: theme.accent, color: '#fff' }}
-                                      >
-                                        Save Trip Details
-                                      </motion.button>
                                     </div>
                                   </div>
 
-                                  {/* Itinerary */}
+                                  {/* Flight Information */}
                                   <div className="rounded-xl border p-3 sm:p-4 transition-colors" style={{ backgroundColor: theme.bg, borderColor: tealBorder }}>
-                                    <h4 className="font-bold text-sm mb-3" style={{ color: theme.text }}>Itinerary</h4>
-                                    <div className="flex gap-2 mb-3">
-                                      <input
-                                        type="text"
-                                        placeholder="Add itinerary item..."
-                                        value={newItineraryTitles[group.id] || ''}
-                                        onChange={(e) => setNewItineraryTitles(prev => ({ ...prev, [group.id]: e.target.value }))}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleAddItinerary(group.id)}
-                                        className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors"
-                                        style={{ backgroundColor: theme.card, borderColor: theme.border, color: theme.text }}
-                                      />
-                                      <motion.button
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => handleAddItinerary(group.id)}
-                                        className="font-bold px-4 py-2 rounded-xl text-sm transition-shadow whitespace-nowrap"
-                                        style={{ backgroundColor: theme.accent, color: '#fff' }}
-                                      >
-                                        <Plus className="w-4 h-4 inline mr-1" />Add
-                                      </motion.button>
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <Plane className="w-4 h-4" style={{ color: teal }} />
+                                      <h4 className="font-bold text-sm" style={{ color: theme.text }}>Flight Information</h4>
                                     </div>
-                                    <div className="space-y-2">
-                                      {(group.trip?.itinerary || []).length === 0 ? (
-                                        <p className="text-sm py-3 text-center" style={{ color: theme.textS }}>No itinerary items yet.</p>
-                                      ) : (
-                                        (group.trip?.itinerary || []).map(item => (
-                                          <div key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg border transition-colors" style={{ backgroundColor: theme.card, borderColor: theme.border, opacity: item.completed ? 0.6 : 1 }}>
-                                            <button onClick={() => handleToggleItinerary(group.id, item.id)} className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors" style={{ borderColor: item.completed ? '#10B981' : theme.border, backgroundColor: item.completed ? '#10B981' : 'transparent' }}>
-                                              {item.completed && <Check className="w-3 h-3 text-white" />}
-                                            </button>
-                                            <span className="flex-1 text-sm" style={{ color: theme.text, textDecoration: item.completed ? 'line-through' : 'none' }}>{item.title}</span>
-                                            <button onClick={() => handleDeleteItinerary(group.id, item.id)} className="p-1 rounded-lg hover:opacity-80 transition-opacity flex-shrink-0" style={{ color: '#EF4444' }}>
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                          </div>
-                                        ))
-                                      )}
+                                    <div className="space-y-3">
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Airline</label>
+                                          <input
+                                            type="text"
+                                            placeholder="e.g., Delta, United"
+                                            value={tripAirlines[group.id] ?? (group.trip?.airline || '')}
+                                            onChange={(e) => setTripAirlines(prev => ({ ...prev, [group.id]: e.target.value }))}
+                                            className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors"
+                                            style={{ backgroundColor: theme.card, borderColor: theme.border, color: theme.text }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Flight Number</label>
+                                          <input
+                                            type="text"
+                                            placeholder="e.g., DL 1234"
+                                            value={tripFlightNumbers[group.id] ?? (group.trip?.flightNumber || '')}
+                                            onChange={(e) => setTripFlightNumbers(prev => ({ ...prev, [group.id]: e.target.value }))}
+                                            className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors"
+                                            style={{ backgroundColor: theme.card, borderColor: theme.border, color: theme.text }}
+                                          />
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
+
+                                  {/* Airport Details */}
+                                  <div className="rounded-xl border p-3 sm:p-4 transition-colors" style={{ backgroundColor: theme.bg, borderColor: tealBorder }}>
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <MapPin className="w-4 h-4" style={{ color: teal }} />
+                                      <h4 className="font-bold text-sm" style={{ color: theme.text }}>Airport Details</h4>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Departure Airport</label>
+                                        <input
+                                          type="text"
+                                          placeholder="e.g., JFK, LAX"
+                                          value={tripDepartureAirports[group.id] ?? (group.trip?.departureAirport || '')}
+                                          onChange={(e) => setTripDepartureAirports(prev => ({ ...prev, [group.id]: e.target.value }))}
+                                          className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors"
+                                          style={{ backgroundColor: theme.card, borderColor: theme.border, color: theme.text }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Arrival Airport</label>
+                                        <input
+                                          type="text"
+                                          placeholder="e.g., MIA, ORD"
+                                          value={tripArrivalAirports[group.id] ?? (group.trip?.arrivalAirport || '')}
+                                          onChange={(e) => setTripArrivalAirports(prev => ({ ...prev, [group.id]: e.target.value }))}
+                                          className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors"
+                                          style={{ backgroundColor: theme.card, borderColor: theme.border, color: theme.text }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => handleSaveTripDetails(group.id)}
+                                    className="w-full font-bold px-4 py-2.5 rounded-xl text-sm transition-shadow"
+                                    style={{ backgroundColor: theme.accent, color: '#fff' }}
+                                  >
+                                    Save Trip Details
+                                  </motion.button>
                                 </div>
                               )}
                             </div>

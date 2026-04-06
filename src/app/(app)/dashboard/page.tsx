@@ -1119,14 +1119,14 @@ export default function DashboardPage() {
         )
 
       case 'stack-circle':
-        return group ? (
+        return stackCircleStats.totalGroups > 0 ? (
           <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
             <Link href="/stack-circle">
               <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Users size={18} style={{ color: '#6366F1' }} />
-                    <p className="text-base font-semibold" style={{ color: theme.text }}>Stack Circle</p>
+                    <p className="text-base font-semibold" style={{ color: theme.text }}>My Circle</p>
                   </div>
                   <span className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ backgroundColor: '#6366F115', color: '#6366F1' }}>
                     {stackCircleStats.totalGroups} group{stackCircleStats.totalGroups !== 1 ? 's' : ''}
@@ -1151,12 +1151,12 @@ export default function DashboardPage() {
                 {stackCircleStats.totalTarget > 0 && (
                   <ProgressBar current={stackCircleStats.totalSaved} target={stackCircleStats.totalTarget} color="#6366F1" theme={theme} />
                 )}
-                {/* Show first group name */}
-                {group && (
+                {/* Show first group name from stats (works with localStorage groups) */}
+                {stackCircleStats.groups[0] && (
                   <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${theme.border}40` }}>
-                    <p className="text-sm font-medium" style={{ color: theme.textS }}>{group.name}</p>
+                    <p className="text-sm font-medium" style={{ color: theme.textS }}>{stackCircleStats.groups[0].customName || stackCircleStats.groups[0].name}</p>
                     <div className="flex items-center gap-1.5">
-                      <code className="text-xs font-mono" style={{ color: '#6366F1' }}>{group.code}</code>
+                      <code className="text-xs font-mono" style={{ color: '#6366F1' }}>{stackCircleStats.groups[0].code}</code>
                       <Copy size={12} style={{ color: '#6366F1' }} />
                     </div>
                   </div>
