@@ -244,6 +244,12 @@ export const THEMES: Record<string, Theme> = {
 
 export const THEME_LIST = Object.values(THEMES)
 
+// Aliases for backward compatibility (used by admin page)
+export const ALL_THEMES = THEME_LIST
+export function buildTheme(theme: Theme, isDark: boolean): Theme {
+  return isDark ? makeDark(theme) : theme
+}
+
 type ThemeContextType = {
   theme: Theme
   themeId: string
