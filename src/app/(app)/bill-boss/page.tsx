@@ -14,7 +14,7 @@ import CalendarPicker from '@/components/CalendarPicker'
 
 // Category to icon mapping with Figma colors
 const CATEGORY_ICONS: Record<string, { Icon: React.ComponentType<any>, color: string }> = {
-  'Housing': { Icon: Home, color: theme.accent },
+  'Housing': { Icon: Home, color: '#6366F1' },
   'Transportation': { Icon: Car, color: '#F59E0B' },
   'Insurance': { Icon: AlertCircle, color: '#EC4899' },
   'Utilities': { Icon: Zap, color: '#8B5CF6' },
