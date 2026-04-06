@@ -13,11 +13,10 @@ interface AppShellProps {
 
 export default function AppShell({ children, userName = 'User' }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { isDark, currentTheme } = useTheme()
+  const { theme, isDark } = useTheme()
 
-  // V10 page background: themed dark bg or light universal
-  const pageBg = isDark ? currentTheme.pageBg : '#F0F2FA'
-  const textColor = isDark ? '#F1F5F9' : '#0F172A'
+  const pageBg = theme.bg
+  const textColor = theme.text
 
   return (
     <div

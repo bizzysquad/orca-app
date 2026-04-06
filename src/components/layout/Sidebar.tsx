@@ -36,7 +36,7 @@ interface SidebarProps {
 
 export default function Sidebar({ userName = 'User', open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const { theme, currentTheme, isDark } = useTheme()
+  const { theme, isDark } = useTheme()
   const { data } = useOrcaData()
 
   // Custom logo from admin — syncs via event + cross-tab storage
@@ -145,17 +145,17 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         onClick={onClose}
         className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
         style={{
-          background: active ? currentTheme.navActiveBg : 'transparent',
+          background: active ? `${theme.accent}33` : 'transparent',
           fontWeight: active ? 600 : 400,
           color: active ? '#FFFFFF' : '#94A3B8',
         }}
       >
         <Icon
           className="w-4 h-4 flex-shrink-0"
-          style={{ color: active ? currentTheme.navActiveIcon : '#475569' }}
+          style={{ color: active ? theme.accent : '#475569' }}
         />
         <span className="flex-1 truncate">{item.name}</span>
-        {active && <ChevronRight className="w-3 h-3" style={{ color: currentTheme.navActiveIcon }} />}
+        {active && <ChevronRight className="w-3 h-3" style={{ color: theme.accent }} />}
       </Link>
     )
   }
@@ -181,19 +181,19 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
           'lg:translate-x-0'
         )}
         style={{
-          background: `linear-gradient(180deg, ${currentTheme.sidebarGradientFrom} 0%, ${currentTheme.sidebarGradientTo} 100%)`,
+          background: `linear-gradient(180deg, ${theme.surface} 0%, ${theme.bg} 100%)`,
           flexShrink: 0,
         }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-4" style={{ borderBottom: `1px solid ${currentTheme.sidebarBorderColor}` }}>
+        <div className="flex items-center gap-3 px-4 py-4" style={{ borderBottom: `1px solid ${theme.border}` }}>
           {customLogo ? (
-            <img src={customLogo} alt="ORCA" className="w-9 h-9 rounded-xl object-cover flex-shrink-0" style={{ boxShadow: `0 0 12px ${currentTheme.primary}44` }} />
+            <img src={customLogo} alt="ORCA" className="w-9 h-9 rounded-xl object-cover flex-shrink-0" style={{ boxShadow: `0 0 12px ${theme.accent}44` }} />
           ) : (
-            <Image src="/logo.svg" alt="ORCA" width={36} height={36} className="rounded-xl object-cover flex-shrink-0" style={{ boxShadow: `0 0 12px ${currentTheme.primary}44` }} />
+            <Image src="/logo.svg" alt="ORCA" width={36} height={36} className="rounded-xl object-cover flex-shrink-0" style={{ boxShadow: `0 0 12px ${theme.accent}44` }} />
           )}
           <div className="min-w-0">
-            <div style={{ color: currentTheme.primaryLight, fontWeight: 900, fontSize: 14, letterSpacing: '0.06em' }}>ORCA</div>
+            <div style={{ color: theme.accent, fontWeight: 900, fontSize: 14, letterSpacing: '0.06em' }}>ORCA</div>
             <div style={{ color: '#475569', fontSize: 9, letterSpacing: '0.1em', fontWeight: 600 }}>FINANCIAL CONTROL</div>
           </div>
           <button className="ml-auto lg:hidden p-1 rounded-lg text-slate-400 hover:text-white flex-shrink-0" onClick={onClose}>
@@ -207,7 +207,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
             if (!group.items || group.items.length === 0) return null
             return (
               <div key={group.label}>
-                <div className="px-3 mb-1.5" style={{ color: `${currentTheme.primaryLight}55`, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em' }}>
+                <div className="px-3 mb-1.5" style={{ color: `${theme.accent}55`, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em' }}>
                   {group.label}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -219,7 +219,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         </nav>
 
         {/* Bottom nav: Settings + Admin */}
-        <div className="px-3 py-3" style={{ borderTop: `1px solid ${currentTheme.sidebarBorderColor}`, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div className="px-3 py-3" style={{ borderTop: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {settingsItem && renderNavItem(settingsItem)}
 
           {adminItem && (
@@ -241,9 +241,9 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         </div>
 
         {/* User profile */}
-        <div className="px-4 py-3" style={{ borderTop: `1px solid ${currentTheme.sidebarBorderColor}` }}>
+        <div className="px-4 py-3" style={{ borderTop: `1px solid ${theme.border}` }}>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: currentTheme.primary, fontSize: 11, fontWeight: 800 }}>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: theme.accent, fontSize: 11, fontWeight: 800 }}>
               {initials}
             </div>
             <div className="flex-1 min-w-0">
