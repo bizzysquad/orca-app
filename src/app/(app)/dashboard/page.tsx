@@ -21,6 +21,7 @@ import {
   calcSafeToSpend,
   paymentsToEvents,
   getNextCycleDate,
+  getRecurringBillDates,
   type IncomingPayment,
 } from '@/lib/income-engine'
 
@@ -672,9 +673,20 @@ export default function DashboardPage() {
     const events: CalendarEvent[] = []
 
     bills.forEach(bill => {
-      const d = new Date(bill.due + 'T00:00:00')
-      if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
-        events.push({ date: d.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+      if (bill.recurrence && bill.recurrence !== 'one-time') {
+        // Expand recurring bills into the viewed month
+        const recurDates = getRecurringBillDates(bill, 24)
+        recurDates.forEach(dateStr => {
+          const rd = new Date(dateStr + 'T00:00:00')
+          if (rd.getMonth() === calMonth && rd.getFullYear() === calYear) {
+            events.push({ date: rd.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+          }
+        })
+      } else {
+        const d = new Date(bill.due + 'T00:00:00')
+        if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
+          events.push({ date: d.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
+        }
       }
     })
 

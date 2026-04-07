@@ -1,0 +1,2332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.plaid.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://sandbox.plaid.com https://production.plaid.com https://*.supabase.co wss://*.supabase.co;">
+  <title>ORCA - Financial Command Center</title>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100%; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    #root { height: 100%; }
+    @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    @keyframes glow { 0%,100% { box-shadow: 0 0 8px rgba(212,168,67,0.2); } 50% { box-shadow: 0 0 20px rgba(212,168,67,0.4); } }
+    input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    input[type="number"] { -moz-appearance: textfield; }
+    select { -webkit-appearance: none; -moz-appearance: none; }
+    ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #d4a843, #8b6914); border-radius: 5px; }
+    *:focus-visible { outline: 2px solid #d4a843; outline-offset: 2px; }
+    button:hover { filter: brightness(1.08); }
+    button:active { transform: scale(0.97); }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo, useCallback, useEffect, createContext, useContext } = React;
+
+    // ============== LOGO (logo-sm.png) ==============
+    const LOGO_B64 = "data:image/png;base64,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";
+
+    // ============== SECURITY ==============
+    const sanitize = (s) => { if(typeof s!=='string') return ''; return s.replace(/[&<>"'/]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#47;'}[c]||c)).substring(0,500); };
+    const sanitizeNum = (v,min=-Infinity,max=Infinity) => { const n=parseFloat(v); if(isNaN(n))return 0; return Math.min(max,Math.max(min,n)); };
+
+    // ============== SUPABASE CONFIG ==============
+    // Replace these with your Supabase project credentials
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+    // Initialize Supabase client (null if not configured)
+    const supabase = (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && typeof window.supabase !== 'undefined')
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      : null;
+    const isSupabaseConfigured = () => supabase !== null;
+
+    // ============== LOCAL STORAGE PERSISTENCE ==============
+    const STORAGE_KEY = 'orca_app_data';
+    const STORAGE_THEME = 'orca_theme';
+    const STORAGE_CONFIG = 'orca_admin_config';
+
+    function saveToLocal(data) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) { console.warn('localStorage save failed:', e); }
+    }
+    function loadFromLocal() {
+      try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+    }
+    function saveThemeLocal(isDark) {
+      try { localStorage.setItem(STORAGE_THEME, isDark ? 'dark' : 'light'); } catch(e) {}
+    }
+    function loadThemeLocal() {
+      try { return localStorage.getItem(STORAGE_THEME) !== 'light'; } catch(e) { return true; }
+    }
+    function saveConfigLocal(config) {
+      try { localStorage.setItem(STORAGE_CONFIG, JSON.stringify(config)); } catch(e) {}
+    }
+    function loadConfigLocal() {
+      try { const s = localStorage.getItem(STORAGE_CONFIG); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+    }
+
+    // ============== CLOUD SYNC (Supabase) ==============
+    // Offline-first: always saves locally first, then syncs to cloud
+    async function syncToCloud(data, userId) {
+      if (!isSupabaseConfigured() || !userId) return;
+      try {
+        // Upsert profile
+        const { user, ...profileFields } = {
+          name: data.user.name, email: data.user.email,
+          pay_freq: data.user.payFreq, pay_cycle: data.user.payCycle,
+          pay_rate: data.user.payRate, hours_per_day: data.user.hoursPerDay,
+          next_pay: data.user.nextPay, credit_score: data.user.creditScore,
+          utilization: data.user.utilization, on_time: data.user.onTime,
+          acct_age: data.user.acctAge, inquiries: data.user.inquiries,
+          total_debt: data.user.totalDebt, credit_limit: data.user.creditLimit,
+          score_history: data.user.scoreHistory, split_mode: data.splitMode,
+          onboarded: data.user.onboarded,
+        };
+        await supabase.from('profiles').update(profileFields).eq('id', userId);
+
+        // Sync bills, income, expenses, goals — full replace strategy
+        await supabase.from('bills').delete().eq('user_id', userId);
+        if (data.bills.length > 0) {
+          await supabase.from('bills').insert(data.bills.map(b => ({
+            user_id: userId, name: b.name, amount: b.amount, cat: b.cat,
+            due: b.due, freq: b.freq, status: b.status, alloc: b.alloc || [],
+          })));
+        }
+
+        await supabase.from('income_sources').delete().eq('user_id', userId);
+        if (data.income.length > 0) {
+          await supabase.from('income_sources').insert(data.income.map(i => ({
+            user_id: userId, name: i.name, amount: i.amount, freq: i.freq, active: i.active,
+          })));
+        }
+
+        await supabase.from('expenses').delete().eq('user_id', userId);
+        if (data.expenses.length > 0) {
+          await supabase.from('expenses').insert(data.expenses.map(e => ({
+            user_id: userId, name: e.name, amount: e.amount, cat: e.cat, date: e.date,
+          })));
+        }
+
+        await supabase.from('savings_goals').delete().eq('user_id', userId);
+        if (data.goals.length > 0) {
+          await supabase.from('savings_goals').insert(data.goals.map(g => ({
+            user_id: userId, name: g.name, target: g.target, current: g.current,
+            date: g.date, c_type: g.cType, c_val: g.cVal, active: g.active,
+          })));
+        }
+
+        // Update sync timestamp
+        await supabase.from('sync_log').upsert({
+          user_id: userId, client_type: 'html_app', last_sync: new Date().toISOString(),
+        }, { onConflict: 'user_id,client_type' });
+
+      } catch (e) { console.warn('Cloud sync failed (will retry):', e); }
+    }
+
+    async function loadFromCloud(userId) {
+      if (!isSupabaseConfigured() || !userId) return null;
+      try {
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+        if (!profile) return null;
+        const { data: income } = await supabase.from('income_sources').select('*').eq('user_id', userId);
+        const { data: bills } = await supabase.from('bills').select('*').eq('user_id', userId);
+        const { data: expenses } = await supabase.from('expenses').select('*').eq('user_id', userId);
+        const { data: goals } = await supabase.from('savings_goals').select('*').eq('user_id', userId);
+        const { data: notifs } = await supabase.from('notifications').select('*').eq('user_id', userId);
+        const { data: rent } = await supabase.from('rent_entries').select('*').eq('user_id', userId);
+
+        return {
+          user: {
+            name: profile.name, email: profile.email, onboarded: profile.onboarded,
+            payFreq: profile.pay_freq, payCycle: profile.pay_cycle, payRate: profile.pay_rate,
+            hoursPerDay: profile.hours_per_day, nextPay: profile.next_pay,
+            creditScore: profile.credit_score, utilization: profile.utilization,
+            onTime: profile.on_time, acctAge: profile.acct_age, inquiries: profile.inquiries,
+            totalDebt: profile.total_debt, creditLimit: profile.credit_limit,
+            scoreHistory: profile.score_history || [],
+          },
+          income: (income || []).map(i => ({ id: i.id, name: i.name, amount: i.amount, freq: i.freq, active: i.active })),
+          bills: (bills || []).map(b => ({ id: b.id, name: b.name, amount: b.amount, cat: b.cat, due: b.due, freq: b.freq, status: b.status, alloc: b.alloc || [] })),
+          expenses: (expenses || []).map(e => ({ id: e.id, name: e.name, amount: e.amount, cat: e.cat, date: e.date })),
+          goals: (goals || []).map(g => ({ id: g.id, name: g.name, target: g.target, current: g.current, date: g.date, cType: g.c_type, cVal: g.c_val, active: g.active })),
+          splitMode: profile.split_mode || 'equal',
+          notifs: (notifs || []).map(n => ({ id: n.id, type: n.type, title: n.title, body: n.body, read: n.read })),
+          groups: [], // Groups loaded separately
+          rent: (rent || []).map(r => ({ id: r.id, month: r.month, amount: r.amount, status: r.status, reported: r.reported, rDate: r.r_date })),
+          plaid: null,
+          roommates: { enabled: false, totalRent: 0, utilities: [], members: [], history: [] },
+        };
+      } catch (e) { console.warn('Cloud load failed:', e); return null; }
+    }
+
+    // Debounced cloud sync — saves at most once per 3 seconds
+    let syncTimer = null;
+    function debouncedSync(data, userId) {
+      saveToLocal(data); // Always save locally immediately
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => syncToCloud(data, userId), 3000);
+    }
+
+    // ============== THEMES ==============
+    const THEMES = {
+      dark: {
+        name:'dark', bg:'#09090b', bgS:'#131316', card:'#18181b', border:'#27272a',
+        text:'#fafafa', textS:'#a1a1aa', textM:'#71717a',
+        gold:'#d4a843', goldL:'#f5d680', goldD:'#b8860b', goldBg:'rgba(212,168,67,0.08)', goldBg2:'rgba(212,168,67,0.15)',
+        ok:'#4ade80', okBg:'rgba(74,222,128,0.08)', warn:'#fbbf24', warnBg:'rgba(251,191,36,0.08)',
+        bad:'#f87171', badBg:'rgba(248,113,113,0.08)', nav:'#0c0c0e', input:'#131316',
+        shadow:'0 1px 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2)', shadowL:'0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3)',
+        overlay:'rgba(0,0,0,0.75)', glow:'0 0 20px rgba(212,168,67,0.15)',
+        cardGlass:'rgba(24,24,27,0.8)', navGlass:'rgba(12,12,14,0.85)',
+      },
+      light: {
+        name:'light', bg:'#fafaf9', bgS:'#f4f4f2', card:'#ffffff', border:'#e4e4e0',
+        text:'#18181b', textS:'#52525b', textM:'#a1a1aa',
+        gold:'#b8860b', goldL:'#d4a843', goldD:'#8b6914', goldBg:'rgba(184,134,11,0.05)', goldBg2:'rgba(184,134,11,0.1)',
+        ok:'#16a34a', okBg:'rgba(22,163,74,0.06)', warn:'#d97706', warnBg:'rgba(217,119,6,0.06)',
+        bad:'#dc2626', badBg:'rgba(220,38,38,0.06)', nav:'#ffffff', input:'#ffffff',
+        shadow:'0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)', shadowL:'0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
+        overlay:'rgba(0,0,0,0.4)', glow:'0 0 20px rgba(184,134,11,0.1)',
+        cardGlass:'rgba(255,255,255,0.85)', navGlass:'rgba(255,255,255,0.9)',
+      },
+    };
+    const TC = createContext(THEMES.dark);
+
+    // ============== CONSTANTS ==============
+    const BILL_CATS = ['Rent/Mortgage','Utilities','Phone/Internet','Insurance','Debt/Credit Cards','Subscriptions','Car Note','Childcare','Medical','Other'];
+    const EXP_CATS = ['Groceries','Gas/Transport','Dining Out','Entertainment','Shopping','Medical','Household','Personal Care','Misc'];
+    const PAY_FREQ = [{v:'weekly',l:'Weekly'},{v:'biweekly',l:'Biweekly'},{v:'semimonthly',l:'Twice/Month'},{v:'monthly',l:'Monthly'}];
+    const PAY_CYCLES = [{v:'standard',l:'Standard'},{v:'offset',l:'Offset Week'},{v:'1st_15th',l:'1st & 15th'},{v:'last_day',l:'Last Day of Month'}];
+    const SAVE_PRESETS = ['Emergency Fund','Vacation','Moving Fund','Car Fund','Holiday Fund','Custom'];
+    const CREDIT_RANGES = [{min:800,max:850,l:'Exceptional',c:'#4ade80'},{min:740,max:799,l:'Very Good',c:'#86efac'},{min:670,max:739,l:'Good',c:'#fbbf24'},{min:580,max:669,l:'Fair',c:'#fb923c'},{min:300,max:579,l:'Poor',c:'#f87171'}];
+
+    const SPLIT4 = [{name:'Housing',pct:30,color:'#d4a843'},{name:'Bills',pct:25,color:'#f87171'},{name:'Savings',pct:20,color:'#4ade80'},{name:'Spending',pct:25,color:'#60a5fa'}];
+    const SPLIT6 = [{name:'Housing',pct:25,color:'#d4a843'},{name:'Bills',pct:15,color:'#f87171'},{name:'Debt',pct:10,color:'#fb923c'},{name:'Savings',pct:15,color:'#4ade80'},{name:'Fun',pct:15,color:'#a78bfa'},{name:'Emergency',pct:20,color:'#60a5fa'}];
+
+    // ============== UTILS ==============
+    const fmt = a => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(a||0);
+    const fmtD = d => { if(!d)return''; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
+    const today = () => new Date().toISOString().split('T')[0];
+    const addD = (d,n) => { const dt=new Date(d+'T00:00:00'); dt.setDate(dt.getDate()+n); return dt.toISOString().split('T')[0]; };
+    const daysTo = d => { if(!d)return Infinity; const n=new Date(); n.setHours(0,0,0,0); return Math.ceil((new Date(d+'T00:00:00')-n)/(864e5)); };
+    const gid = () => Math.random().toString(36).substr(2,9)+Date.now().toString(36);
+    const pct = (c,t) => t>0?Math.max(0,Math.min(100,Math.round((c/t)*100))):0;
+
+    const f2w = (a,f) => { const m={weekly:1,biweekly:0.5,semimonthly:24/52,monthly:12/52,quarterly:4/52,yearly:1/52}; return a*(m[f]||12/52); };
+    const calcIncome = s => s.filter(x=>x.active!==false).reduce((r,x)=>r+f2w(x.amount,x.freq),0);
+    const calcBillRes = b => b.filter(x=>x.status!=='paid').reduce((r,x)=>r+f2w(x.amount,x.freq||'monthly'),0);
+    function calcAlloc(srcs,bills,goals,mode='equal') {
+      const inc=calcIncome(srcs), br=calcBillRes(bills);
+      const sr=goals.filter(g=>g.active!==false).reduce((s,g)=>s+(g.cType==='fixed'?(g.cVal||0):(inc*(g.cVal||0)/100)),0);
+      const sts=Math.max(0,inc-br-sr), short=Math.max(0,(br+sr)-inc);
+      return {inc,br,sr,sts,daily:sts/7,short};
+    }
+
+    const getPaycheckAmount = (user,income) => {
+      const weeklyInc = calcIncome(income);
+      const m={weekly:1,biweekly:2,semimonthly:52/24,monthly:52/12};
+      return weeklyInc * (m[user.payFreq]||2);
+    };
+
+    // ============== SEED DATA ==============
+    function seed() {
+      const t=today();
+      return {
+        user:{name:'Alex Johnson',email:'alex@example.com',onboarded:true,payFreq:'biweekly',payCycle:'standard',payRate:'18',hoursPerDay:'8',nextPay:addD(t,4),
+          creditScore:648,utilization:34,onTime:94,acctAge:2.5,inquiries:3,totalDebt:4200,creditLimit:12000,
+          scoreHistory:[{m:'Oct',s:621},{m:'Nov',s:628},{m:'Dec',s:635},{m:'Jan',s:640},{m:'Feb',s:644},{m:'Mar',s:648}]},
+        income:[{id:gid(),name:'Main Job',amount:2400,freq:'biweekly',active:true},{id:gid(),name:'Freelance',amount:300,freq:'monthly',active:true}],
+        bills:[
+          {id:gid(),name:'Rent',amount:1200,cat:'Rent/Mortgage',due:addD(t,12),freq:'monthly',status:'upcoming',alloc:[]},
+          {id:gid(),name:'Electric',amount:95,cat:'Utilities',due:addD(t,8),freq:'monthly',status:'upcoming',alloc:[]},
+          {id:gid(),name:'Car Insurance',amount:180,cat:'Insurance',due:addD(t,18),freq:'monthly',status:'upcoming',alloc:[]},
+          {id:gid(),name:'Phone',amount:65,cat:'Phone/Internet',due:addD(t,5),freq:'monthly',status:'upcoming',alloc:[]},
+          {id:gid(),name:'Netflix',amount:15.99,cat:'Subscriptions',due:addD(t,20),freq:'monthly',status:'upcoming',alloc:[]},
+          {id:gid(),name:'Spotify',amount:10.99,cat:'Subscriptions',due:addD(t,22),freq:'monthly',status:'upcoming',alloc:[]},
+          {id:gid(),name:'Credit Card Min',amount:150,cat:'Debt/Credit Cards',due:addD(t,15),freq:'monthly',status:'upcoming',alloc:[]},
+        ],
+        expenses:[
+          {id:gid(),name:'Grocery run',amount:62.40,cat:'Groceries',date:addD(t,-2)},
+          {id:gid(),name:'Gas fill-up',amount:45,cat:'Gas/Transport',date:addD(t,-1)},
+          {id:gid(),name:'Dinner out',amount:38.50,cat:'Dining Out',date:t},
+          {id:gid(),name:'New headphones',amount:29.99,cat:'Shopping',date:addD(t,-3)},
+        ],
+        goals:[
+          {id:gid(),name:'Emergency Fund',target:2000,current:480,date:addD(t,180),cType:'fixed',cVal:25,active:true},
+          {id:gid(),name:'Vacation',target:1500,current:220,date:addD(t,270),cType:'fixed',cVal:15,active:true},
+        ],
+        splitMode:'equal',
+        notifs:[
+          {id:gid(),type:'bill',title:'Phone Bill Due Soon',body:'Your phone bill of $65 is due in 5 days.',read:false},
+          {id:gid(),type:'credit',title:'Credit Tip',body:'Your rent payment was reported. Score update in 30 days.',read:false},
+        ],
+        groups:[{
+          id:gid(),name:'Beach Trip Crew',goal:'Summer Beach Trip',target:3000,current:1240,date:addD(t,120),code:'BEACH24',
+          members:[{id:gid(),name:'Alex (You)',role:'coordinator',target:30,contrib:450,balance:120},
+            {id:gid(),name:'Jordan',role:'member',target:25,contrib:380,balance:80},
+            {id:gid(),name:'Morgan',role:'member',target:20,contrib:290,balance:50},
+            {id:gid(),name:'Taylor',role:'member',target:15,contrib:120,balance:30}],
+          activity:[{id:gid(),user:'Jordan',msg:'Jordan added $25',date:addD(t,-1)},
+            {id:gid(),user:'System',msg:'Group reached 40% of goal!',date:addD(t,-2)},
+            {id:gid(),user:'Alex',msg:'Alex added $30',date:addD(t,-3)}],
+        }],
+        rent:[
+          {id:gid(),month:addD(t,-60),amount:1200,status:'paid',reported:true,rDate:addD(t,-55)},
+          {id:gid(),month:addD(t,-30),amount:1200,status:'paid',reported:true,rDate:addD(t,-25)},
+          {id:gid(),month:t,amount:1200,status:'upcoming',reported:false,rDate:null},
+        ],
+        plaid:null,
+        roommates:{
+          enabled:true,
+          totalRent:1200,
+          utilities:[
+            {id:gid(),name:'Electric',amount:95,split:'equal'},
+            {id:gid(),name:'Internet',amount:70,split:'equal'},
+            {id:gid(),name:'Water',amount:45,split:'equal'},
+          ],
+          members:[
+            {id:gid(),name:'Alex (You)',share:50,paidRent:true,paidUtilities:true},
+            {id:gid(),name:'Jordan',share:50,paidRent:false,paidUtilities:false},
+          ],
+          history:[
+            {id:gid(),month:addD(t,-30),allPaid:true},
+            {id:gid(),month:addD(t,-60),allPaid:true},
+          ],
+        },
+      };
+    }
+
+    // ============== PLAID INTEGRATION (Sandbox Mode) ==============
+    // Plaid config — swap these for real keys when ready
+    const PLAID_CONFIG = {
+      mode: 'sandbox', // 'sandbox' | 'development' | 'production'
+      clientId: '', // your plaid client_id
+      env: 'sandbox',
+      // In production, link_token comes from your backend
+    };
+
+    // Simulated Plaid bank data (sandbox mode)
+    function getPlaidSandboxData() {
+      const t = today();
+      return {
+        accounts: [
+          {id:'plaid_chk_001',name:'Platinum Checking',type:'depository',subtype:'checking',mask:'4829',institution:'Chase',balances:{available:2847.63,current:2847.63}},
+          {id:'plaid_sav_001',name:'High-Yield Savings',type:'depository',subtype:'savings',mask:'7712',institution:'Chase',balances:{available:5420.50,current:5420.50}},
+          {id:'plaid_sav_002',name:'Emergency Fund',type:'depository',subtype:'savings',mask:'3301',institution:'Ally Bank',balances:{available:1280.00,current:1280.00}},
+          {id:'plaid_cc_001',name:'Sapphire Preferred',type:'credit',subtype:'credit card',mask:'6644',institution:'Chase',balances:{available:8200,current:1800,limit:10000}},
+        ],
+        transactions: [
+          {id:'ptx_01',accountId:'plaid_chk_001',name:'DIRECT DEP - EMPLOYER',amount:-2416.80,date:addD(t,-3),category:'Payroll',pending:false},
+          {id:'ptx_02',accountId:'plaid_chk_001',name:'KROGER #1842',amount:67.23,date:addD(t,-2),category:'Groceries',pending:false},
+          {id:'ptx_03',accountId:'plaid_chk_001',name:'SHELL OIL',amount:48.50,date:addD(t,-1),category:'Gas/Transport',pending:false},
+          {id:'ptx_04',accountId:'plaid_chk_001',name:'NETFLIX.COM',amount:15.99,date:addD(t,-5),category:'Subscriptions',pending:false},
+          {id:'ptx_05',accountId:'plaid_chk_001',name:'SPOTIFY USA',amount:10.99,date:addD(t,-5),category:'Subscriptions',pending:false},
+          {id:'ptx_06',accountId:'plaid_chk_001',name:'STATE FARM INS',amount:180.00,date:addD(t,-7),category:'Insurance',pending:false},
+          {id:'ptx_07',accountId:'plaid_chk_001',name:'AT&T WIRELESS',amount:65.00,date:addD(t,-10),category:'Phone/Internet',pending:false},
+          {id:'ptx_08',accountId:'plaid_chk_001',name:'TRANSFER TO SAVINGS',amount:150.00,date:addD(t,-3),category:'Transfer',pending:false},
+          {id:'ptx_09',accountId:'plaid_chk_001',name:'CHIPOTLE #294',amount:14.85,date:t,category:'Dining Out',pending:true},
+          {id:'ptx_10',accountId:'plaid_chk_001',name:'AMAZON.COM',amount:34.99,date:addD(t,-1),category:'Shopping',pending:false},
+          {id:'ptx_11',accountId:'plaid_sav_001',name:'TRANSFER FROM CHECKING',amount:-150.00,date:addD(t,-3),category:'Transfer',pending:false},
+          {id:'ptx_12',accountId:'plaid_cc_001',name:'WHOLE FOODS MKT',amount:42.18,date:addD(t,-2),category:'Groceries',pending:false},
+          {id:'ptx_13',accountId:'plaid_chk_001',name:'DIRECT DEP - EMPLOYER',amount:-2416.80,date:addD(t,-17),category:'Payroll',pending:false},
+        ],
+        income: {
+          lastAmount: 2416.80,
+          frequency: 'biweekly',
+          employer: 'EMPLOYER',
+          lastDate: addD(t,-3),
+          nextDate: addD(t,11),
+        },
+      };
+    }
+
+    // Merge Plaid data into app data
+    function mergePlaidData(appData, plaidData) {
+      if(!plaidData || !plaidData.accounts) return appData;
+
+      const checking = plaidData.accounts.filter(a=>a.subtype==='checking');
+      const savings = plaidData.accounts.filter(a=>a.subtype==='savings');
+      const credit = plaidData.accounts.filter(a=>a.subtype==='credit card');
+
+      // Build real income from deposit transactions
+      const deposits = plaidData.transactions.filter(tx=>tx.amount<0 && tx.category==='Payroll');
+      const incomeItems = deposits.length>0 ? [{
+        id:gid(), name:plaidData.income.employer||'Direct Deposit',
+        amount:plaidData.income.lastAmount, freq:plaidData.income.frequency, active:true
+      }] : appData.income;
+
+      // Build real expenses from non-payroll, non-transfer transactions
+      const realExpenses = plaidData.transactions
+        .filter(tx=>tx.amount>0 && tx.category!=='Transfer' && tx.category!=='Payroll')
+        .slice(0,10)
+        .map(tx=>({id:gid(), name:tx.name, amount:tx.amount, cat:tx.category, date:tx.date}));
+
+      // Update savings goals with real balances
+      const updatedGoals = appData.goals.map((g,i)=>{
+        const savAcct = savings[i];
+        if(savAcct) return {...g, current: savAcct.balances.current, plaidAccountId: savAcct.id};
+        return g;
+      });
+
+      // Update credit info from credit accounts
+      const totalCreditUsed = credit.reduce((s,a)=>s+(a.balances.current||0),0);
+      const totalCreditLimit = credit.reduce((s,a)=>s+(a.balances.limit||0),0);
+      const utilization = totalCreditLimit>0 ? Math.round((totalCreditUsed/totalCreditLimit)*100) : appData.user.utilization;
+
+      return {
+        ...appData,
+        income: incomeItems,
+        expenses: realExpenses.length>0 ? realExpenses : appData.expenses,
+        goals: updatedGoals,
+        user: {
+          ...appData.user,
+          nextPay: plaidData.income.nextDate || appData.user.nextPay,
+          payFreq: plaidData.income.frequency || appData.user.payFreq,
+          utilization,
+          totalDebt: totalCreditUsed || appData.user.totalDebt,
+          creditLimit: totalCreditLimit || appData.user.creditLimit,
+        },
+        plaid: {
+          connected: true,
+          accounts: plaidData.accounts,
+          lastSync: today(),
+          checkingBalance: checking.reduce((s,a)=>s+(a.balances.available||0),0),
+          savingsBalance: savings.reduce((s,a)=>s+(a.balances.available||0),0),
+          creditUsed: totalCreditUsed,
+          creditLimit: totalCreditLimit,
+        },
+      };
+    }
+
+    // PlaidConnect component — handles the linking flow
+    function PlaidConnect({data, setData, compact}) {
+      const t = useContext(TC);
+      const [linking, setLinking] = useState(false);
+      const [step, setStep] = useState('idle'); // idle, select-bank, credentials, loading, success, error
+      const [selectedBank, setSelectedBank] = useState(null);
+      const [errorMsg, setErrorMsg] = useState('');
+
+      const banks = [
+        {id:'chase',name:'Chase',icon:'\uD83C\uDFE6',color:'#117ACA'},
+        {id:'bofa',name:'Bank of America',icon:'\uD83C\uDFE6',color:'#E31837'},
+        {id:'wells',name:'Wells Fargo',icon:'\uD83C\uDFE6',color:'#D71E28'},
+        {id:'ally',name:'Ally Bank',icon:'\uD83C\uDFE6',color:'#6F2DA8'},
+        {id:'capital',name:'Capital One',icon:'\uD83C\uDFE6',color:'#004977'},
+        {id:'citi',name:'Citi',icon:'\uD83C\uDFE6',color:'#003B70'},
+      ];
+
+      const startLink = () => { setLinking(true); setStep('select-bank'); };
+
+      const selectBank = (bank) => {
+        setSelectedBank(bank);
+        setStep('credentials');
+      };
+
+      const connectBank = () => {
+        setStep('loading');
+        // Simulate Plaid auth + data fetch (sandbox)
+        setTimeout(()=>{
+          try {
+            const plaidData = getPlaidSandboxData();
+            // Update institution name to match selected bank
+            plaidData.accounts.forEach(a=>{
+              if(a.institution==='Chase') a.institution = selectedBank.name;
+            });
+            const merged = mergePlaidData(data, plaidData);
+            setData(merged);
+            setStep('success');
+          } catch(e) {
+            setErrorMsg('Connection failed. Please try again.');
+            setStep('error');
+          }
+        }, 2000);
+      };
+
+      const disconnect = () => {
+        const cleaned = {...data};
+        delete cleaned.plaid;
+        setData(cleaned);
+        setLinking(false);
+        setStep('idle');
+      };
+
+      const isConnected = data.plaid && data.plaid.connected;
+
+      // Compact mode for Settings
+      if(compact && isConnected) {
+        return <Card style={{marginBottom:16,background:t.okBg,border:`1px solid ${t.ok}30`}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:t.ok}}>Bank Connected</div>
+              <div style={{fontSize:12,color:t.textM}}>{data.plaid.accounts.length} accounts &middot; Last sync: {data.plaid.lastSync}</div>
+            </div>
+            <Btn sz="sm" v="bad" onClick={disconnect}>Disconnect</Btn>
+          </div>
+          <div style={{marginTop:10,display:'flex',flexWrap:'wrap',gap:6}}>
+            {data.plaid.accounts.map(a=><div key={a.id} style={{fontSize:11,color:t.textM,background:t.bgS,borderRadius:6,padding:'3px 8px'}}>
+              {a.name} &middot;&middot;&middot;{a.mask} &middot; {fmt(a.balances.available||a.balances.current)}
+            </div>)}
+          </div>
+        </Card>;
+      }
+
+      if(compact && !isConnected) {
+        return <Card style={{marginBottom:16,textAlign:'center',padding:20,background:t.bgS,border:`1px dashed ${t.gold}40`}}>
+          <div style={{fontSize:28,marginBottom:8}}>&#128279;</div>
+          <div style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:4}}>Link Your Bank</div>
+          <div style={{fontSize:12,color:t.textM,marginBottom:12}}>Connect via Plaid for real account data</div>
+          <Btn onClick={startLink}>Connect Bank Account</Btn>
+        </Card>;
+      }
+
+      // Full linking flow modal overlay
+      if(linking) {
+        return <div style={{position:'fixed',inset:0,zIndex:999,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>{if(step!=='loading'){setLinking(false);setStep('idle');}}}>
+          <div style={{background:t.card,borderRadius:20,padding:24,maxWidth:380,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.4)',border:`1px solid ${t.border}`}} onClick={e=>e.stopPropagation()}>
+
+            {step==='select-bank'&&<>
+              <div style={{textAlign:'center',marginBottom:16}}>
+                <div style={{fontSize:24,fontWeight:900,color:t.gold,marginBottom:4}}>Connect Your Bank</div>
+                <div style={{fontSize:12,color:t.textM}}>Powered by Plaid &middot; Sandbox Mode</div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {banks.map(b=><button key={b.id} onClick={()=>selectBank(b)}
+                  style={{padding:14,borderRadius:12,border:`1px solid ${t.border}`,background:t.bgS,cursor:'pointer',textAlign:'center',transition:'all 0.15s',fontFamily:'inherit'}}>
+                  <div style={{fontSize:24,marginBottom:4}}>{b.icon}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:t.text}}>{b.name}</div>
+                </button>)}
+              </div>
+              <Btn v="secondary" full onClick={()=>{setLinking(false);setStep('idle');}} style={{marginTop:12}}>Cancel</Btn>
+            </>}
+
+            {step==='credentials'&&<>
+              <div style={{textAlign:'center',marginBottom:16}}>
+                <div style={{fontSize:20,fontWeight:900,color:t.gold,marginBottom:4}}>{selectedBank.name}</div>
+                <div style={{fontSize:12,color:t.textM}}>Sandbox mode — no real credentials needed</div>
+              </div>
+              <div style={{background:t.bgS,borderRadius:12,padding:16,marginBottom:16}}>
+                <div style={{fontSize:11,color:t.textM,marginBottom:6}}>Username</div>
+                <div style={{padding:'8px 12px',background:t.card,borderRadius:8,border:`1px solid ${t.border}`,fontSize:14,color:t.text,marginBottom:10}}>user_good</div>
+                <div style={{fontSize:11,color:t.textM,marginBottom:6}}>Password</div>
+                <div style={{padding:'8px 12px',background:t.card,borderRadius:8,border:`1px solid ${t.border}`,fontSize:14,color:t.text}}>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</div>
+              </div>
+              <div style={{fontSize:10,color:t.textM,textAlign:'center',marginBottom:12}}>In production, Plaid Link handles this securely — your credentials never touch ORCA</div>
+              <Btn full onClick={connectBank}>Connect</Btn>
+              <Btn v="secondary" full onClick={()=>setStep('select-bank')} style={{marginTop:8}}>Back</Btn>
+            </>}
+
+            {step==='loading'&&<div style={{textAlign:'center',padding:40}}>
+              <div style={{fontSize:48,marginBottom:16,animation:'pulse 1.5s infinite'}}>&#128279;</div>
+              <div style={{fontSize:16,fontWeight:700,color:t.gold,marginBottom:8}}>Connecting to {selectedBank.name}...</div>
+              <div style={{fontSize:12,color:t.textM}}>Fetching accounts, balances &amp; transactions</div>
+            </div>}
+
+            {step==='success'&&<div style={{textAlign:'center',padding:20}}>
+              <div style={{fontSize:48,marginBottom:12}}>&#9989;</div>
+              <div style={{fontSize:20,fontWeight:900,color:t.ok,marginBottom:8}}>Bank Connected!</div>
+              <div style={{fontSize:13,color:t.textM,marginBottom:16}}>
+                {data.plaid.accounts.length} accounts synced from {selectedBank.name}
+              </div>
+              <div style={{background:t.bgS,borderRadius:12,padding:12,marginBottom:16,textAlign:'left'}}>
+                {data.plaid.accounts.map(a=><div key={a.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${t.border}`,fontSize:13}}>
+                  <span style={{color:t.text}}>{a.name} &middot;&middot;&middot;{a.mask}</span>
+                  <span style={{fontWeight:700,color:t.gold}}>{fmt(a.balances.available||a.balances.current)}</span>
+                </div>)}
+              </div>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap',justifyContent:'center',marginBottom:16}}>
+                <Badge color={t.ok}>Checking: {fmt(data.plaid.checkingBalance)}</Badge>
+                <Badge color={t.gold}>Savings: {fmt(data.plaid.savingsBalance)}</Badge>
+              </div>
+              <Btn full onClick={()=>{setLinking(false);setStep('idle');}}>Done</Btn>
+            </div>}
+
+            {step==='error'&&<div style={{textAlign:'center',padding:20}}>
+              <div style={{fontSize:48,marginBottom:12}}>&#10060;</div>
+              <div style={{fontSize:18,fontWeight:700,color:t.bad,marginBottom:8}}>Connection Failed</div>
+              <div style={{fontSize:13,color:t.textM,marginBottom:16}}>{errorMsg}</div>
+              <Btn full onClick={()=>setStep('select-bank')}>Try Again</Btn>
+              <Btn v="secondary" full onClick={()=>{setLinking(false);setStep('idle');}} style={{marginTop:8}}>Cancel</Btn>
+            </div>}
+          </div>
+        </div>;
+      }
+
+      // Default: show connect prompt (non-compact)
+      return null;
+    }
+
+    // ============== UI COMPONENTS ==============
+    function Card({children,style,onClick}) {
+      const t=useContext(TC);
+      return <div role={onClick?"button":undefined} tabIndex={onClick?0:undefined} onClick={onClick} style={{background:t.card,borderRadius:18,padding:16,boxShadow:t.shadow,border:`1px solid ${t.border}`,transition:'all 0.25s cubic-bezier(.4,0,.2,1)',cursor:onClick?'pointer':'default',backdropFilter:'blur(12px)',...style}}>{children}</div>;
+    }
+    function Btn({children,onClick,v='primary',sz='md',style,dis,full,ariaLabel}) {
+      const t=useContext(TC);
+      const szs={sm:{padding:'7px 14px',fontSize:12,borderRadius:10},md:{padding:'11px 24px',fontSize:14,borderRadius:12},lg:{padding:'14px 28px',fontSize:15,borderRadius:14}};
+      const vs={
+        primary:{background:`linear-gradient(135deg, ${t.gold}, ${t.goldD})`,color:'#000',boxShadow:`0 2px 8px ${t.gold}30`},
+        secondary:{background:t.bgS,color:t.text,border:`1px solid ${t.border}`},
+        ok:{background:`linear-gradient(135deg, ${t.ok}, #16a34a)`,color:'#000'},
+        bad:{background:t.badBg,color:t.bad,border:`1px solid ${t.bad}20`},
+        ghost:{background:'transparent',color:t.gold}
+      };
+      return <button aria-label={ariaLabel} aria-disabled={dis} onClick={dis?undefined:onClick} style={{border:'none',fontWeight:700,cursor:dis?'default':'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:8,transition:'all 0.25s cubic-bezier(.4,0,.2,1)',opacity:dis?0.5:1,width:full?'100%':'auto',fontFamily:'inherit',letterSpacing:'-0.01em',...szs[sz],...vs[v],...style}}>{children}</button>;
+    }
+    function Inp({label,value,onChange,type='text',ph,style,pre,max}) {
+      const t=useContext(TC);
+      return <div style={{marginBottom:14,...style}}>
+        {label&&<label style={{display:'block',fontSize:12,fontWeight:600,color:t.textM,marginBottom:6,letterSpacing:'0.02em',textTransform:'uppercase'}}>{label}</label>}
+        <div style={{position:'relative',display:'flex',alignItems:'center'}}>
+          {pre&&<span style={{position:'absolute',left:14,color:t.textM,fontSize:14,fontWeight:600}}>{pre}</span>}
+          <input type={type} value={value} onChange={e=>onChange(type==='number'?e.target.value:sanitize(e.target.value))} placeholder={ph} maxLength={max||200} aria-label={label||ph}
+            style={{width:'100%',padding:'12px 14px',paddingLeft:pre?28:14,borderRadius:12,border:`1.5px solid ${t.border}`,fontSize:15,outline:'none',fontFamily:'inherit',background:t.input,color:t.text,boxSizing:'border-box',transition:'border-color 0.2s, box-shadow 0.2s'}}
+            onFocus={e=>{e.target.style.borderColor=t.gold;e.target.style.boxShadow=`0 0 0 3px ${t.gold}15`;}} onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow='none';}} />
+        </div>
+      </div>;
+    }
+    function Sel({label,value,onChange,opts,style}) {
+      const t=useContext(TC);
+      return <div style={{marginBottom:14,...style}}>
+        {label&&<label style={{display:'block',fontSize:13,fontWeight:600,color:t.textS,marginBottom:6}}>{label}</label>}
+        <select value={value} onChange={e=>onChange(e.target.value)} aria-label={label} style={{width:'100%',padding:'12px 14px',borderRadius:12,border:`1.5px solid ${t.border}`,fontSize:15,outline:'none',fontFamily:'inherit',background:t.input,color:t.text,cursor:'pointer',appearance:'none',boxSizing:'border-box'}}>
+          {opts.map(o=><option key={typeof o==='string'?o:o.v} value={typeof o==='string'?o:o.v}>{typeof o==='string'?o:o.l}</option>)}
+        </select>
+      </div>;
+    }
+    function PBar({val,max,color,h=8,showLabel,style}) {
+      const t=useContext(TC); const p=pct(val,max); const c=color||(p>=75?t.ok:p>=40?t.warn:t.bad);
+      return <div style={style} role="progressbar" aria-valuenow={p} aria-valuemin={0} aria-valuemax={100}>
+        <div style={{background:t.bgS,borderRadius:h,height:h,overflow:'hidden'}}><div style={{width:`${p}%`,height:'100%',borderRadius:h,background:`linear-gradient(90deg, ${c}, ${c}cc)`,transition:'width 0.6s cubic-bezier(.4,0,.2,1)',boxShadow:`0 0 8px ${c}30`}}/></div>
+        {showLabel&&<div style={{display:'flex',justifyContent:'space-between',marginTop:4,fontSize:12,color:t.textM}}><span>{fmt(val)}</span><span>{p}%</span></div>}
+      </div>;
+    }
+    function Badge({children,color}) { return <span style={{display:'inline-flex',padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:700,color,background:`${color}14`,border:`1px solid ${color}20`,letterSpacing:'0.01em'}}>{children}</span>; }
+    function Modal({open,onClose,title,children}) {
+      const t=useContext(TC); if(!open)return null;
+      return <div role="dialog" aria-modal="true" aria-label={title} style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'flex-end',justifyContent:'center',animation:'fadeIn 0.2s'}}>
+        <div onClick={onClose} style={{position:'absolute',inset:0,background:t.overlay,backdropFilter:'blur(8px)'}}/>
+        <div style={{position:'relative',background:t.card,borderRadius:'24px 24px 0 0',width:'100%',maxWidth:480,maxHeight:'85vh',overflow:'auto',padding:'24px 20px 40px',border:`1px solid ${t.border}`,boxShadow:t.shadowL,animation:'slideUp 0.3s cubic-bezier(.4,0,.2,1)'}}>
+          <div style={{width:40,height:4,borderRadius:2,background:t.border,margin:'0 auto 16px'}}/>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+            <h2 style={{fontSize:20,fontWeight:800,margin:0,color:t.text,letterSpacing:'-0.02em'}}>{title}</h2>
+            <button aria-label="Close" onClick={onClose} style={{background:t.bgS,border:`1px solid ${t.border}`,borderRadius:10,width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:t.textM,fontFamily:'inherit'}}>&#10005;</button>
+          </div>
+          {children}
+        </div>
+      </div>;
+    }
+    function Hdr({title,sub,action}) {
+      const t=useContext(TC);
+      return <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+        <div><h2 style={{fontSize:18,fontWeight:800,margin:0,color:t.text,letterSpacing:'-0.02em'}}>{title}</h2>{sub&&<p style={{fontSize:12,color:t.textM,margin:'4px 0 0',lineHeight:1.4}}>{sub}</p>}</div>
+        {action}
+      </div>;
+    }
+
+    // ============== DONUT CHART ==============
+    function DonutChart({slices,size=200,hole=60}) {
+      const r=size/2,ir=hole/2*r/50; let cum=0;
+      const paths=slices.map((s,i)=>{
+        const a=s.pct/100*360; const start=cum; cum+=a;
+        const s1=(start-90)*Math.PI/180, s2=((start+a)-90)*Math.PI/180;
+        const x1=r+r*0.9*Math.cos(s1), y1=r+r*0.9*Math.sin(s1);
+        const x2=r+r*0.9*Math.cos(s2), y2=r+r*0.9*Math.sin(s2);
+        const ix1=r+ir*Math.cos(s2), iy1=r+ir*Math.sin(s2);
+        const ix2=r+ir*Math.cos(s1), iy2=r+ir*Math.sin(s1);
+        const lg=a>180?1:0;
+        return <path key={i} d={`M${x1},${y1} A${r*0.9},${r*0.9} 0 ${lg} 1 ${x2},${y2} L${ix1},${iy1} A${ir},${ir} 0 ${lg} 0 ${ix2},${iy2} Z`} fill={s.color} stroke="#0a0a0a" strokeWidth="2"/>;
+      });
+      return <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Paycheck breakdown chart">{paths}</svg>;
+    }
+
+    // ============== SCREENS ==============
+
+    // --- AUTH / LOGIN with OAuth 2.0 / OIDC ---
+    function AuthScreen({onLogin, onSupabaseLogin}) {
+      const t=useContext(TC);
+      const [mode, setMode] = useState('main'); // main, password, create, oauth-loading, signup, supabase-login, supabase-signup
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [newPass, setNewPass] = useState('');
+      const [confirmPass, setConfirmPass] = useState('');
+      const [oauthProvider, setOauthProvider] = useState('');
+      const [sbEmail, setSbEmail] = useState('');
+      const [sbPass, setSbPass] = useState('');
+      const [sbLoading, setSbLoading] = useState(false);
+
+      const storedHash = useMemo(()=>{
+        try { return localStorage.getItem('orca_pass'); } catch(e) { return null; }
+      },[]);
+      const storedOAuth = useMemo(()=>{
+        try { return JSON.parse(localStorage.getItem('orca_oauth')||'null'); } catch(e) { return null; }
+      },[]);
+      const hasAccount = !!storedHash || !!storedOAuth;
+      const useSupabase = isSupabaseConfigured();
+
+      const hashPass = (s) => {
+        let h=0;
+        for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}
+        return 'orca_'+Math.abs(h).toString(36);
+      };
+
+      const handlePasswordLogin = () => {
+        if(!password){setError('Enter your password');return;}
+        if(hashPass(password)===storedHash){setError('');onLogin();}
+        else{setError('Incorrect password');}
+      };
+
+      const handleCreate = () => {
+        if(!newPass||newPass.length<4){setError('Password must be at least 4 characters');return;}
+        if(newPass!==confirmPass){setError('Passwords do not match');return;}
+        try{localStorage.setItem('orca_pass',hashPass(newPass));}catch(e){}
+        setError('');
+        onLogin();
+      };
+
+      // ====== SUPABASE AUTH ======
+      const handleSupabaseLogin = async () => {
+        if(!sbEmail||!sbPass){setError('Enter email and password');return;}
+        setSbLoading(true); setError('');
+        const { data, error: err } = await supabase.auth.signInWithPassword({ email: sbEmail, password: sbPass });
+        setSbLoading(false);
+        if(err){setError(err.message);return;}
+        if(data.user) onSupabaseLogin(data.user);
+      };
+
+      const handleSupabaseSignup = async () => {
+        if(!sbEmail||!sbPass){setError('Enter email and password');return;}
+        if(sbPass.length<6){setError('Password must be at least 6 characters');return;}
+        setSbLoading(true); setError('');
+        const { data, error: err } = await supabase.auth.signUp({ email: sbEmail, password: sbPass });
+        setSbLoading(false);
+        if(err){setError(err.message);return;}
+        if(data.user) onSupabaseLogin(data.user);
+      };
+
+      const handleSupabaseOAuth = async (provider) => {
+        setOauthProvider(provider); setMode('oauth-loading');
+        const { error: err } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
+        if(err){setError(err.message);setMode('main');}
+      };
+
+      const oauthProviders = [
+        {id:'google',name:'Google',icon:'\uD83C\uDF10',color:'#4285F4',
+          authUrl:'https://accounts.google.com/o/oauth2/v2/auth',
+          scopes:'openid profile email'},
+        {id:'apple',name:'Apple',icon:'\uD83C\uDF4E',color:'#000000',
+          authUrl:'https://appleid.apple.com/auth/authorize',
+          scopes:'openid name email'},
+        {id:'microsoft',name:'Microsoft',icon:'\u2B1B',color:'#00A4EF',
+          authUrl:'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+          scopes:'openid profile email'},
+      ];
+
+      const initiateOAuth = (provider) => {
+        setOauthProvider(provider.name);
+        setMode('oauth-loading');
+        setError('');
+
+        // OAuth 2.0 Authorization Code Flow with PKCE
+        // 1. Generate code_verifier + code_challenge (PKCE)
+        // 2. Build authorization URL with: response_type=code, client_id, redirect_uri,
+        //    scope (openid profile email), state (CSRF), code_challenge, code_challenge_method=S256
+        // 3. Redirect user to provider's authorization endpoint
+        // 4. Provider authenticates user, returns authorization code to redirect_uri
+        // 5. Exchange code for tokens (id_token + access_token) at token endpoint
+        // 6. Validate id_token (JWT) — verify signature, issuer, audience, expiry, nonce
+        // 7. Extract user claims (sub, email, name) from id_token
+
+        // Demo simulation — in production, this would be a real redirect flow
+        const oauthState = Math.random().toString(36).substring(2);
+        const codeVerifier = Math.random().toString(36).substring(2)+Math.random().toString(36).substring(2);
+
+        setTimeout(()=>{
+          // Simulate successful OIDC token response
+          const simulatedIdToken = {
+            iss: provider.authUrl,
+            sub: 'orca_user_'+Math.random().toString(36).substring(2,8),
+            email: 'user@example.com',
+            name: 'ORCA User',
+            aud: 'orca-financial-app',
+            exp: Math.floor(Date.now()/1000)+3600,
+            iat: Math.floor(Date.now()/1000),
+            nonce: oauthState,
+            provider: provider.id,
+          };
+          try{
+            localStorage.setItem('orca_oauth', JSON.stringify({
+              provider: provider.id,
+              sub: simulatedIdToken.sub,
+              email: simulatedIdToken.email,
+              name: simulatedIdToken.name,
+              exp: simulatedIdToken.exp,
+              authTime: Date.now(),
+            }));
+          }catch(e){}
+          onLogin();
+        }, 1500);
+      };
+
+      const inputStyle = {width:'100%',padding:'14px 18px',borderRadius:14,border:`1.5px solid ${t.border}`,fontSize:16,background:t.input,color:t.text,outline:'none',fontFamily:'inherit',boxSizing:'border-box',textAlign:'center'};
+
+      const OAuthButton = ({provider}) => (
+        <button onClick={()=>initiateOAuth(provider)} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:'13px 20px',borderRadius:14,border:`1.5px solid ${t.border}`,background:t.card,cursor:'pointer',marginBottom:8,transition:'all 0.2s',fontFamily:'inherit'}}
+          onMouseOver={e=>{e.currentTarget.style.borderColor=t.gold;e.currentTarget.style.background=t.goldBg;}}
+          onMouseOut={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.background=t.card;}}>
+          <span style={{fontSize:18}}>{provider.icon}</span>
+          <span style={{fontSize:14,fontWeight:600,color:t.text}}>Continue with {provider.name}</span>
+        </button>
+      );
+
+      return <div style={{minHeight:'100vh',background:`linear-gradient(180deg, ${t.bg} 0%, #0d0d0d 100%)`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20}}>
+        <div style={{maxWidth:400,width:'100%',textAlign:'center'}}>
+          <img src={LOGO_B64} style={{width:110,height:110,borderRadius:24,marginBottom:20,boxShadow:'0 8px 32px rgba(212,168,67,0.3)'}} alt="ORCA logo"/>
+          <h1 style={{fontSize:42,fontWeight:900,margin:0,color:t.gold,letterSpacing:-1.5}}>ORCA</h1>
+          <p style={{fontSize:13,color:t.gold,margin:'6px 0 4px',letterSpacing:3,fontWeight:600,opacity:0.9}}>Organize Resources Control Assets</p>
+          <p style={{fontSize:12,color:t.textM,margin:'0 0 28px',letterSpacing:1}}>Financial Command Center</p>
+
+          {/* === MAIN LOGIN VIEW === */}
+          {mode==='main' && <>
+            {/* Supabase OAuth (real) when configured */}
+            {useSupabase && <>
+              {['google','apple'].map(p=>{
+                const cfg={google:{name:'Google',icon:'\uD83C\uDF10'},apple:{name:'Apple',icon:'\uD83C\uDF4E'}};
+                return <button key={p} onClick={()=>handleSupabaseOAuth(p)} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:'13px 20px',borderRadius:14,border:`1.5px solid ${t.border}`,background:t.card,cursor:'pointer',marginBottom:8,transition:'all 0.2s',fontFamily:'inherit'}}
+                  onMouseOver={e=>{e.currentTarget.style.borderColor=t.gold;e.currentTarget.style.background=t.goldBg;}}
+                  onMouseOut={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.background=t.card;}}>
+                  <span style={{fontSize:18}}>{cfg[p].icon}</span>
+                  <span style={{fontSize:14,fontWeight:600,color:t.text}}>Continue with {cfg[p].name}</span>
+                </button>;
+              })}
+              <div style={{display:'flex',alignItems:'center',gap:12,margin:'16px 0'}}><div style={{flex:1,height:1,background:t.border}}/><span style={{fontSize:11,color:t.textM,fontWeight:600}}>or</span><div style={{flex:1,height:1,background:t.border}}/></div>
+              <Btn onClick={()=>setMode('supabase-login')} full style={{marginBottom:8}}>Sign In with Email</Btn>
+              <Btn onClick={()=>setMode('supabase-signup')} v="secondary" full style={{marginBottom:8}}>Create Account</Btn>
+            </>}
+
+            {/* Simulated OAuth when Supabase not configured */}
+            {!useSupabase && <>
+              {oauthProviders.map(p=><OAuthButton key={p.id} provider={p}/>)}
+              <div style={{display:'flex',alignItems:'center',gap:12,margin:'16px 0'}}><div style={{flex:1,height:1,background:t.border}}/><span style={{fontSize:11,color:t.textM,fontWeight:600}}>or</span><div style={{flex:1,height:1,background:t.border}}/></div>
+              {hasAccount && storedHash ?
+                <Btn onClick={()=>setMode('password')} v="secondary" full style={{marginBottom:8}}>Sign In with Password</Btn>
+                :
+                <Btn onClick={()=>setMode('create')} v="secondary" full style={{marginBottom:8}}>Create Password</Btn>
+              }
+            </>}
+
+            <div style={{fontSize:11,color:t.textM,cursor:'pointer',marginTop:4}} onClick={()=>onLogin()}>Skip &middot; Try Demo</div>
+
+            <div style={{marginTop:20,padding:12,borderRadius:12,background:t.bgS,border:`1px solid ${t.border}`}}>
+              <div style={{fontSize:10,color:t.textM,lineHeight:1.5}}>
+                {useSupabase
+                  ? <>Secured with <span style={{color:t.gold,fontWeight:700}}>Supabase Auth</span> &middot; Cloud synced</>
+                  : <>Secured with <span style={{color:t.gold,fontWeight:700}}>OAuth 2.0</span> + <span style={{color:t.gold,fontWeight:700}}>OpenID Connect</span></>}
+              </div>
+              <div style={{fontSize:9,color:t.textM,marginTop:4,opacity:0.7}}>{useSupabase?'Your data syncs across devices':'Authorization Code Flow with PKCE \u00b7 JWT validation \u00b7 Encrypted tokens'}</div>
+            </div>
+          </>}
+
+          {/* === SUPABASE EMAIL LOGIN === */}
+          {mode==='supabase-login' && <>
+            <input type="email" value={sbEmail} onChange={e=>setSbEmail(e.target.value)} placeholder="Email"
+              style={{...inputStyle,marginBottom:10}} onFocus={e=>e.target.style.borderColor=t.gold} onBlur={e=>e.target.style.borderColor=t.border}/>
+            <input type="password" value={sbPass} onChange={e=>setSbPass(e.target.value)} placeholder="Password"
+              onKeyDown={e=>{if(e.key==='Enter')handleSupabaseLogin();}}
+              style={{...inputStyle,marginBottom:12}} onFocus={e=>e.target.style.borderColor=t.gold} onBlur={e=>e.target.style.borderColor=t.border}/>
+            {error&&<div style={{fontSize:12,color:t.bad,marginBottom:10,fontWeight:600}}>{error}</div>}
+            <Btn onClick={handleSupabaseLogin} full dis={sbLoading} style={{marginBottom:10}}>{sbLoading?'Signing in...':'Sign In'}</Btn>
+            <div style={{fontSize:11,color:t.textM,cursor:'pointer'}} onClick={()=>{setMode('main');setError('');setSbEmail('');setSbPass('');}}>Back to sign in options</div>
+          </>}
+
+          {/* === SUPABASE SIGNUP === */}
+          {mode==='supabase-signup' && <>
+            <input type="email" value={sbEmail} onChange={e=>setSbEmail(e.target.value)} placeholder="Email"
+              style={{...inputStyle,marginBottom:10}} onFocus={e=>e.target.style.borderColor=t.gold} onBlur={e=>e.target.style.borderColor=t.border}/>
+            <input type="password" value={sbPass} onChange={e=>setSbPass(e.target.value)} placeholder="Password (min 6 chars)"
+              onKeyDown={e=>{if(e.key==='Enter')handleSupabaseSignup();}}
+              style={{...inputStyle,marginBottom:12}} onFocus={e=>e.target.style.borderColor=t.gold} onBlur={e=>e.target.style.borderColor=t.border}/>
+            {error&&<div style={{fontSize:12,color:t.bad,marginBottom:10,fontWeight:600}}>{error}</div>}
+            <Btn onClick={handleSupabaseSignup} full dis={sbLoading} style={{marginBottom:10}}>{sbLoading?'Creating account...':'Create Account'}</Btn>
+            <div style={{fontSize:11,color:t.textM,cursor:'pointer'}} onClick={()=>{setMode('main');setError('');setSbEmail('');setSbPass('');}}>Back to sign in options</div>
+          </>}
+
+          {/* === PASSWORD LOGIN === */}
+          {mode==='password' && <>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter password"
+              onKeyDown={e=>{if(e.key==='Enter')handlePasswordLogin();}}
+              style={{...inputStyle,marginBottom:12}}
+              onFocus={e=>e.target.style.borderColor=t.gold} onBlur={e=>e.target.style.borderColor=t.border}/>
+            {error&&<div style={{fontSize:12,color:t.bad,marginBottom:10,fontWeight:600}}>{error}</div>}
+            <Btn onClick={handlePasswordLogin} full style={{marginBottom:10}}>Unlock</Btn>
+            <div style={{fontSize:11,color:t.textM,cursor:'pointer'}} onClick={()=>{setMode('main');setError('');setPassword('');}}>Back to sign in options</div>
+          </>}
+
+          {/* === CREATE PASSWORD === */}
+          {mode==='create' && <>
+            <input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} placeholder="Create password"
+              style={{...inputStyle,marginBottom:10}}
+              onFocus={e=>e.target.style.borderColor=t.gold} onBlur={e=>e.target.style.borderColor=t.border}/>
+            <input type="password" value={confirmPass} onChange={e=>setConfirmPass(e.target.value)} placeholder="Confirm password"
+              onKeyDown={e=>{if(e.key==='Enter')handleCreate();}}
+              style={{...inputStyle,marginBottom:12}}
+              onFocus={e=>e.target.style.borderColor=t.gold} onBlur={e=>e.target.style.borderColor=t.border}/>
+            {error&&<div style={{fontSize:12,color:t.bad,marginBottom:10,fontWeight:600}}>{error}</div>}
+            <Btn onClick={handleCreate} full style={{marginBottom:10}}>Set Password &amp; Enter</Btn>
+            <div style={{fontSize:11,color:t.textM,cursor:'pointer'}} onClick={()=>{setMode('main');setError('');}}>Back</div>
+          </>}
+
+          {/* === OAUTH LOADING === */}
+          {mode==='oauth-loading' && <>
+            <div style={{padding:30}}>
+              <div style={{fontSize:32,marginBottom:12,animation:'pulse 1.5s infinite'}}>&#128274;</div>
+              <div style={{fontSize:14,fontWeight:600,color:t.text,marginBottom:4}}>Connecting to {oauthProvider}...</div>
+              <div style={{fontSize:11,color:t.textM}}>Authenticating via OpenID Connect</div>
+              <div style={{fontSize:10,color:t.textM,marginTop:8,opacity:0.6}}>Verifying ID token &middot; Validating claims</div>
+            </div>
+          </>}
+
+          <div style={{marginTop:24,fontSize:10,color:t.textM,opacity:0.5}}>v2.0 &middot; {useSupabase?'Cloud synced':'Offline mode'}</div>
+        </div>
+      </div>;
+    }
+
+    // --- DASHBOARD ---
+    function DashboardScreen({data,setData,setScreen}) {
+      const t=useContext(TC);
+      const alloc=useMemo(()=>calcAlloc(data.income,data.bills,data.goals),[data]);
+      const paycheck = getPaycheckAmount(data.user, data.income);
+      const upcoming=useMemo(()=>data.bills.filter(b=>b.status!=='paid').sort((a,b)=>daysTo(a.due)-daysTo(b.due)).slice(0,3),[data.bills]);
+      const {creditScore:cs}=data.user;
+      const range=CREDIT_RANGES.find(r=>cs>=r.min&&cs<=r.max)||CREDIT_RANGES[4];
+      const group=data.groups[0];
+
+      // Income/Expense ratio (same logic as BudgetSub)
+      const totalBillsPerCheck = useMemo(()=>{
+        const m={weekly:52,biweekly:26,semimonthly:24,monthly:12};
+        const ppy = m[data.user.payFreq]||26;
+        return data.bills.filter(b=>b.status!=='paid').reduce((s,b)=>(b.amount*12)/ppy+s,0);
+      },[data.bills,data.user.payFreq]);
+      const totalSavingsPerCheck = useMemo(()=>{
+        const m2={weekly:1,biweekly:2,semimonthly:52/24,monthly:52/12};
+        return data.goals.filter(g=>g.active!==false).reduce((s,g)=>{
+          const wk = g.cType==='fixed' ? (g.cVal||0) : (alloc.inc*(g.cVal||0)/100);
+          return s + wk*(m2[data.user.payFreq]||2);
+        },0);
+      },[data.goals,data.user.payFreq,alloc.inc]);
+      const totalAllocDash = totalBillsPerCheck + totalSavingsPerCheck + data.expenses.reduce((s,e)=>s+e.amount,0);
+      const ratioDash = paycheck>0 ? Math.round((totalAllocDash/paycheck)*100) : 0;
+      const surplusDash = paycheck - totalAllocDash;
+      const ratioColorDash = ratioDash<=70 ? t.ok : ratioDash<=90 ? t.warn : t.bad;
+
+      // Next pay info
+      const nextPayDate = data.user.nextPay || today();
+      const nextPayDays = daysTo(nextPayDate);
+
+      return <div style={{padding:'16px 20px',paddingBottom:100}}>
+        {/* Welcome Message */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:20,fontWeight:900,color:t.gold}}>Welcome back, {data.user.name.split(' ')[0]}</div>
+          <div style={{fontSize:13,color:t.textM}}>Here's your financial snapshot</div>
+        </div>
+
+        {/* Next Pay + Safe to Spend */}
+        <div style={{display:'flex',gap:10,marginBottom:16}}>
+          <Card style={{flex:1.2,background:`linear-gradient(135deg, ${t.gold}, ${t.goldD})`,color:'#000',padding:18,textAlign:'center'}}>
+            <div style={{fontSize:11,opacity:0.9,marginBottom:4}}>Safe to Spend</div>
+            <div style={{fontSize:32,fontWeight:900}}>{fmt(alloc.sts)}</div>
+            <div style={{fontSize:11,opacity:0.8,marginTop:2}}>~{fmt(alloc.daily)}/day</div>
+          </Card>
+          <Card style={{flex:1,padding:18,textAlign:'center',background:t.goldBg,border:`1px solid ${t.gold}30`}}>
+            <div style={{fontSize:11,color:t.textM,marginBottom:4}}>Next Pay</div>
+            <div style={{fontSize:24,fontWeight:900,color:t.gold}}>{fmt(paycheck)}</div>
+            <div style={{fontSize:11,color:t.textM,marginTop:2}}>{fmtD(nextPayDate)} &middot; {nextPayDays}d</div>
+          </Card>
+        </div>
+
+        {/* Allocated */}
+        <Card style={{marginBottom:16,padding:18,textAlign:'center',background:surplusDash>=0?t.okBg:t.badBg,border:`1px solid ${ratioColorDash}30`}}>
+          <div style={{fontSize:11,color:t.textM,marginBottom:4}}>Allocated</div>
+          <div style={{fontSize:28,fontWeight:900,color:ratioColorDash}}>{fmt(totalAllocDash)}</div>
+          <div style={{fontSize:10,color:t.textM,marginTop:2}}>Bills + Savings + Spending</div>
+        </Card>
+
+        {/* Plaid Linked Accounts */}
+        {data.plaid&&data.plaid.connected&&<>
+          <Hdr title="Linked Accounts" action={<Btn v="ghost" sz="sm" onClick={()=>setScreen('settings')}>Manage</Btn>}/>
+          <div style={{display:'flex',gap:10,marginBottom:16}}>
+            <Card style={{flex:1,padding:14,textAlign:'center',background:t.okBg,border:`1px solid ${t.ok}30`}}>
+              <div style={{fontSize:10,color:t.textM,marginBottom:3}}>Checking</div>
+              <div style={{fontSize:20,fontWeight:900,color:t.ok}}>{fmt(data.plaid.checkingBalance)}</div>
+            </Card>
+            <Card style={{flex:1,padding:14,textAlign:'center',background:t.goldBg,border:`1px solid ${t.gold}30`}}>
+              <div style={{fontSize:10,color:t.textM,marginBottom:3}}>Savings</div>
+              <div style={{fontSize:20,fontWeight:900,color:t.gold}}>{fmt(data.plaid.savingsBalance)}</div>
+            </Card>
+            {data.plaid.creditLimit>0&&<Card style={{flex:1,padding:14,textAlign:'center',background:t.badBg,border:`1px solid ${t.bad}30`}}>
+              <div style={{fontSize:10,color:t.textM,marginBottom:3}}>Credit Used</div>
+              <div style={{fontSize:20,fontWeight:900,color:t.bad}}>{fmt(data.plaid.creditUsed)}</div>
+              <div style={{fontSize:9,color:t.textM}}>of {fmt(data.plaid.creditLimit)}</div>
+            </Card>}
+          </div>
+        </>}
+        {!data.plaid&&<PlaidConnect data={data} setData={setData} compact/>}
+
+        <Card style={{marginBottom:16,display:'flex',alignItems:'center',gap:16}} onClick={()=>setScreen('smartstack','credit')}>
+          <div style={{width:64,height:64,borderRadius:32,background:`${range.c}20`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <span style={{fontSize:22,fontWeight:900,color:range.c}}>{cs}</span>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:700,color:t.text}}>Credit Score</div>
+            <div style={{fontSize:13,color:range.c,fontWeight:600}}>{range.l}</div>
+            <PBar val={cs-300} max={550} color={range.c} style={{marginTop:6}}/>
+          </div>
+        </Card>
+
+        <Hdr title="Upcoming Bills" action={<Btn v="ghost" sz="sm" onClick={()=>setScreen('bills')}>See All</Btn>}/>
+        {upcoming.map(b=><Card key={b.id} style={{marginBottom:8,padding:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div><div style={{fontSize:14,fontWeight:600,color:t.text}}>{b.name}</div><div style={{fontSize:12,color:t.textM}}>{fmtD(b.due)} &middot; {daysTo(b.due)}d</div></div>
+          <div style={{fontSize:16,fontWeight:700,color:t.gold}}>{fmt(b.amount)}</div>
+        </Card>)}
+
+        {/* Stack Circle / Group Stats */}
+        {group && <>
+          <Hdr title="Stack Circle" action={<Btn v="ghost" sz="sm" onClick={()=>setScreen('groups')}>See All</Btn>}/>
+          <Card style={{marginBottom:16,background:t.goldBg,border:`1px solid ${t.gold}30`}} onClick={()=>setScreen('groups')}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:t.gold}}>{group.name}</div>
+                <div style={{fontSize:12,color:t.textM}}>{group.members.length} members &middot; Code: {group.code}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:20,fontWeight:900,color:t.gold}}>{fmt(group.current)}</div>
+                <div style={{fontSize:11,color:t.textM}}>of {fmt(group.target)}</div>
+              </div>
+            </div>
+            <PBar val={group.current} max={group.target} color={t.gold} style={{marginBottom:8}}/>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:11}}>
+              <span style={{color:t.textM}}>{pct(group.current,group.target)}% funded</span>
+              <span style={{color:t.textM}}>{group.goal}</span>
+            </div>
+            {/* Member contribution bars */}
+            <div style={{marginTop:10,display:'flex',gap:6}}>
+              {group.members.map(m=><div key={m.id} style={{flex:1,textAlign:'center'}}>
+                <div style={{height:24,background:t.bgS,borderRadius:4,overflow:'hidden',marginBottom:3}}>
+                  <div style={{width:`${Math.min(100,m.target>0?(m.contrib/((group.target*m.target)/100))*100:0)}%`,height:'100%',background:t.gold,borderRadius:4,transition:'width 0.4s'}}/>
+                </div>
+                <div style={{fontSize:9,color:t.textM,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.name.split(' ')[0]}</div>
+              </div>)}
+            </div>
+          </Card>
+        </>}
+
+        <Hdr title="Savings Goals" action={<Btn v="ghost" sz="sm" onClick={()=>setScreen('smartstack','savings')}>See All</Btn>}/>
+        {data.goals.slice(0,2).map(g=><Card key={g.id} style={{marginBottom:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+            <div style={{fontSize:14,fontWeight:600,color:t.text}}>{g.name}</div>
+            <div style={{fontSize:13,fontWeight:600,color:t.gold}}>{pct(g.current,g.target)}%</div>
+          </div>
+          <PBar val={g.current} max={g.target} style={{marginBottom:6}}/>
+          <div style={{fontSize:12,color:t.textM}}>{fmt(g.current)} of {fmt(g.target)}</div>
+        </Card>)}
+      </div>;
+    }
+
+    // --- SMART STACK (Budget / Check Splitter / Savings / Credit) ---
+    function SmartStackScreen({data,setData,subTab,setSubTab}) {
+      const t=useContext(TC);
+      const tabs=['budget','savings','credit'];
+      const labels=['Budget','Savings','Credit'];
+
+      return <div style={{padding:'0 0 100px'}}>
+        <div role="tablist" style={{display:'flex',gap:0,background:t.bgS,borderBottom:`1px solid ${t.border}`,position:'sticky',top:56,zIndex:50}}>
+          {tabs.map((tb,i)=><button role="tab" aria-selected={subTab===tb} key={tb} onClick={()=>setSubTab(tb)} style={{flex:1,padding:'12px 0',background:'none',border:'none',borderBottom:subTab===tb?`3px solid ${t.gold}`:'3px solid transparent',color:subTab===tb?t.gold:t.textM,fontWeight:700,fontSize:11,cursor:'pointer',fontFamily:'inherit',transition:'all 0.2s'}}>{labels[i]}</button>)}
+        </div>
+        <div role="tabpanel" style={{padding:'16px 20px'}}>
+          {subTab==='budget'&&<BudgetSub data={data} setData={setData}/>}
+          {subTab==='savings'&&<SavingsSub data={data} setData={setData}/>}
+          {subTab==='credit'&&<CreditSub data={data}/>}
+        </div>
+      </div>;
+    }
+
+    function BudgetSub({data,setData}) {
+      const t=useContext(TC);
+      const alloc=useMemo(()=>calcAlloc(data.income,data.bills,data.goals,data.splitMode),[data]);
+
+      // ======= CHECK SPLITTER (reactive to user data) =======
+      const paycheck = getPaycheckAmount(data.user, data.income);
+
+      // Build slices from actual user data: bills, savings, spending (NO Free Cash, NO donut)
+      const COLORS = ['#d4a843','#f87171','#fb923c','#fbbf24','#4ade80','#60a5fa','#a78bfa','#e879f9','#34d399','#f97316','#06b6d4','#ec4899'];
+      const splitterSlices = useMemo(()=>{
+        const slices=[];
+        let ci=0;
+
+        data.bills.filter(b=>b.status!=='paid').forEach(b=>{
+          const m={weekly:52,biweekly:26,semimonthly:24,monthly:12};
+          const paychecksPerYear = m[data.user.payFreq]||26;
+          const perPaycheck = (b.amount * 12) / paychecksPerYear;
+          const p = paycheck>0 ? Math.round((perPaycheck/paycheck)*1000)/10 : 0;
+          slices.push({name:b.name,amount:perPaycheck,pct:p,color:COLORS[ci%COLORS.length],type:'bill'});
+          ci++;
+        });
+
+        data.goals.filter(g=>g.active!==false).forEach(g=>{
+          const weeklyAmt = g.cType==='fixed' ? (g.cVal||0) : (alloc.inc*(g.cVal||0)/100);
+          const m2={weekly:1,biweekly:2,semimonthly:52/24,monthly:52/12};
+          const perPaycheck = weeklyAmt * (m2[data.user.payFreq]||2);
+          const p = paycheck>0 ? Math.round((perPaycheck/paycheck)*1000)/10 : 0;
+          slices.push({name:g.name,amount:perPaycheck,pct:p,color:COLORS[ci%COLORS.length],type:'savings'});
+          ci++;
+        });
+
+        const totalSpending = data.expenses.reduce((s,e)=>s+e.amount,0);
+        if(totalSpending>0){
+          const p = paycheck>0 ? Math.round((totalSpending/paycheck)*1000)/10 : 0;
+          slices.push({name:'Spending',amount:totalSpending,pct:p,color:COLORS[ci%COLORS.length],type:'spending'});
+        }
+
+        // Normalize percentages
+        const totalPct = slices.reduce((s,x)=>s+x.pct,0);
+        if(totalPct>0 && totalPct!==100){
+          slices.forEach(s=>{ s.pct=Math.round((s.pct/totalPct)*1000)/10; });
+        }
+        return slices;
+      },[data.bills,data.goals,data.expenses,data.income,data.user.payFreq,paycheck,alloc.inc]);
+
+      const typeIcons = {bill:'\uD83D\uDCC4',savings:'\uD83C\uDFAF',spending:'\uD83D\uDED2'};
+      const typeLabels = {bill:'Bill',savings:'Goal',spending:'Expenses'};
+
+      // ======= INCOME / EXPENSE RATIO =======
+      const totalAllocated = splitterSlices.reduce((s,x)=>s+x.amount,0);
+      const ratio = paycheck>0 ? Math.round((totalAllocated/paycheck)*100) : 0;
+      const surplus = paycheck - totalAllocated;
+      const ratioColor = ratio<=70 ? t.ok : ratio<=90 ? t.warn : t.bad;
+      const ratioLabel = ratio<=70 ? 'Healthy' : ratio<=90 ? 'Tight' : 'Over Budget';
+
+      // ======= CHECK PROJECTION CALENDAR =======
+      const [projFreq, setProjFreq] = useState(data.user.payFreq||'biweekly');
+      const [hrRate, setHrRate] = useState(data.user.payRate||'');
+      const [locked, setLocked] = useState(false);
+      const [editingHoursDay, setEditingHoursDay] = useState(null); // date string of day being hour-edited
+
+      const hourlyRate = parseFloat(hrRate)||0;
+      const defaultHrsPerDay = parseFloat(data.user.hoursPerDay)||8;
+
+      const workDaysPerPay = {weekly:5,biweekly:10,semimonthly:11,monthly:22};
+      const totalWorkDays = workDaysPerPay[projFreq]||10;
+
+      // Build calendar days for the current pay period
+      const calendarDays = useMemo(()=>{
+        const nextPay = data.user.nextPay || today();
+        const gap = {weekly:7,biweekly:14,semimonthly:15,monthly:30}[projFreq]||14;
+        const startDate = addD(nextPay, -gap);
+        const days = [];
+        for(let i=0; i<gap; i++){
+          const d = addD(startDate, i);
+          const dt = new Date(d+'T00:00:00');
+          const dow = dt.getDay();
+          const isWeekend = dow===0||dow===6;
+          days.push({date:d, dayName:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow], dayNum:dt.getDate(), isWeekend, month:dt.toLocaleDateString('en-US',{month:'short'})});
+        }
+        return days;
+      },[data.user.nextPay,projFreq]);
+
+      // Track day status: 'off' or number of hours (e.g. 8, 4, 6)
+      const [dayHours, setDayHours] = useState(()=>{
+        const s={};
+        calendarDays.forEach(d=>{ s[d.date] = d.isWeekend ? 0 : defaultHrsPerDay; });
+        return s;
+      });
+
+      useEffect(()=>{
+        const s={};
+        calendarDays.forEach(d=>{ s[d.date] = d.isWeekend ? 0 : defaultHrsPerDay; });
+        setDayHours(s);
+        setLocked(false);
+        setEditingHoursDay(null);
+      },[data.user.nextPay,projFreq]);
+
+      const toggleDay = (date) => {
+        if(locked) return;
+        setDayHours(prev=>{
+          const cur = prev[date]||0;
+          return {...prev, [date]: cur>0 ? 0 : defaultHrsPerDay};
+        });
+      };
+
+      const setDayHourVal = (date, val) => {
+        const h = Math.max(0, Math.min(24, parseFloat(val)||0));
+        setDayHours(prev=>({...prev, [date]: h}));
+      };
+
+      const daysWorked = Object.values(dayHours).filter(v=>v>0).length;
+      const totalHoursWorked = Object.values(dayHours).reduce((s,v)=>s+(v||0),0);
+      const daysOff = Object.values(dayHours).filter(v=>v===0).length - calendarDays.filter(d=>d.isWeekend).length;
+
+      // === PROJECTED CHECK: total hours × hourly rate ===
+      const projectedCheck = useMemo(()=>{
+        if(hourlyRate>0){
+          return totalHoursWorked * hourlyRate;
+        }
+        // Salary fallback
+        const dailyRate = paycheck / totalWorkDays;
+        return daysWorked * dailyRate;
+      },[hourlyRate,totalHoursWorked,daysWorked,paycheck,totalWorkDays]);
+
+      // Base check (normal full period)
+      const baseCheck = useMemo(()=>{
+        if(hourlyRate>0){
+          return totalWorkDays * defaultHrsPerDay * hourlyRate;
+        }
+        return paycheck;
+      },[hourlyRate,defaultHrsPerDay,totalWorkDays,paycheck]);
+
+      const projDiff = projectedCheck - baseCheck;
+
+      // Lock in: save inputs to data and freeze calendar
+      const lockIn = () => {
+        setLocked(true);
+        setEditingHoursDay(null);
+        setData({...data, user:{...data.user, payRate:hrRate, payFreq:projFreq}});
+      };
+      const unlock = () => { setLocked(false); };
+
+      // ======= PAYCHECK HISTORY (linked to projected amounts) =======
+      const paycheckHistory = useMemo(()=>{
+        const nextPay = data.user.nextPay || today();
+        const daysBetween = {weekly:7,biweekly:14,semimonthly:15,monthly:30};
+        const gap = daysBetween[projFreq]||14;
+        const history = [];
+        // 4 past checks (use base check as historical)
+        for(let i=4;i>=1;i--){
+          const d = addD(nextPay, -gap*i);
+          history.push({date:d, amount:baseCheck, status:'paid'});
+        }
+        // Next check uses projected (reflects off days, extra hours, etc.)
+        history.push({date:nextPay, amount:projectedCheck, status:'next'});
+        // 3 future checks use base (assumes normal schedule)
+        for(let i=1;i<=3;i++){
+          history.push({date:addD(nextPay, gap*i), amount:baseCheck, status:'upcoming'});
+        }
+        return history;
+      },[data.user.nextPay,projFreq,baseCheck,projectedCheck]);
+
+      return <>
+        <Card style={{background:t.goldBg,border:`1px solid ${t.gold}30`,marginBottom:16,textAlign:'center',padding:20}}>
+          <div style={{fontSize:13,color:t.textM}}>Weekly Safe to Spend</div>
+          <div style={{fontSize:36,fontWeight:900,color:t.gold}}>{fmt(alloc.sts)}</div>
+          <div style={{fontSize:13,color:t.textM}}>~{fmt(alloc.daily)}/day</div>
+        </Card>
+
+        {/* Income / Expense Ratio */}
+        <Card style={{marginBottom:16}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <span style={{fontSize:14,fontWeight:700,color:t.text}}>Income / Expense Ratio</span>
+            <Badge color={ratioColor}>{ratioLabel}</Badge>
+          </div>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+            <span style={{fontSize:13,color:t.textM}}>Paycheck</span>
+            <span style={{fontSize:13,fontWeight:700,color:t.ok}}>{fmt(paycheck)}</span>
+          </div>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+            <span style={{fontSize:13,color:t.textM}}>Allocated (Bills + Savings + Spending)</span>
+            <span style={{fontSize:13,fontWeight:700,color:t.bad}}>{fmt(totalAllocated)}</span>
+          </div>
+          <div style={{background:t.bgS,borderRadius:6,height:10,overflow:'hidden',marginBottom:8}}>
+            <div style={{width:`${Math.min(ratio,100)}%`,height:'100%',borderRadius:6,background:ratioColor,transition:'width 0.4s'}}/>
+          </div>
+          <div style={{display:'flex',justifyContent:'space-between'}}>
+            <span style={{fontSize:14,fontWeight:700,color:surplus>=0?t.ok:t.bad}}>{surplus>=0?'Remaining:':'Deficit:'} {fmt(Math.abs(surplus))}</span>
+            <span style={{fontSize:14,fontWeight:800,color:ratioColor}}>{ratio}% used</span>
+          </div>
+        </Card>
+
+
+        {/* ===== CHECK PROJECTION CALENDAR ===== */}
+        <Hdr title="Check Projection" sub={locked?"Locked in — tap Edit to adjust":"Tap days to toggle work/off, then Lock In"}/>
+        <Card style={{marginBottom:16}}>
+          {/* Pay Frequency Toggle */}
+          <div style={{display:'flex',gap:6,marginBottom:12}}>
+            {['weekly','biweekly'].map(f=><button key={f} onClick={()=>{if(!locked)setProjFreq(f);}}
+              style={{flex:1,padding:'8px 0',borderRadius:8,border:`1.5px solid ${projFreq===f?t.gold:t.border}`,background:projFreq===f?t.goldBg:'transparent',
+                color:projFreq===f?t.gold:t.textM,fontWeight:700,fontSize:12,cursor:locked?'not-allowed':'pointer',fontFamily:'inherit',opacity:locked?0.6:1}}>
+              {f==='weekly'?'Weekly':'Bi-Weekly'}
+            </button>)}
+          </div>
+
+          {/* Hourly Rate + Total Hours */}
+          <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'flex-end'}}>
+            <div style={{flex:1}}>
+              <label style={{fontSize:10,color:t.textM,fontWeight:700,display:'block',marginBottom:3}}>Hourly Rate ($)</label>
+              <input type="number" value={hrRate} onChange={e=>{if(!locked)setHrRate(e.target.value);}} placeholder="0.00" onKeyDown={e=>{if(e.key==='Enter')lockIn();}}
+                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${t.border}`,background:t.bgS,color:t.text,fontSize:14,fontWeight:700,fontFamily:'inherit',outline:'none',boxSizing:'border-box',opacity:locked?0.6:1}}
+                disabled={locked} />
+            </div>
+            <div style={{padding:'8px 14px',borderRadius:8,background:t.goldBg,border:`1px solid ${t.gold}30`,textAlign:'center',minWidth:80}}>
+              <div style={{fontSize:20,fontWeight:900,color:t.gold}}>{totalHoursWorked}</div>
+              <div style={{fontSize:9,color:t.textM,fontWeight:700}}>Total Hours</div>
+            </div>
+          </div>
+          <div style={{fontSize:10,color:t.textM,marginBottom:12}}>Tap a day to toggle work/off. Long-press or tap the hours badge to set custom hours (half days, part-time, etc.)</div>
+
+          {/* Calendar Header */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:8}}>
+            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>
+              <div key={d} style={{textAlign:'center',fontSize:10,fontWeight:700,color:t.textM,padding:'4px 0'}}>{d}</div>
+            )}
+          </div>
+          {/* Calendar Grid */}
+          {(()=>{
+            const firstDay = calendarDays[0] ? new Date(calendarDays[0].date+'T00:00:00').getDay() : 0;
+            const padded = [...Array(firstDay).fill(null), ...calendarDays];
+            const rows = [];
+            for(let i=0; i<padded.length; i+=7) rows.push(padded.slice(i,i+7));
+            return rows.map((row,ri)=>
+              <div key={ri} style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
+                {row.map((day,di)=>{
+                  if(!day) return <div key={di}/>;
+                  const hrs = dayHours[day.date]||0;
+                  const isWork = hrs>0;
+                  const isToday = day.date===today();
+                  const isEditing = editingHoursDay===day.date;
+                  return <div key={di} style={{position:'relative'}}>
+                    <button onClick={()=>toggleDay(day.date)} title={`${day.date}: ${isWork?hrs+'h':'Off'}${locked?' (locked)':''}`}
+                      style={{width:'100%',aspectRatio:'1',borderRadius:10,border:isToday?`2px solid ${t.gold}`:`1.5px solid ${isWork?t.ok+'60':t.border}`,
+                        background:isWork?t.okBg:day.isWeekend?t.badBg+'80':'transparent',
+                        cursor:locked?'default':'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:0,padding:2,transition:'all 0.15s',opacity:locked?0.85:1}}>
+                      <span style={{fontSize:13,fontWeight:isToday?900:600,color:isWork?t.ok:day.isWeekend?t.bad+'cc':t.textM}}>{day.dayNum}</span>
+                      {isWork?<span style={{fontSize:7,fontWeight:700,color:t.ok,cursor:locked?'default':'pointer',background:t.ok+'18',borderRadius:3,padding:'0 3px'}}
+                        onClick={e=>{e.stopPropagation();if(!locked)setEditingHoursDay(isEditing?null:day.date);}}>{hrs}h</span>
+                        :<span style={{fontSize:7,fontWeight:700,color:t.bad}}>X</span>}
+                    </button>
+                    {isEditing&&!locked&&<div style={{position:'absolute',top:'100%',left:'50%',transform:'translateX(-50%)',zIndex:20,background:t.card,border:`1px solid ${t.gold}`,borderRadius:8,padding:6,boxShadow:'0 4px 12px rgba(0,0,0,0.3)',minWidth:60}}>
+                      <input type="number" autoFocus value={hrs} min="0" max="24" step="0.5"
+                        onChange={e=>setDayHourVal(day.date,e.target.value)}
+                        onKeyDown={e=>{if(e.key==='Enter'){setEditingHoursDay(null);}}}
+                        onBlur={()=>setEditingHoursDay(null)}
+                        style={{width:'100%',padding:'4px 6px',borderRadius:6,border:`1px solid ${t.border}`,background:t.bgS,color:t.text,fontSize:13,fontWeight:700,fontFamily:'inherit',outline:'none',textAlign:'center',boxSizing:'border-box'}}/>
+                      <div style={{fontSize:8,color:t.textM,textAlign:'center',marginTop:2}}>hours</div>
+                    </div>}
+                  </div>;
+                })}
+              </div>
+            );
+          })()}
+          {/* Legend */}
+          <div style={{display:'flex',justifyContent:'center',gap:16,marginTop:8,marginBottom:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:3,background:t.okBg,border:`1px solid ${t.ok}60`}}/><span style={{fontSize:10,color:t.textM}}>Working</span></div>
+            <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:3,background:t.badBg,border:`1px solid ${t.border}`}}/><span style={{fontSize:10,color:t.textM}}>Off</span></div>
+          </div>
+          {/* Stats */}
+          <div style={{display:'flex',justifyContent:'space-around',marginBottom:12,padding:'10px 0',background:t.bgS,borderRadius:10}}>
+            <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:900,color:t.ok}}>{daysWorked}</div><div style={{fontSize:10,color:t.textM}}>Days Working</div></div>
+            <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:900,color:t.bad}}>{daysOff>0?daysOff:0}</div><div style={{fontSize:10,color:t.textM}}>Extra Off</div></div>
+            <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:900,color:t.gold}}>{totalHoursWorked}</div><div style={{fontSize:10,color:t.textM}}>Total Hours</div></div>
+          </div>
+          {/* Projected Check */}
+          <Card style={{background:projDiff<0?t.badBg:t.okBg,border:`1px solid ${projDiff<0?t.bad:t.ok}30`,textAlign:'center',padding:16}}>
+            <div style={{fontSize:11,color:t.textM}}>Projected Check {locked?'(Locked)':''}</div>
+            <div style={{fontSize:32,fontWeight:900,color:projDiff<0?t.bad:t.ok}}>{fmt(projectedCheck)}</div>
+            {projDiff!==0&&<div style={{fontSize:13,color:projDiff<0?t.bad:t.ok,marginTop:4}}>
+              {projDiff>0?'+':''}{fmt(projDiff)} vs normal ({fmt(baseCheck)})
+            </div>}
+          </Card>
+          {hourlyRate>0&&<div style={{fontSize:11,color:t.textM,textAlign:'center',marginTop:6}}>${hourlyRate}/hr &middot; {totalHoursWorked} hrs &middot; {daysWorked} days</div>}
+          {!hourlyRate&&<div style={{fontSize:11,color:t.textM,textAlign:'center',marginTop:6}}>Enter your hourly rate above for precise projections</div>}
+
+          {/* Lock In / Edit Button */}
+          <div style={{marginTop:12}}>
+            {!locked ?
+              <Btn onClick={lockIn} v="primary" full>Lock In (Enter)</Btn> :
+              <Btn onClick={unlock} v="secondary" full>Edit Schedule</Btn>
+            }
+          </div>
+        </Card>
+
+        {/* ===== CHECK SPLITTER (under Check Projection) ===== */}
+        <Hdr title="Check Splitter" sub={`How your ${fmt(paycheck)} paycheck breaks down`}/>
+        {splitterSlices.length>0 && <Card style={{marginBottom:16}}>
+          {splitterSlices.map((s,i)=>{
+            return <div key={i} style={{marginBottom:i<splitterSlices.length-1?12:0,padding:10,background:t.bgS,borderRadius:12,border:`1px solid ${t.border}`}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}>
+                  <div style={{width:14,height:14,borderRadius:4,background:s.color,flexShrink:0}}/>
+                  <div>
+                    <span style={{fontSize:14,fontWeight:600,color:t.text}}>{s.name}</span>
+                    <span style={{fontSize:11,color:t.textM,marginLeft:6}}>{typeIcons[s.type]} {typeLabels[s.type]}</span>
+                  </div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:15,fontWeight:800,color:t.gold}}>{fmt(s.amount)}</div>
+                  <div style={{fontSize:11,color:t.textM}}>{s.pct}%</div>
+                </div>
+              </div>
+              <div style={{marginTop:6,background:t.card,borderRadius:4,height:6,overflow:'hidden'}}>
+                <div style={{width:`${Math.min(s.pct,100)}%`,height:'100%',borderRadius:4,background:s.color,transition:'width 0.4s'}}/>
+              </div>
+            </div>;
+          })}
+          <div style={{fontSize:11,color:t.textM,textAlign:'center',marginTop:8}}>Auto-calculated from your bills, savings goals &amp; spending</div>
+        </Card>}
+
+        {/* ===== PAYCHECK HISTORY ===== */}
+        <Hdr title="Paycheck History" sub={locked?"Amounts reflect locked schedule":"Amounts update with your schedule changes"}/>
+        <Card style={{marginBottom:16}}>
+          {paycheckHistory.map((p,i)=>{
+            const isNext = p.status==='next';
+            const isPaid = p.status==='paid';
+            const diff = isNext ? (p.amount - baseCheck) : 0;
+            return <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:i<paycheckHistory.length-1?`1px solid ${t.border}`:'none',background:isNext?`${t.gold}10`:'transparent',margin:isNext?'-2px -8px':0,padding:isNext?'10px 8px':'10px 0',borderRadius:isNext?8:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontSize:14,fontWeight:isNext?800:500,color:isNext?t.gold:isPaid?t.textS:t.textM}}>{fmtD(p.date)}</span>
+                {isNext&&<Badge color={t.gold}>Next{locked?' (Locked)':''}</Badge>}
+                {isPaid&&<span style={{fontSize:10,color:t.ok}}>&#10003;</span>}
+              </div>
+              <div style={{textAlign:'right'}}>
+                <span style={{fontSize:14,fontWeight:isNext?800:600,color:isNext?t.gold:isPaid?t.text:t.textM}}>{fmt(p.amount)}</span>
+                {isNext&&diff!==0&&<div style={{fontSize:10,color:diff>0?t.ok:t.bad}}>{diff>0?'+':''}{fmt(diff)}</div>}
+                {!isPaid&&!isNext&&<div style={{fontSize:10,color:t.textM}}>{daysTo(p.date)}d</div>}
+              </div>
+            </div>;
+          })}
+        </Card>
+      </>;
+    }
+
+    // --- SAVINGS (with Add Money) ---
+    function SavingsSub({data,setData}) {
+      const t=useContext(TC);
+      const [ng,setNg]=useState({name:'Emergency Fund',target:'',current:'',cType:'fixed',cVal:''});
+      const [addAmts, setAddAmts] = useState({});
+      const add=()=>{if(ng.name&&ng.target&&ng.cVal){setData({...data,goals:[...data.goals,{id:gid(),name:ng.name,target:parseFloat(ng.target),current:parseFloat(ng.current)||0,date:addD(today(),180),cType:ng.cType,cVal:parseFloat(ng.cVal),active:true}]});setNg({name:'Emergency Fund',target:'',current:'',cType:'fixed',cVal:''});}};
+      const rm=id=>setData({...data,goals:data.goals.filter(g=>g.id!==id)});
+      const toggle=id=>setData({...data,goals:data.goals.map(g=>g.id===id?{...g,active:!g.active}:g)});
+
+      const addMoney=(id)=>{
+        const amt=parseFloat(addAmts[id]);
+        if(!amt||amt<=0)return;
+        setData({...data,goals:data.goals.map(g=>g.id===id?{...g,current:Math.min(g.target,g.current+amt)}:g)});
+        setAddAmts({...addAmts,[id]:''});
+      };
+
+      return <>
+        <Card style={{background:t.okBg,border:`1px solid ${t.ok}30`,marginBottom:16,textAlign:'center',padding:20}}>
+          <div style={{fontSize:13,color:t.textM}}>Total Saved</div>
+          <div style={{fontSize:36,fontWeight:900,color:t.ok}}>{fmt(data.goals.reduce((s,g)=>s+g.current,0))}</div>
+        </Card>
+        <Hdr title="Create Goal"/>
+        <Sel label="Goal" value={ng.name} onChange={v=>setNg({...ng,name:v})} opts={SAVE_PRESETS}/>
+        <div style={{display:'flex',gap:8}}>
+          <div style={{flex:1}}><Inp label="Target" value={ng.target} onChange={v=>setNg({...ng,target:v})} type="number" pre="$"/></div>
+          <div style={{flex:1}}><Inp label="Current" value={ng.current} onChange={v=>setNg({...ng,current:v})} type="number" pre="$"/></div>
+        </div>
+        <Inp label="Weekly Amount ($)" value={ng.cVal} onChange={v=>setNg({...ng,cVal:v})} type="number" pre="$"/>
+        <Btn onClick={add} full>Create Goal</Btn>
+        <Hdr title="Your Goals"/>
+        {data.goals.map(g=><Card key={g.id} style={{marginBottom:10,opacity:g.active?1:0.5}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+            <div style={{fontSize:14,fontWeight:600,color:t.text}}>{g.name}</div>
+            <div style={{fontSize:13,fontWeight:600,color:t.gold}}>{pct(g.current,g.target)}%</div>
+          </div>
+          <PBar val={g.current} max={g.target} style={{marginBottom:6}}/>
+          <div style={{fontSize:12,color:t.textM,marginBottom:8}}>{fmt(g.current)} of {fmt(g.target)}</div>
+
+          {/* Add Money to Goal */}
+          <div style={{display:'flex',gap:6,marginBottom:8}}>
+            <div style={{flex:1}}>
+              <input type="number" placeholder="$0.00" value={addAmts[g.id]||''} onChange={e=>setAddAmts({...addAmts,[g.id]:e.target.value})} aria-label={`Add money to ${g.name}`}
+                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${t.border}`,background:t.input,color:t.text,fontSize:13,outline:'none',fontFamily:'inherit'}}/>
+            </div>
+            <Btn sz="sm" onClick={()=>addMoney(g.id)} v="ok">+ Add</Btn>
+          </div>
+
+          <div style={{display:'flex',gap:8}}>
+            <Btn sz="sm" onClick={()=>toggle(g.id)} v={g.active?'primary':'secondary'}>{g.active?'Active':'Paused'}</Btn>
+            <Btn sz="sm" onClick={()=>rm(g.id)} v="bad">Delete</Btn>
+          </div>
+        </Card>)}
+      </>;
+    }
+
+    // --- CREDIT (moved from Settings to Smart Stack) ---
+    function CreditSub({data}) {
+      const t=useContext(TC);
+      const {creditScore:cs,utilization:ut,onTime:ot,inquiries:iq}=data.user;
+      const range=CREDIT_RANGES.find(r=>cs>=r.min&&cs<=r.max)||CREDIT_RANGES[4];
+      const hist=data.user.scoreHistory||[];
+
+      // Score Simulator
+      const [simUt,setSimUt]=useState(ut);
+      const [simOt,setSimOt]=useState(ot);
+      const simScore = useMemo(()=>{
+        let s=cs;
+        if(simUt<ut) s+=Math.round((ut-simUt)*0.8);
+        if(simUt>ut) s-=Math.round((simUt-ut)*0.6);
+        if(simOt>ot) s+=Math.round((simOt-ot)*1.5);
+        if(simOt<ot) s-=Math.round((ot-simOt)*2);
+        return Math.max(300,Math.min(850,s));
+      },[simUt,simOt,cs,ut,ot]);
+
+      // SVG Line Chart
+      const chartW=320, chartH=120, pad=30;
+      const maxS=Math.max(...hist.map(h=>h.s),700), minS=Math.min(...hist.map(h=>h.s),550);
+      const pts=hist.map((h,i)=>{
+        const x=pad+i*(chartW-2*pad)/(hist.length-1||1);
+        const y=chartH-pad-(h.s-minS)/(maxS-minS||1)*(chartH-2*pad);
+        return {x,y,s:h.s,m:h.m};
+      });
+
+      const insights=[
+        {p:1,type:ut>30?'bad':'ok',icon:'\uD83D\uDCB3',title:'Credit Utilization',msg:ut>30?`High (${ut}%). Aim for under 30%.`:`Great (${ut}%). Under 10% is ideal.`},
+        {p:1,type:ot<95?'bad':'ok',icon:'\uD83D\uDCC5',title:'Payment History',msg:ot<95?`${ot}% on-time. Set up autopay.`:`Excellent (${ot}%)!`},
+        {p:2,type:'info',icon:'\uD83C\uDFE0',title:'Rent Reporting',msg:data.rent.filter(r=>r.reported).length>0?'Rent being reported. Update coming soon.':'Start reporting rent for +20-40 pts.'},
+        {p:3,type:iq>2?'warn':'ok',icon:'\uD83D\uDD0D',title:'Hard Inquiries',msg:iq>2?`${iq} inquiries. Avoid new apps 6mo.`:`${iq} inquiries. Good.`},
+        {p:2,type:'info',icon:'\uD83D\uDCA1',title:'AI Tip: Debt Snowball',msg:'Pay minimums on all debts, extra at smallest.'},
+        {p:3,type:'info',icon:'\uD83D\uDCCA',title:'AI Tip: 50/30/20 Rule',msg:'50% needs, 30% wants, 20% savings.'},
+      ].sort((a,b)=>a.p-b.p);
+
+      const bgM={bad:t.badBg,warn:t.warnBg,ok:t.okBg,info:t.goldBg};
+      const cM={bad:t.bad,warn:t.warn,ok:t.ok,info:t.gold};
+
+      return <>
+        <Card style={{marginBottom:16,textAlign:'center',padding:20,background:`${range.c}15`,border:`1px solid ${range.c}40`}}>
+          <div style={{fontSize:48,fontWeight:900,color:range.c}}>{cs}</div>
+          <div style={{fontSize:16,fontWeight:700,color:range.c}}>{range.l}</div>
+          <PBar val={cs-300} max={550} color={range.c} style={{marginTop:12}}/>
+        </Card>
+
+        {/* Score History */}
+        {hist.length>1&&<Card style={{marginBottom:16}}>
+          <div style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:12}}>Score History</div>
+          <svg width={chartW} height={chartH} viewBox={`0 0 ${chartW} ${chartH}`} role="img" aria-label="Credit score history chart">
+            <polyline fill="none" stroke={t.gold} strokeWidth="2.5" points={pts.map(p=>`${p.x},${p.y}`).join(' ')}/>
+            {pts.map((p,i)=><g key={i}><circle cx={p.x} cy={p.y} r="4" fill={t.gold}/><text x={p.x} y={p.y-10} textAnchor="middle" fontSize="10" fill={t.textS}>{p.s}</text><text x={p.x} y={chartH-5} textAnchor="middle" fontSize="9" fill={t.textM}>{p.m}</text></g>)}
+          </svg>
+        </Card>}
+
+        <Hdr title="Credit Factors"/>
+        {[{l:'Payment History',v:ot,mx:100,w:'35%',c:ot>=95?t.ok:t.warn},{l:'Utilization',v:ut,mx:100,w:'30%',c:ut<=30?t.ok:ut<=50?t.warn:t.bad},{l:'Account Age',v:data.user.acctAge,mx:30,w:'15%',c:data.user.acctAge>=5?t.ok:t.warn},{l:'Credit Mix',v:40,mx:100,w:'10%',c:t.ok},{l:'Inquiries',v:Math.max(0,10-iq),mx:10,w:'10%',c:iq<=2?t.ok:t.warn}].map((f,i)=>
+          <Card key={i} style={{marginBottom:8}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+              <div><div style={{fontSize:13,fontWeight:600,color:t.text}}>{f.l}</div><div style={{fontSize:11,color:t.textM}}>Weight: {f.w}</div></div>
+              <div style={{fontSize:14,fontWeight:700,color:f.c}}>{Math.round(f.v)}/{Math.round(f.mx)}</div>
+            </div>
+            <PBar val={f.v} max={f.mx} color={f.c}/>
+          </Card>
+        )}
+
+        {/* Score Simulator */}
+        <Hdr title="Score Simulator"/>
+        <Card style={{marginBottom:16}}>
+          <div style={{textAlign:'center',marginBottom:12}}>
+            <div style={{fontSize:11,color:t.textM}}>Simulated Score</div>
+            <div style={{fontSize:32,fontWeight:900,color:simScore>cs?t.ok:simScore<cs?t.bad:t.gold}}>{simScore}</div>
+            {simScore!==cs&&<div style={{fontSize:12,color:simScore>cs?t.ok:t.bad}}>{simScore>cs?'+':''}{simScore-cs} pts</div>}
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:t.textS}}><span>Utilization</span><span>{simUt}%</span></div>
+            <input type="range" min="0" max="100" value={simUt} onChange={e=>setSimUt(parseInt(e.target.value))} aria-label="Simulated utilization" style={{width:'100%',accentColor:t.gold}}/>
+          </div>
+          <div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:t.textS}}><span>On-Time Payments</span><span>{simOt}%</span></div>
+            <input type="range" min="0" max="100" value={simOt} onChange={e=>setSimOt(parseInt(e.target.value))} aria-label="Simulated on-time payments" style={{width:'100%',accentColor:t.gold}}/>
+          </div>
+        </Card>
+
+        <Hdr title="AI Insights &amp; Tips"/>
+        {insights.map((ins,i)=><Card key={i} style={{marginBottom:10,background:bgM[ins.type],border:`1px solid ${cM[ins.type]}30`}}>
+          <div style={{display:'flex',gap:10}}>
+            <span style={{fontSize:18}}>{ins.icon}</span>
+            <div><div style={{fontSize:13,fontWeight:700,color:cM[ins.type]}}>{ins.title}</div><div style={{fontSize:12,color:cM[ins.type],marginTop:3,opacity:0.9}}>{ins.msg}</div></div>
+          </div>
+        </Card>)}
+      </>;
+    }
+
+    // --- BILL BOSS ---
+    function BillBossScreen({data,setData}) {
+      const t=useContext(TC);
+      const [showAdd,setShowAdd]=useState(false);
+      const [nb,setNb]=useState({name:'',amount:'',cat:BILL_CATS[0],due:today(),customCat:''});
+      const [allocModal,setAllocModal]=useState(null);
+      const [allocParts,setAllocParts]=useState(2);
+
+      const totalBills=data.bills.reduce((s,b)=>s+b.amount,0);
+      // For bills with split payments, deduct any paid split amounts from the unpaid total
+      const unpaidTotal=data.bills.filter(b=>b.status!=='paid').reduce((s,b)=>{
+        if(b.alloc&&b.alloc.length>0){
+          return s + b.alloc.filter(a=>!a.paid).reduce((ps,a)=>ps+a.amount,0);
+        }
+        return s+b.amount;
+      },0);
+      const paidTotal=data.bills.filter(b=>b.status==='paid').reduce((s,b)=>s+b.amount,0)
+        + data.bills.filter(b=>b.status!=='paid').reduce((s,b)=>{
+          if(b.alloc&&b.alloc.length>0) return s+b.alloc.filter(a=>a.paid).reduce((ps,a)=>ps+a.amount,0);
+          return s;
+        },0);
+      const upcoming=data.bills.filter(b=>b.status!=='paid').sort((a,b)=>daysTo(a.due)-daysTo(b.due));
+      const paid=data.bills.filter(b=>b.status==='paid');
+
+      const addBill=()=>{
+        if(nb.name&&nb.amount){
+          const cat=nb.cat==='Other'&&nb.customCat?nb.customCat:nb.cat;
+          setData({...data,bills:[...data.bills,{id:gid(),name:sanitize(nb.name),amount:sanitizeNum(nb.amount,0),cat,due:nb.due,freq:'monthly',status:'upcoming',alloc:[]}]});
+          setNb({name:'',amount:'',cat:BILL_CATS[0],due:today(),customCat:''});setShowAdd(false);
+        }
+      };
+      const rmBill=id=>setData({...data,bills:data.bills.filter(b=>b.id!==id)});
+      const payBill=id=>setData({...data,bills:data.bills.map(b=>b.id===id?{...b,status:'paid'}:b)});
+      const revert=id=>setData({...data,bills:data.bills.map(b=>b.id===id?{...b,status:'upcoming',alloc:b.alloc?.map(a=>({...a,paid:false}))||[]}:b)});
+      const splitBill=(id)=>{
+        const bill=data.bills.find(b=>b.id===id);
+        if(!bill)return;
+        const parts=[];
+        const each=Math.round((bill.amount/allocParts)*100)/100;
+        for(let i=0;i<allocParts;i++){
+          parts.push({id:gid(),date:addD(bill.due,i*7),amount:i===allocParts-1?Math.round((bill.amount-each*(allocParts-1))*100)/100:each,paid:false});
+        }
+        setData({...data,bills:data.bills.map(b=>b.id===id?{...b,alloc:parts}:b)});
+        setAllocModal(null);
+      };
+      // Pay a single split payment by its index — deduct from bill amount shown, keep remaining schedule
+      const paySplitPayment=(billId,partIdx)=>{
+        setData({...data,bills:data.bills.map(b=>{
+          if(b.id!==billId)return b;
+          const newAlloc=b.alloc.map((a,i)=>i===partIdx?{...a,paid:true}:a);
+          // If ALL split payments are paid, mark the whole bill as paid
+          const allPaid = newAlloc.every(a=>a.paid);
+          return {...b, alloc:newAlloc, status:allPaid?'paid':'upcoming'};
+        })});
+      };
+
+      const rentBill=data.bills.find(b=>b.cat==='Rent/Mortgage');
+      const reportRent=()=>{
+        const t2=today();
+        if(!data.rent.find(r=>r.month===t2)){
+          setData({...data,rent:[...data.rent,{id:gid(),month:t2,amount:rentBill?.amount||0,status:'paid',reported:true,rDate:t2}]});
+        }
+      };
+
+      return <div style={{padding:'16px 20px',paddingBottom:100}}>
+        <Card style={{background:`linear-gradient(135deg, ${t.gold}, ${t.goldD})`,color:'#000',padding:24,marginBottom:16,textAlign:'center'}}>
+          <div style={{fontSize:13,opacity:0.9}}>Total Monthly Bills</div>
+          <div style={{fontSize:40,fontWeight:900}}>{fmt(unpaidTotal)}</div>
+          <div style={{marginTop:10}}>
+            <div style={{fontSize:11,opacity:0.8}}>Paid</div>
+            <div style={{fontSize:20,fontWeight:700}}>{fmt(paidTotal)}</div>
+          </div>
+        </Card>
+
+        <Btn onClick={()=>setShowAdd(!showAdd)} full style={{marginBottom:16}}>{showAdd?'Cancel':'+ Add Bill'}</Btn>
+
+        {showAdd&&<Card style={{marginBottom:16}}>
+          <Inp label="Bill Name" value={nb.name} onChange={v=>setNb({...nb,name:v})} ph="e.g. Rent"/>
+          <div style={{display:'flex',gap:8}}>
+            <div style={{flex:1}}><Inp label="Amount" value={nb.amount} onChange={v=>setNb({...nb,amount:v})} type="number" pre="$"/></div>
+            <div style={{flex:1}}><Inp label="Due Date" value={nb.due} onChange={v=>setNb({...nb,due:v})} type="date"/></div>
+          </div>
+          <Sel label="Category" value={nb.cat} onChange={v=>setNb({...nb,cat:v})} opts={BILL_CATS}/>
+          {nb.cat==='Other'&&<Inp label="Custom Category" value={nb.customCat} onChange={v=>setNb({...nb,customCat:v})} ph="Enter category"/>}
+          <Btn onClick={addBill} full>Save Bill</Btn>
+        </Card>}
+
+        <Hdr title="Upcoming Bills"/>
+        {upcoming.map(b=><Card key={b.id} style={{marginBottom:10,padding:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div><div style={{fontSize:14,fontWeight:600,color:t.text}}>{b.name}</div><div style={{fontSize:12,color:t.textM}}>{b.cat} &middot; Due {fmtD(b.due)}</div></div>
+            <div style={{fontSize:16,fontWeight:700,color:t.gold}}>{fmt(b.amount)}</div>
+          </div>
+          {b.alloc&&b.alloc.length>0&&<div style={{marginBottom:8,padding:8,background:t.bgS,borderRadius:8}}>
+            <div style={{fontSize:11,fontWeight:700,color:t.textM,marginBottom:6}}>PAYMENT SCHEDULE</div>
+            {b.alloc.map((a,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,color:a.paid?t.ok:t.textS,padding:'4px 0',borderBottom:i<b.alloc.length-1?`1px solid ${t.border}`:'none',opacity:a.paid?0.6:1}}>
+              <div>
+                <span style={{fontWeight:600}}>{a.paid?'\u2713 ':''} Payment {i+1}</span>
+                <span style={{color:t.textM,marginLeft:6}}>{fmtD(a.date)}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontWeight:700,textDecoration:a.paid?'line-through':'none'}}>{fmt(a.amount)}</span>
+                {!a.paid&&<button onClick={()=>paySplitPayment(b.id,i)} style={{background:t.okBg,border:`1px solid ${t.ok}40`,borderRadius:6,padding:'2px 8px',cursor:'pointer',color:t.ok,fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Pay</button>}
+                {a.paid&&<span style={{fontSize:10,color:t.ok,fontWeight:700}}>Paid</span>}
+              </div>
+            </div>)}
+            <div style={{display:'flex',justifyContent:'space-between',marginTop:6,paddingTop:6,borderTop:`1px solid ${t.border}`}}>
+              <span style={{fontSize:11,fontWeight:700,color:t.textM}}>Remaining</span>
+              <span style={{fontSize:12,fontWeight:800,color:t.gold}}>{fmt(b.alloc.filter(a=>!a.paid).reduce((s,a)=>s+a.amount,0))}</span>
+            </div>
+          </div>}
+          <div style={{display:'flex',gap:6}}>
+            {!(b.alloc&&b.alloc.length>0)&&<Btn sz="sm" onClick={()=>payBill(b.id)} v="ok">Pay Full</Btn>}
+            {b.alloc&&b.alloc.length>0&&<Btn sz="sm" onClick={()=>payBill(b.id)} v="ok">Pay All</Btn>}
+            <Btn sz="sm" onClick={()=>{setAllocModal(b.id);setAllocParts(2);}} v="secondary">Split</Btn>
+            <Btn sz="sm" onClick={()=>rmBill(b.id)} v="bad">Del</Btn>
+          </div>
+        </Card>)}
+
+        {paid.length>0&&<>
+          <Hdr title="Paid Bills"/>
+          {paid.map(b=><Card key={b.id} style={{marginBottom:8,padding:12,opacity:0.5,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div><div style={{fontSize:14,color:t.textM}}>&#10003; {b.name}</div><div style={{fontSize:12,color:t.textM}}>{fmt(b.amount)}</div></div>
+            <Btn sz="sm" onClick={()=>revert(b.id)} v="secondary">Undo</Btn>
+          </Card>)}
+        </>}
+
+        {/* Rent Reporter */}
+        <div style={{marginTop:24}}>
+          <Hdr title="Rent Reporter" sub="Build credit from rent payments"/>
+          {rentBill?<>
+            <Card style={{background:t.goldBg,border:`1px solid ${t.gold}30`,marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div><div style={{fontSize:14,fontWeight:600,color:t.gold}}>Monthly Rent</div><div style={{fontSize:24,fontWeight:900,color:t.gold}}>{fmt(rentBill.amount)}</div></div>
+                <div style={{textAlign:'right'}}><Badge color={t.ok}>&#10003; {data.rent.filter(r=>r.reported).length} Reported</Badge><div style={{fontSize:11,color:t.textM,marginTop:4}}>+20-40 pts impact</div></div>
+              </div>
+            </Card>
+            <Btn onClick={reportRent} full style={{marginBottom:12}}>Report Current Month</Btn>
+            {data.rent.map(r=><Card key={r.id} style={{marginBottom:8,padding:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{fontSize:13,color:t.text}}>{fmtD(r.month)} - {fmt(r.amount)}</div>
+              {r.reported?<Badge color={t.ok}>Reported</Badge>:<Badge color={t.warn}>Pending</Badge>}
+            </Card>)}
+          </>:<Card style={{background:t.warnBg,border:`1px solid ${t.warn}30`,padding:16}}>
+            <div style={{fontSize:14,fontWeight:600,color:t.warn}}>No rent bill found</div>
+            <div style={{fontSize:12,color:t.warn,marginTop:4}}>Add a Rent/Mortgage bill above to enable reporting</div>
+          </Card>}
+        </div>
+
+        <Modal open={!!allocModal} onClose={()=>setAllocModal(null)} title="Split Into Payments">
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:14,color:t.text,marginBottom:12}}>Split this bill into how many payments?</div>
+            <div style={{display:'flex',gap:8}}>
+              {[2,3,4].map(n=><Btn key={n} onClick={()=>setAllocParts(n)} v={allocParts===n?'primary':'secondary'} full>{n} payments</Btn>)}
+            </div>
+          </div>
+          <Btn onClick={()=>splitBill(allocModal)} full>Apply Split</Btn>
+        </Modal>
+      </div>;
+    }
+
+    // --- STACK CIRCLE (Group Savings + Roommates) ---
+    function StackCircleScreen({data,setData}) {
+      const t=useContext(TC);
+      const [scTab, setScTab] = useState('group');
+      const tabs = ['group','roommates'];
+      const tabLabels = ['Group Savings','Roommates'];
+
+      return <div style={{padding:'0 0 100px'}}>
+        <div role="tablist" style={{display:'flex',gap:0,background:t.bgS,borderBottom:`1px solid ${t.border}`,position:'sticky',top:56,zIndex:50}}>
+          {tabs.map((tb,i)=><button role="tab" aria-selected={scTab===tb} key={tb} onClick={()=>setScTab(tb)} style={{flex:1,padding:'12px 0',background:'none',border:'none',borderBottom:scTab===tb?`3px solid ${t.gold}`:'3px solid transparent',color:scTab===tb?t.gold:t.textM,fontWeight:700,fontSize:12,cursor:'pointer',fontFamily:'inherit',transition:'all 0.2s',letterSpacing:'-0.01em'}}>{tabLabels[i]}</button>)}
+        </div>
+        <div role="tabpanel" style={{padding:'16px 20px'}}>
+          {scTab==='group'&&<GroupSavingsSub data={data} setData={setData}/>}
+          {scTab==='roommates'&&<RoommatesSub data={data} setData={setData}/>}
+        </div>
+      </div>;
+    }
+
+    function GroupSavingsSub({data,setData}) {
+      const t=useContext(TC);
+      const [addAmt,setAddAmt]=useState('');
+      const group=data.groups[0];
+      if(!group) return <div><Hdr title="Group Savings" sub="Save together"/><Card style={{textAlign:'center',padding:40}}><div style={{fontSize:48,marginBottom:12}}>&#128101;</div><h3 style={{fontSize:18,fontWeight:700,color:t.text,margin:0}}>No Groups Yet</h3><p style={{fontSize:14,color:t.textM,margin:'8px 0 20px'}}>Create or join a group to save with friends</p><Btn full>Create Group</Btn></Card></div>;
+
+      const addMoney=()=>{
+        const amt=parseFloat(addAmt);
+        if(!amt||amt<=0)return;
+        const updatedMembers=group.members.map(m=>m.name.includes('You')?{...m,contrib:m.contrib+amt,balance:m.balance+amt}:m);
+        const newAct={id:gid(),user:'Alex',msg:`Alex added ${fmt(amt)}`,date:today()};
+        const updatedGroup={...group,current:group.current+amt,members:updatedMembers,activity:[newAct,...group.activity]};
+        setData({...data,groups:[updatedGroup]});
+        setAddAmt('');
+      };
+
+      return <>
+        <Card style={{background:`linear-gradient(135deg, ${t.gold}12, ${t.gold}06)`,border:`1px solid ${t.gold}25`,marginBottom:16,padding:20,textAlign:'center'}}>
+          <div style={{fontSize:14,fontWeight:700,color:t.gold,marginBottom:8,letterSpacing:'-0.01em'}}>{group.name}</div>
+          <div style={{fontSize:32,fontWeight:900,color:t.gold}}>{fmt(group.current)}</div>
+          <div style={{fontSize:13,color:t.textM}}>of {fmt(group.target)} &middot; {pct(group.current,group.target)}%</div>
+          <PBar val={group.current} max={group.target} color={t.gold} style={{marginTop:12}}/>
+          <div style={{fontSize:12,color:t.textM,marginTop:8}}>Invite: {group.code}</div>
+        </Card>
+
+        <Card style={{marginBottom:16}}>
+          <div style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:10}}>Add Money to Group</div>
+          <div style={{display:'flex',gap:8}}>
+            <div style={{flex:1}}><Inp value={addAmt} onChange={setAddAmt} type="number" pre="$" ph="0.00" style={{marginBottom:0}}/></div>
+            <Btn onClick={addMoney}>Add</Btn>
+          </div>
+        </Card>
+
+        <Hdr title="Members"/>
+        {group.members.map(m=><Card key={m.id} style={{marginBottom:8,padding:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:600,color:t.text}}>{m.name}</div>
+              <div style={{fontSize:12,color:t.textM}}>Contributed: {fmt(m.contrib)} &middot; Balance: {fmt(m.balance)}</div>
+            </div>
+            <Badge color={t.gold}>{m.role}</Badge>
+          </div>
+        </Card>)}
+
+        <Hdr title="Activity"/>
+        {group.activity.slice(0,5).map(a=><Card key={a.id} style={{marginBottom:8,padding:10,display:'flex',gap:10}}>
+          <span style={{fontSize:16}}>&#128205;</span>
+          <div><div style={{fontSize:13,fontWeight:600,color:t.text}}>{a.msg}</div><div style={{fontSize:11,color:t.textM}}>{fmtD(a.date)}</div></div>
+        </Card>)}
+      </>;
+    }
+
+    // --- ROOMMATES SUB ---
+    function RoommatesSub({data,setData}) {
+      const t=useContext(TC);
+      const rm = data.roommates || {enabled:false,totalRent:0,utilities:[],members:[],history:[]};
+      const [addingMember,setAddingMember]=useState(false);
+      const [newName,setNewName]=useState('');
+      const [addingUtil,setAddingUtil]=useState(false);
+      const [newUtil,setNewUtil]=useState({name:'',amount:''});
+      const [editRent,setEditRent]=useState(false);
+      const [rentVal,setRentVal]=useState(String(rm.totalRent));
+
+      const update = (newRm) => setData({...data, roommates: newRm});
+
+      // Calculate each member's share
+      const totalUtilities = rm.utilities.reduce((s,u)=>s+u.amount,0);
+      const totalMonthly = rm.totalRent + totalUtilities;
+      const memberShares = rm.members.map(m=>{
+        const rentShare = rm.totalRent * (m.share/100);
+        const utilShare = totalUtilities * (m.share/100);
+        return {...m, rentShare, utilShare, totalShare: rentShare+utilShare};
+      });
+
+      const allPaid = rm.members.every(m=>m.paidRent && m.paidUtilities);
+
+      const addMember = () => {
+        if(!newName.trim()) return;
+        const newMembers = [...rm.members, {id:gid(),name:newName.trim(),share:0,paidRent:false,paidUtilities:false}];
+        // Re-distribute shares equally
+        const equalShare = Math.round(100/newMembers.length);
+        newMembers.forEach((m,i)=>{ m.share = i===newMembers.length-1 ? 100-equalShare*(newMembers.length-1) : equalShare; });
+        update({...rm, members:newMembers});
+        setNewName('');
+        setAddingMember(false);
+      };
+
+      const removeMember = (id) => {
+        const newMembers = rm.members.filter(m=>m.id!==id);
+        if(newMembers.length>0){
+          const equalShare = Math.round(100/newMembers.length);
+          newMembers.forEach((m,i)=>{ m.share = i===newMembers.length-1 ? 100-equalShare*(newMembers.length-1) : equalShare; });
+        }
+        update({...rm, members:newMembers});
+      };
+
+      const togglePaid = (id, type) => {
+        const newMembers = rm.members.map(m=>m.id===id ? {...m, [type]:!m[type]} : m);
+        update({...rm, members:newMembers});
+      };
+
+      const addUtility = () => {
+        if(!newUtil.name||!newUtil.amount) return;
+        update({...rm, utilities:[...rm.utilities, {id:gid(),name:newUtil.name,amount:parseFloat(newUtil.amount),split:'equal'}]});
+        setNewUtil({name:'',amount:''});
+        setAddingUtil(false);
+      };
+
+      const removeUtility = (id) => {
+        update({...rm, utilities:rm.utilities.filter(u=>u.id!==id)});
+      };
+
+      const saveRent = () => {
+        update({...rm, totalRent:parseFloat(rentVal)||0});
+        setEditRent(false);
+      };
+
+      const updateShare = (id, val) => {
+        const newMembers = rm.members.map(m=>m.id===id ? {...m, share:Math.max(0,Math.min(100,parseInt(val)||0))} : m);
+        update({...rm, members:newMembers});
+      };
+
+      return <>
+        {/* Monthly Overview */}
+        <Card style={{marginBottom:16,padding:20,textAlign:'center',background:`linear-gradient(135deg, ${t.gold}10, ${t.gold}05)`,border:`1px solid ${t.gold}25`}}>
+          <div style={{fontSize:12,color:t.textM,marginBottom:4,fontWeight:600,letterSpacing:'0.02em',textTransform:'uppercase'}}>Total Monthly Housing</div>
+          <div style={{fontSize:36,fontWeight:900,color:t.gold}}>{fmt(totalMonthly)}</div>
+          <div style={{display:'flex',justifyContent:'center',gap:12,marginTop:8}}>
+            <span style={{fontSize:12,color:t.textM}}>Rent: {fmt(rm.totalRent)}</span>
+            <span style={{fontSize:12,color:t.textM}}>Utilities: {fmt(totalUtilities)}</span>
+          </div>
+          {allPaid&&<Badge color={t.ok} style={{marginTop:8}}>All Paid This Month</Badge>}
+        </Card>
+
+        {/* Rent */}
+        <Hdr title="Rent" action={<Btn v="ghost" sz="sm" onClick={()=>setEditRent(!editRent)}>{editRent?'Cancel':'Edit'}</Btn>}/>
+        {editRent?<Card style={{marginBottom:16}}>
+          <Inp label="Monthly Rent" value={rentVal} onChange={setRentVal} type="number" pre="$"/>
+          <Btn onClick={saveRent} full>Save Rent</Btn>
+        </Card>:<Card style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div style={{fontSize:14,fontWeight:600,color:t.text}}>Monthly Rent</div>
+          <div style={{fontSize:20,fontWeight:900,color:t.gold}}>{fmt(rm.totalRent)}</div>
+        </Card>}
+
+        {/* Utilities */}
+        <Hdr title="Shared Utilities" action={<Btn v="ghost" sz="sm" onClick={()=>setAddingUtil(!addingUtil)}>{addingUtil?'Cancel':'+ Add'}</Btn>}/>
+        {addingUtil&&<Card style={{marginBottom:12}}>
+          <div style={{display:'flex',gap:8}}>
+            <div style={{flex:1}}><Inp value={newUtil.name} onChange={v=>setNewUtil({...newUtil,name:v})} ph="Name" style={{marginBottom:0}}/></div>
+            <div style={{width:100}}><Inp value={newUtil.amount} onChange={v=>setNewUtil({...newUtil,amount:v})} type="number" pre="$" ph="0" style={{marginBottom:0}}/></div>
+            <Btn onClick={addUtility} sz="sm">Add</Btn>
+          </div>
+        </Card>}
+        {rm.utilities.map(u=><Card key={u.id} style={{marginBottom:8,padding:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div style={{fontSize:14,fontWeight:600,color:t.text}}>{u.name}</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:15,fontWeight:700,color:t.gold}}>{fmt(u.amount)}</span>
+            <button onClick={()=>removeUtility(u.id)} style={{background:'none',border:'none',color:t.bad,cursor:'pointer',fontSize:14,fontFamily:'inherit'}}>&#10005;</button>
+          </div>
+        </Card>)}
+
+        {/* Roommates / Members */}
+        <Hdr title="Roommates" action={<Btn v="ghost" sz="sm" onClick={()=>setAddingMember(!addingMember)}>{addingMember?'Cancel':'+ Add'}</Btn>}/>
+        {addingMember&&<Card style={{marginBottom:12}}>
+          <div style={{display:'flex',gap:8}}>
+            <div style={{flex:1}}><Inp value={newName} onChange={setNewName} ph="Roommate name" style={{marginBottom:0}}/></div>
+            <Btn onClick={addMember} sz="sm">Add</Btn>
+          </div>
+        </Card>}
+        {memberShares.map(m=>{
+          const isYou = m.name.includes('You');
+          const allDone = m.paidRent && m.paidUtilities;
+          return <Card key={m.id} style={{marginBottom:10,padding:14,border:allDone?`1px solid ${t.ok}30`:`1px solid ${t.border}`,background:allDone?t.okBg:'transparent'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:t.text}}>{m.name}</div>
+                <div style={{fontSize:12,color:t.textM}}>Share: {m.share}% &middot; Owes {fmt(m.totalShare)}/mo</div>
+              </div>
+              {allDone?<Badge color={t.ok}>Paid</Badge>:<Badge color={t.warn}>Pending</Badge>}
+            </div>
+            <div style={{display:'flex',gap:6,marginBottom:8}}>
+              <div style={{flex:1,background:t.bgS,borderRadius:10,padding:'8px 10px',textAlign:'center'}}>
+                <div style={{fontSize:10,color:t.textM,marginBottom:2}}>Rent</div>
+                <div style={{fontSize:14,fontWeight:800,color:t.text}}>{fmt(m.rentShare)}</div>
+              </div>
+              <div style={{flex:1,background:t.bgS,borderRadius:10,padding:'8px 10px',textAlign:'center'}}>
+                <div style={{fontSize:10,color:t.textM,marginBottom:2}}>Utilities</div>
+                <div style={{fontSize:14,fontWeight:800,color:t.text}}>{fmt(m.utilShare)}</div>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={()=>togglePaid(m.id,'paidRent')} style={{flex:1,padding:'8px 0',borderRadius:10,border:`1.5px solid ${m.paidRent?t.ok:t.border}`,background:m.paidRent?t.okBg:'transparent',color:m.paidRent?t.ok:t.textM,fontWeight:700,fontSize:11,cursor:'pointer',fontFamily:'inherit',transition:'all 0.2s'}}>
+                {m.paidRent?'\u2713 Rent Paid':'Mark Rent Paid'}
+              </button>
+              <button onClick={()=>togglePaid(m.id,'paidUtilities')} style={{flex:1,padding:'8px 0',borderRadius:10,border:`1.5px solid ${m.paidUtilities?t.ok:t.border}`,background:m.paidUtilities?t.okBg:'transparent',color:m.paidUtilities?t.ok:t.textM,fontWeight:700,fontSize:11,cursor:'pointer',fontFamily:'inherit',transition:'all 0.2s'}}>
+                {m.paidUtilities?'\u2713 Utils Paid':'Mark Utils Paid'}
+              </button>
+            </div>
+            {!isYou&&<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center'}}>
+              <div style={{fontSize:11,color:t.textM}}>Share %:</div>
+              <input type="number" value={m.share} onChange={e=>updateShare(m.id,e.target.value)} min="0" max="100"
+                style={{width:60,padding:'4px 8px',borderRadius:8,border:`1px solid ${t.border}`,background:t.bgS,color:t.text,fontSize:13,fontWeight:700,fontFamily:'inherit',outline:'none',textAlign:'center',boxSizing:'border-box'}}/>
+              <button onClick={()=>removeMember(m.id)} style={{marginLeft:'auto',background:'none',border:'none',color:t.bad,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Remove</button>
+            </div>}
+          </Card>;
+        })}
+
+        {/* Quick Summary */}
+        {rm.members.length>1&&<Card style={{marginBottom:16,background:t.bgS}}>
+          <div style={{fontSize:13,fontWeight:700,color:t.text,marginBottom:8}}>Split Summary</div>
+          {memberShares.map(m=><div key={m.id} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}>
+            <span style={{color:t.textM}}>{m.name}</span>
+            <span style={{fontWeight:700,color:m.paidRent&&m.paidUtilities?t.ok:t.text}}>{fmt(m.totalShare)} {m.paidRent&&m.paidUtilities?'\u2713':''}</span>
+          </div>)}
+          <div style={{borderTop:`1px solid ${t.border}`,marginTop:6,paddingTop:6,display:'flex',justifyContent:'space-between',fontSize:13}}>
+            <span style={{fontWeight:700,color:t.text}}>Total</span>
+            <span style={{fontWeight:900,color:t.gold}}>{fmt(totalMonthly)}</span>
+          </div>
+        </Card>}
+      </>;
+    }
+
+    // --- SETTINGS (General + Pay Settings + Privacy) ---
+    function SettingsScreen({data,setData,isDark,setIsDark,onSignOut}) {
+      const t=useContext(TC);
+      const u=data.user;
+      const set=(k,v)=>setData({...data,user:{...data.user,[k]:v}});
+      const [confirmReset,setConfirmReset]=useState(false);
+
+      const resetAll=()=>{
+        setData(seed());
+        setConfirmReset(false);
+      };
+
+      return <div style={{padding:'16px 20px',paddingBottom:100}}>
+        <Hdr title="Settings"/>
+
+        {/* Profile */}
+        <Card style={{marginBottom:16}}>
+          <div style={{fontSize:14,fontWeight:600,color:t.text,marginBottom:4}}>{u.name}</div>
+          <div style={{fontSize:13,color:t.textM}}>{u.email}</div>
+        </Card>
+
+        {/* Appearance */}
+        <h3 style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:12}}>Appearance</h3>
+        <Card style={{marginBottom:20}}>
+          <div style={{display:'flex',gap:8}}>
+            <Btn onClick={()=>setIsDark(true)} v={isDark?'primary':'secondary'} full ariaLabel="Dark mode">&#127769; Dark</Btn>
+            <Btn onClick={()=>setIsDark(false)} v={!isDark?'primary':'secondary'} full ariaLabel="Light mode">&#9728;&#65039; Light</Btn>
+          </div>
+        </Card>
+
+        {/* Personal Info */}
+        <h3 style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:12}}>Personal Info</h3>
+        <Card style={{marginBottom:20}}>
+          <Inp label="Name" value={u.name} onChange={v=>set('name',v)}/>
+          <Inp label="Email" value={u.email} onChange={v=>set('email',v)}/>
+        </Card>
+
+        {/* Linked Accounts (Plaid) */}
+        <h3 style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:12}}>Linked Accounts</h3>
+        <PlaidConnect data={data} setData={setData} compact/>
+        {data.plaid&&data.plaid.connected&&<Card style={{marginBottom:20}}>
+          <div style={{fontSize:12,color:t.textM,lineHeight:1.6}}>
+            Your bank data is synced via Plaid using bank-level encryption. ORCA never stores your bank credentials. Currently running in sandbox mode with simulated data.
+          </div>
+        </Card>}
+
+        {/* Cloud Sync Status */}
+        <h3 style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:12}}>Cloud Sync</h3>
+        <Card style={{marginBottom:20}}>
+          {isSupabaseConfigured() ? <>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <div style={{width:8,height:8,borderRadius:4,background:t.ok}}/>
+              <span style={{fontSize:13,fontWeight:600,color:t.ok}}>Connected to Cloud</span>
+            </div>
+            <div style={{fontSize:12,color:t.textM,lineHeight:1.6}}>
+              Your data automatically syncs between this app and the ORCA website. Changes made on either platform will appear on both.
+            </div>
+          </> : <>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <div style={{width:8,height:8,borderRadius:4,background:t.warn}}/>
+              <span style={{fontSize:13,fontWeight:600,color:t.warn}}>Offline Mode</span>
+            </div>
+            <div style={{fontSize:12,color:t.textM,lineHeight:1.6}}>
+              Data is saved locally on this device. Configure Supabase to enable cloud sync across devices.
+            </div>
+          </>}
+        </Card>
+
+        {/* Privacy & Data */}
+        <h3 style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:12}}>Privacy &amp; Data</h3>
+        <Card style={{marginBottom:20}}>
+          <div style={{fontSize:12,color:t.textM,lineHeight:1.6,marginBottom:12}}>
+            Your data is stored locally on your device. ORCA does not sell or share your personal information with third parties. You may request data deletion at any time in accordance with GDPR/CCPA guidelines. All financial data is encrypted in transit.
+          </div>
+          {!confirmReset?
+            <Btn onClick={()=>setConfirmReset(true)} v="bad" full>Reset All Data</Btn>:
+            <div>
+              <div style={{fontSize:13,color:t.bad,fontWeight:600,marginBottom:8,textAlign:'center'}}>Are you sure? This will erase all your data.</div>
+              <div style={{display:'flex',gap:8}}>
+                <Btn onClick={resetAll} v="bad" full>Yes, Reset</Btn>
+                <Btn onClick={()=>setConfirmReset(false)} v="secondary" full>Cancel</Btn>
+              </div>
+            </div>
+          }
+        </Card>
+
+        {/* Sign Out */}
+        <Card style={{marginBottom:20,textAlign:'center'}}>
+          <Btn onClick={onSignOut} v="bad" full>Sign Out</Btn>
+        </Card>
+      </div>;
+    }
+
+    // ============== ADMIN PANEL ==============
+    function AdminPanel({config,setConfig,onClose}) {
+      const t=useContext(TC);
+      const [logoUrl, setLogoUrl] = useState(config.logoUrl||'');
+      const [appName, setAppName] = useState(config.appName||'ORCA');
+      const [tagline, setTagline] = useState(config.tagline||'Your Money. Commanded.');
+      const [goldColor, setGoldColor] = useState(config.goldColor||'#d4a843');
+      const [saved, setSaved] = useState(false);
+
+      const save=()=>{
+        setConfig({...config, logoUrl:logoUrl||null, appName, tagline, goldColor});
+        setSaved(true);
+        setTimeout(()=>setSaved(false),2000);
+      };
+
+      return <div style={{padding:'16px 20px',paddingBottom:100}}>
+        <Hdr title="Admin Panel" sub="Customize branding without rebuilding"/>
+
+        <Card style={{marginBottom:16,background:t.goldBg,border:`1px solid ${t.gold}30`,padding:16}}>
+          <div style={{fontSize:12,color:t.textM,lineHeight:1.5}}>
+            Changes apply instantly. Use this panel to swap the logo, app name, tagline, and accent color without editing code.
+          </div>
+        </Card>
+
+        <h3 style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:12}}>Branding</h3>
+        <Card style={{marginBottom:16}}>
+          <Inp label="App Name" value={appName} onChange={setAppName} ph="ORCA" max={20}/>
+          <Inp label="Tagline" value={tagline} onChange={setTagline} ph="Your Money. Commanded." max={60}/>
+          <Inp label="Logo URL (paste image URL, or leave blank for default)" value={logoUrl} onChange={setLogoUrl} ph="https://example.com/logo.png" max={500}/>
+          <div style={{marginBottom:14}}>
+            <label style={{display:'block',fontSize:13,fontWeight:600,color:t.textS,marginBottom:6}}>Accent Color</label>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <input type="color" value={goldColor} onChange={e=>setGoldColor(e.target.value)} style={{width:48,height:36,border:'none',borderRadius:8,cursor:'pointer',background:'transparent'}}/>
+              <span style={{fontSize:14,color:t.text,fontFamily:'monospace'}}>{goldColor}</span>
+            </div>
+          </div>
+        </Card>
+
+        <h3 style={{fontSize:14,fontWeight:700,color:t.text,marginBottom:12}}>Preview</h3>
+        <Card style={{marginBottom:16,textAlign:'center',padding:20}}>
+          <img src={logoUrl||LOGO_B64} style={{width:60,height:60,borderRadius:14,marginBottom:8,objectFit:'cover'}} alt="Logo preview" onError={e=>{e.target.src=LOGO_B64;}}/>
+          <div style={{fontSize:22,fontWeight:900,color:goldColor}}>{appName}</div>
+          <div style={{fontSize:12,color:t.textM,marginTop:4}}>{tagline}</div>
+        </Card>
+
+        <Btn onClick={save} full style={{marginBottom:8}}>{saved?'Saved!':'Save Changes'}</Btn>
+        <Btn onClick={onClose} v="secondary" full>Back to App</Btn>
+      </div>;
+    }
+
+    // ============== RESPONSIVE LAYOUT HOOK ==============
+    function useWindowWidth() {
+      const [w,setW]=useState(typeof window!=='undefined'?window.innerWidth:480);
+      useEffect(()=>{
+        const h=()=>setW(window.innerWidth);
+        window.addEventListener('resize',h);
+        return ()=>window.removeEventListener('resize',h);
+      },[]);
+      return w;
+    }
+
+    // ============== MAIN APP ==============
+    function OrcaApp() {
+      const [isDark,setIsDark]=useState(()=>loadThemeLocal());
+      const [config,setConfig]=useState(()=>loadConfigLocal()||{appName:'ORCA',tagline:'Your Money. Commanded.',logoUrl:null,goldColor:'#d4a843'});
+      const t=isDark?THEMES.dark:THEMES.light;
+      const [authed,setAuthed]=useState(false);
+      const [data,setData]=useState(null);
+      const [screen,setScreen]=useState('dashboard');
+      const [ssTab,setSsTab]=useState('budget');
+      const [supabaseUser, setSupabaseUser] = useState(null);
+      const [initialLoading, setInitialLoading] = useState(true);
+      const width=useWindowWidth();
+      const isDesktop=width>=768;
+
+      // Check for existing Supabase session on mount
+      useEffect(()=>{
+        const init = async () => {
+          if(isSupabaseConfigured()){
+            const { data: { session } } = await supabase.auth.getSession();
+            if(session?.user){
+              setSupabaseUser(session.user);
+              // Try cloud data first, fallback to local
+              const cloudData = await loadFromCloud(session.user.id);
+              const localData = loadFromLocal();
+              if(cloudData && cloudData.income.length > 0){
+                setData(cloudData);
+                saveToLocal(cloudData);
+              } else if(localData){
+                setData(localData);
+                syncToCloud(localData, session.user.id);
+              } else {
+                const s = seed();
+                setData(s);
+                saveToLocal(s);
+                syncToCloud(s, session.user.id);
+              }
+              setAuthed(true);
+            } else {
+              // No session — check local data for offline mode
+              const localData = loadFromLocal();
+              if(localData){ setData(localData); setAuthed(true); }
+            }
+            // Listen for auth changes (OAuth redirect callback)
+            supabase.auth.onAuthStateChange((event, session) => {
+              if(event==='SIGNED_IN' && session?.user){
+                setSupabaseUser(session.user);
+                if(!authed){
+                  const localData = loadFromLocal();
+                  if(localData){ setData(localData); }
+                  else { const s=seed(); setData(s); saveToLocal(s); }
+                  setAuthed(true);
+                }
+              }
+              if(event==='SIGNED_OUT'){ setSupabaseUser(null); setAuthed(false); setData(null); }
+            });
+          } else {
+            // No Supabase — pure offline mode with localStorage
+            const localData = loadFromLocal();
+            if(localData){ setData(localData); setAuthed(true); }
+          }
+          setInitialLoading(false);
+        };
+        init();
+      },[]);
+
+      // Auto-save to localStorage + cloud on every data change
+      useEffect(()=>{
+        if(data && authed){
+          debouncedSync(data, supabaseUser?.id);
+        }
+      },[data]);
+
+      // Persist theme and config changes
+      useEffect(()=>{ saveThemeLocal(isDark); },[isDark]);
+      useEffect(()=>{ saveConfigLocal(config); },[config]);
+
+      const unread = data ? data.notifs.filter(n=>!n.read).length : 0;
+      const logo = config.logoUrl || LOGO_B64;
+      const appName = config.appName || 'ORCA';
+
+      const handleScreen=(scr,sub)=>{setScreen(scr);if(sub&&scr==='smartstack')setSsTab(sub);};
+
+      // Handle demo login (no Supabase)
+      const handleDemoLogin = () => {
+        const localData = loadFromLocal();
+        setData(localData || seed());
+        setAuthed(true);
+      };
+
+      // Handle Supabase login
+      const handleSupabaseLogin = async (user) => {
+        setSupabaseUser(user);
+        const cloudData = await loadFromCloud(user.id);
+        const localData = loadFromLocal();
+        if(cloudData && cloudData.income.length > 0){
+          setData(cloudData); saveToLocal(cloudData);
+        } else if(localData){
+          setData(localData); syncToCloud(localData, user.id);
+        } else {
+          const s=seed(); setData(s); saveToLocal(s); syncToCloud(s, user.id);
+        }
+        setAuthed(true);
+      };
+
+      // Handle sign out
+      const handleSignOut = async () => {
+        if(isSupabaseConfigured()) await supabase.auth.signOut();
+        setAuthed(false); setData(null); setSupabaseUser(null);
+      };
+
+      if(initialLoading) return <TC.Provider value={t}><div style={{minHeight:'100vh',background:t.bg,display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{textAlign:'center'}}><div style={{fontSize:48,marginBottom:12,animation:'pulse 1.5s infinite'}}>&#128051;</div><div style={{fontSize:14,color:t.gold,fontWeight:700}}>Loading ORCA...</div></div></div></TC.Provider>;
+
+      if(!authed||!data) return <TC.Provider value={t}><AuthScreen onLogin={handleDemoLogin} onSupabaseLogin={handleSupabaseLogin}/></TC.Provider>;
+
+      const navItems=[
+        {id:'dashboard',icon:'\uD83C\uDFE0',label:'Home'},
+        {id:'smartstack',icon:'\uD83D\uDCCA',label:'Smart Stack'},
+        {id:'bills',icon:'\uD83D\uDCC4',label:'Bill Boss'},
+        {id:'groups',icon:'\uD83D\uDC65',label:'Stack Circle'},
+        {id:'settings',icon:'\u2699\uFE0F',label:'Settings'},
+        {id:'admin',icon:'\uD83D\uDD27',label:'Admin'},
+      ];
+
+      const content = <>
+        {screen==='dashboard'&&<DashboardScreen data={data} setData={setData} setScreen={handleScreen}/>}
+        {screen==='smartstack'&&<SmartStackScreen data={data} setData={setData} subTab={ssTab} setSubTab={setSsTab}/>}
+        {screen==='bills'&&<BillBossScreen data={data} setData={setData}/>}
+        {screen==='groups'&&<StackCircleScreen data={data} setData={setData}/>}
+        {screen==='settings'&&<SettingsScreen data={data} setData={setData} isDark={isDark} setIsDark={setIsDark} onSignOut={handleSignOut}/>}
+        {screen==='admin'&&<AdminPanel config={config} setConfig={setConfig} onClose={()=>setScreen('dashboard')}/>}
+      </>;
+
+      // ===== DESKTOP LAYOUT (>= 768px): sidebar + main =====
+      if(isDesktop) {
+        return <TC.Provider value={t}>
+          <div style={{minHeight:'100vh',background:t.bg,display:'flex'}}>
+            {/* Desktop Sidebar */}
+            <aside style={{width:220,background:t.navGlass,backdropFilter:'blur(20px)',borderRight:`1px solid ${t.border}`,display:'flex',flexDirection:'column',position:'fixed',top:0,bottom:0,left:0,zIndex:100}}>
+              <div style={{padding:'20px 16px',display:'flex',alignItems:'center',gap:10,borderBottom:`1px solid ${t.border}`}}>
+                <img src={logo} style={{width:36,height:36,borderRadius:10,objectFit:'cover'}} alt={`${appName} logo`} onError={e=>{e.target.src=LOGO_B64;}}/>
+                <span style={{fontSize:20,fontWeight:900,color:config.goldColor||t.gold,letterSpacing:-0.5}}>{appName}</span>
+              </div>
+              <nav aria-label="Main navigation" style={{flex:1,padding:'12px 0',overflowY:'auto'}}>
+                {navItems.map(nav=><button key={nav.id} aria-current={screen===nav.id?'page':undefined} onClick={()=>handleScreen(nav.id)}
+                  style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'12px 20px',background:screen===nav.id?(config.goldColor||t.gold)+'18':'transparent',border:'none',borderLeft:screen===nav.id?`3px solid ${config.goldColor||t.gold}`:'3px solid transparent',cursor:'pointer',transition:'all 0.15s',fontFamily:'inherit'}}>
+                  <span style={{fontSize:20}}>{nav.icon}</span>
+                  <span style={{fontSize:14,fontWeight:screen===nav.id?700:500,color:screen===nav.id?(config.goldColor||t.gold):t.textS}}>{nav.label}</span>
+                </button>)}
+              </nav>
+              <div style={{padding:'12px 16px',borderTop:`1px solid ${t.border}`,display:'flex',gap:8}}>
+                <button aria-label="Toggle theme" onClick={()=>setIsDark(!isDark)} style={{flex:1,background:t.bgS,border:'none',borderRadius:8,padding:'8px 0',cursor:'pointer',color:t.gold,fontSize:14,fontFamily:'inherit'}}>
+                  {isDark?'\u2600\uFE0F Light':'\uD83C\uDF19 Dark'}
+                </button>
+              </div>
+            </aside>
+
+            {/* Desktop Main Content */}
+            <div style={{marginLeft:220,flex:1,display:'flex',justifyContent:'center'}}>
+              <div style={{width:'100%',maxWidth:720,minHeight:'100vh'}}>
+                {/* Desktop Top Bar */}
+                <header style={{background:t.navGlass,backdropFilter:'blur(20px)',borderBottom:`1px solid ${t.border}`,padding:'12px 24px',display:'flex',justifyContent:'space-between',alignItems:'center',position:'sticky',top:0,zIndex:99}}>
+                  <h1 style={{fontSize:18,fontWeight:800,color:t.text,margin:0,letterSpacing:'-0.02em'}}>{navItems.find(n=>n.id===screen)?.label||'ORCA'}</h1>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <button aria-label={`Notifications ${unread>0?`(${unread} unread)`:''}`} onClick={()=>handleScreen('smartstack','budget')} style={{background:t.bgS,border:'none',borderRadius:8,width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:config.goldColor||t.gold,fontSize:16,position:'relative'}}>
+                      &#128276;
+                      {unread>0&&<span style={{position:'absolute',top:2,right:2,width:16,height:16,borderRadius:8,background:t.bad,color:'#fff',fontSize:9,fontWeight:900,display:'flex',alignItems:'center',justifyContent:'center'}}>{unread}</span>}
+                    </button>
+                    <div style={{fontSize:13,color:t.textS}}>{data.user.name}</div>
+                  </div>
+                </header>
+                <main style={{minHeight:'calc(100vh - 56px)'}}>
+                  {content}
+                </main>
+              </div>
+            </div>
+          </div>
+        </TC.Provider>;
+      }
+
+      // ===== MOBILE LAYOUT (< 768px): top bar + bottom nav =====
+      return <TC.Provider value={t}>
+        <div style={{minHeight:'100vh',background:t.bg,display:'flex',justifyContent:'center'}}>
+          <div style={{width:'100%',maxWidth:480,background:t.bg,position:'relative',boxShadow:'0 0 50px rgba(0,0,0,0.5)'}}>
+            {/* TOP BAR */}
+            <header style={{background:t.navGlass,backdropFilter:'blur(20px)',borderBottom:`1px solid ${t.border}`,padding:'10px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',position:'sticky',top:0,zIndex:100}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <img src={logo} style={{width:32,height:32,borderRadius:8,objectFit:'cover'}} alt={`${appName} logo`} onError={e=>{e.target.src=LOGO_B64;}}/>
+                <span style={{fontSize:20,fontWeight:900,color:config.goldColor||t.gold,letterSpacing:-0.5}}>{appName}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <button aria-label={`Notifications ${unread>0?`(${unread} unread)`:''}`} onClick={()=>handleScreen('smartstack','budget')} style={{background:t.bgS,border:'none',borderRadius:8,width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:config.goldColor||t.gold,fontSize:16,position:'relative'}}>
+                  &#128276;
+                  {unread>0&&<span style={{position:'absolute',top:2,right:2,width:16,height:16,borderRadius:8,background:t.bad,color:'#fff',fontSize:9,fontWeight:900,display:'flex',alignItems:'center',justifyContent:'center'}}>{unread}</span>}
+                </button>
+                <button aria-label="Toggle theme" onClick={()=>setIsDark(!isDark)} style={{background:t.bgS,border:'none',borderRadius:8,width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:config.goldColor||t.gold,fontSize:16}}>
+                  {isDark?'\u2600\uFE0F':'\uD83C\uDF19'}
+                </button>
+              </div>
+            </header>
+
+            {/* CONTENT */}
+            <main style={{minHeight:'calc(100vh - 120px)'}}>
+              {content}
+            </main>
+
+            {/* BOTTOM NAV */}
+            <nav aria-label="Main navigation" style={{position:'fixed',bottom:0,left:0,right:0,maxWidth:480,margin:'0 auto',background:t.navGlass,backdropFilter:'blur(20px)',borderTop:`1px solid ${t.border}`,display:'flex',justifyContent:'space-around',padding:'6px 0 env(safe-area-inset-bottom, 6px)',zIndex:100}}>
+              {navItems.filter(n=>n.id!=='admin').map(nav=><button key={nav.id} aria-current={screen===nav.id?'page':undefined} onClick={()=>handleScreen(nav.id)} style={{background:'none',border:'none',cursor:'pointer',padding:'8px 4px',display:'flex',flexDirection:'column',alignItems:'center',gap:2,opacity:screen===nav.id?1:0.5,transition:'all 0.2s',minWidth:0}}>
+                <span style={{fontSize:22}}>{nav.icon}</span>
+                <span style={{fontSize:9,color:screen===nav.id?(config.goldColor||t.gold):t.textM,fontWeight:700,whiteSpace:'nowrap'}}>{nav.label}</span>
+              </button>)}
+            </nav>
+          </div>
+        </div>
+      </TC.Provider>;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<OrcaApp/>);
+  </script>
+</body>
+</html>

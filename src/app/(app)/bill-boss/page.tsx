@@ -693,7 +693,7 @@ export default function BillBossPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <div className="relative overflow-hidden rounded-2xl p-4 sm:p-8 w-full max-w-full box-border" style={{ backgroundImage: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', color: '#fff' }}>
+          <div className="relative overflow-hidden rounded-2xl p-4 sm:p-8 w-full max-w-full box-border" style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)`, color: '#fff' }}>
             <div className="text-center mb-6">
               <p className="text-sm font-medium opacity-80 mb-2">Total Monthly Bills</p>
               <p className="text-3xl sm:text-5xl font-bold mb-4 break-words">{fmt(unpaidTotal)}</p>
@@ -1128,42 +1128,32 @@ export default function BillBossPage() {
             {visibleBills
               .filter(b => b.status === 'upcoming')
               .map((bill, idx) => {
-                const iconConfig = CATEGORY_ICONS[bill.cat] || CATEGORY_ICONS['Other']
-                const Icon = iconConfig.Icon
                 return (
                 <motion.div
                   key={bill.id}
                   variants={item}
                   transition={{ delay: idx * 0.03 }}
-                  className="flex items-center gap-4 px-5 py-4"
+                  className="flex items-center gap-3 px-4 py-3"
                   style={{ borderColor: theme.border }}
                 >
-                  {/* Icon Badge */}
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${iconConfig.color}20` }}
-                  >
-                    <Icon className="w-5 h-5" style={{ color: iconConfig.color }} />
-                  </div>
                   {/* Name + Category */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{bill.name}</p>
-                    <p className="text-xs" style={{ color: theme.textM }}>
+                    <p className="text-xs truncate" style={{ color: theme.textM }}>
                       {bill.cat} · Due {fmtD(bill.due)}
-                      {bill.recurrenceEndDate && ` · Ends ${fmtD(bill.recurrenceEndDate)}`}
                     </p>
                   </div>
                   {/* Amount */}
-                  <p className="text-sm font-bold flex-shrink-0" style={{ color: '#EF4444' }}>–{fmt(bill.amount)}</p>
+                  <p className="text-sm font-bold flex-shrink-0 tabular-nums" style={{ color: '#EF4444' }}>–{fmt(bill.amount)}</p>
                   {/* Quick actions */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => handlePayFull(bill.id)}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
                       style={{ backgroundColor: theme.accent }}
                       title="Pay"
                     >
-                      <Check size={14} style={{ color: '#fff' }} />
+                      <Check size={13} style={{ color: '#fff' }} />
                     </button>
                     <button
                       onClick={() => setSplitModalBillId(bill.id)}
@@ -1171,7 +1161,7 @@ export default function BillBossPage() {
                       style={{ backgroundColor: '#F59E0B20' }}
                       title="Split Payment"
                     >
-                      <ChevronRight size={14} style={{ color: '#F59E0B' }} />
+                      <ChevronRight size={13} style={{ color: '#F59E0B' }} />
                     </button>
                     <button
                       onClick={() => handleStartEdit(bill.id)}
@@ -1179,7 +1169,7 @@ export default function BillBossPage() {
                       style={{ backgroundColor: `${theme.gold}20` }}
                       title="Edit"
                     >
-                      <Edit3 size={14} style={{ color: theme.gold }} />
+                      <Edit3 size={13} style={{ color: theme.gold }} />
                     </button>
                     <button
                       onClick={() => handleDeleteBill(bill.id)}
@@ -1234,7 +1224,7 @@ export default function BillBossPage() {
                         onClick={() => persistBills(bills.map(b =>
                           b.id === bill.id ? { ...b, status: 'upcoming' as const } : b
                         ))}
-                        style={{ backgroundColor: theme.textS, color: theme.textM }}
+                        style={{ backgroundColor: theme.border, color: theme.text }}
                         className="px-3 py-1 text-xs rounded hover:opacity-80 transition-colors"
                       >
                         Undo
@@ -1417,7 +1407,7 @@ export default function BillBossPage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setPartialPayId(null)}
-                  style={{ backgroundColor: theme.textS, color: theme.textM }}
+                  style={{ backgroundColor: theme.border, color: theme.text }}
                   className="flex-1 px-5 py-3.5 rounded-xl font-bold hover:opacity-80 transition-colors"
                 >
                   Cancel

@@ -279,6 +279,32 @@ export default function SmartStackPage() {
   const [newPaymentDesc, setNewPaymentDesc] = useState('');
   const [newPaymentRecurrence, setNewPaymentRecurrence] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none');
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [editingPaymentAmount, setEditingPaymentAmount] = useState('');
+  const [editingPaymentDate, setEditingPaymentDate] = useState('');
+  const [editingPaymentDesc, setEditingPaymentDesc] = useState('');
+  const [editingPaymentRecurrence, setEditingPaymentRecurrence] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none');
+
+  const startEditingPayment = (p: PaymentEntry) => {
+    setEditingPaymentId(p.id);
+    setEditingPaymentAmount(String(p.amount));
+    setEditingPaymentDate(p.date);
+    setEditingPaymentDesc(p.description);
+    setEditingPaymentRecurrence(p.recurrence || 'none');
+  };
+
+  const saveEditingPayment = () => {
+    if (!editingPaymentId) return;
+    const amt = parseFloat(editingPaymentAmount);
+    if (!amt || !editingPaymentDate) return;
+    const updated = paymentEntries.map(pe =>
+      pe.id === editingPaymentId
+        ? { ...pe, amount: amt, date: editingPaymentDate, description: editingPaymentDesc, recurrence: editingPaymentRecurrence }
+        : pe
+    );
+    setPaymentEntries(updated);
+    setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+    setEditingPaymentId(null);
+  };
 
   const [customHours, setCustomHours] = useState<Record<string, number>>({});
   const [editingHoursDay, setEditingHoursDay] = useState<string | null>(null);
@@ -910,41 +936,83 @@ export default function SmartStackPage() {
               <div className="text-sm" style={{ color: theme.textM }}>No payments scheduled</div>
             ) : (
               paymentEntries.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-3.5 rounded-xl mb-2 transition-all" style={{ border: `1px solid ${theme.border}`, opacity: p.status === 'received' ? 0.6 : 1 }}>
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.status === 'received' ? '#6B7280' : '#10B981' }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate" style={{ fontWeight: 700, color: theme.text }}>{p.description}</div>
-                    <div className="text-xs" style={{ color: theme.textM }}>{p.date} · {p.recurrence || 'One-time'}</div>
+                <div key={p.id} className="rounded-xl mb-2 overflow-hidden" style={{ border: `1px solid ${theme.border}`, opacity: p.status === 'received' ? 0.6 : 1 }}>
+                  <div className="flex items-center gap-3 p-3.5 transition-all">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.status === 'received' ? '#6B7280' : '#10B981' }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm truncate" style={{ fontWeight: 700, color: theme.text }}>{p.description}</div>
+                      <div className="text-xs" style={{ color: theme.textM }}>{p.date} · {p.recurrence === 'none' || !p.recurrence ? 'One-time' : p.recurrence}</div>
+                    </div>
+                    {p.status === 'received' ? (
+                      <span className="px-2 py-1 rounded-full text-xs flex-shrink-0" style={{ backgroundColor: '#F3F4F6', color: '#6B7280', fontWeight: 600 }}>Received</span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          const updated = paymentEntries.map(pe => pe.id === p.id ? { ...pe, status: 'received' as const } : pe);
+                          setPaymentEntries(updated);
+                          setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                        }}
+                        className="px-2 py-1 rounded-full text-xs flex-shrink-0 hover:opacity-80 transition-all"
+                        style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontWeight: 600 }}
+                      >
+                        Mark Received
+                      </button>
+                    )}
+                    <div className="flex-shrink-0 flex items-center gap-1.5">
+                      <div style={{ fontSize: 13, fontWeight: 800, color: p.status === 'received' ? '#6B7280' : '#10B981' }}>+${p.amount.toFixed(2)}</div>
+                      <button
+                        onClick={() => editingPaymentId === p.id ? setEditingPaymentId(null) : startEditingPayment(p)}
+                        className="p-1 rounded-lg hover:opacity-80 transition-all"
+                        style={{ color: theme.accent }}
+                        title="Edit payment"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const updated = paymentEntries.filter(pe => pe.id !== p.id);
+                          setPaymentEntries(updated);
+                          setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                        }}
+                        className="p-1 rounded-lg hover:opacity-80 transition-all"
+                        style={{ color: '#EF4444' }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  {p.status === 'received' ? (
-                    <span className="px-2 py-1 rounded-full text-xs flex-shrink-0" style={{ backgroundColor: '#F3F4F6', color: '#6B7280', fontWeight: 600 }}>Received</span>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        const updated = paymentEntries.map(pe => pe.id === p.id ? { ...pe, status: 'received' as const } : pe);
-                        setPaymentEntries(updated);
-                        setLocalSynced('orca-payment-entries', JSON.stringify(updated));
-                      }}
-                      className="px-2 py-1 rounded-full text-xs flex-shrink-0 hover:opacity-80 transition-all"
-                      style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontWeight: 600 }}
-                    >
-                      Mark Received
-                    </button>
+                  {editingPaymentId === p.id && (
+                    <div className="p-3.5 pt-0 space-y-2 border-t" style={{ borderColor: theme.border }}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
+                          <input type="number" value={editingPaymentAmount} onChange={e => setEditingPaymentAmount(e.target.value)}
+                            className="w-full pl-7 pr-3 py-2 rounded-xl text-sm outline-none" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }} />
+                        </div>
+                        <input type="date" value={editingPaymentDate} onChange={e => setEditingPaymentDate(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }} />
+                      </div>
+                      <input type="text" value={editingPaymentDesc} onChange={e => setEditingPaymentDesc(e.target.value)}
+                        placeholder="Description" className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }} />
+                      <div className="flex gap-2 flex-wrap">
+                        {(['none', 'weekly', 'biweekly', 'monthly'] as const).map(r => (
+                          <button key={r} onClick={() => setEditingPaymentRecurrence(r)}
+                            className="px-3 py-1 rounded-lg text-xs capitalize transition-all"
+                            style={{ backgroundColor: editingPaymentRecurrence === r ? theme.accent : theme.border, color: editingPaymentRecurrence === r ? '#fff' : theme.textM, fontWeight: editingPaymentRecurrence === r ? 700 : 400 }}>
+                            {r === 'none' ? 'One-time' : r}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={saveEditingPayment}
+                          className="flex-1 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+                          style={{ backgroundColor: theme.accent, color: '#fff' }}>Save</button>
+                        <button onClick={() => setEditingPaymentId(null)}
+                          className="flex-1 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-80"
+                          style={{ backgroundColor: theme.border, color: theme.text }}>Cancel</button>
+                      </div>
+                    </div>
                   )}
-                  <div className="flex-shrink-0 flex items-center gap-1.5">
-                    <div style={{ fontSize: 13, fontWeight: 800, color: p.status === 'received' ? '#6B7280' : '#10B981' }}>+${p.amount.toFixed(2)}</div>
-                    <button
-                      onClick={() => {
-                        const updated = paymentEntries.filter(pe => pe.id !== p.id);
-                        setPaymentEntries(updated);
-                        setLocalSynced('orca-payment-entries', JSON.stringify(updated));
-                      }}
-                      className="p-1 rounded-lg hover:opacity-80 transition-all"
-                      style={{ color: '#EF4444' }}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
                 </div>
               ))
             )}

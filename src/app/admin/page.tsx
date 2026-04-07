@@ -409,6 +409,7 @@ export default function AdminPage() {
   const [activeSubTab, setActiveSubTab] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<'lastActive' | 'name' | 'status'>('lastActive')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [showDropdown, setShowDropdown] = useState<string | null>(null)
 
@@ -728,14 +729,37 @@ export default function AdminPage() {
 
   // Computed values
   const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
+    const filtered = users.filter((user) => {
       const matchesSearch =
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.email.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesStatus = !statusFilter || user.status === statusFilter
       return matchesSearch && matchesStatus
     })
-  }, [users, searchQuery, statusFilter])
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'lastActive') {
+        // Parse relative time strings to sort — more recent first
+        const parseActivity = (s: string) => {
+          if (!s || s === 'Never') return 0
+          if (s === 'Just now') return Date.now()
+          const m = s.match(/(\d+)\s+(minute|hour|day|month|year)/)
+          if (!m) return 0
+          const val = parseInt(m[1])
+          const unit = m[2]
+          const ms = unit.startsWith('minute') ? val * 60000
+            : unit.startsWith('hour') ? val * 3600000
+            : unit.startsWith('day') ? val * 86400000
+            : unit.startsWith('month') ? val * 2592000000
+            : val * 31536000000
+          return Date.now() - ms
+        }
+        return parseActivity(b.lastActive) - parseActivity(a.lastActive)
+      }
+      if (sortBy === 'name') return a.name.localeCompare(b.name)
+      if (sortBy === 'status') return a.status.localeCompare(b.status)
+      return 0
+    })
+  }, [users, searchQuery, statusFilter, sortBy])
 
   const userStats = useMemo(() => {
     const total = users.length
@@ -1289,6 +1313,20 @@ export default function AdminPage() {
                     <option value="premium">Premium</option>
                     <option value="founding">Founding</option>
                     <option value="suspended">Suspended</option>
+                  </select>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'lastActive' | 'name' | 'status')}
+                    style={{
+                      backgroundColor: BG_CARD,
+                      borderColor: BORDER_COLOR,
+                      color: TEXT_PRIMARY,
+                    }}
+                    className="px-4 py-2 rounded-xl border focus:outline-none"
+                  >
+                    <option value="lastActive">Most Recently Active</option>
+                    <option value="name">Name A–Z</option>
+                    <option value="status">Status</option>
                   </select>
                 </div>
 
