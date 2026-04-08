@@ -247,6 +247,7 @@ export default function BillBossPage() {
   const [collapsedSplits, setCollapsedSplits] = useState<Record<string, boolean>>({})
   const [partialPayId, setPartialPayId] = useState<string | null>(null)
   const [partialPayAmount, setPartialPayAmount] = useState('')
+  const [partialPayMode, setPartialPayMode] = useState<'full' | 'half' | 'custom'>('full')
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -558,6 +559,7 @@ export default function BillBossPage() {
     const bill = bills.find(b => b.id === billId)
     if (bill) {
       setPartialPayId(billId)
+      setPartialPayMode('full')
       setPartialPayAmount(String(bill.amount))
     }
   }
@@ -592,6 +594,7 @@ export default function BillBossPage() {
 
     setPartialPayId(null)
     setPartialPayAmount('')
+    setPartialPayMode('full')
   }
 
   // Handler: Delete bill
@@ -1346,76 +1349,160 @@ export default function BillBossPage() {
         )}
       </div>
 
-      {/* 6b. Partial Payment Modal */}
+      {/* 6b. Partial Payment Modal — Redesigned */}
       <AnimatePresence>
-        {partialPayId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
-            onClick={() => setPartialPayId(null)}
-          >
+        {partialPayId && (() => {
+          const bill = bills.find(b => b.id === partialPayId)
+          if (!bill) return null
+          const billTotal = bill.amount
+          const enteredAmount = parseFloat(partialPayAmount) || 0
+          const clampedAmount = Math.min(enteredAmount, billTotal)
+          const fillPct = billTotal > 0 ? Math.min((clampedAmount / billTotal) * 100, 100) : 0
+          const remaining = Math.max(billTotal - clampedAmount, 0)
+          const isFullPayment = clampedAmount >= billTotal
+
+          return (
             <motion.div
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="w-full max-w-full border-t rounded-t-3xl p-5 sm:p-8 space-y-5 overflow-hidden"
+              key="pay-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
+              onClick={() => setPartialPayId(null)}
             >
-              <div className="flex justify-between items-center mb-2">
-                <h2 style={{ color: theme.text }} className="font-bold text-xl">Payment</h2>
-                <button
-                  onClick={() => setPartialPayId(null)}
-                  className="p-2 rounded-lg transition-colors"
-                  style={{ backgroundColor: theme.textS }}
-                >
-                  <X className="w-5 h-5" style={{ color: theme.textM }} />
-                </button>
-              </div>
+              <motion.div
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 100, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                style={{ backgroundColor: theme.card, borderColor: theme.border }}
+                className="w-full max-w-full border-t rounded-t-3xl p-5 sm:p-6 space-y-4 overflow-hidden"
+              >
+                {/* Header */}
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest mb-0.5" style={{ color: theme.textM }}>Make a Payment</p>
+                    <h2 style={{ color: theme.text }} className="font-bold text-xl leading-tight">{bill.name}</h2>
+                    <p className="text-sm mt-0.5" style={{ color: theme.textM }}>
+                      Total due: <span className="font-bold" style={{ color: theme.bad }}>{fmt(billTotal)}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setPartialPayId(null)}
+                    className="p-2 rounded-xl transition-colors mt-1"
+                    style={{ backgroundColor: theme.border }}
+                  >
+                    <X className="w-4 h-4" style={{ color: theme.text }} />
+                  </button>
+                </div>
 
-              <p style={{ color: theme.textM }} className="text-sm">
-                Enter payment amount:
-              </p>
+                {/* Quick-pick chips */}
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: theme.textM }}>Payment Amount</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: 'Full', sublabel: fmt(billTotal), mode: 'full' as const, amount: billTotal },
+                      { label: 'Half', sublabel: fmt(billTotal / 2), mode: 'half' as const, amount: billTotal / 2 },
+                      { label: 'Custom', sublabel: 'Enter amount', mode: 'custom' as const, amount: null },
+                    ].map(opt => (
+                      <motion.button
+                        key={opt.mode}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => {
+                          setPartialPayMode(opt.mode)
+                          if (opt.amount !== null) setPartialPayAmount(String(opt.amount))
+                        }}
+                        className="rounded-xl p-3 text-center transition-all border-2"
+                        style={{
+                          backgroundColor: partialPayMode === opt.mode ? theme.accent : theme.bg,
+                          borderColor: partialPayMode === opt.mode ? theme.accent : theme.border,
+                          color: partialPayMode === opt.mode ? '#fff' : theme.text,
+                        }}
+                      >
+                        <p className="font-bold text-sm">{opt.label}</p>
+                        <p className="text-xs mt-0.5 opacity-80">{opt.sublabel}</p>
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
 
-              <input
-                type="number"
-                value={partialPayAmount}
-                onChange={(e) => setPartialPayAmount(e.target.value)}
-                className="w-full px-5 py-4 rounded-xl border font-bold text-lg"
-                style={{
-                  backgroundColor: theme.bg,
-                  borderColor: theme.border,
-                  color: theme.text
-                }}
-                step="0.01"
-                min="0"
-              />
+                {/* Custom amount input */}
+                <AnimatePresence>
+                  {partialPayMode === 'custom' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-lg" style={{ color: theme.textM }}>$</span>
+                        <input
+                          type="number"
+                          value={partialPayAmount}
+                          onChange={(e) => setPartialPayAmount(e.target.value)}
+                          placeholder="0.00"
+                          autoFocus
+                          className="w-full pl-8 pr-4 py-4 rounded-xl border-2 font-bold text-xl outline-none transition-colors"
+                          style={{
+                            backgroundColor: theme.bg,
+                            borderColor: theme.accent,
+                            color: theme.text,
+                          }}
+                          step="0.01"
+                          min="0"
+                          max={billTotal}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-              <div className="flex gap-3 pt-2">
+                {/* Progress bar */}
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <p className="text-xs font-semibold" style={{ color: theme.textM }}>
+                      Paying <span style={{ color: theme.accent }}>{fmt(clampedAmount)}</span>
+                    </p>
+                    <p className="text-xs font-semibold" style={{ color: remaining > 0 ? theme.warn : theme.ok }}>
+                      {remaining > 0 ? `${fmt(remaining)} remaining` : '✓ Fully paid'}
+                    </p>
+                  </div>
+                  <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+                    <motion.div
+                      className="h-full rounded-full"
+                      animate={{ width: `${fillPct}%` }}
+                      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+                      style={{ backgroundColor: isFullPayment ? theme.ok : theme.accent }}
+                    />
+                  </div>
+                  <p className="text-xs mt-1 text-right tabular-nums" style={{ color: theme.textM }}>
+                    {fillPct.toFixed(0)}% of bill
+                  </p>
+                </div>
+
+                {/* Confirm button */}
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleApplyPartialPayment}
-                  style={{ backgroundColor: theme.accent, color: '#fff' }}
-                  className="flex-1 px-5 py-3.5 rounded-xl font-bold hover:opacity-90 transition-colors"
+                  disabled={clampedAmount <= 0}
+                  style={{
+                    backgroundColor: clampedAmount > 0 ? (isFullPayment ? theme.ok : theme.accent) : theme.border,
+                    color: clampedAmount > 0 ? '#fff' : theme.textM,
+                  }}
+                  className="w-full py-4 rounded-xl font-bold text-base transition-all"
                 >
-                  Apply
+                  {clampedAmount <= 0
+                    ? 'Enter an amount to continue'
+                    : isFullPayment
+                    ? `✓ Confirm Full Payment — ${fmt(clampedAmount)}`
+                    : `Confirm Partial Payment — ${fmt(clampedAmount)}`}
                 </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setPartialPayId(null)}
-                  style={{ backgroundColor: theme.border, color: theme.text }}
-                  className="flex-1 px-5 py-3.5 rounded-xl font-bold hover:opacity-80 transition-colors"
-                >
-                  Cancel
-                </motion.button>
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          )
+        })()}
       </AnimatePresence>
 
       {/* 7. Split Modal */}

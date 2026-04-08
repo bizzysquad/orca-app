@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -279,6 +279,8 @@ export default function SmartStackPage() {
   const [newPaymentDesc, setNewPaymentDesc] = useState('');
   const [newPaymentRecurrence, setNewPaymentRecurrence] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none');
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const paymentSectionRef = useRef<HTMLDivElement>(null);
+  const savingsSectionRef = useRef<HTMLDivElement>(null);
   const [editingPaymentAmount, setEditingPaymentAmount] = useState('');
   const [editingPaymentDate, setEditingPaymentDate] = useState('');
   const [editingPaymentDesc, setEditingPaymentDesc] = useState('');
@@ -481,6 +483,18 @@ export default function SmartStackPage() {
   }, [effectiveNetIncome, effectivePeriod, daysOff, weekendWorkDays, customHours]);
 
   const checkAmount = projectedCheckAmount;
+
+  // Live summary totals — recompute any time payments or savings change
+  const summaryTotals = useMemo(() => {
+    const totalIncoming = paymentEntries
+      .filter(p => p.status !== 'received')
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalSavings = savingsAccounts
+      .reduce((sum, a) => sum + (a.amount || 0), 0);
+    const receivedCount = paymentEntries.filter(p => p.status === 'received').length;
+    const pendingCount = paymentEntries.filter(p => p.status !== 'received').length;
+    return { totalIncoming, totalSavings, receivedCount, pendingCount };
+  }, [paymentEntries, savingsAccounts]);
 
   const renderCheckProjectionWithCalendar = () => {
     const period = effectivePeriod;
@@ -852,7 +866,7 @@ export default function SmartStackPage() {
         </div>
 
         {projectionMode === 'payment' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
+          <motion.div ref={paymentSectionRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${theme.accent}20` }}>
                 <Wallet className="w-5 h-5" style={{ color: theme.accent }} />
@@ -1030,7 +1044,7 @@ export default function SmartStackPage() {
     const totalSavings = savingsAccounts.reduce((sum, acc) => sum + acc.amount, 0);
 
     return (
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+      <motion.div ref={savingsSectionRef} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
         <div className="rounded-2xl p-5" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
           <div className="flex items-center gap-2 mb-2">
             <Target className="w-4 h-4" style={{ color: theme.accent }} />
@@ -1235,7 +1249,7 @@ export default function SmartStackPage() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-6"
         >
           <h1 style={{ color: theme.text }} className="text-4xl font-bold mb-2">
             Smart Stack
@@ -1243,6 +1257,79 @@ export default function SmartStackPage() {
           <p style={{ color: theme.textM }} className="text-lg">
             Complete financial management at a glance
           </p>
+        </motion.div>
+
+        {/* ── Financial Summary Banner ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="rounded-2xl mb-6 overflow-hidden"
+          style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)` }}
+        >
+          <div className="p-4 sm:p-5">
+            {/* Metrics row */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Wallet className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
+                  <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                    Incoming Payments
+                  </p>
+                </div>
+                <p className="text-xl font-black text-white tabular-nums">
+                  ${summaryTotals.totalIncoming.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  {summaryTotals.pendingCount} pending · {summaryTotals.receivedCount} received
+                </p>
+              </div>
+              <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Target className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
+                  <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                    Total Savings
+                  </p>
+                </div>
+                <p className="text-xl font-black text-white tabular-nums">
+                  ${summaryTotals.totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  {savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+            </div>
+            {/* CTA row */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setActiveTab('income');
+                  setProjectionMode('payment');
+                  setTimeout(() => {
+                    paymentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 120);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
+                style={{ backgroundColor: 'rgba(255,255,255,0.22)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)' }}
+              >
+                <Plus className="w-4 h-4" />
+                Add Payment
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('savings');
+                  setTimeout(() => {
+                    savingsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 120);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
+                style={{ backgroundColor: '#fff', color: theme.accent }}
+              >
+                <TrendingUp className="w-4 h-4" />
+                Add to Savings
+              </button>
+            </div>
+          </div>
         </motion.div>
 
         <div
