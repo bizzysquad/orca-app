@@ -469,9 +469,9 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.checkingBalance, syncReady, localWriteTick])
 
-  // Safe to Spend — checking balance + upcoming income minus ALL upcoming unpaid bills
+  // Safe to Spend — current month only: checking balance + this month's income minus this month's unpaid bills
   const safeToSpend = useMemo(() => {
-    // Get all upcoming income
+    // Get all incoming payments
     let payments: any[] = []
     if (data.incomingPayments && data.incomingPayments.length > 0) {
       payments = data.incomingPayments
@@ -485,15 +485,26 @@ export default function DashboardPage() {
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    const currentMonth = today.getMonth()
+    const currentYear = today.getFullYear()
+    const monthStart = new Date(currentYear, currentMonth, 1)
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
 
-    // Total income from all upcoming expected payments
+    // Total income from payments in the current month only
     const totalIncome = payments
-      .filter((p: any) => new Date(p.date + 'T23:59:59') >= today && p.status !== 'received')
+      .filter((p: any) => {
+        const pDate = new Date(p.date + 'T23:59:59')
+        return pDate >= monthStart && pDate <= monthEnd && p.status !== 'received'
+      })
       .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
 
-    // Total of ALL upcoming unpaid bills
+    // Total unpaid bills due in the current month only
     const totalBills = bills
-      .filter(b => b.status !== 'paid')
+      .filter(b => {
+        if (b.status === 'paid') return false
+        const dueDate = new Date(b.due + 'T00:00:00')
+        return dueDate >= monthStart && dueDate <= monthEnd
+      })
       .reduce((sum, b) => sum + b.amount, 0)
 
     // Savings allocation
@@ -503,17 +514,17 @@ export default function DashboardPage() {
 
     const buffer = user.safeToSpendBuffer || 0
 
-    // Available funds = checking balance + upcoming income
+    // Available funds = checking balance + this month's income
     const totalAvailable = checkingBalance + totalIncome
     const totalObligations = totalBills + savingsPerCycle + buffer
     const amount = Math.max(0, totalAvailable - totalObligations)
 
-    // Days until next 30-day window for daily/weekly rate
-    const daysInWindow = 30
+    // Days remaining in the current month for daily/weekly rate
+    const daysInMonth = monthEnd.getDate()
     return {
       amount,
-      weekly: (amount / daysInWindow) * 7,
-      daily: amount / daysInWindow,
+      weekly: (amount / daysInMonth) * 7,
+      daily: amount / daysInMonth,
       totalIncome,
       totalBills,
       totalAvailable,
@@ -581,7 +592,7 @@ export default function DashboardPage() {
     return sorted[0] || null
   }, [nextBill, bills])
 
-  // Next incoming payment from payment entries — reads context first, then localStorage fallback
+  // Next incoming payment from payment entries — current month only
   const nextIncomingPayment = useMemo(() => {
     let entries: any[] = []
     // Primary: context data (written by Smart Stack on add/edit)
@@ -596,17 +607,22 @@ export default function DashboardPage() {
       } catch {}
     }
     if (entries.length === 0) return null
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const currentMonth = today.getMonth()
+    const currentYear = today.getFullYear()
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
     const upcoming = entries
       .filter((p: any) => {
         const pDate = new Date(p.date + 'T23:59:59')
-        return pDate >= new Date() && p.status !== 'received'
+        return pDate >= today && pDate <= monthEnd && p.status !== 'received'
       })
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
     return upcoming[0] || null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.incomingPayments, syncReady, localWriteTick])
 
-  // Total income from all upcoming payment entries (for Safe to Spend clarity)
+  // Total income from payment entries in the current month only
   const totalUpcomingIncome = useMemo(() => {
     let entries: any[] = []
     if (data.incomingPayments && data.incomingPayments.length > 0) {
@@ -618,8 +634,16 @@ export default function DashboardPage() {
         if (stored) entries = JSON.parse(stored)
       } catch {}
     }
+    const today = new Date()
+    const currentMonth = today.getMonth()
+    const currentYear = today.getFullYear()
+    const monthStart = new Date(currentYear, currentMonth, 1)
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
     return entries
-      .filter((p: any) => new Date(p.date + 'T23:59:59') >= new Date() && p.status !== 'received')
+      .filter((p: any) => {
+        const pDate = new Date(p.date + 'T23:59:59')
+        return pDate >= monthStart && pDate <= monthEnd && p.status !== 'received'
+      })
       .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.incomingPayments, syncReady, localWriteTick])
@@ -1035,7 +1059,7 @@ export default function DashboardPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
                       <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
-                      Next Payment
+                      Incoming Payments
                     </div>
                     <ArrowUpRight className="w-4 h-4" style={{ color: '#10B981' }} />
                   </div>
@@ -1045,8 +1069,14 @@ export default function DashboardPage() {
                   <div className="text-sm mt-1" style={{ color: theme.textS }}>
                     {nextIncomingPayment
                       ? `${nextIncomingPayment.description || 'Income'} · ${new Date(nextIncomingPayment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${daysTo(nextIncomingPayment.date)}d`
-                      : 'No upcoming payments'}
+                      : 'No upcoming payments this month'}
                   </div>
+                  {totalUpcomingIncome > 0 && (
+                    <div className="mt-2 pt-2 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${theme.border}`, color: theme.textS }}>
+                      <span>Monthly total</span>
+                      <span style={{ color: '#10B981', fontWeight: 700 }}>{m(totalUpcomingIncome)}</span>
+                    </div>
+                  )}
                 </div>
               </Link>
 
@@ -1213,39 +1243,24 @@ export default function DashboardPage() {
 
         {/* Safe to Spend Hero Card */}
         <motion.div variants={fadeUp} className="rounded-2xl p-5 sm:p-6" style={{ background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}DD 100%)`, color: '#fff' }}>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm opacity-70">Safe to Spend</span>
-                <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
-              </div>
-              <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>{m(safeToSpend.amount)}</div>
-              <div className="text-sm opacity-60 mt-1">
-                {safeToSpendView === 'daily' ? m(safeToSpend.daily) : safeToSpendView === 'weekly' ? m(safeToSpend.weekly) : m(safeToSpend.amount)} / {safeToSpendView} available
-              </div>
-              <div className="flex gap-2 mt-4">
-                {['daily', 'weekly', 'monthly'].map(v => (
-                  <button key={v} onClick={() => setSafeToSpendView(v as 'daily' | 'weekly' | 'monthly')} className="px-3 py-1 rounded-lg text-xs transition-all capitalize"
-                    style={{ background: v === safeToSpendView ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', fontWeight: v === safeToSpendView ? 700 : 400 }}>
-                    {v}
-                  </button>
-                ))}
-              </div>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm opacity-70">Safe to Spend</span>
+              <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
             </div>
-            <div className="rounded-xl p-4 space-y-2.5" style={{ background: 'rgba(255,255,255,0.12)', minWidth: 200 }}>
-              <div className="text-xs opacity-60 uppercase tracking-widest mb-3" style={{ fontWeight: 700 }}>How it's calculated</div>
-              <div className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#34D399' }} /><span className="opacity-80">Incoming</span></div>
-                <span style={{ color: '#34D399', fontWeight: 700 }}>+{m(safeToSpend.totalIncome)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#F87171' }} /><span className="opacity-80">Bills Reserved</span></div>
-                <span style={{ color: '#F87171', fontWeight: 700 }}>−{m(safeToSpend.totalBills)}</span>
-              </div>
-              <div className="pt-2 flex justify-between items-center text-sm" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-                <span style={{ fontWeight: 700 }}>Safe to Spend</span>
-                <span style={{ fontWeight: 800 }}>{m(safeToSpend.amount)}</span>
-              </div>
+            <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>
+              {safeToSpendView === 'daily' ? m(safeToSpend.daily) : safeToSpendView === 'weekly' ? m(safeToSpend.weekly) : m(safeToSpend.amount)}
+            </div>
+            <div className="text-sm opacity-60">
+              {safeToSpendView} · this month
+            </div>
+            <div className="flex gap-1.5 mt-1">
+              {['daily', 'weekly', 'monthly'].map(v => (
+                <button key={v} onClick={() => setSafeToSpendView(v as 'daily' | 'weekly' | 'monthly')} className="px-2 py-0.5 rounded-md text-xs transition-all capitalize"
+                  style={{ background: v === safeToSpendView ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', fontWeight: v === safeToSpendView ? 700 : 400 }}>
+                  {v}
+                </button>
+              ))}
             </div>
           </div>
         </motion.div>

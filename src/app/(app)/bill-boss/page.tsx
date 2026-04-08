@@ -821,12 +821,15 @@ export default function BillBossPage() {
                   onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.accent}40`}
                   onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
                 />
-                <CalendarPicker
-                  value={formData.due}
-                  onChange={(date) => setFormData({ ...formData, due: date })}
-                  placeholder="Due Date"
-                  theme={theme}
-                />
+                <div>
+                  <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>Date</label>
+                  <CalendarPicker
+                    value={formData.due}
+                    onChange={(date) => setFormData({ ...formData, due: date })}
+                    placeholder="Due Date"
+                    theme={theme}
+                  />
+                </div>
               </div>
 
               <select
@@ -916,13 +919,16 @@ export default function BillBossPage() {
               </div>
 
               {formData.recurrenceEndType === 'after-date' && (
-                <CalendarPicker
-                  value={formData.recurrenceEndDate || ''}
-                  onChange={(date) => setFormData({ ...formData, recurrenceEndDate: date })}
-                  placeholder="End Date"
-                  theme={theme}
-                  showQuickSelect={false}
-                />
+                <div>
+                  <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>Date</label>
+                  <CalendarPicker
+                    value={formData.recurrenceEndDate || ''}
+                    onChange={(date) => setFormData({ ...formData, recurrenceEndDate: date })}
+                    placeholder="End Date"
+                    theme={theme}
+                    showQuickSelect={false}
+                  />
+                </div>
               )}
 
               {formData.recurrenceEndType === 'after-count' && (
@@ -982,14 +988,8 @@ export default function BillBossPage() {
                   transition={{ delay: idx * 0.05 }}
                 >
                   <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-6 space-y-4">
-                    {/* Bill Header with Icon */}
+                    {/* Bill Header */}
                     <div className="flex items-start gap-3 sm:gap-4 flex-wrap sm:flex-nowrap">
-                      <div
-                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{ backgroundColor: `${iconConfig.color}20` }}
-                      >
-                        <Icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: iconConfig.color }} />
-                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
                           <h3 style={{ color: theme.text }} className="font-bold text-base sm:text-lg truncate">{bill.name}</h3>
