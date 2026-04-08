@@ -490,18 +490,17 @@ export default function DashboardPage() {
     const monthStart = new Date(currentYear, currentMonth, 1)
     const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
 
-    // Total income from payments in the current month only
+    // Total income from ALL payments in the current month (received + expected)
     const totalIncome = payments
       .filter((p: any) => {
         const pDate = new Date(p.date + 'T23:59:59')
-        return pDate >= monthStart && pDate <= monthEnd && p.status !== 'received'
+        return pDate >= monthStart && pDate <= monthEnd
       })
       .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
 
-    // Total unpaid bills due in the current month only
+    // Total bills due in the current month (all, regardless of paid status — matches Bill Boss total)
     const totalBills = bills
       .filter(b => {
-        if (b.status === 'paid') return false
         const dueDate = new Date(b.due + 'T00:00:00')
         return dueDate >= monthStart && dueDate <= monthEnd
       })
@@ -642,11 +641,27 @@ export default function DashboardPage() {
     return entries
       .filter((p: any) => {
         const pDate = new Date(p.date + 'T23:59:59')
-        return pDate >= monthStart && pDate <= monthEnd && p.status !== 'received'
+        return pDate >= monthStart && pDate <= monthEnd
       })
       .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.incomingPayments, syncReady, localWriteTick])
+
+  // Total monthly bills for the current month (all bills, regardless of paid status — mirrors Bill Boss)
+  const totalMonthlyBills = useMemo(() => {
+    const today = new Date()
+    const currentMonth = today.getMonth()
+    const currentYear = today.getFullYear()
+    const monthStart = new Date(currentYear, currentMonth, 1)
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
+    return bills
+      .filter(b => {
+        const dueDate = new Date(b.due + 'T00:00:00')
+        return dueDate >= monthStart && dueDate <= monthEnd
+      })
+      .reduce((sum, b) => sum + b.amount, 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bills, syncReady])
 
   // Savings goal total for progress tracking
   const savingsGoalTotal = useMemo(() => {
@@ -1098,6 +1113,12 @@ export default function DashboardPage() {
                       ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${m(billsDueThisWeek)} this week`
                       : 'All paid up'}
                   </div>
+                  {totalMonthlyBills > 0 && (
+                    <div className="mt-2 pt-2 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${theme.border}`, color: theme.textS }}>
+                      <span>Monthly total</span>
+                      <span style={{ color: '#EF4444', fontWeight: 700 }}>{m(totalMonthlyBills)}</span>
+                    </div>
+                  )}
                 </div>
               </Link>
 

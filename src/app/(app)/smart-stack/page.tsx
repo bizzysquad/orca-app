@@ -945,39 +945,97 @@ export default function SmartStackPage() {
               </button>
             </div>
 
-            <div className="text-xs mb-3" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scheduled Payments</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scheduled Payments</div>
+              {paymentEntries.length > 0 && (
+                <div className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.accent}20`, color: theme.accent }}>
+                  {paymentEntries.length} total
+                </div>
+              )}
+            </div>
             {paymentEntries.length === 0 ? (
-              <div className="text-sm" style={{ color: theme.textM }}>No payments scheduled</div>
+              <div className="text-sm py-4 text-center" style={{ color: theme.textM }}>No payments scheduled yet</div>
             ) : (
-              paymentEntries.map(p => (
-                <div key={p.id} className="rounded-xl mb-2 overflow-hidden" style={{ border: `1px solid ${theme.border}`, opacity: p.status === 'received' ? 0.6 : 1 }}>
-                  <div className="flex items-center gap-3 p-3.5 transition-all">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.status === 'received' ? '#6B7280' : '#10B981' }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm truncate" style={{ fontWeight: 700, color: theme.text }}>{p.description}</div>
-                      <div className="text-xs" style={{ color: theme.textM }}>{p.date} · {p.recurrence === 'none' || !p.recurrence ? 'One-time' : p.recurrence}</div>
+              paymentEntries.map(p => {
+                const pDate = p.date ? new Date(p.date + 'T00:00:00') : null;
+                const today = new Date(); today.setHours(0, 0, 0, 0);
+                const isOverdue = pDate && p.status !== 'received' && pDate < today;
+                const daysAway = pDate ? Math.ceil((pDate.getTime() - today.getTime()) / 86400000) : null;
+                const recurrenceLabel = !p.recurrence || p.recurrence === 'none' ? 'One-time' : p.recurrence.charAt(0).toUpperCase() + p.recurrence.slice(1);
+                return (
+                <div key={p.id} className="rounded-xl mb-3 overflow-hidden" style={{ border: `1px solid ${p.status === 'received' ? theme.border : isOverdue ? '#FCA5A5' : theme.accent + '60'}`, opacity: p.status === 'received' ? 0.65 : 1 }}>
+                  {/* Main payment row */}
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      {/* Left: description + badges */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.status === 'received' ? '#6B7280' : isOverdue ? '#EF4444' : '#10B981' }} />
+                          <span className="text-sm font-bold truncate" style={{ color: theme.text }}>{p.description || 'Payment'}</span>
+                          {p.status === 'received' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>✓ Received</span>
+                          )}
+                          {isOverdue && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: '#FEE2E2', color: '#DC2626' }}>Overdue</span>
+                          )}
+                        </div>
+                        {/* Date + recurrence row */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-1" style={{ color: theme.textM }}>
+                            <Calendar className="w-3 h-3" />
+                            <span className="text-xs font-semibold">
+                              {pDate ? pDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                            </span>
+                          </div>
+                          {daysAway !== null && p.status !== 'received' && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: isOverdue ? '#FEE2E2' : daysAway <= 3 ? '#FEF3C7' : `${theme.accent}15`, color: isOverdue ? '#DC2626' : daysAway <= 3 ? '#D97706' : theme.accent }}>
+                              {isOverdue ? `${Math.abs(daysAway)}d overdue` : daysAway === 0 ? 'Today' : `In ${daysAway}d`}
+                            </span>
+                          )}
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: theme.bg, color: theme.textM, border: `1px solid ${theme.border}` }}>
+                            {recurrenceLabel}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Right: amount */}
+                      <div className="flex-shrink-0 text-right">
+                        <div className="text-lg font-black" style={{ color: p.status === 'received' ? '#6B7280' : '#10B981' }}>
+                          +${p.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
                     </div>
-                    {p.status === 'received' ? (
-                      <span className="px-2 py-1 rounded-full text-xs flex-shrink-0" style={{ backgroundColor: '#F3F4F6', color: '#6B7280', fontWeight: 600 }}>Received</span>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          const updated = paymentEntries.map(pe => pe.id === p.id ? { ...pe, status: 'received' as const } : pe);
-                          setPaymentEntries(updated);
-                          setLocalSynced('orca-payment-entries', JSON.stringify(updated));
-                        }}
-                        className="px-2 py-1 rounded-full text-xs flex-shrink-0 hover:opacity-80 transition-all"
-                        style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontWeight: 600 }}
-                      >
-                        Mark Received
-                      </button>
-                    )}
-                    <div className="flex-shrink-0 flex items-center gap-1.5">
-                      <div style={{ fontSize: 13, fontWeight: 800, color: p.status === 'received' ? '#6B7280' : '#10B981' }}>+${p.amount.toFixed(2)}</div>
+                    {/* Action buttons row */}
+                    <div className="flex items-center gap-2 pt-2" style={{ borderTop: `1px solid ${theme.border}40` }}>
+                      {p.status !== 'received' ? (
+                        <button
+                          onClick={() => {
+                            const updated = paymentEntries.map(pe => pe.id === p.id ? { ...pe, status: 'received' as const } : pe);
+                            setPaymentEntries(updated);
+                            setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:opacity-90"
+                          style={{ backgroundColor: '#DCFCE7', color: '#16A34A' }}
+                        >
+                          <Check className="w-3 h-3" /> Mark Received
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const updated = paymentEntries.map(pe => pe.id === p.id ? { ...pe, status: 'expected' as const } : pe);
+                            setPaymentEntries(updated);
+                            setLocalSynced('orca-payment-entries', JSON.stringify(updated));
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:opacity-80"
+                          style={{ backgroundColor: theme.bg, color: theme.textM, border: `1px solid ${theme.border}` }}
+                        >
+                          Undo
+                        </button>
+                      )}
+                      <div className="flex-1" />
                       <button
                         onClick={() => editingPaymentId === p.id ? setEditingPaymentId(null) : startEditingPayment(p)}
-                        className="p-1 rounded-lg hover:opacity-80 transition-all"
-                        style={{ color: theme.accent }}
+                        className="p-1.5 rounded-lg hover:opacity-80 transition-all"
+                        style={{ color: theme.accent, backgroundColor: `${theme.accent}15` }}
                         title="Edit payment"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
@@ -988,8 +1046,8 @@ export default function SmartStackPage() {
                           setPaymentEntries(updated);
                           setLocalSynced('orca-payment-entries', JSON.stringify(updated));
                         }}
-                        className="p-1 rounded-lg hover:opacity-80 transition-all"
-                        style={{ color: '#EF4444' }}
+                        className="p-1.5 rounded-lg hover:opacity-80 transition-all"
+                        style={{ color: '#EF4444', backgroundColor: '#FEE2E2' }}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1028,7 +1086,8 @@ export default function SmartStackPage() {
                     </div>
                   )}
                 </div>
-              ))
+                );
+              })
             )}
           </motion.div>
         )}
@@ -1046,9 +1105,33 @@ export default function SmartStackPage() {
     return (
       <motion.div ref={savingsSectionRef} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
         <div className="rounded-2xl p-5" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
-          <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4" style={{ color: theme.accent }} />
-            <span className="text-sm" style={{ fontWeight: 700, color: theme.accent }}>Total Savings</span>
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4" style={{ color: theme.accent }} />
+              <span className="text-sm" style={{ fontWeight: 700, color: theme.accent }}>Total Savings</span>
+            </div>
+            <button
+              onClick={() => {
+                const name = window.prompt('Account name (e.g., Emergency Fund):');
+                if (name && name.trim()) {
+                  const newAcct: SavingsAccount = {
+                    id: Date.now().toString(),
+                    name: name.trim(),
+                    amount: 0,
+                    goal: 0,
+                    saved: false,
+                  };
+                  const updated = [...savingsAccounts, newAcct];
+                  setSavingsAccounts(updated);
+                  setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:opacity-90 active:scale-95"
+              style={{ backgroundColor: theme.accent, color: '#fff' }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Savings
+            </button>
           </div>
           <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: theme.accent }}>${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           <div className="text-xs mt-1" style={{ color: theme.textM }}>{savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}</div>
@@ -1200,37 +1283,6 @@ export default function SmartStackPage() {
           </motion.div>
         )})}
 
-        <div className="rounded-2xl p-5" style={{ backgroundColor: theme.card, border: `2px dashed ${theme.border}` }}>
-          <h3 className="text-sm mb-3" style={{ fontWeight: 700, color: theme.textM }}>Add Savings Account</h3>
-          <div className="flex gap-2">
-            <input type="text" placeholder="Account name (e.g., Emergency Fund)" value={newAccountName} onChange={e => setNewAccountName(e.target.value)}
-              className="flex-1 px-4 py-3 rounded-xl text-sm outline-none" style={{
-                backgroundColor: theme.bg,
-                borderColor: theme.border,
-                color: theme.text,
-                border: `1px solid ${theme.border}`,
-              }} />
-            <button onClick={() => {
-              if (newAccountName.trim()) {
-                const newAcct: SavingsAccount = {
-                  id: Date.now().toString(),
-                  name: newAccountName.trim(),
-                  amount: 0,
-                  goal: 0,
-                  saved: false,
-                };
-                const updated = [...savingsAccounts, newAcct];
-                setSavingsAccounts(updated);
-                setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                setNewAccountName('');
-              }
-            }}
-              className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all hover:opacity-90 font-bold"
-              style={{ backgroundColor: theme.accent, color: '#fff' }}>
-              <Plus className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
       </motion.div>
     );
   };
@@ -1299,6 +1351,44 @@ export default function SmartStackPage() {
                 </p>
               </div>
             </div>
+
+            {/* Incoming Payments by Month */}
+            {(() => {
+              const byMonth: Record<string, { total: number; count: number; key: string }> = {};
+              paymentEntries.forEach(p => {
+                if (!p.date) return;
+                const d = new Date(p.date + 'T00:00:00');
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                if (!byMonth[key]) byMonth[key] = { total: 0, count: 0, key: label };
+                byMonth[key].total += p.amount || 0;
+                byMonth[key].count += 1;
+              });
+              const months = Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b));
+              if (months.length === 0) return null;
+              return (
+                <div className="mb-4 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                  <div className="flex items-center gap-1.5 px-3 pt-3 pb-2">
+                    <Calendar className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
+                    <p className="text-xs font-bold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>Payments by Month</p>
+                  </div>
+                  <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+                    {months.map(([key, val]) => (
+                      <div key={key} className="flex items-center justify-between px-3 py-2">
+                        <div>
+                          <p className="text-xs font-semibold text-white">{val.key}</p>
+                          <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{val.count} payment{val.count !== 1 ? 's' : ''}</p>
+                        </div>
+                        <p className="text-sm font-black text-white tabular-nums">
+                          +${val.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* CTA row */}
             <div className="flex gap-2">
               <button
