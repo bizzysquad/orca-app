@@ -404,6 +404,7 @@ export default function DashboardPage() {
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [calendarView, setCalendarView] = useState<'monthly' | 'weekly'>('monthly')
+  const [payMonthOffset, setPayMonthOffset] = useState(0) // 0 = current month for payments view
   const [weekOffset, setWeekOffset] = useState(0)
   const [spendView, setSpendView] = useState<'weekly' | 'daily'>('weekly')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
@@ -654,12 +655,21 @@ export default function DashboardPage() {
     const currentYear = today.getFullYear()
     const monthStart = new Date(currentYear, currentMonth, 1)
     const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
-    return bills
-      .filter(b => {
+    let total = 0
+    bills.forEach(b => {
+      // If split: sum only the alloc amounts falling in this month
+      if (b.alloc && b.alloc.length > 0) {
+        b.alloc.forEach((a: any) => {
+          if (!a.date) return
+          const ad = new Date(a.date + 'T00:00:00')
+          if (ad >= monthStart && ad <= monthEnd) total += a.amount ?? b.amount
+        })
+      } else {
         const dueDate = new Date(b.due + 'T00:00:00')
-        return dueDate >= monthStart && dueDate <= monthEnd
-      })
-      .reduce((sum, b) => sum + b.amount, 0)
+        if (dueDate >= monthStart && dueDate <= monthEnd) total += b.amount
+      }
+    })
+    return total
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bills, syncReady])
 
@@ -712,6 +722,24 @@ export default function DashboardPage() {
     const events: CalendarEvent[] = []
 
     bills.forEach(bill => {
+      // If the bill has split alloc entries, show only those on the calendar
+      // (prevents double-counting: original due date + alloc payment dates)
+      if (bill.alloc && bill.alloc.length > 0) {
+        bill.alloc.forEach((a: any) => {
+          if (!a.date) return
+          const ad = new Date(a.date + 'T00:00:00')
+          if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) {
+            events.push({
+              date: ad.getDate(),
+              type: 'bill',
+              label: `${bill.name}${bill.alloc.length > 1 ? ' (split)' : ''}`,
+              amount: a.amount ?? bill.amount,
+            })
+          }
+        })
+        return // skip standard recurring/one-time logic for split bills
+      }
+
       if (bill.recurrence && bill.recurrence !== 'one-time') {
         // Expand recurring bills into the viewed month
         const recurDates = getRecurringBillDates(bill, 24)
@@ -834,7 +862,15 @@ export default function DashboardPage() {
       }
     }
 
-    return events
+    // Deduplicate: prevent the same bill/event from appearing twice on the same day
+    // (e.g. rent showing up both from recurring expansion and a one-time entry)
+    const seen = new Set<string>()
+    return events.filter(ev => {
+      const key = `${ev.date}-${ev.type}-${ev.label}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calMonth, calYear, bills, group, syncReady, localWriteTick])
 
@@ -1069,31 +1105,86 @@ export default function DashboardPage() {
             </div>
             <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Next Payment Card */}
-              <Link href="/smart-stack">
-                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                      <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
-                      Incoming Payments
+              {/* Incoming Payments Card — month-navigable */}
+              {(() => {
+                const now = new Date()
+                const viewDate = new Date(now.getFullYear(), now.getMonth() + payMonthOffset, 1)
+                const viewMonth = viewDate.getMonth()
+                const viewYear = viewDate.getFullYear()
+                const viewLabel = viewDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                const monthStart = new Date(viewYear, viewMonth, 1)
+                const monthEnd = new Date(viewYear, viewMonth + 1, 0, 23, 59, 59)
+
+                let allEntries: any[] = []
+                if (data.incomingPayments && data.incomingPayments.length > 0) {
+                  allEntries = data.incomingPayments
+                } else if (typeof window !== 'undefined') {
+                  try {
+                    const stored = localStorage.getItem('orca-payment-entries')
+                    if (stored) allEntries = JSON.parse(stored)
+                  } catch {}
+                }
+
+                const monthEntries = allEntries.filter((p: any) => {
+                  const pDate = new Date(p.date + 'T23:59:59')
+                  return pDate >= monthStart && pDate <= monthEnd
+                })
+                const monthTotal = monthEntries.reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
+                const monthCount = monthEntries.length
+
+                // Next upcoming payment in the viewed month
+                const todayStr = now.toISOString().slice(0, 10)
+                const upcoming = monthEntries
+                  .filter((p: any) => p.date >= todayStr)
+                  .sort((a: any, b: any) => a.date.localeCompare(b.date))[0]
+
+                return (
+                  <div className="rounded-2xl p-5 transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                    {/* Header row: label + month nav */}
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
+                        <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
+                        Incoming Payments
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={e => { e.stopPropagation(); setPayMonthOffset(o => o - 1) }}
+                          className="p-1 rounded-lg transition-colors"
+                          style={{ color: theme.textM }}
+                        >
+                          <ChevronLeft size={14} />
+                        </button>
+                        <span className="text-[10px] font-semibold" style={{ color: theme.textS, minWidth: 56, textAlign: 'center' }}>{viewLabel}</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); setPayMonthOffset(o => o + 1) }}
+                          className="p-1 rounded-lg transition-colors"
+                          style={{ color: theme.textM }}
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
                     </div>
-                    <ArrowUpRight className="w-4 h-4" style={{ color: '#10B981' }} />
-                  </div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
-                    {nextIncomingPayment ? `+${m(nextIncomingPayment.amount)}` : '$0.00'}
-                  </div>
-                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                    {nextIncomingPayment
-                      ? `${nextIncomingPayment.description || 'Income'} · ${new Date(nextIncomingPayment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${daysTo(nextIncomingPayment.date)}d`
-                      : 'No upcoming payments this month'}
-                  </div>
-                  {totalUpcomingIncome > 0 && (
-                    <div className="mt-2 pt-2 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${theme.border}`, color: theme.textS }}>
-                      <span>Monthly total</span>
-                      <span style={{ color: '#10B981', fontWeight: 700 }}>{m(totalUpcomingIncome)}</span>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
+                      {monthTotal > 0 ? `+${m(monthTotal)}` : '$0.00'}
                     </div>
-                  )}
-                </div>
-              </Link>
+                    <div className="text-sm mt-1" style={{ color: theme.textS }}>
+                      {upcoming
+                        ? `Next: ${upcoming.description || 'Income'} · ${new Date(upcoming.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                        : monthCount > 0
+                          ? `${monthCount} payment${monthCount !== 1 ? 's' : ''} this month`
+                          : `No payments for ${viewLabel}`}
+                    </div>
+                    {monthCount > 0 && (
+                      <div className="mt-2 pt-2 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${theme.border}`, color: theme.textS }}>
+                        <span>{monthCount} payment{monthCount !== 1 ? 's' : ''}</span>
+                        <Link href="/smart-stack">
+                          <span style={{ color: '#10B981', fontWeight: 700 }}>View all →</span>
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Bills Due Card */}
               <Link href="/bill-boss">

@@ -417,6 +417,7 @@ export default function SmartStackPage() {
 
   const [projFreq, setProjFreq] = useState<'weekly' | 'biweekly'>('biweekly');
   const [projPeriodIndex, setProjPeriodIndex] = useState(0);
+  const [payMonthOffset, setPayMonthOffset] = useState(0); // 0 = current month
 
   const payPeriods = useMemo(() => {
     const today = new Date();
@@ -1105,33 +1106,9 @@ export default function SmartStackPage() {
     return (
       <motion.div ref={savingsSectionRef} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
         <div className="rounded-2xl p-5" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4" style={{ color: theme.accent }} />
-              <span className="text-sm" style={{ fontWeight: 700, color: theme.accent }}>Total Savings</span>
-            </div>
-            <button
-              onClick={() => {
-                const name = window.prompt('Account name (e.g., Emergency Fund):');
-                if (name && name.trim()) {
-                  const newAcct: SavingsAccount = {
-                    id: Date.now().toString(),
-                    name: name.trim(),
-                    amount: 0,
-                    goal: 0,
-                    saved: false,
-                  };
-                  const updated = [...savingsAccounts, newAcct];
-                  setSavingsAccounts(updated);
-                  setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:opacity-90 active:scale-95"
-              style={{ backgroundColor: theme.accent, color: '#fff' }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Savings
-            </button>
+          <div className="flex items-center gap-2 mb-2">
+            <Target className="w-4 h-4" style={{ color: theme.accent }} />
+            <span className="text-sm" style={{ fontWeight: 700, color: theme.accent }}>Total Savings</span>
           </div>
           <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: theme.accent }}>${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           <div className="text-xs mt-1" style={{ color: theme.textM }}>{savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}</div>
@@ -1352,38 +1329,61 @@ export default function SmartStackPage() {
               </div>
             </div>
 
-            {/* Incoming Payments by Month */}
+            {/* Incoming Payments by Month — navigable */}
             {(() => {
-              const byMonth: Record<string, { total: number; count: number; key: string }> = {};
-              paymentEntries.forEach(p => {
-                if (!p.date) return;
+              const now = new Date();
+              const viewDate = new Date(now.getFullYear(), now.getMonth() + payMonthOffset, 1);
+              const viewMonth = viewDate.getMonth();
+              const viewYear = viewDate.getFullYear();
+              const viewLabel = viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+              const filtered = paymentEntries.filter(p => {
+                if (!p.date) return false;
                 const d = new Date(p.date + 'T00:00:00');
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                if (!byMonth[key]) byMonth[key] = { total: 0, count: 0, key: label };
-                byMonth[key].total += p.amount || 0;
-                byMonth[key].count += 1;
+                return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
               });
-              const months = Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b));
-              if (months.length === 0) return null;
+
+              const total = filtered.reduce((sum, p) => sum + (p.amount || 0), 0);
+              const count = filtered.length;
+
               return (
                 <div className="mb-4 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                  <div className="flex items-center gap-1.5 px-3 pt-3 pb-2">
-                    <Calendar className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
-                    <p className="text-xs font-bold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>Payments by Month</p>
+                  {/* Header with navigation */}
+                  <div className="flex items-center justify-between px-3 pt-3 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
+                      <p className="text-xs font-bold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>Payments by Month</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setPayMonthOffset(o => o - 1)}
+                        className="p-1 rounded-lg transition-colors"
+                        style={{ color: 'rgba(255,255,255,0.8)' }}
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-[10px] font-semibold px-1" style={{ color: 'rgba(255,255,255,0.9)', minWidth: 80, textAlign: 'center' }}>{viewLabel}</span>
+                      <button
+                        onClick={() => setPayMonthOffset(o => o + 1)}
+                        className="p-1 rounded-lg transition-colors"
+                        style={{ color: 'rgba(255,255,255,0.8)' }}
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-                    {months.map(([key, val]) => (
-                      <div key={key} className="flex items-center justify-between px-3 py-2">
-                        <div>
-                          <p className="text-xs font-semibold text-white">{val.key}</p>
-                          <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{val.count} payment{val.count !== 1 ? 's' : ''}</p>
-                        </div>
+                  {/* Data row */}
+                  <div className="px-3 pb-3">
+                    {count === 0 ? (
+                      <p className="text-xs text-center py-2" style={{ color: 'rgba(255,255,255,0.5)' }}>No payments for {viewLabel}</p>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{count} payment{count !== 1 ? 's' : ''}</p>
                         <p className="text-sm font-black text-white tabular-nums">
-                          +${val.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          +${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               );
@@ -1407,6 +1407,19 @@ export default function SmartStackPage() {
               </button>
               <button
                 onClick={() => {
+                  const name = window.prompt('Account name (e.g., Emergency Fund):');
+                  if (name && name.trim()) {
+                    const newAcct: SavingsAccount = {
+                      id: Date.now().toString(),
+                      name: name.trim(),
+                      amount: 0,
+                      goal: 0,
+                      saved: false,
+                    };
+                    const updated = [...savingsAccounts, newAcct];
+                    setSavingsAccounts(updated);
+                    setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
+                  }
                   setActiveTab('savings');
                   setTimeout(() => {
                     savingsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1416,7 +1429,7 @@ export default function SmartStackPage() {
                 style={{ backgroundColor: '#fff', color: theme.accent }}
               >
                 <TrendingUp className="w-4 h-4" />
-                Add to Savings
+                Add Savings
               </button>
             </div>
           </div>
