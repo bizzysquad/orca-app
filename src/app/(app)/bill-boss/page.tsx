@@ -2,14 +2,14 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Upload, Edit3, Home, Phone, Car, CreditCard, Heart, Utensils, BookOpen, Zap } from 'lucide-react'
+import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Edit3, Home, Phone, Car, CreditCard, Heart, Utensils, BookOpen, Zap } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
 import { getRecurringBillDates } from '@/lib/income-engine'
 import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
 
-import type { Bill, BillAlloc, RentEntry, BillRecurrence, RecurrenceEndType } from '@/lib/types'
+import type { Bill, BillAlloc, BillRecurrence, RecurrenceEndType } from '@/lib/types'
 import CalendarPicker from '@/components/CalendarPicker'
 
 // Category to icon mapping with Figma colors
@@ -57,51 +57,71 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   const todayDay = isCurrentMonth ? todayDate.getDate() : -1
   const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
-  // Get all events for a day including split payments and recurring bill dates
-  // Paid bills show on their actual paid date; unpaid bills show on due date with red indicator
+  // Get all events for a day including split payments and recurring bill dates.
+  // Deduplicates so a bill never shows more than once on the same day (prefers paid=true).
   const getEventsForDay = (day: number) => {
-    const events: { label: string; amount: number; type: 'bill' | 'split'; paid: boolean }[] = []
+    const raw: { label: string; amount: number; type: 'bill' | 'split'; paid: boolean }[] = []
 
     bills.forEach(b => {
       if (b.alloc.length === 0) {
         if (b.status === 'paid' && (b as any).paidDate) {
+          // Show on the actual paid date (green)
           const pd = new Date((b as any).paidDate + 'T00:00:00')
           if (pd.getDate() === day && pd.getMonth() === month && pd.getFullYear() === year) {
-            events.push({ label: b.name, amount: b.amount, type: 'bill', paid: true })
+            raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: true })
           }
-        } else if (b.recurrence && b.recurrence !== 'monthly') {
-          // For recurring bills, generate all dates in this month
+          // For monthly bills that are paid: also show upcoming occurrence in OTHER months as red
+          if (b.recurrence === 'monthly') {
+            const paidMonth = pd.getMonth()
+            const paidYear = pd.getFullYear()
+            const dueDay = new Date(b.due + 'T00:00:00').getDate()
+            if ((month !== paidMonth || year !== paidYear) && dueDay === day) {
+              raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: false })
+            }
+          }
+        } else if (b.recurrence && b.recurrence !== 'one-time' && b.recurrence !== 'monthly') {
+          // Weekly / biweekly / custom: expand into dates for the viewed month
           const recurDates = getRecurringBillDates(b, 6)
           recurDates.forEach(dateStr => {
             const rd = new Date(dateStr + 'T00:00:00')
             if (rd.getDate() === day && rd.getMonth() === month && rd.getFullYear() === year) {
-              events.push({ label: b.name, amount: b.amount, type: 'bill', paid: false })
+              raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: false })
             }
           })
         } else {
-          // Standard: show on due date, and for monthly recurrence on same day-of-month
           const d = new Date(b.due + 'T00:00:00')
           if (b.recurrence === 'monthly') {
-            // Monthly recurring: show on the same day every month
+            // Monthly: show on same day-of-month each month, with correct paid status
+            // Paid status applies only to the calendar month that matches paidDate (or current if no paidDate)
             if (d.getDate() === day) {
-              events.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
+              const isPaidThisMonth = b.status === 'paid' && !(b as any).paidDate
+              raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: isPaidThisMonth })
             }
           } else if (d.getDate() === day && d.getMonth() === month && d.getFullYear() === year) {
-            events.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
+            raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
           }
         }
       }
 
-      // Check split payment dates
+      // Split payment dates
       b.alloc.forEach(a => {
         const ad = new Date(a.date + 'T00:00:00')
         if (ad.getDate() === day && ad.getMonth() === month && ad.getFullYear() === year) {
-          events.push({ label: `${b.name} (split)`, amount: a.amount, type: 'split', paid: a.paid })
+          raw.push({ label: `${b.name} (split)`, amount: a.amount, type: 'split', paid: a.paid })
         }
       })
     })
 
-    return events
+    // Deduplicate: same label + same type on the same day — prefer paid=true
+    const seen = new Map<string, typeof raw[0]>()
+    raw.forEach(ev => {
+      const key = `${ev.label}-${ev.type}`
+      const existing = seen.get(key)
+      if (!existing || (!existing.paid && ev.paid)) {
+        seen.set(key, ev)
+      }
+    })
+    return Array.from(seen.values())
   }
 
   const cells = []
@@ -240,7 +260,6 @@ export default function BillBossPage() {
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
-  const [rentReceipts, setRentReceipts] = useState<Record<string, string>>({})
   const [viewMode, setViewMode] = useState<'list' | 'compact'>('compact')
   const [notifications, setNotifications] = useState<Array<{ id: string; billId: string; billName: string; amount: number; dueDate: string; type: 'due-today' | 'upcoming'; dismissed: boolean }>>([])
   const [editingBillId, setEditingBillId] = useState<string | null>(null)
@@ -439,20 +458,48 @@ export default function BillBossPage() {
     return total
   }, [bills, calMonth, calYear])
 
-  // Both views show all bills — view mode only changes layout
-  const getVisibleBills = () => [...bills].sort((a, b) => new Date(a.due + 'T00:00:00').getTime() - new Date(b.due + 'T00:00:00').getTime())
+  // Returns bills relevant to the currently selected calendar month.
+  // Monthly recurring bills always appear (they recur every month).
+  // One-time / weekly / biweekly bills only appear if they have an occurrence in the selected month.
+  const getVisibleBills = () => {
+    const monthStart = new Date(calYear, calMonth, 1)
+    const monthEnd = new Date(calYear, calMonth + 1, 0)
 
-  // Get rent bill if exists
-  const rentBill = bills.find(b => b.cat.toLowerCase() === 'housing' && b.name.toLowerCase().includes('rent'))
-  const rentEntries: RentEntry[] = data.rent || []
+    return [...bills]
+      .filter(b => {
+        // Split alloc: show if any alloc date falls in this month
+        if (b.alloc.length > 0) {
+          return b.alloc.some(a => {
+            const ad = new Date(a.date + 'T00:00:00')
+            return ad.getMonth() === calMonth && ad.getFullYear() === calYear
+          })
+        }
 
-  // Auto-update rent tracker (filter entries that match paid bills)
-  const updatedRentEntries = rentEntries.map(entry => {
-    if (rentBill?.status === 'paid') {
-      return { ...entry, reported: true }
-    }
-    return entry
-  })
+        const recurrence = b.recurrence || 'one-time'
+        const dueDate = new Date(b.due + 'T00:00:00')
+
+        if (recurrence === 'monthly') return true  // always visible — recurs every month
+        if (recurrence === 'yearly') {
+          return dueDate.getMonth() === calMonth  // same month, any year
+        }
+        if (recurrence === 'one-time' || !recurrence) {
+          return dueDate.getMonth() === calMonth && dueDate.getFullYear() === calYear
+        }
+        // Weekly / biweekly / custom: check if any occurrence lands in the month
+        const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
+        const cursor = new Date(dueDate)
+        if (cursor < monthStart) {
+          const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
+          cursor.setDate(cursor.getDate() + gap)
+        }
+        while (cursor <= monthEnd) {
+          if (cursor >= monthStart && cursor >= dueDate) return true
+          cursor.setDate(cursor.getDate() + intervalDays)
+        }
+        return false
+      })
+      .sort((a, b) => new Date(a.due + 'T00:00:00').getTime() - new Date(b.due + 'T00:00:00').getTime())
+  }
 
   // Handler: Add bill
   const handleAddBill = () => {
@@ -1219,16 +1266,16 @@ export default function BillBossPage() {
                         <p className="text-sm" style={{ color: theme.textM }}>{bill.cat}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       <p style={{ color: '#ef4444' }} className="font-bold">–{fmt(bill.amount)}</p>
                       <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => persistBills(bills.map(b =>
                           b.id === bill.id ? { ...b, status: 'upcoming' as const } : b
                         ))}
-                        style={{ backgroundColor: theme.border, color: theme.text }}
-                        className="px-3 py-1 text-xs rounded hover:opacity-80 transition-colors"
+                        style={{ backgroundColor: theme.ok, color: '#fff' }}
+                        className="px-4 py-1.5 text-sm font-bold rounded-lg hover:opacity-90 transition-colors"
                       >
                         Undo
                       </motion.button>
@@ -1244,8 +1291,8 @@ export default function BillBossPage() {
                     <p className="text-sm font-bold" style={{ color: theme.textM }}>–{fmt(bill.amount)}</p>
                     <button
                       onClick={() => persistBills(bills.map(b => b.id === bill.id ? { ...b, status: 'upcoming' as const } : b))}
-                      className="text-[10px] px-2 py-0.5 rounded hover:opacity-80 transition-colors"
-                      style={{ backgroundColor: theme.textS, color: theme.textM }}
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg hover:opacity-90 transition-colors"
+                      style={{ backgroundColor: theme.ok, color: '#fff' }}
                     >
                       Undo
                     </button>
@@ -1256,97 +1303,6 @@ export default function BillBossPage() {
           </motion.div>
         )}
 
-        {/* 6. Rent Tracker Section */}
-        {rentBill ? (
-          <motion.div
-            variants={item}
-            initial="hidden"
-            animate="show"
-            style={{ backgroundColor: `${theme.gold}10`, borderColor: `${theme.gold}30` }}
-            className="border rounded-2xl p-8 mt-8"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 style={{ color: theme.gold }} className="font-bold text-lg">Rent Tracker</h3>
-                <p style={{ color: theme.textM }} className="text-sm mt-1">Monthly: {fmt(rentBill.amount)}</p>
-              </div>
-              <div style={{ backgroundColor: theme.gold, color: theme.bg }} className="rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
-                {updatedRentEntries.filter(r => r.reported).length}
-              </div>
-            </div>
-
-            {/* Auto-tracked status */}
-            <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ backgroundColor: rentBill.status === 'paid' ? `${theme.ok}15` : `${theme.warn}15` }}>
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: rentBill.status === 'paid' ? theme.ok : theme.warn }} />
-              <div className="flex-1">
-                <p className="text-sm font-semibold" style={{ color: rentBill.status === 'paid' ? theme.ok : theme.warn }}>
-                  {rentBill.status === 'paid' ? 'Rent Paid This Month' : 'Rent Due'}
-                </p>
-                <p className="text-xs" style={{ color: theme.textM }}>
-                  {rentBill.status === 'paid' ? 'Automatically tracked from your payment' : `Due ${fmtD(rentBill.due)} — mark as paid in your bills list`}
-                </p>
-              </div>
-              {rentBill.status === 'paid' && <Check size={18} style={{ color: theme.ok }} />}
-            </div>
-
-            {updatedRentEntries.length > 0 && (
-              <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-lg p-4">
-                <p className="text-xs font-bold mb-3" style={{ color: theme.textM }}>Payment History</p>
-                <div className="space-y-3">
-                  {updatedRentEntries.map(entry => (
-                    <div key={entry.id} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border p-3 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium" style={{ color: theme.text }}>{entry.month}</span>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium`} style={{ backgroundColor: entry.reported ? `${theme.ok}20` : `${theme.textM}20`, color: entry.reported ? theme.ok : theme.textM }}>
-                            {entry.reported ? 'Paid' : 'Pending'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs" style={{ color: theme.textM }}>{fmt(rentBill.amount)}</p>
-                        {rentReceipts[entry.id] ? (
-                          <span className="text-xs flex items-center gap-1" style={{ color: theme.ok }}>
-                            <Check size={12} /> Receipt uploaded
-                          </span>
-                        ) : (
-                          <label className="text-xs flex items-center gap-1 cursor-pointer" style={{ color: theme.gold }}>
-                            <Upload size={12} />
-                            Upload Receipt
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              className="hidden"
-                              onChange={(e) => {
-                                if (e.target.files?.[0]) {
-                                  setRentReceipts(prev => ({ ...prev, [entry.id]: e.target.files![0].name }))
-                                }
-                              }}
-                            />
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </motion.div>
-        ) : (
-          <motion.div
-            variants={item}
-            initial="hidden"
-            animate="show"
-            style={{ backgroundColor: `${theme.bad}10`, borderColor: `${theme.bad}30` }}
-            className="border rounded-2xl p-8 mt-8 flex items-center gap-4"
-          >
-            <AlertCircle className="w-6 h-6 flex-shrink-0" style={{ color: theme.bad }} />
-            <div>
-              <p style={{ color: theme.bad }} className="font-semibold">No Rent Bill Found</p>
-              <p style={{ color: theme.textM }} className="text-sm">Add a housing bill to track rent reporting</p>
-            </div>
-          </motion.div>
-        )}
       </div>
 
       {/* 6b. Partial Payment Modal — Redesigned */}
