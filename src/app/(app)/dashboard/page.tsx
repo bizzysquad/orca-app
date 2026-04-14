@@ -673,8 +673,29 @@ export default function DashboardPage() {
     [bills]
   )
 
-  // Next upcoming bill for preview on dashboard
+  // Next upcoming bill for preview on dashboard — respects split payments
   const nextBill = useMemo(() => allUpcomingBills[0] || null, [allUpcomingBills])
+
+  // Next due item considering split alloc payments across all upcoming bills
+  const nextDueItem = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    // Collect all unpaid split alloc entries across all bills
+    const splitItems: { name: string; due: string; amount: number; isSplit: boolean }[] = []
+    bills.forEach(b => {
+      if (b.status === 'paid') return
+      if (b.alloc && b.alloc.length > 0) {
+        b.alloc.forEach((a: any) => {
+          if (!a.paid && a.date >= todayStr) {
+            splitItems.push({ name: b.name, due: a.date, amount: a.amount, isSplit: true })
+          }
+        })
+      } else if (b.status === 'upcoming') {
+        splitItems.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false })
+      }
+    })
+    splitItems.sort((a, b) => a.due.localeCompare(b.due))
+    return splitItems[0] || null
+  }, [bills])
 
   // Bills due this week (or today)
   const billsDueThisWeek = useMemo(() => {
@@ -1291,9 +1312,7 @@ export default function DashboardPage() {
                     {monthCount > 0 && (
                       <div className="mt-2 pt-2 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${theme.border}`, color: theme.textS }}>
                         <span>{monthCount} payment{monthCount !== 1 ? 's' : ''}</span>
-                        <Link href="/smart-stack">
-                          <span style={{ color: '#10B981', fontWeight: 700 }}>View all →</span>
-                        </Link>
+                        <span style={{ color: '#10B981', fontWeight: 700 }}>{monthTotal > 0 ? `+${m(monthTotal)}` : '$0.00'} total</span>
                       </div>
                     )}
                   </div>
@@ -1311,11 +1330,11 @@ export default function DashboardPage() {
                     <ArrowDownRight className="w-4 h-4" style={{ color: '#EF4444' }} />
                   </div>
                   <div style={{ fontSize: 28, fontWeight: 800, color: '#EF4444' }}>
-                    {nextBill ? `−${m(nextBill.amount)}` : '$0.00'}
+                    {nextDueItem ? `−${m(nextDueItem.amount)}` : '$0.00'}
                   </div>
                   <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                    {nextBill
-                      ? `Next: ${nextBill.name} · ${new Date(nextBill.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${m(billsDueThisWeek)} this week`
+                    {nextDueItem
+                      ? `Next: ${nextDueItem.name}${nextDueItem.isSplit ? ' (split)' : ''} · ${new Date(nextDueItem.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${m(billsDueThisWeek)} this week`
                       : 'All paid up'}
                   </div>
                   {totalMonthlyBills > 0 && (
@@ -1501,18 +1520,6 @@ export default function DashboardPage() {
             <SafeToSpendBreakdown breakdown={engine.breakdown} theme={theme} />
           </div>
         </motion.div>
-
-        {/* Next Action Card */}
-        {engine.nextActions.length > 0 && (
-          <motion.div variants={fadeUp}>
-            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: theme.textS }}>Next Action</p>
-            <div className="space-y-2">
-              {engine.nextActions.slice(0, 2).map(action => (
-                <NextActionCard key={action.id} action={action} theme={theme} />
-              ))}
-            </div>
-          </motion.div>
-        )}
 
         {/* Render sections in order — pinned first, then unpinned */}
         {sortedSectionOrder.map((sectionId, index) => renderSection(sectionId, index))}

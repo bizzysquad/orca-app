@@ -464,6 +464,26 @@ export default function BillBossPage() {
       .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0] || null
   }, [bills])
 
+  // Next due item — split-aware: if a bill has unpaid alloc entries, surface the nearest one
+  const nextDueItem = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const candidates: { name: string; due: string; amount: number; isSplit: boolean; billId: string }[] = []
+    bills.forEach(b => {
+      if (b.status === 'paid') return
+      if (b.alloc && b.alloc.length > 0) {
+        b.alloc.forEach((a: any) => {
+          if (!a.paid && a.date >= todayStr) {
+            candidates.push({ name: b.name, due: a.date, amount: a.amount, isSplit: true, billId: b.id })
+          }
+        })
+      } else if (b.status === 'upcoming') {
+        candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+      }
+    })
+    candidates.sort((a, b) => a.due.localeCompare(b.due))
+    return candidates[0] || null
+  }, [bills])
+
   // Calculate monthly bill total for selected calendar month — expands recurring bills
   const monthlyBillTotal = useMemo(() => {
     let total = 0
@@ -832,16 +852,21 @@ export default function BillBossPage() {
               </div>
             </div>
 
-            {/* Next Bill Due + Quick Pay */}
-            {nextBillDue && (
+            {/* Next Bill Due + Quick Pay — split-aware */}
+            {nextDueItem && (
               <div className="mt-6 pt-6 border-t flex items-center justify-between gap-3 sm:gap-4 flex-wrap sm:flex-nowrap" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium opacity-70">Next Due</p>
-                  <p className="text-base sm:text-lg font-bold truncate mt-1">{nextBillDue.name}</p>
-                  <p className="text-xs opacity-70 mt-1">{fmtD(nextBillDue.due)} · {fmt(nextBillDue.amount)}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-base sm:text-lg font-bold truncate">{nextDueItem.name}</p>
+                    {nextDueItem.isSplit && (
+                      <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>SPLIT</span>
+                    )}
+                  </div>
+                  <p className="text-xs opacity-70 mt-1">{fmtD(nextDueItem.due)} · {fmt(nextDueItem.amount)}</p>
                 </div>
                 <button
-                  onClick={() => handlePayFull(nextBillDue.id)}
+                  onClick={() => handlePayFull(nextDueItem.billId)}
                   className="shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
                   style={{ backgroundColor: '#fff', color: theme.accent }}
                 >

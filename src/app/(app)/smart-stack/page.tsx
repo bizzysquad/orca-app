@@ -278,6 +278,7 @@ export default function SmartStackPage() {
   const [projectionMode, setProjectionMode] = useState<'payment' | 'check' | 'calculator'>('payment');
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
   const [collapsedAccounts, setCollapsedAccounts] = useState<Record<string, boolean>>({});
+  const [scheduledPaymentsCollapsed, setScheduledPaymentsCollapsed] = useState(false);
 
   const [customSavingsAmount, setCustomSavingsAmount] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -353,16 +354,6 @@ export default function SmartStackPage() {
     },
   })
 
-  // Coverage Ratio label and color
-  const coverageLabel = engine.coverageRatio === Infinity ? '∞'
-    : engine.coverageRatio >= 1.5 ? 'Strong' : engine.coverageRatio >= 1.0 ? 'Adequate' : 'At Risk'
-  const coverageColor = engine.coverageRatio >= 1.5 ? '#10B981' : engine.coverageRatio >= 1.0 ? '#F59E0B' : '#EF4444'
-
-  // Forecast confidence label and color
-  const confidenceLabel = engine.forecastConfidence === 'high' ? 'High Confidence'
-    : engine.forecastConfidence === 'medium' ? 'Medium Confidence' : 'Low Confidence'
-  const confidenceColor = engine.forecastConfidence === 'high' ? '#10B981'
-    : engine.forecastConfidence === 'medium' ? '#F59E0B' : '#EF4444'
   const [inlinePayDate, setInlinePayDate] = useState('');
   const hasNetIncome = (parseFloat(inlineNetIncome) || netIncome) > 0;
 
@@ -894,31 +885,6 @@ export default function SmartStackPage() {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
 
-        {/* Coverage Ratio & Forecast Confidence — Engine-Driven */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl p-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: theme.textS }}>Coverage Ratio</p>
-            <p className="text-2xl font-bold" style={{ color: coverageColor }}>
-              {engine.coverageRatio === Infinity ? '∞' : `${engine.coverageRatio.toFixed(2)}×`}
-            </p>
-            <p className="text-xs mt-0.5 font-semibold" style={{ color: coverageColor }}>{coverageLabel}</p>
-            <p className="text-[10px] mt-1" style={{ color: theme.textS }}>income ÷ obligations (30d)</p>
-          </div>
-          <div className="rounded-2xl p-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: theme.textS }}>Forecast</p>
-            <p className="text-sm font-bold" style={{ color: confidenceColor }}>{confidenceLabel}</p>
-            <div className="flex items-center gap-1 mt-1">
-              {(['high', 'medium', 'low'] as const).map(level => (
-                <div key={level} className="h-1.5 flex-1 rounded-full"
-                  style={{ backgroundColor: engine.forecastConfidence === level ? confidenceColor : `${theme.border}60` }} />
-              ))}
-            </div>
-            <p className="text-[10px] mt-1.5" style={{ color: theme.textS }}>
-              {engine.forecastConfidence === 'high' ? 'Fixed income detected' : engine.forecastConfidence === 'medium' ? 'Mixed income pattern' : 'Manual / irregular income'}
-            </p>
-          </div>
-        </div>
-
         <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
           {[
             { key: 'payment', label: 'Incoming Payments', icon: Wallet },
@@ -1022,17 +988,27 @@ export default function SmartStackPage() {
             </div>
 
             <div className="flex items-center justify-between mb-3">
-              <div className="text-xs" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scheduled Payments</div>
-              {paymentEntries.length > 0 && (
-                <div className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.accent}20`, color: theme.accent }}>
-                  {paymentEntries.length} total
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <div className="text-xs" style={{ color: theme.textM, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scheduled Payments</div>
+                {paymentEntries.length > 0 && (
+                  <div className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.accent}20`, color: theme.accent }}>
+                    {paymentEntries.length} total
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setScheduledPaymentsCollapsed(c => !c)}
+                className="p-1 rounded-lg transition-colors hover:opacity-70"
+                style={{ color: theme.textM }}
+                title={scheduledPaymentsCollapsed ? 'Expand' : 'Minimize'}
+              >
+                {scheduledPaymentsCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
             </div>
-            {paymentEntries.length === 0 ? (
+            {!scheduledPaymentsCollapsed && paymentEntries.length === 0 && (
               <div className="text-sm py-4 text-center" style={{ color: theme.textM }}>No payments scheduled yet</div>
-            ) : (
-              paymentEntries.map(p => {
+            )}
+            {!scheduledPaymentsCollapsed && paymentEntries.length > 0 && paymentEntries.map(p => {
                 const pDate = p.date ? new Date(p.date + 'T00:00:00') : null;
                 const today = new Date(); today.setHours(0, 0, 0, 0);
                 const isOverdue = pDate && p.status !== 'received' && pDate < today;
@@ -1163,8 +1139,7 @@ export default function SmartStackPage() {
                   )}
                 </div>
                 );
-              })
-            )}
+              })}
           </motion.div>
         )}
 

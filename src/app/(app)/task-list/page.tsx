@@ -346,26 +346,6 @@ export default function TaskListPage() {
         </div>
       )}
 
-      {/* Smart Filters */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        {([
-          { key: 'all', label: 'All' },
-          { key: 'today', label: `Today${todayCount > 0 ? ` (${todayCount})` : ''}` },
-          { key: 'overdue', label: '🔴 Overdue' },
-          { key: 'starred', label: '⭐ Starred' },
-          { key: 'high-priority', label: '🔥 High Priority' },
-        ] as { key: SmartFilter; label: string }[]).map(f => (
-          <button key={f.key} onClick={() => setSmartFilter(f.key)}
-            className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-            style={{
-              backgroundColor: smartFilter === f.key ? theme.accent : theme.bg,
-              color: smartFilter === f.key ? '#fff' : theme.textS,
-              border: `1px solid ${smartFilter === f.key ? theme.accent : theme.border}`,
-            }}
-          >{f.label}</button>
-        ))}
-      </div>
-
       {/* Category cards - 4 column grid with per-category colors */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {(Object.entries(categoryConfig) as [TaskCategory, typeof categoryConfig[TaskCategory]][]).map(([key, cfg]) => {
