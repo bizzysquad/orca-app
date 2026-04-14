@@ -2,6 +2,62 @@
 export type Frequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'quarterly' | 'yearly'
 export type SplitMode = 'equal' | '4way' | '6way' | 'custom'
 
+// ── Standard Status System (used consistently across all modules) ──
+export type FinancialStatus = 'on_track' | 'tight' | 'shortfall' | 'covered' | 'overdue'
+export type RiskLevel = 'on_track' | 'tight' | 'shortfall'
+
+// ── Bill Data Model (upgraded: separated from occurrences) ──
+export interface BillTemplate {
+  id: string
+  name: string
+  amount: number
+  category: string
+  recurrenceRule: string // 'monthly' | 'weekly' | 'one-time' | etc.
+}
+
+export interface BillOccurrence {
+  id: string
+  billId: string
+  dueDate: string
+  expectedAmount: number
+  status: 'due' | 'paid' | 'partial' | 'skipped'
+}
+
+export interface BillPayment {
+  id: string
+  billOccurrenceId: string
+  amount: number
+  paidDate: string
+  method: string
+}
+
+// ── Unified Income Model (multi-source, no "modes") ──
+export type IncomeSourceType = 'fixed' | 'irregular' | 'manual'
+
+export interface UnifiedIncomeSource {
+  id: string
+  type: IncomeSourceType
+  name: string
+  frequency: string
+  nextDate: string
+  amount: number
+  active: boolean
+}
+
+export interface UnifiedIncomeEvent {
+  id: string
+  sourceId: string
+  amount: number
+  date: string
+  status: 'expected' | 'received' | 'overdue'
+  paidDate?: string
+  allocations: {
+    bills: number
+    savings: number
+    spending: number
+  }
+}
+
 export interface Allocation {
   income: number
   billReserve: number
@@ -258,6 +314,33 @@ export interface AdminConfig {
   tagline: string
   logoUrl: string | null
   goldColor: string
+}
+
+// ── Quick Action types (for global command palette) ──
+export type QuickActionType =
+  | 'add_bill'
+  | 'log_income'
+  | 'mark_bill_paid'
+  | 'create_savings_goal'
+  | 'add_task'
+
+export interface QuickAction {
+  id: string
+  type: QuickActionType
+  label: string
+  shortcut?: string
+  icon?: string
+}
+
+// ── Audit Log (admin) ──
+export interface AuditLogEntry {
+  id: string
+  userId: string
+  action: string
+  resource: string
+  resourceId?: string
+  timestamp: string
+  metadata?: Record<string, unknown>
 }
 
 // ── Credit Insight ──

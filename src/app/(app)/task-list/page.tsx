@@ -6,10 +6,11 @@ declare global {
   }
 }
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
 import CalendarPicker from '@/components/CalendarPicker'
+import { useOrcaData } from '@/context/OrcaDataContext'
 import {
   Plus,
   Trash2,
@@ -26,7 +27,10 @@ import {
   Circle,
   CheckCircle2,
   Users,
+  Zap,
 } from 'lucide-react'
+import { orcaEvents } from '@/lib/eventBus'
+import { gid } from '@/lib/utils'
 
 type TaskCategory = 'todo' | 'groceries' | 'meetings' | 'notes'
 type TaskPriority = 'low' | 'medium' | 'high'
@@ -97,8 +101,12 @@ const syncTasksToCalendars = (tasks: Task[]) => {
   }
 }
 
+// Smart filter types
+type SmartFilter = 'all' | 'today' | 'overdue' | 'starred' | 'high-priority'
+
 export default function TaskListPage() {
   const { theme } = useTheme()
+  const { data } = useOrcaData()
   const [activeCategory, setActiveCategory] = useState<TaskCategory>('todo')
   const [tasks, setTasks] = useState<Task[]>(loadInitialTasks)
   const [notes, setNotes] = useState<Note[]>(loadInitialNotes)
@@ -109,6 +117,45 @@ export default function TaskListPage() {
   const [newNoteTitle, setNewNoteTitle] = useState('')
   const [newNoteContent, setNewNoteContent] = useState('')
   const [showAddNote, setShowAddNote] = useState(false)
+  const [smartFilter, setSmartFilter] = useState<SmartFilter>('all')
+  const [quickAddText, setQuickAddText] = useState('')
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
+
+  // ── Auto-create tasks from overdue bills ──
+  useEffect(() => {
+    const bills = data.bills || []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().split('T')[0]
+
+    bills.forEach(bill => {
+      if (bill.status === 'paid') return
+      const due = new Date(bill.due + 'T00:00:00')
+      if (due < today) {
+        // Check if task already exists for this bill
+        const exists = tasks.some(t => t.text.includes(`Pay ${bill.name}`) && !t.completed)
+        if (!exists) {
+          const newTask: Task = {
+            id: `bill-overdue-${bill.id}`,
+            text: `Pay ${bill.name} — ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(bill.amount)} (overdue)`,
+            completed: false,
+            category: 'todo',
+            priority: 'high',
+            dueDate: todayStr,
+            createdAt: new Date().toISOString(),
+            starred: false,
+          }
+          setTasks(prev => {
+            if (prev.some(t => t.id === newTask.id)) return prev
+            const updated = [...prev, newTask]
+            setLocalSynced('orca-tasks', JSON.stringify(updated))
+            return updated
+          })
+        }
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.bills])
 
   // Load tasks and notes from localStorage on mount, initialize global task store
   useEffect(() => {
@@ -119,6 +166,7 @@ export default function TaskListPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setLocalSynced('orca-tasks', JSON.stringify(tasks))
+      orcaEvents.emit('task.updated')
     }
   }, [tasks])
 
@@ -129,9 +177,55 @@ export default function TaskListPage() {
     }
   }, [notes])
 
-  const filteredTasks = tasks.filter(t => t.category === activeCategory)
+  // ── Smart filter logic ──
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayStr = today.toISOString().split('T')[0]
+
+  const filteredBySmartFilter = useMemo(() => {
+    let base = tasks.filter(t => t.category === activeCategory)
+    switch (smartFilter) {
+      case 'today':
+        return base.filter(t => !t.completed && t.dueDate === todayStr)
+      case 'overdue':
+        return base.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr)
+      case 'starred':
+        return base.filter(t => t.starred && !t.completed)
+      case 'high-priority':
+        return base.filter(t => t.priority === 'high' && !t.completed)
+      default:
+        return base
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, activeCategory, smartFilter, todayStr])
+
+  const filteredTasks = filteredBySmartFilter
   const activeTasks = filteredTasks.filter(t => !t.completed)
   const completedTasks = filteredTasks.filter(t => t.completed)
+
+  // ── Today count across all categories ──
+  const todayCount = useMemo(() =>
+    tasks.filter(t => !t.completed && t.dueDate === todayStr).length,
+    [tasks, todayStr]
+  )
+
+  // ── Global quick add ──
+  const handleQuickAdd = () => {
+    if (!quickAddText.trim()) return
+    const newTask: Task = {
+      id: gid(),
+      text: quickAddText.trim(),
+      completed: false,
+      category: 'todo',
+      priority: 'medium',
+      dueDate: todayStr,
+      createdAt: new Date().toISOString(),
+      starred: false,
+    }
+    setTasks(prev => [...prev, newTask])
+    setQuickAddText('')
+    setShowQuickAdd(false)
+  }
 
   const addTask = () => {
     if (!newTaskText.trim()) return
@@ -216,11 +310,60 @@ export default function TaskListPage() {
     <div className="p-4 sm:p-6 lg:p-8 w-full min-h-screen overflow-x-hidden" style={{ backgroundColor: theme.bg, color: theme.text }}>
     <div className="max-w-4xl mx-auto w-full">
       {/* Header */}
-      <div className="mb-6">
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0F172A' }}>Task List & Reminders</h1>
-        <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>
-          Stay organized with notes, tasks, groceries, and meetings
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: theme.text }}>Task List & Reminders</h1>
+          <p className="text-sm mt-0.5" style={{ color: theme.textS }}>
+            Stay organized — {todayCount > 0 ? `${todayCount} task${todayCount !== 1 ? 's' : ''} due today` : 'all caught up today'}
+          </p>
+        </div>
+        {/* Global Quick Add */}
+        <button
+          onClick={() => setShowQuickAdd(o => !o)}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all"
+          style={{ backgroundColor: theme.accent, color: '#fff' }}
+        >
+          <Plus size={16} />
+          Quick Add
+        </button>
+      </div>
+
+      {/* Quick Add Bar */}
+      {showQuickAdd && (
+        <div className="mb-4 flex gap-2">
+          <input
+            type="text"
+            autoFocus
+            value={quickAddText}
+            onChange={(e) => setQuickAddText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAdd(); if (e.key === 'Escape') setShowQuickAdd(false) }}
+            placeholder="Add a task quickly... (Enter to save)"
+            className="flex-1 px-4 py-2.5 rounded-xl border text-sm outline-none"
+            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+          />
+          <button onClick={handleQuickAdd} style={{ backgroundColor: theme.accent, color: '#fff' }}
+            className="px-4 py-2 rounded-xl font-bold text-sm">Add</button>
+        </div>
+      )}
+
+      {/* Smart Filters */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {([
+          { key: 'all', label: 'All' },
+          { key: 'today', label: `Today${todayCount > 0 ? ` (${todayCount})` : ''}` },
+          { key: 'overdue', label: '🔴 Overdue' },
+          { key: 'starred', label: '⭐ Starred' },
+          { key: 'high-priority', label: '🔥 High Priority' },
+        ] as { key: SmartFilter; label: string }[]).map(f => (
+          <button key={f.key} onClick={() => setSmartFilter(f.key)}
+            className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+            style={{
+              backgroundColor: smartFilter === f.key ? theme.accent : theme.bg,
+              color: smartFilter === f.key ? '#fff' : theme.textS,
+              border: `1px solid ${smartFilter === f.key ? theme.accent : theme.border}`,
+            }}
+          >{f.label}</button>
+        ))}
       </div>
 
       {/* Category cards - 4 column grid with per-category colors */}

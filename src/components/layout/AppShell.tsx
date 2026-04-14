@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import DesktopTopBar from './DesktopTopBar'
 import MobileHomeButton from './MobileHomeButton'
 import { useTheme } from '@/context/ThemeContext'
+import { QuickActions } from '@/components/QuickActions'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -48,6 +49,9 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
 
       {/* Mobile floating scroll-to-top button */}
       <MobileHomeButton />
+
+      {/* Global Quick Actions Command Palette (Cmd+K) */}
+      <QuickActions />
     </div>
   )
 }

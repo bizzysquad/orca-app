@@ -11,6 +11,13 @@ import { setLocalSynced } from '@/lib/syncLocal'
 
 import type { Bill, BillAlloc, BillRecurrence, RecurrenceEndType } from '@/lib/types'
 import CalendarPicker from '@/components/CalendarPicker'
+import { orcaEvents } from '@/lib/eventBus'
+
+// ── Progressive form step type ──
+type FormStep = 1 | 2 | 3
+
+// ── Payment type for the payment flow ──
+type PaymentType = 'full' | 'partial' | 'early' | 'skipped'
 
 // Category to icon mapping with Figma colors
 const CATEGORY_ICONS: Record<string, { Icon: React.ComponentType<any>, color: string }> = {
@@ -255,8 +262,13 @@ export default function BillBossPage() {
 
   const [bills, setBills] = useState<Bill[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
+  const [formStep, setFormStep] = useState<FormStep>(1)
   const [splitModalBillId, setSplitModalBillId] = useState<string | null>(null)
   const [customCategory, setCustomCategory] = useState('')
+  const [paymentModalBillId, setPaymentModalBillId] = useState<string | null>(null)
+  const [paymentType, setPaymentType] = useState<PaymentType>('full')
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [showOccurrencePreview, setShowOccurrencePreview] = useState(false)
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
@@ -326,6 +338,64 @@ export default function BillBossPage() {
     setBills(updatedBills);
     setData(prev => ({ ...prev, bills: updatedBills }));
     try { setLocalSynced('orca-bills', JSON.stringify(updatedBills)); } catch {}
+    // Emit event for financial engine recompute
+    if (deductTotal > 0) {
+      orcaEvents.broadcast('bill.paid', { amount: deductTotal })
+    }
+  }
+
+  // ── Duplicate a bill ──
+  const handleDuplicateBill = (bill: Bill) => {
+    const newBill: Bill = {
+      ...bill,
+      id: gid(),
+      name: `${bill.name} (copy)`,
+      status: 'upcoming',
+      alloc: [],
+    }
+    const updated = [...bills, newBill]
+    persistBills(updated)
+    orcaEvents.broadcast('bill.created', { billId: newBill.id })
+  }
+
+  // ── Advanced Payment Flow ──
+  const handlePaymentSubmit = (billId: string) => {
+    const bill = bills.find(b => b.id === billId)
+    if (!bill) return
+
+    const amount = paymentType === 'full' ? bill.amount
+      : paymentType === 'skipped' ? 0
+      : parseFloat(paymentAmount) || 0
+
+    if (paymentType === 'skipped') {
+      // Mark as skipped — keep upcoming but log it
+      const updated = bills.map(b =>
+        b.id === billId ? { ...b, status: 'upcoming' as const } : b
+      )
+      persistBills(updated)
+    } else if (paymentType === 'partial' && amount < bill.amount) {
+      // Partial — create alloc entry for partial amount
+      const alloc: BillAlloc = {
+        id: gid(),
+        date: new Date().toISOString().split('T')[0],
+        amount,
+        paid: true,
+      }
+      const updated = bills.map(b =>
+        b.id === billId ? { ...b, alloc: [...b.alloc, alloc] } : b
+      )
+      persistBills(updated)
+    } else {
+      // Full or early payment
+      const updated = bills.map(b =>
+        b.id === billId ? { ...b, status: 'paid' as const, paidDate: new Date().toISOString().split('T')[0] } : b
+      )
+      persistBills(updated)
+    }
+    orcaEvents.broadcast('bill.paid', { billId, paymentType, amount })
+    setPaymentModalBillId(null)
+    setPaymentAmount('')
+    setPaymentType('full')
   }
 
   // Generate notifications from bills
@@ -522,6 +592,7 @@ export default function BillBossPage() {
     }
 
     persistBills([...bills, newBill])
+    orcaEvents.broadcast('bill.created', { billId: newBill.id, name: newBill.name })
     setFormData({
       name: '',
       amount: '',
@@ -535,6 +606,7 @@ export default function BillBossPage() {
       recurrenceEndAfter: '',
     })
     setCustomCategory('')
+    setFormStep(1)
     setShowAddForm(false)
   }
 
@@ -846,171 +918,203 @@ export default function BillBossPage() {
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
               className="border rounded-2xl p-5 sm:p-8 space-y-5"
             >
-              <input
-                type="text"
-                placeholder="Bill Name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
-                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.accent}40`}
-                onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-                <input
-                  type="number"
-                  placeholder="Amount ($)"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none focus:ring-2 font-medium"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.accent}40`}
-                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
-                />
-                <div>
-                  <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>Date</label>
-                  <CalendarPicker
-                    value={formData.due}
-                    onChange={(date) => setFormData({ ...formData, due: date })}
-                    placeholder="Due Date"
-                    theme={theme}
-                  />
-                </div>
-              </div>
-
-              <select
-                value={formData.cat}
-                onChange={(e) => setFormData({ ...formData, cat: e.target.value })}
-                style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                className="w-full px-5 py-3 border rounded-xl focus:outline-none focus:ring-2 font-medium"
-                onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.accent}40`}
-                onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
-              >
-                {CATEGORIES.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-
-              {formData.cat === 'Other' && (
-                <input
-                  type="text"
-                  placeholder="Custom Category"
-                  value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="w-full px-4 py-2.5 border rounded-lg placeholder:opacity-50 focus:outline-none focus:ring-2"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
-                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
-                />
-              )}
-
-              {/* Recurrence Selector */}
-              <div>
-                <label style={{ color: theme.textM }} className="text-sm font-medium block mb-2">Recurrence</label>
-                <select
-                  value={formData.recurrence}
-                  onChange={(e) => setFormData({ ...formData, recurrence: e.target.value as BillRecurrence })}
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
-                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
-                >
-                  <option value="one-time">One-Time Payment</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                  <option value="custom">Custom</option>
-                </select>
-              </div>
-
-              {/* Custom Recurrence Days */}
-              {formData.recurrence === 'custom' && (
-                <input
-                  type="number"
-                  placeholder="Days between recurrence"
-                  value={formData.customRecurrenceDays}
-                  onChange={(e) => setFormData({ ...formData, customRecurrenceDays: e.target.value })}
-                  min="1"
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="w-full px-4 py-2.5 border rounded-lg placeholder:opacity-50 focus:outline-none focus:ring-2"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
-                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
-                />
-              )}
-
-              {/* Recurrence End Options */}
-              <div>
-                <label style={{ color: theme.textM }} className="text-sm font-medium block mb-2">Recurrence Duration</label>
-                <div className="flex gap-2">
-                  {([
-                    { value: 'ongoing', label: 'Ongoing' },
-                    { value: 'after-date', label: 'End Date' },
-                    { value: 'after-count', label: 'N Times' },
-                  ] as { value: RecurrenceEndType; label: string }[]).map(opt => (
+              {/* ── Progressive Form Steps ── */}
+              {/* Step Indicator */}
+              <div className="flex items-center gap-2 mb-2">
+                {([1, 2, 3] as FormStep[]).map(step => (
+                  <div key={step} className="flex items-center gap-2">
                     <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, recurrenceEndType: opt.value })}
+                      onClick={() => formStep > step && setFormStep(step)}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all"
                       style={{
-                        backgroundColor: formData.recurrenceEndType === opt.value ? `${theme.gold}20` : theme.bg,
-                        borderColor: formData.recurrenceEndType === opt.value ? theme.gold : theme.border,
-                        color: formData.recurrenceEndType === opt.value ? theme.gold : theme.textM,
+                        backgroundColor: formStep >= step ? theme.accent : theme.bg,
+                        color: formStep >= step ? '#fff' : theme.textS,
+                        border: `2px solid ${formStep >= step ? theme.accent : theme.border}`,
+                        cursor: formStep > step ? 'pointer' : 'default',
                       }}
-                      className="flex-1 px-4 py-2.5 rounded-lg text-xs font-bold border transition-all"
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {formData.recurrenceEndType === 'after-date' && (
-                <div>
-                  <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>Date</label>
-                  <CalendarPicker
-                    value={formData.recurrenceEndDate || ''}
-                    onChange={(date) => setFormData({ ...formData, recurrenceEndDate: date })}
-                    placeholder="End Date"
-                    theme={theme}
-                    showQuickSelect={false}
-                  />
-                </div>
-              )}
-
-              {formData.recurrenceEndType === 'after-count' && (
-                <input
-                  type="number"
-                  placeholder="Number of occurrences"
-                  value={formData.recurrenceEndAfter}
-                  onChange={(e) => setFormData({ ...formData, recurrenceEndAfter: e.target.value })}
-                  min="1"
-                  style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="w-full px-4 py-2.5 border rounded-lg placeholder:opacity-50 focus:outline-none focus:ring-2"
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.gold}40`}
-                  onBlur={(e) => e.currentTarget.style.boxShadow = 'none'}
-                />
-              )}
-
-              <div className="flex gap-3 pt-2">
-                {editingBillId && (
-                  <button
-                    onClick={handleCancelEdit}
-                    style={{ borderColor: theme.border, color: theme.textS }}
-                    className="flex-1 px-5 py-3 rounded-xl font-bold border hover:opacity-80 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
+                    >{step}</button>
+                    {step < 3 && <div className="h-0.5 w-8 rounded" style={{ backgroundColor: formStep > step ? theme.accent : theme.border }} />}
+                  </div>
+                ))}
+                <span className="ml-2 text-xs font-semibold" style={{ color: theme.textS }}>
+                  {formStep === 1 ? 'Basic Info' : formStep === 2 ? 'Recurrence' : 'Advanced'}
+                </span>
                 <button
-                  onClick={editingBillId ? handleSaveEdit : handleAddBill}
-                  disabled={!formData.name || !formData.amount || !formData.due}
-                  style={{ backgroundColor: theme.accent, color: '#fff' }}
-                  className="flex-1 px-5 py-3 rounded-xl font-bold disabled:opacity-50 hover:opacity-90 transition-colors"
-                >
-                  {editingBillId ? 'Update Bill' : 'Save Bill'}
-                </button>
+                  onClick={() => { setShowAddForm(false); setFormStep(1); setEditingBillId(null) }}
+                  className="ml-auto text-xs opacity-60 hover:opacity-100"
+                  style={{ color: theme.textS }}
+                >✕ Close</button>
               </div>
+
+              <AnimatePresence mode="wait">
+                {/* STEP 1: Basic Info */}
+                {formStep === 1 && (
+                  <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+                    <input
+                      type="text"
+                      placeholder="Bill Name (e.g. Rent, Netflix)"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                      className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none font-medium"
+                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <input
+                        type="number"
+                        placeholder="Amount ($)"
+                        value={formData.amount}
+                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                        className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none font-medium"
+                      />
+                      <div>
+                        <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>Due Date</label>
+                        <CalendarPicker value={formData.due} onChange={(date) => setFormData({ ...formData, due: date })} placeholder="Due Date" theme={theme} />
+                      </div>
+                    </div>
+                    <select
+                      value={formData.cat}
+                      onChange={(e) => setFormData({ ...formData, cat: e.target.value })}
+                      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                      className="w-full px-5 py-3 border rounded-xl focus:outline-none font-medium"
+                    >
+                      {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                    {formData.cat === 'Other' && (
+                      <input type="text" placeholder="Custom Category" value={customCategory} onChange={(e) => setCustomCategory(e.target.value)}
+                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                        className="w-full px-4 py-2.5 border rounded-lg placeholder:opacity-50 focus:outline-none" />
+                    )}
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        onClick={() => setFormStep(2)}
+                        disabled={!formData.name || !formData.amount || !formData.due}
+                        style={{ backgroundColor: theme.accent, color: '#fff' }}
+                        className="flex-1 px-5 py-3 rounded-xl font-bold disabled:opacity-50"
+                      >Next: Recurrence →</button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* STEP 2: Recurrence */}
+                {formStep === 2 && (
+                  <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+                    <label style={{ color: theme.textM }} className="text-sm font-medium block">How often does this bill recur?</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {([
+                        { value: 'one-time', label: 'One-Time' },
+                        { value: 'weekly', label: 'Weekly' },
+                        { value: 'monthly', label: 'Monthly' },
+                        { value: 'yearly', label: 'Yearly' },
+                        { value: 'custom', label: 'Custom' },
+                      ] as { value: BillRecurrence; label: string }[]).map(opt => (
+                        <button key={opt.value} type="button"
+                          onClick={() => setFormData({ ...formData, recurrence: opt.value })}
+                          style={{
+                            backgroundColor: formData.recurrence === opt.value ? `${theme.accent}20` : theme.bg,
+                            borderColor: formData.recurrence === opt.value ? theme.accent : theme.border,
+                            color: formData.recurrence === opt.value ? theme.accent : theme.textM,
+                          }}
+                          className="px-4 py-2.5 rounded-lg text-sm font-bold border transition-all"
+                        >{opt.label}</button>
+                      ))}
+                    </div>
+                    {formData.recurrence === 'custom' && (
+                      <input type="number" placeholder="Days between each occurrence" value={formData.customRecurrenceDays}
+                        onChange={(e) => setFormData({ ...formData, customRecurrenceDays: e.target.value })} min="1"
+                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                        className="w-full px-4 py-2.5 border rounded-lg focus:outline-none" />
+                    )}
+                    <div className="flex gap-3 pt-2">
+                      <button onClick={() => setFormStep(1)} style={{ borderColor: theme.border, color: theme.textS }}
+                        className="flex-1 px-5 py-3 rounded-xl font-bold border">← Back</button>
+                      <button onClick={() => setFormStep(3)} style={{ backgroundColor: theme.accent, color: '#fff' }}
+                        className="flex-1 px-5 py-3 rounded-xl font-bold">Next: Advanced →</button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* STEP 3: Advanced + Preview + Save */}
+                {formStep === 3 && (
+                  <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+                    {formData.recurrence !== 'one-time' && (
+                      <>
+                        <label style={{ color: theme.textM }} className="text-sm font-medium block">End Condition</label>
+                        <div className="flex gap-2">
+                          {([
+                            { value: 'ongoing', label: 'Ongoing' },
+                            { value: 'after-date', label: 'End Date' },
+                            { value: 'after-count', label: 'N Times' },
+                          ] as { value: RecurrenceEndType; label: string }[]).map(opt => (
+                            <button key={opt.value} type="button"
+                              onClick={() => setFormData({ ...formData, recurrenceEndType: opt.value })}
+                              style={{
+                                backgroundColor: formData.recurrenceEndType === opt.value ? `${theme.accent}20` : theme.bg,
+                                borderColor: formData.recurrenceEndType === opt.value ? theme.accent : theme.border,
+                                color: formData.recurrenceEndType === opt.value ? theme.accent : theme.textM,
+                              }}
+                              className="flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-all"
+                            >{opt.label}</button>
+                          ))}
+                        </div>
+                        {formData.recurrenceEndType === 'after-date' && (
+                          <CalendarPicker value={formData.recurrenceEndDate || ''} onChange={(date) => setFormData({ ...formData, recurrenceEndDate: date })}
+                            placeholder="End Date" theme={theme} showQuickSelect={false} />
+                        )}
+                        {formData.recurrenceEndType === 'after-count' && (
+                          <input type="number" placeholder="Number of occurrences" value={formData.recurrenceEndAfter}
+                            onChange={(e) => setFormData({ ...formData, recurrenceEndAfter: e.target.value })} min="1"
+                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                            className="w-full px-4 py-2.5 border rounded-lg focus:outline-none" />
+                        )}
+                      </>
+                    )}
+
+                    {/* Preview future occurrences */}
+                    {formData.recurrence !== 'one-time' && formData.due && (
+                      <div>
+                        <button onClick={() => setShowOccurrencePreview(o => !o)} className="text-xs font-semibold" style={{ color: theme.accent }}>
+                          {showOccurrencePreview ? '▲ Hide preview' : '▼ Preview future occurrences'}
+                        </button>
+                        {showOccurrencePreview && (() => {
+                          const tempBill: Bill = { id: 'preview', name: formData.name, amount: parseFloat(formData.amount) || 0,
+                            cat: formData.cat, due: formData.due, freq: formData.freq, recurrence: formData.recurrence,
+                            customRecurrenceDays: formData.recurrence === 'custom' ? parseInt(formData.customRecurrenceDays) : undefined,
+                            recurrenceEndDate: formData.recurrenceEndDate, recurrenceEndAfter: parseInt(formData.recurrenceEndAfter) || undefined,
+                            status: 'upcoming', alloc: [] }
+                          const dates = getRecurringBillDates(tempBill, 3)
+                          return (
+                            <div className="mt-2 rounded-xl p-3 space-y-1" style={{ background: theme.bg }}>
+                              {dates.slice(0, 5).map((d, i) => (
+                                <div key={i} className="flex items-center justify-between text-xs">
+                                  <span style={{ color: theme.textS }}>{new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                  <span style={{ color: '#EF4444', fontWeight: 700 }}>−{fmt(parseFloat(formData.amount) || 0)}</span>
+                                </div>
+                              ))}
+                              {dates.length > 5 && <p className="text-xs opacity-50" style={{ color: theme.textS }}>+{dates.length - 5} more...</p>}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+
+                    <div className="flex gap-3 pt-2">
+                      <button onClick={() => setFormStep(2)} style={{ borderColor: theme.border, color: theme.textS }}
+                        className="flex-1 px-5 py-3 rounded-xl font-bold border">← Back</button>
+                      {editingBillId && (
+                        <button onClick={handleCancelEdit} style={{ borderColor: theme.border, color: theme.textS }}
+                          className="flex-1 px-5 py-3 rounded-xl font-bold border">Cancel</button>
+                      )}
+                      <button
+                        onClick={editingBillId ? handleSaveEdit : handleAddBill}
+                        disabled={!formData.name || !formData.amount || !formData.due}
+                        style={{ backgroundColor: theme.accent, color: '#fff' }}
+                        className="flex-1 px-5 py-3 rounded-xl font-bold disabled:opacity-50"
+                      >{editingBillId ? '✓ Update Bill' : '✓ Save Bill'}</button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1222,6 +1326,22 @@ export default function BillBossPage() {
                       <Edit3 size={13} style={{ color: theme.gold }} />
                     </button>
                     <button
+                      onClick={() => handleDuplicateBill(bill)}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ backgroundColor: `${theme.accent}15` }}
+                      title="Duplicate"
+                    >
+                      <span style={{ color: theme.accent, fontSize: 11, fontWeight: 700 }}>⊕</span>
+                    </button>
+                    <button
+                      onClick={() => { setPaymentModalBillId(bill.id); setPaymentType('full'); setPaymentAmount(String(bill.amount)) }}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ backgroundColor: '#10B98120' }}
+                      title="Pay"
+                    >
+                      <Check size={13} style={{ color: '#10B981' }} />
+                    </button>
+                    <button
                       onClick={() => handleDeleteBill(bill.id)}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
                       style={{ backgroundColor: `${theme.bad}20` }}
@@ -1233,6 +1353,70 @@ export default function BillBossPage() {
                 </motion.div>
               )
               })}
+
+              {/* Payment Modal */}
+              <AnimatePresence>
+                {paymentModalBillId && (() => {
+                  const bill = bills.find(b => b.id === paymentModalBillId)
+                  if (!bill) return null
+                  return (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                      onClick={(e) => { if (e.target === e.currentTarget) setPaymentModalBillId(null) }}
+                    >
+                      <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.9, opacity: 0 }}
+                        className="rounded-2xl p-6 w-full max-w-sm space-y-4"
+                        style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-bold text-base" style={{ color: theme.text }}>Pay {bill.name}</h3>
+                          <button onClick={() => setPaymentModalBillId(null)} style={{ color: theme.textS }}>✕</button>
+                        </div>
+                        <p className="text-2xl font-bold" style={{ color: '#EF4444' }}>{fmt(bill.amount)}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { value: 'full', label: '✓ Full Payment', desc: `Pay ${fmt(bill.amount)}` },
+                            { value: 'partial', label: '◑ Partial', desc: 'Pay a portion' },
+                            { value: 'early', label: '⚡ Early', desc: 'Pay before due date' },
+                            { value: 'skipped', label: '⏭ Skip', desc: 'Mark as skipped' },
+                          ] as { value: PaymentType; label: string; desc: string }[]).map(opt => (
+                            <button key={opt.value} onClick={() => setPaymentType(opt.value)}
+                              style={{
+                                backgroundColor: paymentType === opt.value ? `${theme.accent}20` : theme.bg,
+                                borderColor: paymentType === opt.value ? theme.accent : theme.border,
+                                color: paymentType === opt.value ? theme.accent : theme.textS,
+                              }}
+                              className="p-3 rounded-xl border text-left transition-all"
+                            >
+                              <div className="text-xs font-bold">{opt.label}</div>
+                              <div className="text-[10px] opacity-70">{opt.desc}</div>
+                            </button>
+                          ))}
+                        </div>
+                        {paymentType === 'partial' && (
+                          <input type="number" placeholder="Amount to pay" value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(e.target.value)}
+                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                            className="w-full px-4 py-3 border rounded-xl focus:outline-none" />
+                        )}
+                        <div className="flex gap-3">
+                          <button onClick={() => setPaymentModalBillId(null)} style={{ borderColor: theme.border, color: theme.textS }}
+                            className="flex-1 px-4 py-3 rounded-xl font-bold border">Cancel</button>
+                          <button onClick={() => handlePaymentSubmit(bill.id)} style={{ backgroundColor: '#10B981', color: '#fff' }}
+                            className="flex-1 px-4 py-3 rounded-xl font-bold">Confirm</button>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )
+                })()}
+              </AnimatePresence>
             {visibleBills.filter(b => b.status === 'upcoming').length === 0 && (
               <div className="p-8 text-center">
                 <p className="text-sm" style={{ color: theme.textM }}>No upcoming bills</p>

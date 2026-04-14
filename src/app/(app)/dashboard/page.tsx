@@ -24,6 +24,8 @@ import {
   getRecurringBillDates,
   type IncomingPayment,
 } from '@/lib/income-engine'
+import { useFinancialEngine, type NextAction } from '@/lib/financialEngine'
+import { orcaEvents } from '@/lib/eventBus'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20, scale: 0.98 },
@@ -252,6 +254,107 @@ function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selec
   )
 }
 
+// ── Risk Level Badge ──
+function RiskBadge({ level, theme }: { level: 'on_track' | 'tight' | 'shortfall'; theme: any }) {
+  const config = {
+    on_track: { label: 'On Track', color: '#10B981', bg: '#10B98115' },
+    tight: { label: 'Tight', color: '#F59E0B', bg: '#F59E0B15' },
+    shortfall: { label: 'Shortfall', color: '#EF4444', bg: '#EF444415' },
+  }[level]
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold" style={{ color: config.color, backgroundColor: config.bg }}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: config.color }} />
+      {config.label}
+    </span>
+  )
+}
+
+// ── Next Action Card ──
+function NextActionCard({ action, theme, onDismiss }: { action: NextAction; theme: any; onDismiss?: () => void }) {
+  const urgencyColor = action.urgency === 'high' ? '#EF4444' : action.urgency === 'medium' ? '#F59E0B' : '#10B981'
+  const urgencyBg = action.urgency === 'high' ? '#EF444415' : action.urgency === 'medium' ? '#F59E0B15' : '#10B98115'
+  const actionIcon = action.type === 'pay_bill' ? '💸' : action.type === 'shortfall_warning' ? '⚠️' : action.type === 'savings_move' ? '💰' : action.type === 'delay_transfer' ? '⏸️' : '➡️'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl p-4 flex items-start gap-3"
+      style={{ background: urgencyBg, border: `1px solid ${urgencyColor}40` }}
+    >
+      <span className="text-xl mt-0.5">{actionIcon}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-sm font-bold" style={{ color: urgencyColor }}>{action.title}</p>
+          {action.urgency === 'high' && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: urgencyColor, color: '#fff' }}>URGENT</span>
+          )}
+        </div>
+        <p className="text-xs" style={{ color: theme.textS }}>{action.description}</p>
+        {action.amount && (
+          <p className="text-sm font-bold mt-1" style={{ color: urgencyColor }}>{fmt(action.amount)}</p>
+        )}
+      </div>
+      {onDismiss && (
+        <button onClick={onDismiss} className="text-xs opacity-50 hover:opacity-100 shrink-0" style={{ color: theme.textS }}>✕</button>
+      )}
+    </motion.div>
+  )
+}
+
+// ── Why This Number? Breakdown ──
+function SafeToSpendBreakdown({ breakdown, theme }: {
+  breakdown: { balance: number; buffer: number; reservedBills: number; reservedSavings: number; safeToSpend: number }
+  theme: any
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 text-xs opacity-60 hover:opacity-100 transition-opacity mt-2"
+        style={{ color: '#fff' }}
+      >
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        Why this number?
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden mt-2"
+          >
+            <div className="rounded-xl p-3 space-y-1.5 text-xs" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <div className="flex justify-between">
+                <span style={{ color: 'rgba(255,255,255,0.7)' }}>Account balance</span>
+                <span style={{ color: '#fff', fontWeight: 700 }}>{fmt(breakdown.balance)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: 'rgba(255,255,255,0.7)' }}>− Safety buffer</span>
+                <span style={{ color: '#F87171', fontWeight: 700 }}>−{fmt(breakdown.buffer)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: 'rgba(255,255,255,0.7)' }}>− Reserved for bills</span>
+                <span style={{ color: '#F87171', fontWeight: 700 }}>−{fmt(breakdown.reservedBills)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: 'rgba(255,255,255,0.7)' }}>− Reserved for savings</span>
+                <span style={{ color: '#F87171', fontWeight: 700 }}>−{fmt(breakdown.reservedSavings)}</span>
+              </div>
+              <div className="flex justify-between border-t border-white/20 pt-1.5">
+                <span style={{ color: '#fff', fontWeight: 700 }}>= Safe to Spend</span>
+                <span style={{ color: '#6EE7B7', fontWeight: 800 }}>{fmt(breakdown.safeToSpend)}</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, isLast, isReordering, isPinned, onTogglePin, theme }: {
   id: string
   children: React.ReactNode
@@ -469,6 +572,17 @@ export default function DashboardPage() {
     return 0
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.checkingBalance, syncReady, localWriteTick])
+
+  // ── Canonical Financial Engine (placed after checkingBalance is declared) ──
+  const engine = useFinancialEngine({
+    incomeSources: income,
+    bills,
+    savingsGoals: goals,
+    accountSettings: {
+      balance: checkingBalance,
+      buffer: user.safeToSpendBuffer || 0,
+    },
+  })
 
   // Safe to Spend — current month only: checking balance + this month's income minus this month's unpaid bills
   const safeToSpend = useMemo(() => {
@@ -1353,29 +1467,52 @@ export default function DashboardPage() {
           </p>
         </motion.div>
 
-        {/* Safe to Spend Hero Card */}
+        {/* Safe to Spend Hero Card — Action-First */}
         <motion.div variants={fadeUp} className="rounded-2xl p-5 sm:p-6" style={{ background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}DD 100%)`, color: '#fff' }}>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm opacity-70">Safe to Spend</span>
-              <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm opacity-70">Safe to Spend</span>
+                <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
+              </div>
+              <RiskBadge level={engine.riskLevel} theme={theme} />
             </div>
             <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>
-              {safeToSpendView === 'daily' ? m(safeToSpend.daily) : safeToSpendView === 'weekly' ? m(safeToSpend.weekly) : m(safeToSpend.amount)}
+              {safeToSpendView === 'daily' ? m(engine.safeToSpendDaily) : safeToSpendView === 'weekly' ? m(engine.safeToSpendWeekly) : m(engine.safeToSpendTotal)}
             </div>
             <div className="text-sm opacity-60">
-              {safeToSpendView} · this month
+              {safeToSpendView} · based on current balance
             </div>
+            {/* Bills due before next income */}
+            {engine.billsDueBeforeNextIncome > 0 && (
+              <div className="flex items-center gap-2 text-xs rounded-lg px-2 py-1.5 mt-1" style={{ background: 'rgba(239,68,68,0.25)' }}>
+                <Receipt size={12} />
+                <span><strong>{fmt(engine.billsDueBeforeNextIncome)}</strong> in bills due before next income ({engine.daysUntilNextIncome}d away)</span>
+              </div>
+            )}
             <div className="flex gap-1.5 mt-1">
-              {['daily', 'weekly', 'monthly'].map(v => (
-                <button key={v} onClick={() => setSafeToSpendView(v as 'daily' | 'weekly' | 'monthly')} className="px-2 py-0.5 rounded-md text-xs transition-all capitalize"
+              {(['daily', 'weekly', 'monthly'] as const).map(v => (
+                <button key={v} onClick={() => setSafeToSpendView(v)} className="px-2 py-0.5 rounded-md text-xs transition-all capitalize"
                   style={{ background: v === safeToSpendView ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', fontWeight: v === safeToSpendView ? 700 : 400 }}>
                   {v}
                 </button>
               ))}
             </div>
+            <SafeToSpendBreakdown breakdown={engine.breakdown} theme={theme} />
           </div>
         </motion.div>
+
+        {/* Next Action Card */}
+        {engine.nextActions.length > 0 && (
+          <motion.div variants={fadeUp}>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: theme.textS }}>Next Action</p>
+            <div className="space-y-2">
+              {engine.nextActions.slice(0, 2).map(action => (
+                <NextActionCard key={action.id} action={action} theme={theme} />
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Render sections in order — pinned first, then unpinned */}
         {sortedSectionOrder.map((sectionId, index) => renderSection(sectionId, index))}

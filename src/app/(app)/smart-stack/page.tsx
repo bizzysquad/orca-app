@@ -15,6 +15,8 @@ import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount }
 import { useTheme } from '@/context/ThemeContext';
 import { setLocalSynced } from '@/lib/syncLocal';
 import CalendarPicker from '@/components/CalendarPicker';
+import { useFinancialEngine } from '@/lib/financialEngine';
+import { orcaEvents } from '@/lib/eventBus';
 
 type Tab = 'income' | 'savings';
 
@@ -71,7 +73,10 @@ function ProjectionCalculator({ theme }: { theme: any }) {
   const [currentSaved, setCurrentSaved] = useState('')
   const [timeframe, setTimeframe] = useState('')
   const [timeUnit, setTimeUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('months')
-  const [result, setResult] = useState<{ perWeek: number; perMonth: number; perDay: number } | null>(null)
+  const [result, setResult] = useState<{
+    perWeek: number; perMonth: number; perDay: number
+    projectedCompletionDate: string; requiredPace: string
+  } | null>(null)
 
   const calculate = () => {
     const goal = parseFloat(goalAmount)
@@ -80,7 +85,7 @@ function ProjectionCalculator({ theme }: { theme: any }) {
 
     const remaining = goal - (parseFloat(currentSaved) || 0)
     if (remaining <= 0) {
-      setResult({ perWeek: 0, perMonth: 0, perDay: 0 })
+      setResult({ perWeek: 0, perMonth: 0, perDay: 0, projectedCompletionDate: 'Already reached!', requiredPace: '$0/day' })
       return
     }
 
@@ -93,7 +98,18 @@ function ProjectionCalculator({ theme }: { theme: any }) {
     const perMonth = perWeek * 4.33
     const perDay = perWeek / 7
 
-    setResult({ perWeek, perMonth, perDay })
+    // Required pace
+    const requiredPace = perDay < 10
+      ? `$${perDay.toFixed(2)}/day`
+      : `$${perWeek.toFixed(2)}/week`
+
+    // Projected completion date (based on required pace, from today)
+    const totalDays = remaining / perDay
+    const completionDate = new Date()
+    completionDate.setDate(completionDate.getDate() + Math.ceil(totalDays))
+    const projectedCompletionDate = completionDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+
+    setResult({ perWeek, perMonth, perDay, projectedCompletionDate, requiredPace })
   }
 
   return (
@@ -199,6 +215,17 @@ function ProjectionCalculator({ theme }: { theme: any }) {
               <div className="text-center p-3 rounded-xl" style={{ backgroundColor: `${theme.accent}20` }}>
                 <p style={{ color: theme.textM }} className="text-xs font-semibold mb-1">Per Day</p>
                 <p style={{ color: theme.accent }} className="text-lg font-bold">{fmt(result.perDay)}</p>
+              </div>
+            </div>
+            {/* Projected completion date */}
+            <div className="rounded-xl p-3 space-y-1.5" style={{ background: '#10B98115', border: '1px solid #10B98130' }}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold" style={{ color: theme.textS }}>Required Pace</span>
+                <span className="text-sm font-bold" style={{ color: '#10B981' }}>{result.requiredPace}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold" style={{ color: theme.textS }}>Projected Completion</span>
+                <span className="text-sm font-bold" style={{ color: '#10B981' }}>{result.projectedCompletionDate}</span>
               </div>
             </div>
           </motion.div>
@@ -314,6 +341,28 @@ export default function SmartStackPage() {
 
   const netIncome = data.user?.netIncome || 0;
   const [inlineNetIncome, setInlineNetIncome] = useState(String(netIncome || ''));
+
+  // ── Canonical Financial Engine ──
+  const engine = useFinancialEngine({
+    incomeSources: data.income || [],
+    bills: data.bills || [],
+    savingsGoals: data.goals || [],
+    accountSettings: {
+      balance: data.user?.checkingBalance || 0,
+      buffer: data.user?.safeToSpendBuffer || 0,
+    },
+  })
+
+  // Coverage Ratio label and color
+  const coverageLabel = engine.coverageRatio === Infinity ? '∞'
+    : engine.coverageRatio >= 1.5 ? 'Strong' : engine.coverageRatio >= 1.0 ? 'Adequate' : 'At Risk'
+  const coverageColor = engine.coverageRatio >= 1.5 ? '#10B981' : engine.coverageRatio >= 1.0 ? '#F59E0B' : '#EF4444'
+
+  // Forecast confidence label and color
+  const confidenceLabel = engine.forecastConfidence === 'high' ? 'High Confidence'
+    : engine.forecastConfidence === 'medium' ? 'Medium Confidence' : 'Low Confidence'
+  const confidenceColor = engine.forecastConfidence === 'high' ? '#10B981'
+    : engine.forecastConfidence === 'medium' ? '#F59E0B' : '#EF4444'
   const [inlinePayDate, setInlinePayDate] = useState('');
   const hasNetIncome = (parseFloat(inlineNetIncome) || netIncome) > 0;
 
@@ -844,6 +893,32 @@ export default function SmartStackPage() {
   const renderIncomeTab = () => {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+
+        {/* Coverage Ratio & Forecast Confidence — Engine-Driven */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl p-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: theme.textS }}>Coverage Ratio</p>
+            <p className="text-2xl font-bold" style={{ color: coverageColor }}>
+              {engine.coverageRatio === Infinity ? '∞' : `${engine.coverageRatio.toFixed(2)}×`}
+            </p>
+            <p className="text-xs mt-0.5 font-semibold" style={{ color: coverageColor }}>{coverageLabel}</p>
+            <p className="text-[10px] mt-1" style={{ color: theme.textS }}>income ÷ obligations (30d)</p>
+          </div>
+          <div className="rounded-2xl p-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: theme.textS }}>Forecast</p>
+            <p className="text-sm font-bold" style={{ color: confidenceColor }}>{confidenceLabel}</p>
+            <div className="flex items-center gap-1 mt-1">
+              {(['high', 'medium', 'low'] as const).map(level => (
+                <div key={level} className="h-1.5 flex-1 rounded-full"
+                  style={{ backgroundColor: engine.forecastConfidence === level ? confidenceColor : `${theme.border}60` }} />
+              ))}
+            </div>
+            <p className="text-[10px] mt-1.5" style={{ color: theme.textS }}>
+              {engine.forecastConfidence === 'high' ? 'Fixed income detected' : engine.forecastConfidence === 'medium' ? 'Mixed income pattern' : 'Manual / irregular income'}
+            </p>
+          </div>
+        </div>
+
         <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
           {[
             { key: 'payment', label: 'Incoming Payments', icon: Wallet },
