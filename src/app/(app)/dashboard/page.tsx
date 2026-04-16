@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
   DollarSign, Receipt, Palmtree, Calendar,
-  Pin, PinOff, PiggyBank, Wallet,
+  Pin, PinOff, PiggyBank, Wallet, Zap,
   TrendingUp, ArrowUpRight, ArrowDownRight, CreditCard,
   Bell,
 } from 'lucide-react'
@@ -17,6 +17,8 @@ import { fmt, fmtD, daysTo, calcAlloc, pct } from '@/lib/utils'
 import { createBrowserClient } from '@supabase/ssr'
 import { useTheme } from '@/context/ThemeContext'
 import type { Bill } from '@/lib/types'
+import DashboardSkeleton from '@/components/layout/DashboardSkeleton'
+import SetupBanner from '@/components/layout/SetupBanner'
 import {
   calcSafeToSpend,
   paymentsToEvents,
@@ -1321,7 +1323,10 @@ export default function DashboardPage() {
 
               {/* Bills Due Card */}
               <Link href="/bill-boss">
-                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="rounded-2xl p-5 cursor-pointer transition-all duration-200 group" style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = theme.border)}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
                       <Receipt className="w-4 h-4" style={{ color: '#EF4444' }} />
@@ -1348,7 +1353,10 @@ export default function DashboardPage() {
 
               {/* Total Saved Card */}
               <Link href="/smart-stack?tab=savings">
-                <div className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="rounded-2xl p-5 cursor-pointer transition-all duration-200" style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = theme.border)}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
                       <PiggyBank className="w-4 h-4" style={{ color: '#6366F1' }} />
@@ -1460,11 +1468,16 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div>Loading...</div>
+      <div style={{ backgroundColor: theme.bg, minHeight: '100vh' }}>
+        <DashboardSkeleton theme={theme} />
       </div>
     )
   }
+
+  // Determine new-user setup state
+  const hasBalance = checkingBalance > 0
+  const hasIncome = income && income.length > 0
+  const hasBills = bills && bills.length > 0
 
   return (
     <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }} className="overflow-x-hidden max-w-full">
@@ -1476,47 +1489,101 @@ export default function DashboardPage() {
       >
         {/* Welcome Message */}
         <motion.div variants={fadeUp} className="space-y-1">
-          <h1 className="text-2xl sm:text-5xl font-bold truncate" style={{ color: theme.text }}>
+          <h1 className="text-2xl sm:text-4xl font-bold" style={{ color: theme.text, letterSpacing: '-0.02em' }}>
             {firstName
-              ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName}`
+              ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName} 👋`
               : 'Welcome back'}
           </h1>
-          <p className="text-lg" style={{ color: theme.textS }}>
-            Here's your financial snapshot
+          <p className="text-sm" style={{ color: theme.textS }}>
+            {hasBalance && hasIncome
+              ? "Here\u2019s your financial snapshot for today."
+              : "Let\u2019s get your finances set up \u2014 takes about 2 minutes."}
           </p>
         </motion.div>
 
+        {/* New-user setup guide — only shown when onboarding is incomplete */}
+        {(!hasBalance || !hasIncome || !hasBills) && (
+          <motion.div variants={fadeUp}>
+            <SetupBanner
+              hasBalance={hasBalance}
+              hasIncome={!!hasIncome}
+              hasBills={!!hasBills}
+              theme={theme}
+            />
+          </motion.div>
+        )}
+
         {/* Safe to Spend Hero Card — Action-First */}
-        <motion.div variants={fadeUp} className="rounded-2xl p-5 sm:p-6" style={{ background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}DD 100%)`, color: '#fff' }}>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between mb-1">
+        <motion.div
+          variants={fadeUp}
+          className="rounded-2xl p-5 sm:p-6 relative overflow-hidden"
+          style={{ background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}CC 100%)`, color: '#fff' }}
+        >
+          {/* Subtle inner texture */}
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse 80% 50% at 10% 20%, rgba(255,255,255,0.08) 0%, transparent 70%)' }}
+          />
+
+          <div className="relative flex flex-col gap-2">
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-0.5">
               <div className="flex items-center gap-2">
-                <span className="text-sm opacity-70">Safe to Spend</span>
-                <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.2)', fontWeight: 600 }}>After bills & savings</span>
+                <Wallet size={14} className="opacity-70" />
+                <span className="text-sm font-semibold opacity-80">Safe to Spend</span>
               </div>
               <RiskBadge level={engine.riskLevel} theme={theme} />
             </div>
-            <div style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.1 }}>
-              {safeToSpendView === 'daily' ? m(engine.safeToSpendDaily) : safeToSpendView === 'weekly' ? m(engine.safeToSpendWeekly) : m(engine.safeToSpendTotal)}
+
+            {/* Big number */}
+            <div style={{ fontSize: 52, fontWeight: 900, lineHeight: 1.05, letterSpacing: '-0.03em' }}>
+              {safeToSpendView === 'daily'
+                ? m(engine.safeToSpendDaily)
+                : safeToSpendView === 'weekly'
+                ? m(engine.safeToSpendWeekly)
+                : m(engine.safeToSpendTotal)}
             </div>
-            <div className="text-sm opacity-60">
-              {safeToSpendView} · based on current balance
+
+            {/* Context line */}
+            <div className="text-xs opacity-60 -mt-1">
+              {safeToSpendView === 'daily' && 'per day this month — after bills & savings'}
+              {safeToSpendView === 'weekly' && 'per week this month — after bills & savings'}
+              {safeToSpendView === 'monthly' && 'remaining this month — after bills & savings'}
             </div>
-            {/* Bills due before next income */}
+
+            {/* Bills alert */}
             {engine.billsDueBeforeNextIncome > 0 && (
-              <div className="flex items-center gap-2 text-xs rounded-lg px-2 py-1.5 mt-1" style={{ background: 'rgba(239,68,68,0.25)' }}>
-                <Receipt size={12} />
-                <span><strong>{fmt(engine.billsDueBeforeNextIncome)}</strong> in bills due before next income ({engine.daysUntilNextIncome}d away)</span>
+              <div
+                className="flex items-center gap-2 text-xs rounded-xl px-3 py-2 mt-1"
+                style={{ background: 'rgba(239,68,68,0.22)', border: '1px solid rgba(239,68,68,0.3)' }}
+              >
+                <Receipt size={12} className="flex-shrink-0" />
+                <span>
+                  <strong>{fmt(engine.billsDueBeforeNextIncome)}</strong> in bills due before next payday
+                  {engine.daysUntilNextIncome > 0 && ` (${engine.daysUntilNextIncome}d away)`}
+                </span>
               </div>
             )}
+
+            {/* View toggles */}
             <div className="flex gap-1.5 mt-1">
               {(['daily', 'weekly', 'monthly'] as const).map(v => (
-                <button key={v} onClick={() => setSafeToSpendView(v)} className="px-2 py-0.5 rounded-md text-xs transition-all capitalize"
-                  style={{ background: v === safeToSpendView ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', fontWeight: v === safeToSpendView ? 700 : 400 }}>
+                <button
+                  key={v}
+                  onClick={() => setSafeToSpendView(v)}
+                  className="px-3 py-1 rounded-lg text-xs capitalize font-semibold transition-all duration-150"
+                  style={{
+                    background: v === safeToSpendView ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.1)',
+                    fontWeight: v === safeToSpendView ? 700 : 400,
+                    boxShadow: v === safeToSpendView ? 'inset 0 1px 0 rgba(255,255,255,0.2)' : 'none',
+                  }}
+                >
                   {v}
                 </button>
               ))}
             </div>
+
             <SafeToSpendBreakdown breakdown={engine.breakdown} theme={theme} />
           </div>
         </motion.div>

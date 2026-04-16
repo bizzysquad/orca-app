@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   BarChart3,
@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
+import { createBrowserClient } from '@supabase/ssr'
 
 interface NavItem {
   name: string
@@ -36,8 +37,24 @@ interface SidebarProps {
 
 export default function Sidebar({ userName = 'User', open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { theme, isDark } = useTheme()
   const { data } = useOrcaData()
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+      await supabase.auth.signOut()
+      router.push('/auth/login')
+    } catch {
+      setLoggingOut(false)
+    }
+  }
 
   // Custom logo from admin — syncs via event + cross-tab storage
   const [customLogo, setCustomLogo] = useState<string | null>(null)
@@ -145,9 +162,13 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
         onClick={onClose}
         className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
         style={{
-          background: active ? `${theme.accent}33` : 'transparent',
+          background: active
+            ? `linear-gradient(90deg, ${theme.accent}20 0%, ${theme.accent}08 100%)`
+            : 'transparent',
           fontWeight: active ? 600 : 400,
-          color: active ? '#FFFFFF' : '#94A3B8',
+          color: active ? theme.accent : '#64748B',
+          borderLeft: active ? `2px solid ${theme.accent}` : '2px solid transparent',
+          paddingLeft: 10,
         }}
       >
         <Icon
@@ -155,7 +176,7 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
           style={{ color: active ? theme.accent : '#475569' }}
         />
         <span className="flex-1 truncate">{item.name}</span>
-        {active && <ChevronRight className="w-3 h-3" style={{ color: theme.accent }} />}
+        {active && <ChevronRight className="w-3 h-3 opacity-60" style={{ color: theme.accent }} />}
       </Link>
     )
   }
@@ -240,17 +261,34 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
           )}
         </div>
 
-        {/* User profile */}
+        {/* User profile + Logout */}
         <div className="px-4 py-3" style={{ borderTop: `1px solid ${theme.border}` }}>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: theme.accent, fontSize: 11, fontWeight: 800 }}>
+          <div className="flex items-center gap-3 mb-2.5">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: `${theme.accent}25`, border: `1px solid ${theme.accent}40`, fontSize: 11, fontWeight: 800, color: theme.accent }}
+            >
               {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-white truncate" style={{ fontSize: 13, fontWeight: 600 }}>{resolvedName}</div>
+              <div className="truncate" style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{resolvedName}</div>
               <div className="truncate" style={{ color: '#475569', fontSize: 10 }}>{data.user?.email || 'Active'}</div>
             </div>
           </div>
+          {/* Logout button */}
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 hover:opacity-80 disabled:opacity-40"
+            style={{
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.15)',
+              color: '#F87171',
+            }}
+          >
+            <LogOut className="w-3.5 h-3.5 flex-shrink-0" />
+            {loggingOut ? 'Signing out…' : 'Sign Out'}
+          </button>
         </div>
       </div>
     </>

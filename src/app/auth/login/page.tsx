@@ -11,6 +11,7 @@ import {
   Lock,
   ArrowRight,
   CheckCircle,
+  CheckCircle2,
   BarChart3,
   Receipt,
   PiggyBank,
@@ -323,8 +324,10 @@ function LoginPageInner() {
       <div
         className="hidden lg:flex lg:w-[55%] flex-col justify-between p-10 xl:p-14"
         style={{
-          background: 'linear-gradient(160deg, #0F172A 0%, #1E1B4B 60%, #0F172A 100%)',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
+          background: 'linear-gradient(160deg, #080808 0%, #0F1218 50%, #080808 100%)',
+          borderRight: '1px solid rgba(255,255,255,0.05)',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
         {/* Top: Logo + Branding */}
@@ -341,19 +344,19 @@ function LoginPageInner() {
               <h1 className="text-xl font-black" style={{ color: '#F59E0B', letterSpacing: '0.08em' }}>
                 ORCA
               </h1>
-              <p className="text-xs text-slate-400" style={{ letterSpacing: '0.14em', fontWeight: 600 }}>
-                ORGANIZE RESOURCES CONTROL ASSETS
+              <p className="text-xs text-slate-500" style={{ letterSpacing: '0.14em', fontWeight: 600 }}>
+                FINANCIAL COMMAND CENTER
               </p>
             </div>
           </div>
 
-          {/* Purple pill badge */}
+          {/* Gold badge — matches brand */}
           <div
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs mb-6"
-            style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#818CF8', fontWeight: 600 }}
+            style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.25)', color: '#D4AF37', fontWeight: 600 }}
           >
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#818CF8' }} />
-            Your Financial Command Center
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#D4AF37' }} />
+            Know exactly what's safe to spend
           </div>
 
           {/* Hero heading */}
@@ -441,15 +444,15 @@ function LoginPageInner() {
             <img src="/ORCA-Logo.png" alt="ORCA" width={64} height={64} className="rounded-2xl object-cover mb-3" />
           )}
           <div style={{ color: '#F59E0B', fontWeight: 900, fontSize: 22, letterSpacing: '0.08em' }}>ORCA</div>
-          <div style={{ color: '#64748B', fontSize: 11, letterSpacing: '0.12em', fontWeight: 600 }} className="mb-4">ORGANIZE RESOURCES CONTROL ASSETS</div>
+          <div style={{ color: '#64748B', fontSize: 11, letterSpacing: '0.14em', fontWeight: 600 }} className="mb-4">FINANCIAL COMMAND CENTER</div>
 
           {/* Mobile app description */}
           <div
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs mb-4"
-            style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#818CF8', fontWeight: 600 }}
+            style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.25)', color: '#D4AF37', fontWeight: 600 }}
           >
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#818CF8' }} />
-            Your Financial Command Center
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#D4AF37' }} />
+            Know exactly what&apos;s safe to spend
           </div>
 
           <p className="text-center text-sm mb-5 px-2" style={{ color: '#94A3B8', lineHeight: 1.6 }}>
@@ -495,8 +498,8 @@ function LoginPageInner() {
                     }}
                     className="flex-1 py-2.5 rounded-lg text-sm capitalize transition-all"
                     style={{
-                      background: isSignUp === (m === 'signup') ? '#6366F1' : 'transparent',
-                      color: isSignUp === (m === 'signup') ? '#FFFFFF' : '#64748B',
+                      background: isSignUp === (m === 'signup') ? '#D4AF37' : 'transparent',
+                      color: isSignUp === (m === 'signup') ? '#0A0A0A' : '#64748B',
                       fontWeight: isSignUp === (m === 'signup') ? 700 : 500,
                     }}
                   >
@@ -548,8 +551,8 @@ function LoginPageInner() {
                   className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-4"
                   style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.35)' }}
                 >
-                  <Users size={16} style={{ color: '#A5B4FC', flexShrink: 0 }} />
-                  <span style={{ color: '#C7D2FE' }}>You were invited to a Stack Circle group. Sign in or create an account to join.</span>
+                  <Users size={16} style={{ color: '#D4AF37', flexShrink: 0 }} />
+                  <span style={{ color: 'rgba(212,175,55,0.9)' }}>You were invited to a Stack Circle group. Sign in or create an account to join.</span>
                 </div>
               )}
 
@@ -650,7 +653,7 @@ function LoginPageInner() {
                         setError('')
                       }}
                       className="text-xs mt-2 transition-all hover:opacity-80"
-                      style={{ color: '#818CF8', fontWeight: 700 }}
+                      style={{ color: '#D4AF37', fontWeight: 700, opacity: 0.8 }}
                     >
                       Forgot Password?
                     </button>
@@ -690,9 +693,9 @@ function LoginPageInner() {
                   type="submit"
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm transition-all hover:opacity-90 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                  style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: '#fff', fontWeight: 700 }}
+                  style={{ background: 'linear-gradient(135deg, #D4AF37 0%, #F5D76E 50%, #D4AF37 100%)', backgroundSize: '200% 100%', color: '#0A0A0A', fontWeight: 700, boxShadow: '0 0 20px rgba(212,175,55,0.2)' }}
                 >
-                  {loading ? (isSignUp ? 'Creating account...' : 'Signing in...') : (isSignUp ? 'Create My Account' : 'Sign In')}
+                  {loading ? (isSignUp ? 'Creating account...' : 'Signing in...') : (isSignUp ? 'Create My Account' : 'Sign In →')}
                   {!loading && <ArrowRight className="w-4 h-4" />}
                 </button>
               </form>
@@ -708,16 +711,23 @@ function LoginPageInner() {
                     setError('')
                   }}
                   className="text-sm transition-all hover:opacity-80"
-                  style={{ color: '#818CF8', fontWeight: 700 }}
+                  style={{ color: '#D4AF37', fontWeight: 700 }}
                 >
-                  {isSignUp ? 'Sign in' : 'Create one'}
+                  {isSignUp ? 'Sign in' : 'Create one free'}
                 </button>
               </div>
 
               {/* Security note */}
-              <div className="flex items-center justify-center gap-1.5 mt-6">
-                <Shield className="w-3.5 h-3.5" style={{ color: '#334155' }} />
-                <span style={{ color: '#334155', fontSize: 11 }}>Secured with end-to-end encryption</span>
+              <div className="flex items-center justify-center gap-4 mt-6">
+                <div className="flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5" style={{ color: '#334155' }} />
+                  <span style={{ color: '#334155', fontSize: 11 }}>End-to-end encrypted</span>
+                </div>
+                <div className="w-px h-3 bg-slate-800" />
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle className="w-3.5 h-3.5" style={{ color: '#334155' }} />
+                  <span style={{ color: '#334155', fontSize: 11 }}>No card required</span>
+                </div>
               </div>
             </>
           ) : (
@@ -773,7 +783,7 @@ function LoginPageInner() {
                   type="submit"
                   disabled={forgotPasswordLoading}
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm transition-all hover:opacity-90 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                  style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: '#fff', fontWeight: 700 }}
+                  style={{ background: 'linear-gradient(135deg, #D4AF37 0%, #F5D76E 50%, #D4AF37 100%)', backgroundSize: '200% 100%', color: '#0A0A0A', fontWeight: 700 }}
                 >
                   {forgotPasswordLoading ? 'Sending...' : 'Send Reset Link'}
                   {!forgotPasswordLoading && <ArrowRight className="w-4 h-4" />}
@@ -790,7 +800,7 @@ function LoginPageInner() {
                     setForgotPasswordError('')
                   }}
                   className="text-sm transition-all hover:opacity-80"
-                  style={{ color: '#818CF8', fontWeight: 700 }}
+                  style={{ color: '#D4AF37', fontWeight: 700 }}
                 >
                   Back to login
                 </button>

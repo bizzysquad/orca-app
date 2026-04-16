@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import Image from 'next/image'
-import { Menu, Home, Sun, Moon } from 'lucide-react'
+import { Menu, Sun, Moon, Search, Command } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -14,12 +14,27 @@ interface DesktopTopBarProps {
   userName?: string
 }
 
-export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, userName = 'User' }: DesktopTopBarProps) {
+// Page titles by route
+const PAGE_TITLES: Record<string, string> = {
+  '/dashboard': 'Dashboard',
+  '/smart-stack': 'Smart Stack',
+  '/bill-boss': 'Bill Boss',
+  '/stack-circle': 'Stack Circle',
+  '/task-list': 'Task List',
+  '/settings': 'Settings',
+  '/admin': 'Admin',
+}
+
+export default function DesktopTopBar({
+  onMenuToggle,
+  notificationCount = 0,
+  userName = 'User',
+}: DesktopTopBarProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const { theme, isDark, toggleDark } = useTheme()
   const [customLogo, setCustomLogo] = useState<string | null>(null)
 
-  // Read custom logo from localStorage
   useEffect(() => {
     const load = () => {
       try {
@@ -30,118 +45,112 @@ export default function DesktopTopBar({ onMenuToggle, notificationCount = 0, use
     load()
     const handler = () => load()
     window.addEventListener('orca-logo-updated', handler)
-    return () => {
-      window.removeEventListener('orca-logo-updated', handler)
-    }
+    return () => window.removeEventListener('orca-logo-updated', handler)
   }, [])
 
-  // Compute user initials
-  const getInitials = (name: string): string => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
-  }
+  const getInitials = (name: string): string =>
+    name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 
   const initials = getInitials(userName)
+
+  // Find the current page title
+  const currentTitle = Object.entries(PAGE_TITLES).find(([route]) =>
+    route === '/dashboard' ? pathname === '/dashboard' || pathname === '/' : pathname.startsWith(route)
+  )?.[1] ?? 'ORCA'
+
+  // Trigger Quick Actions (Cmd+K)
+  const triggerSearch = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+  }
 
   return (
     <div
       className={cn(
         'sticky top-0 z-40',
-        'backdrop-blur-xl',
-        'flex items-center justify-between px-4 sm:px-8 py-3 sm:py-4 transition-colors duration-200'
+        'flex items-center justify-between px-4 sm:px-5 py-3 transition-colors duration-200'
       )}
       style={{
-        backgroundColor: theme.bg,
+        backgroundColor: `${theme.bg}ee`,
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         borderBottom: `1px solid ${theme.border}`,
       }}
     >
-      {/* Left side: Hamburger + ORCA Logo + Text */}
-      <div className="flex items-center gap-3">
-        {/* Hamburger menu — mobile only */}
+      {/* Left: Hamburger (mobile) + Logo */}
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Mobile hamburger */}
         <button
           onClick={onMenuToggle}
-          className={cn(
-            'md:hidden p-2 rounded-lg transition-colors duration-200',
-            'hover:opacity-80'
-          )}
+          className="lg:hidden p-2 rounded-lg transition-colors hover:opacity-80 flex-shrink-0"
           style={{ color: theme.textM }}
+          aria-label="Open navigation"
         >
-          <Menu size={22} />
+          <Menu size={20} />
         </button>
 
-        {/* ORCA Logo and Text */}
-        <div className="flex items-center gap-2">
+        {/* Logo — hidden on desktop (sidebar has it), shown on mobile */}
+        <Link href="/dashboard" className="flex items-center gap-2 lg:hidden flex-shrink-0">
           {customLogo ? (
-            <Image
-              src={customLogo}
-              alt="ORCA Logo"
-              width={32}
-              height={32}
-              className="rounded"
-            />
+            <img src={customLogo} alt="ORCA" width={28} height={28} className="rounded-lg object-cover" />
           ) : (
-            <Image
-              src="/logo.svg"
-              alt="ORCA Logo"
-              width={32}
-              height={32}
-              className="rounded"
-            />
+            <Image src="/logo.svg" alt="ORCA" width={28} height={28} className="rounded-lg" />
           )}
-          <span
-            className="font-bold text-lg"
-            style={{ color: theme.gold }}
-          >
+          <span className="font-black text-base" style={{ color: theme.accent, letterSpacing: '0.06em' }}>
             ORCA
           </span>
+        </Link>
+
+        {/* Desktop: current page title as breadcrumb */}
+        <div className="hidden lg:block">
+          <h2 className="text-sm font-semibold" style={{ color: theme.text }}>
+            {currentTitle}
+          </h2>
         </div>
       </div>
 
-      {/* Right side: Home + Theme Toggle + Profile Circle */}
-      <div className="flex items-center gap-2">
-        {/* Home Button — navigates to Dashboard */}
-        <button
-          onClick={() => router.push('/dashboard')}
-          className={cn(
-            'p-2 rounded-lg transition-colors duration-200',
-            'hover:opacity-80'
-          )}
-          style={{ color: theme.gold }}
-          title="Go to Dashboard"
+      {/* Center: Search/Quick Actions pill — desktop only */}
+      <button
+        onClick={triggerSearch}
+        className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all duration-150 hover:opacity-80"
+        style={{
+          background: theme.surface || 'rgba(255,255,255,0.05)',
+          border: `1px solid ${theme.border}`,
+          color: theme.textM,
+        }}
+        title="Open command palette"
+      >
+        <Search size={13} />
+        <span>Quick search</span>
+        <kbd
+          className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-bold"
+          style={{ background: `${theme.border}`, color: theme.textM }}
         >
-          <Home size={20} strokeWidth={1.5} />
-        </button>
+          <Command size={8} />K
+        </kbd>
+      </button>
 
-        {/* Light/Dark Mode Toggle */}
+      {/* Right: Theme toggle + Avatar */}
+      <div className="flex items-center gap-2">
+        {/* Theme toggle */}
         <button
           onClick={toggleDark}
-          className={cn(
-            'p-2 rounded-lg transition-colors duration-200',
-            'hover:opacity-80'
-          )}
+          className="p-2 rounded-lg transition-all hover:opacity-80"
           style={{ color: theme.textM }}
           title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         >
-          {isDark ? <Sun size={20} strokeWidth={1.5} /> : <Moon size={20} strokeWidth={1.5} />}
+          {isDark ? <Sun size={18} strokeWidth={1.5} /> : <Moon size={18} strokeWidth={1.5} />}
         </button>
 
-        {/* Profile Circle with Initials */}
+        {/* Avatar → Settings */}
         <button
           onClick={() => router.push('/settings')}
-          className={cn(
-            'w-8 h-8 rounded-full transition-opacity duration-200',
-            'hover:opacity-80 flex items-center justify-center',
-            'font-bold text-xs'
-          )}
+          className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-opacity hover:opacity-80"
           style={{
-            background: `linear-gradient(135deg, ${theme.gold}, ${theme.goldD})`,
-            color: theme.bg,
+            background: `${theme.accent}25`,
+            border: `1.5px solid ${theme.accent}50`,
+            color: theme.accent,
           }}
-          title={userName}
+          title={`${userName} · Settings`}
         >
           {initials}
         </button>
