@@ -18,6 +18,8 @@ export default function CalendarPicker({ value, onChange, placeholder = 'Select 
   const [year, setYear] = useState(() => value ? new Date(value + 'T00:00:00').getFullYear() : new Date().getFullYear())
   const [isMobile, setIsMobile] = useState(false)
   const backdropRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number; width: number } | null>(null)
 
   // Detect mobile viewport
   useEffect(() => {
@@ -58,6 +60,30 @@ export default function CalendarPicker({ value, onChange, placeholder = 'Select 
   const selectDate = (dateStr: string) => {
     onChange(dateStr)
     setOpen(false)
+  }
+
+  // Calculate popup position from trigger button rect (desktop only)
+  const handleOpen = () => {
+    if (!open && !isMobile && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      const minWidth = 300
+      const popupWidth = Math.max(rect.width, minWidth)
+      let left = rect.left
+      // Clamp so popup doesn't overflow right edge of viewport
+      if (left + popupWidth > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - popupWidth - 8)
+      }
+      // If popup would overflow bottom, flip above the trigger
+      const estimatedHeight = showQuickSelect ? 390 : 340
+      const top = rect.bottom + window.scrollY + 4
+      const flipTop = rect.top + window.scrollY - estimatedHeight - 4
+      setPopupPos({
+        top: rect.bottom + estimatedHeight > window.innerHeight ? flipTop : top,
+        left,
+        width: popupWidth,
+      })
+    }
+    setOpen(prev => !prev)
   }
 
   const firstDay = new Date(year, month, 1).getDay()
@@ -146,8 +172,9 @@ export default function CalendarPicker({ value, onChange, placeholder = 'Select 
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={handleOpen}
         style={{ backgroundColor: theme.bg, borderColor: theme.border, color: value ? theme.text : `${theme.textM}80` }}
         className="w-full px-4 py-2.5 border rounded-lg text-left flex items-center justify-between focus:outline-none text-sm"
       >
@@ -192,12 +219,21 @@ export default function CalendarPicker({ value, onChange, placeholder = 'Select 
               </div>
             </div>
           ) : (
-            /* ─── Desktop: Dropdown popover ─── */
+            /* ─── Desktop: Fixed popover (escapes overflow-hidden parents) ─── */
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+              <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
               <div
-                style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-xl p-4 shadow-xl"
+                style={{
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                  position: 'fixed',
+                  top: popupPos?.top ?? 0,
+                  left: popupPos?.left ?? 0,
+                  width: popupPos?.width ?? 300,
+                  minWidth: 280,
+                  zIndex: 9999,
+                }}
+                className="border rounded-xl p-4 shadow-2xl"
               >
                 {calendarContent}
               </div>
