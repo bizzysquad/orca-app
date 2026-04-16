@@ -23,6 +23,10 @@ type FormStep = 1 | 2 | 3
  * This prevents recurring bills from disappearing permanently after being paid once.
  */
 function getBillEffectiveStatus(bill: Bill, calMonth: number, calYear: number): 'upcoming' | 'paid' {
+  // If fully paid via alloc entries, treat as paid regardless of stored status
+  const totalAllocPaid = bill.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+  if (bill.alloc.length > 0 && totalAllocPaid >= bill.amount) return 'paid'
+
   if (bill.status !== 'paid') return bill.status as 'upcoming' | 'paid'
   // One-time bills: paid is permanent
   if (!bill.recurrence || bill.recurrence === 'one-time') return 'paid'
@@ -101,65 +105,98 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   const todayDay = isCurrentMonth ? todayDate.getDate() : -1
   const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
-  // Get all events for a day including split payments and recurring bill dates.
-  // Deduplicates so a bill never shows more than once on the same day (prefers paid=true).
+  // Compute whether a bill is effectively paid for a specific calendar month/year.
+  // Mirrors the getBillEffectiveStatus logic used in the bill list.
+  const isBillPaidForMonth = (b: Bill, m: number, y: number): boolean => {
+    // Fully paid via alloc entries
+    const totalAllocPaid = b.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+    if (b.alloc.length > 0 && totalAllocPaid >= b.amount) return true
+
+    if (b.status !== 'paid') return false
+    if (!b.paidDate) return true // legacy: no paidDate, treat as paid
+
+    const pd = new Date(b.paidDate + 'T00:00:00')
+    const recurrence = b.recurrence || 'one-time'
+
+    if (recurrence === 'one-time') return true
+    if (recurrence === 'monthly') return pd.getMonth() === m && pd.getFullYear() === y
+    if (recurrence === 'yearly') return pd.getFullYear() === y
+    if (recurrence === 'weekly' || recurrence === 'custom') {
+      const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
+      const now = new Date(); now.setHours(0, 0, 0, 0)
+      return Math.floor((now.getTime() - pd.getTime()) / 86400000) < intervalDays
+    }
+    return false
+  }
+
+  // Compute partial payment info for a bill
+  const getBillAllocInfo = (b: Bill) => {
+    const totalPaid = b.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+    const remaining = Math.max(0, b.amount - totalPaid)
+    return { totalPaid, remaining, isPartial: totalPaid > 0 && remaining > 0 }
+  }
+
+  // Get all bill events for a calendar day. Rewritten to:
+  // - Always show monthly/yearly recurring bills on their due day (regardless of alloc state)
+  // - Use cycle-aware paid status (paid this month ≠ paid every month)
+  // - Deduplicate by case-insensitive name+type (prevents showing the same bill twice)
   const getEventsForDay = (day: number) => {
     const raw: { label: string; amount: number; type: 'bill' | 'split'; paid: boolean }[] = []
 
     bills.forEach(b => {
-      if (b.alloc.length === 0) {
-        if (b.status === 'paid' && (b as any).paidDate) {
-          // Show on the actual paid date (green)
-          const pd = new Date((b as any).paidDate + 'T00:00:00')
-          if (pd.getDate() === day && pd.getMonth() === month && pd.getFullYear() === year) {
-            raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: true })
+      const recurrence = b.recurrence || 'one-time'
+      const dueDate = new Date(b.due + 'T00:00:00')
+      const effectivePaid = isBillPaidForMonth(b, month, year)
+
+      // Partial payment info
+      const { totalPaid: allocPaid, remaining } = getBillAllocInfo(b)
+      const displayAmount = allocPaid > 0 ? Math.max(remaining, b.amount) : b.amount
+
+      // Determine if this bill lands on this specific day in the viewed month
+      let showOnThisDay = false
+
+      if (recurrence === 'one-time') {
+        showOnThisDay = dueDate.getDate() === day && dueDate.getMonth() === month && dueDate.getFullYear() === year
+      } else if (recurrence === 'monthly') {
+        showOnThisDay = dueDate.getDate() === day
+      } else if (recurrence === 'yearly') {
+        showOnThisDay = dueDate.getDate() === day && dueDate.getMonth() === month
+      } else {
+        // Weekly / custom — check if any occurrence in this month lands on this day
+        const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
+        const monthStart = new Date(year, month, 1)
+        const monthEnd = new Date(year, month + 1, 0)
+        const cursor = new Date(dueDate)
+        if (cursor < monthStart) {
+          const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
+          cursor.setDate(cursor.getDate() + gap)
+        }
+        while (cursor <= monthEnd) {
+          if (cursor >= dueDate && cursor.getDate() === day && cursor.getMonth() === month && cursor.getFullYear() === year) {
+            showOnThisDay = true
+            break
           }
-          // For monthly bills that are paid: also show upcoming occurrence in OTHER months as red
-          if (b.recurrence === 'monthly') {
-            const paidMonth = pd.getMonth()
-            const paidYear = pd.getFullYear()
-            const dueDay = new Date(b.due + 'T00:00:00').getDate()
-            if ((month !== paidMonth || year !== paidYear) && dueDay === day) {
-              raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: false })
-            }
-          }
-        } else if (b.recurrence && b.recurrence !== 'one-time' && b.recurrence !== 'monthly') {
-          // Weekly / biweekly / custom: expand into dates for the viewed month
-          const recurDates = getRecurringBillDates(b, 6)
-          recurDates.forEach(dateStr => {
-            const rd = new Date(dateStr + 'T00:00:00')
-            if (rd.getDate() === day && rd.getMonth() === month && rd.getFullYear() === year) {
-              raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: false })
-            }
-          })
-        } else {
-          const d = new Date(b.due + 'T00:00:00')
-          if (b.recurrence === 'monthly') {
-            // Monthly: show on same day-of-month each month, with correct paid status
-            // Paid status applies only to the calendar month that matches paidDate (or current if no paidDate)
-            if (d.getDate() === day) {
-              const isPaidThisMonth = b.status === 'paid' && !(b as any).paidDate
-              raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: isPaidThisMonth })
-            }
-          } else if (d.getDate() === day && d.getMonth() === month && d.getFullYear() === year) {
-            raw.push({ label: b.name, amount: b.amount, type: 'bill', paid: b.status === 'paid' })
-          }
+          cursor.setDate(cursor.getDate() + intervalDays)
         }
       }
 
-      // Split payment dates
+      if (showOnThisDay) {
+        raw.push({ label: b.name, amount: displayAmount, type: 'bill', paid: effectivePaid })
+      }
+
+      // Alloc / split payment entries — shown on their specific date
       b.alloc.forEach(a => {
         const ad = new Date(a.date + 'T00:00:00')
         if (ad.getDate() === day && ad.getMonth() === month && ad.getFullYear() === year) {
-          raw.push({ label: `${b.name} (split)`, amount: a.amount, type: 'split', paid: a.paid })
+          raw.push({ label: `${b.name} (partial)`, amount: a.amount, type: 'split', paid: a.paid })
         }
       })
     })
 
-    // Deduplicate: same label + same type on the same day — prefer paid=true
+    // Deduplicate: case-insensitive name + type — prefer the paid=true entry
     const seen = new Map<string, typeof raw[0]>()
     raw.forEach(ev => {
-      const key = `${ev.label}-${ev.type}`
+      const key = `${ev.label.toLowerCase().trim()}-${ev.type}`
       const existing = seen.get(key)
       if (!existing || (!existing.paid && ev.paid)) {
         seen.set(key, ev)
@@ -741,6 +778,8 @@ export default function BillBossPage() {
   }
 
   // Handler: Apply partial or full payment
+  // Partial payments are tracked via alloc entries (bill.amount is never mutated).
+  // Once alloc paid total reaches bill.amount the bill is considered fully paid.
   const handleApplyPartialPayment = () => {
     if (!partialPayId || !partialPayAmount) return
 
@@ -752,18 +791,36 @@ export default function BillBossPage() {
 
     const today = new Date().toISOString().split('T')[0]
 
-    if (amount >= bill.amount) {
-      // Full payment
+    // Total already paid via alloc
+    const alreadyPaid = bill.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+    const remaining = Math.max(0, bill.amount - alreadyPaid)
+    const effectiveAmount = Math.min(amount, remaining)
+
+    if (effectiveAmount <= 0) {
+      setPartialPayId(null)
+      setPartialPayAmount('')
+      setPartialPayMode('full')
+      return
+    }
+
+    if (effectiveAmount >= remaining) {
+      // Full (or completing) payment — mark bill as paid
       persistBills(bills.map(b =>
         b.id === partialPayId
-          ? { ...b, status: 'paid' as const, paidDate: today }
+          ? { ...b, status: 'paid' as const, paidDate: today, alloc: [] }
           : b
       ))
     } else {
-      // Partial payment
+      // Genuine partial payment — record as alloc entry, keep status upcoming
+      const newAlloc: BillAlloc = {
+        id: gid(),
+        date: today,
+        amount: effectiveAmount,
+        paid: true,
+      }
       persistBills(bills.map(b =>
         b.id === partialPayId
-          ? { ...b, amount: b.amount - amount, status: 'upcoming' as const }
+          ? { ...b, alloc: [...b.alloc, newAlloc] }
           : b
       ))
     }
@@ -776,6 +833,19 @@ export default function BillBossPage() {
   // Handler: Delete bill
   const handleDeleteBill = (billId: string) => {
     persistBills(bills.filter(b => b.id !== billId))
+  }
+
+  // Helper: compute partial payment info for a bill
+  const getPartialPayInfo = (bill: Bill) => {
+    const totalPaid = bill.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+    if (totalPaid <= 0) return null
+    const remaining = Math.max(0, bill.amount - totalPaid)
+    return {
+      totalPaid,
+      remaining,
+      isPartial: remaining > 0,
+      pct: Math.min(100, Math.round((totalPaid / bill.amount) * 100)),
+    }
   }
 
   // Handler: Apply split
@@ -1200,6 +1270,9 @@ export default function BillBossPage() {
                   variants={item}
                   transition={{ delay: idx * 0.05 }}
                 >
+                  {(() => {
+                    const partial = getPartialPayInfo(bill)
+                    return (
                   <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-6 space-y-4">
                     {/* Bill Header */}
                     <div className="flex items-start gap-3 sm:gap-4 flex-wrap sm:flex-nowrap">
@@ -1209,6 +1282,11 @@ export default function BillBossPage() {
                           <span className="px-2 sm:px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: `${iconConfig.color}15`, color: iconConfig.color }}>
                             {bill.cat}
                           </span>
+                          {partial?.isPartial && (
+                            <span className="px-2 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: '#F59E0B20', color: '#F59E0B' }}>
+                              Partially Paid
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm" style={{ color: theme.textM }}>
                           Due {fmtD(bill.due)}
@@ -1218,13 +1296,29 @@ export default function BillBossPage() {
                           {bill.recurrenceEndDate && <span> · Ends {fmtD(bill.recurrenceEndDate)}</span>}
                           {bill.recurrenceEndAfter && <span> · {bill.recurrenceEndAfter}x left</span>}
                         </p>
+                        {partial?.isPartial && (
+                          <div className="mt-2">
+                            <div className="flex justify-between text-xs mb-1" style={{ color: theme.textM }}>
+                              <span>Paid: <span className="font-bold" style={{ color: theme.ok }}>{fmt(partial.totalPaid)}</span></span>
+                              <span>Remaining: <span className="font-bold" style={{ color: '#EF4444' }}>{fmt(partial.remaining)}</span></span>
+                            </div>
+                            <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+                              <div className="h-full rounded-full" style={{ width: `${partial.pct}%`, backgroundColor: '#F59E0B' }} />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xl sm:text-3xl font-bold flex-shrink-0" style={{ color: '#EF4444' }}>
-                        –{fmt(bill.amount)}
-                      </p>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xl sm:text-3xl font-bold" style={{ color: '#EF4444' }}>
+                          –{fmt(partial?.isPartial ? partial.remaining : bill.amount)}
+                        </p>
+                        {partial?.isPartial && (
+                          <p className="text-xs mt-0.5" style={{ color: theme.textM }}>of {fmt(bill.amount)}</p>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Split Payment Schedule (collapsible) */}
+                    {/* Partial/Split Payment Schedule (collapsible) */}
                     {bill.alloc.length > 0 && (
                       <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-xl p-4">
                         <button
@@ -1232,7 +1326,7 @@ export default function BillBossPage() {
                           className="w-full flex items-center justify-between"
                         >
                           <p className="text-xs font-bold" style={{ color: theme.gold }}>
-                            SPLIT SCHEDULE ({bill.alloc.filter(a => a.paid).length}/{bill.alloc.length} paid)
+                            {partial?.isPartial ? `PARTIAL PAYMENTS (${fmt(partial.totalPaid)} of ${fmt(bill.amount)})` : `SPLIT SCHEDULE (${bill.alloc.filter(a => a.paid).length}/${bill.alloc.length} paid)`}
                           </p>
                           {collapsedSplits[bill.id]
                             ? <ChevronDown className="w-4 h-4" style={{ color: theme.textM }} />
@@ -1326,6 +1420,8 @@ export default function BillBossPage() {
                       </motion.button>
                     </div>
                   </div>
+                    )
+                  })()}
                 </motion.div>
               )
               })}
@@ -1344,6 +1440,7 @@ export default function BillBossPage() {
             {visibleBills
               .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
               .map((bill, idx) => {
+                const partial = getPartialPayInfo(bill)
                 return (
                 <motion.div
                   key={bill.id}
@@ -1354,13 +1451,18 @@ export default function BillBossPage() {
                 >
                   {/* Name + Category */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{bill.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{bill.name}</p>
+                      {partial?.isPartial && (
+                        <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: '#F59E0B20', color: '#F59E0B' }}>PARTIAL</span>
+                      )}
+                    </div>
                     <p className="text-xs truncate" style={{ color: theme.textM }}>
-                      {bill.cat} · Due {fmtD(bill.due)}
+                      {bill.cat} · Due {fmtD(bill.due)}{partial?.isPartial ? ` · ${fmt(partial.remaining)} left` : ''}
                     </p>
                   </div>
                   {/* Amount */}
-                  <p className="text-sm font-bold flex-shrink-0 tabular-nums" style={{ color: '#EF4444' }}>–{fmt(bill.amount)}</p>
+                  <p className="text-sm font-bold flex-shrink-0 tabular-nums" style={{ color: '#EF4444' }}>–{fmt(partial?.isPartial ? partial.remaining : bill.amount)}</p>
                   {/* Quick actions */}
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button

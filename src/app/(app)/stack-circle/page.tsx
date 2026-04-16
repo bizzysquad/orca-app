@@ -16,6 +16,8 @@ import {
   ChevronUp,
   Calendar,
   Plane,
+  Target,
+  TrendingUp,
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, pct, gid } from '@/lib/utils';
@@ -100,6 +102,7 @@ interface Group {
   current: number;
   date: string;
   code: string;
+  type?: 'trip' | 'savings';
   members: GroupMember[];
   activity: GroupActivity[];
   tasks?: GroupTask[];
@@ -166,6 +169,7 @@ export default function StackCirclePage() {
   const [newGroupGoal, setNewGroupGoal] = useState('');
   const [newGroupTarget, setNewGroupTarget] = useState('');
   const [newGroupDate, setNewGroupDate] = useState('');
+  const [newGroupType, setNewGroupType] = useState<'trip' | 'savings'>('trip');
 
   // Other state
   const [activeTab, setActiveTab] = useState<'group' | 'roommates'>('group');
@@ -272,6 +276,7 @@ export default function StackCirclePage() {
         target: Number(newGroupTarget),
         current: 0,
         date: newGroupDate,
+        type: newGroupType,
         code: generateInviteCode(),
         members: [
           {
@@ -305,6 +310,7 @@ export default function StackCirclePage() {
       setNewGroupGoal('');
       setNewGroupTarget('');
       setNewGroupDate('');
+      setNewGroupType('trip');
       setShowCreateGroupForm(false);
     }
   };
@@ -736,6 +742,34 @@ export default function StackCirclePage() {
                 >
                   <h3 className="font-bold text-base sm:text-lg mb-6" style={{ color: theme.text }}>Create Your First Group</h3>
                   <div className="space-y-3 sm:space-y-4">
+                    {/* Group Type Selector */}
+                    <div>
+                      <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Group Type</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {([
+                          { value: 'trip' as const, icon: Plane, label: 'Group Trip', desc: 'Plan a trip together' },
+                          { value: 'savings' as const, icon: Target, label: 'Group Savings', desc: 'Save toward a goal' },
+                        ]).map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setNewGroupType(opt.value)}
+                            className="flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all"
+                            style={{
+                              backgroundColor: newGroupType === opt.value ? `${teal}18` : theme.bg,
+                              borderColor: newGroupType === opt.value ? teal : theme.border,
+                              color: newGroupType === opt.value ? teal : theme.textM,
+                            }}
+                          >
+                            <opt.icon className="w-5 h-5" />
+                            <div>
+                              <p className="text-xs font-bold">{opt.label}</p>
+                              <p className="text-[10px] opacity-70">{opt.desc}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div>
                       <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Group Name</label>
                       <input
@@ -809,7 +843,10 @@ export default function StackCirclePage() {
                       {/* Group Header Row */}
                       <div className="flex items-center gap-3 p-4 sm:p-5">
                         <div className="p-2 rounded-2xl flex-shrink-0" style={{ backgroundColor: isDark ? `${theme.accent}26` : `${theme.accent}14` }}>
-                          <Plane className="w-5 h-5" style={{ color: theme.accent }} />
+                          {group.type === 'savings'
+                            ? <Target className="w-5 h-5" style={{ color: theme.accent }} />
+                            : <Plane className="w-5 h-5" style={{ color: theme.accent }} />
+                          }
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-sm sm:text-base truncate" style={{ color: theme.text }}>{displayGroupName}</p>
@@ -954,7 +991,7 @@ export default function StackCirclePage() {
                                 {[
                                   { key: 'savings', label: 'My Circle' },
                                   { key: 'tasks', label: 'Checklist' },
-                                  { key: 'trip', label: 'Group Trip' },
+                                  { key: 'trip', label: group.type === 'savings' ? 'Savings Plan' : 'Group Trip' },
                                 ].map(({ key, label }) => (
                                   <button
                                     key={key}
@@ -1116,8 +1153,110 @@ export default function StackCirclePage() {
                                 </div>
                               )}
 
-                              {/* ── TRIP SUB-TAB ── */}
-                              {subTab === 'trip' && (
+                              {/* ── TRIP / SAVINGS PLAN SUB-TAB ── */}
+                              {subTab === 'trip' && group.type === 'savings' && (
+                                <div className="space-y-4">
+                                  {/* Monthly Contribution Calculator */}
+                                  <div className="rounded-xl border p-3 sm:p-4" style={{ backgroundColor: theme.bg, borderColor: tealBorder }}>
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <TrendingUp className="w-4 h-4" style={{ color: teal }} />
+                                      <h4 className="font-bold text-sm" style={{ color: theme.text }}>Monthly Contribution</h4>
+                                    </div>
+                                    {(() => {
+                                      const remaining = Math.max(0, group.target - group.current)
+                                      const monthsLeft = group.date ? (() => {
+                                        const now = new Date()
+                                        const targetDate = new Date(group.date + 'T00:00:00')
+                                        return Math.max(1, Math.ceil((targetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30)))
+                                      })() : 12
+                                      const perMonth = remaining / monthsLeft
+                                      const perMember = group.members.length > 0 ? perMonth / group.members.length : perMonth
+                                      return (
+                                        <div className="space-y-3">
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <div className="rounded-xl p-3 text-center" style={{ backgroundColor: isDark ? `${theme.accent}26` : `${theme.accent}14` }}>
+                                              <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: theme.accent, opacity: 0.7 }}>Group/Month</p>
+                                              <p className="text-xl font-black" style={{ color: theme.accent }}>{fmt(perMonth)}</p>
+                                            </div>
+                                            <div className="rounded-xl p-3 text-center" style={{ backgroundColor: isDark ? `${theme.accent}26` : `${theme.accent}14` }}>
+                                              <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: theme.accent, opacity: 0.7 }}>Per Member</p>
+                                              <p className="text-xl font-black" style={{ color: theme.accent }}>{fmt(perMember)}</p>
+                                            </div>
+                                          </div>
+                                          <p className="text-xs text-center" style={{ color: theme.textM }}>
+                                            {monthsLeft} month{monthsLeft !== 1 ? 's' : ''} remaining · {fmt(remaining)} left to save
+                                          </p>
+                                        </div>
+                                      )
+                                    })()}
+                                  </div>
+
+                                  {/* Milestones */}
+                                  <div className="rounded-xl border p-3 sm:p-4" style={{ backgroundColor: theme.bg, borderColor: tealBorder }}>
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <Target className="w-4 h-4" style={{ color: teal }} />
+                                      <h4 className="font-bold text-sm" style={{ color: theme.text }}>Milestones</h4>
+                                    </div>
+                                    <div className="space-y-2">
+                                      {[25, 50, 75, 100].map(milestone => {
+                                        const milestoneAmount = (group.target * milestone) / 100
+                                        const reached = group.current >= milestoneAmount
+                                        return (
+                                          <div
+                                            key={milestone}
+                                            className="flex items-center gap-3 p-2.5 rounded-xl transition-all"
+                                            style={{
+                                              backgroundColor: reached ? (isDark ? `${theme.accent}26` : `${theme.accent}14`) : 'transparent',
+                                              border: `1px solid ${reached ? theme.accent + '44' : theme.border}`,
+                                            }}
+                                          >
+                                            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-black"
+                                              style={{ backgroundColor: reached ? theme.accent : theme.border, color: reached ? '#fff' : theme.textM }}>
+                                              {reached ? <Check className="w-4 h-4" /> : `${milestone}%`}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-xs font-bold" style={{ color: reached ? theme.accent : theme.text }}>
+                                                {milestone}% — {fmt(milestoneAmount)}
+                                              </p>
+                                              <p className="text-xs" style={{ color: theme.textM }}>
+                                                {reached ? '✓ Reached!' : `${fmt(Math.max(0, milestoneAmount - group.current))} to go`}
+                                              </p>
+                                            </div>
+                                            {reached && (
+                                              <span className="text-lg flex-shrink-0">
+                                                {milestone === 100 ? '🎉' : milestone === 75 ? '🔥' : milestone === 50 ? '⭐' : '✨'}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  {/* Per-Member Contributions */}
+                                  <div className="rounded-xl border p-3 sm:p-4" style={{ backgroundColor: theme.bg, borderColor: tealBorder }}>
+                                    <h4 className="font-bold text-sm mb-3" style={{ color: theme.text }}>Member Contributions</h4>
+                                    <div className="space-y-2">
+                                      {group.members.map(member => {
+                                        const memberPct = group.target > 0 ? Math.min(100, Math.round((member.contrib / group.target) * 100)) : 0
+                                        return (
+                                          <div key={member.id} className="space-y-1">
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="font-semibold" style={{ color: theme.text }}>{member.name}</span>
+                                              <span style={{ color: theme.accent, fontWeight: 700 }}>{fmt(member.contrib)}</span>
+                                            </div>
+                                            <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: `${theme.accent}30` }}>
+                                              <div className="h-full rounded-full transition-all" style={{ width: `${memberPct}%`, backgroundColor: theme.accent }} />
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {subTab === 'trip' && group.type !== 'savings' && (
                                 <div className="space-y-4">
                                   {/* Show existing trip info if saved */}
                                   {group.trip && (group.trip.location || group.trip.startDate) && (
@@ -1159,22 +1298,22 @@ export default function StackCirclePage() {
                                       <div className="grid grid-cols-2 gap-3">
                                         <div>
                                           <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Depart Date</label>
-                                          <input
-                                            type="date"
+                                          <CalendarPicker
                                             value={tripStartDates[group.id] ?? (group.trip?.startDate || '')}
-                                            onChange={(e) => setTripStartDates(prev => ({ ...prev, [group.id]: e.target.value }))}
-                                            className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors"
-                                            style={{ backgroundColor: theme.card, borderColor: theme.border, color: theme.text }}
+                                            onChange={(date) => setTripStartDates(prev => ({ ...prev, [group.id]: date }))}
+                                            placeholder="Departure"
+                                            theme={theme}
+                                            showQuickSelect={false}
                                           />
                                         </div>
                                         <div>
                                           <label className="block text-xs font-medium mb-1" style={{ color: theme.textM }}>Return Date</label>
-                                          <input
-                                            type="date"
+                                          <CalendarPicker
                                             value={tripEndDates[group.id] ?? (group.trip?.endDate || '')}
-                                            onChange={(e) => setTripEndDates(prev => ({ ...prev, [group.id]: e.target.value }))}
-                                            className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors"
-                                            style={{ backgroundColor: theme.card, borderColor: theme.border, color: theme.text }}
+                                            onChange={(date) => setTripEndDates(prev => ({ ...prev, [group.id]: date }))}
+                                            placeholder="Return"
+                                            theme={theme}
+                                            showQuickSelect={false}
                                           />
                                         </div>
                                       </div>
@@ -1295,6 +1434,34 @@ export default function StackCirclePage() {
                       >
                         <h3 className="font-bold text-base sm:text-lg mb-6" style={{ color: theme.text }}>Create New Group</h3>
                         <div className="space-y-3 sm:space-y-4">
+                          {/* Group Type Selector */}
+                          <div>
+                            <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Group Type</label>
+                            <div className="grid grid-cols-2 gap-3">
+                              {([
+                                { value: 'trip' as const, icon: Plane, label: 'Group Trip', desc: 'Plan a trip together' },
+                                { value: 'savings' as const, icon: Target, label: 'Group Savings', desc: 'Save toward a goal' },
+                              ]).map(opt => (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => setNewGroupType(opt.value)}
+                                  className="flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all"
+                                  style={{
+                                    backgroundColor: newGroupType === opt.value ? `${teal}18` : theme.bg,
+                                    borderColor: newGroupType === opt.value ? teal : theme.border,
+                                    color: newGroupType === opt.value ? teal : theme.textM,
+                                  }}
+                                >
+                                  <opt.icon className="w-5 h-5" />
+                                  <div>
+                                    <p className="text-xs font-bold">{opt.label}</p>
+                                    <p className="text-[10px] opacity-70">{opt.desc}</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <div>
                             <label className="block text-xs sm:text-sm font-medium mb-2" style={{ color: theme.text }}>Group Name</label>
                             <input
