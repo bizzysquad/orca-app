@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Users, Plus, Copy, Share2, ChevronDown, Edit2, Activity, UserPlus, Trash2, Check } from 'lucide-react';
+import { Users, Plus, Copy, Share2, ChevronDown, Edit2, Activity, UserPlus, Trash2, Check, X } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { CalendarPicker } from '../components/CalendarPicker';
 
 const groups = [
   { id: 1, name: 'Vacation', saved: 0, target: 6000, tripDate: 'Mon, March 30, 2026', daysAway: 2, inviteCode: 'J32JIA' },
@@ -16,6 +17,7 @@ const activityFeed = [
 
 interface Utility { id: number; name: string; amount: string; paid: boolean; }
 interface Roommate { id: number; name: string; rent: string; paid: boolean; }
+interface GroupData { id: number; name: string; saved: number; target: number; tripDate: string; daysAway: number; inviteCode: string; }
 
 export function StackCircle() {
   const { isDark } = useTheme();
@@ -23,6 +25,16 @@ export function StackCircle() {
   const [addAmount, setAddAmount] = useState('');
   const [inviteExpiry, setInviteExpiry] = useState('7 days');
   const [copied, setCopied] = useState(false);
+
+  // Create Group modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupTarget, setNewGroupTarget] = useState('');
+  const [newGroupDate, setNewGroupDate] = useState('');
+  const [allGroups, setAllGroups] = useState<GroupData[]>([
+    { id: 1, name: 'Vacation', saved: 0, target: 6000, tripDate: 'Mon, March 30, 2026', daysAway: 2, inviteCode: 'J32JIA' },
+  ]);
+  const [activeGroupId, setActiveGroupId] = useState(1);
 
   // Roommates state
   const [rent, setRent] = useState('0.00');
@@ -37,8 +49,26 @@ export function StackCircle() {
   const [showRoommateForm, setShowRoommateForm] = useState(false);
   const [allPaidThisMonth, setAllPaidThisMonth] = useState(false);
 
-  const group = groups[0];
+  const group = allGroups.find(g => g.id === activeGroupId) ?? allGroups[0];
   const pct = Math.round((group.saved / group.target) * 100);
+
+  const handleCreateGroup = () => {
+    if (!newGroupName.trim()) return;
+    const target = parseFloat(newGroupTarget) || 0;
+    const tripDate = newGroupDate
+      ? new Date(newGroupDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
+      : 'TBD';
+    const daysAway = newGroupDate
+      ? Math.max(0, Math.ceil((new Date(newGroupDate).getTime() - Date.now()) / 86400000))
+      : 0;
+    const newId = Date.now();
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const newGroup: GroupData = { id: newId, name: newGroupName.trim(), saved: 0, target, tripDate, daysAway, inviteCode: code };
+    setAllGroups(prev => [...prev, newGroup]);
+    setActiveGroupId(newId);
+    setNewGroupName(''); setNewGroupTarget(''); setNewGroupDate('');
+    setShowCreateModal(false);
+  };
 
   const handleCopy = () => { setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
@@ -77,6 +107,86 @@ export function StackCircle() {
 
   return (
     <div className="w-full min-h-full">
+      {/* ── Create Group Modal ─────────────────────────────────────────────── */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+          {/* Backdrop close */}
+          <div className="absolute inset-0" onClick={() => setShowCreateModal(false)} />
+          <div
+            className="relative w-full max-w-md rounded-2xl p-6 space-y-4"
+            style={{ background: card, border: cardBorder, zIndex: 1 }}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5" style={{ color: teal }} />
+                <h2 style={{ fontSize: 18, fontWeight: 800, color: txt }}>Create New Group</h2>
+              </div>
+              <button onClick={() => setShowCreateModal(false)} className="p-1.5 rounded-lg hover:opacity-70 transition-all" style={{ color: muted }}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Group name */}
+            <div>
+              <label className="block text-xs mb-1.5" style={{ color: muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Group Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Summer Trip, Holiday Fund..."
+                value={newGroupName}
+                onChange={e => setNewGroupName(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={inputStyle}
+                autoFocus
+              />
+            </div>
+
+            {/* Savings goal */}
+            <div>
+              <label className="block text-xs mb-1.5" style={{ color: muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Savings Goal</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: muted }}>$</span>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={newGroupTarget}
+                  onChange={e => setNewGroupTarget(e.target.value)}
+                  className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+
+            {/* Target date — CalendarPicker with fixed-position dropdown (no clipping on desktop) */}
+            <CalendarPicker
+              label="Target Date"
+              value={newGroupDate}
+              onChange={setNewGroupDate}
+              placeholder="Select a target date"
+            />
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm hover:opacity-80 transition-all"
+                style={{ background: isDark ? '#334155' : '#F1F5F9', color: muted, fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateGroup}
+                disabled={!newGroupName.trim()}
+                className="flex-1 py-2.5 rounded-xl text-sm hover:opacity-90 transition-all"
+                style={{ background: newGroupName.trim() ? teal : (isDark ? '#334155' : '#E2E8F0'), color: newGroupName.trim() ? '#fff' : muted, fontWeight: 700 }}
+              >
+                Create Group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
@@ -250,7 +360,11 @@ export function StackCircle() {
               ))}
             </div>
 
-            <button className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm hover:opacity-80 transition-all" style={{ background: subtle, border: `1px dashed ${isDark ? '#475569' : '#CBD5E1'}`, color: '#6366F1', fontWeight: 700 }}>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm hover:opacity-80 transition-all"
+              style={{ background: subtle, border: `1px dashed ${isDark ? '#475569' : '#CBD5E1'}`, color: '#6366F1', fontWeight: 700 }}
+            >
               <Plus className="w-4 h-4" />Create Another Group
             </button>
           </div>

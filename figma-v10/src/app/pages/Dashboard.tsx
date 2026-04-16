@@ -462,10 +462,15 @@ export function Dashboard() {
             </div>
             <div className="rounded-xl p-4 space-y-2.5" style={{ background: 'rgba(255,255,255,0.12)', minWidth: 200 }}>
               <div className="text-xs opacity-60 uppercase tracking-widest mb-3" style={{ fontWeight: 700 }}>How it's calculated</div>
-              <div className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#34D399' }} /><span className="opacity-80">Incoming</span></div>
-                <span style={{ color: '#34D399', fontWeight: 700 }}>+$497.00</span>
-              </div>
+              <button
+                onClick={() => navigate('/smart-stack')}
+                className="w-full flex justify-between items-center text-sm rounded-lg px-1 py-0.5 transition-all hover:opacity-80 cursor-pointer"
+                style={{ background: 'transparent' }}
+                title="View incoming payments in Smart Stack"
+              >
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#34D399' }} /><span className="opacity-80">Incoming payments</span></div>
+                <span style={{ color: '#34D399', fontWeight: 700 }}>+$497.00 →</span>
+              </button>
               <div className="flex justify-between items-center text-sm">
                 <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: '#F87171' }} /><span className="opacity-80">Bills Reserved</span></div>
                 <span style={{ color: '#F87171', fontWeight: 700 }}>−$1,310.00</span>

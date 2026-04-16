@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
@@ -24,6 +24,9 @@ export function CalendarPicker({ value, onChange, placeholder = 'Select date', l
   const { isDark, currentTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Track dropdown position for fixed placement (prevents clipping inside overflow containers)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 300 });
 
   // Parse value or default to today
   const parsed = value ? new Date(value + 'T00:00:00') : null;
@@ -31,12 +34,28 @@ export function CalendarPicker({ value, onChange, placeholder = 'Select date', l
   const [viewYear, setViewYear] = useState(parsed ? parsed.getFullYear() : today.getFullYear());
   const [viewMonth, setViewMonth] = useState(parsed ? parsed.getMonth() : today.getMonth());
 
+  // Compute position from the trigger button so the dropdown can use position:fixed
+  const updatePos = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const dropdownHeight = 340; // approximate
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow >= dropdownHeight ? rect.bottom + 6 : rect.top - dropdownHeight - 6;
+    setDropdownPos({ top, left: rect.left, width: Math.max(rect.width, 300) });
+  }, []);
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    window.addEventListener('resize', () => setOpen(false));
+    window.addEventListener('scroll', () => setOpen(false), true);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('resize', () => setOpen(false));
+      window.removeEventListener('scroll', () => setOpen(false), true);
+    };
   }, []);
 
   const formatDisplay = (v: string) => {
@@ -84,8 +103,9 @@ export function CalendarPicker({ value, onChange, placeholder = 'Select date', l
       )}
       {/* Trigger */}
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { updatePos(); setOpen(o => !o); }}
         className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm text-left transition-all"
         style={{ background: inputBg, border: `1px solid ${open ? teal : cardBorder}`, color: value ? txt : muted, outline: 'none' }}
       >
@@ -101,15 +121,19 @@ export function CalendarPicker({ value, onChange, placeholder = 'Select date', l
         )}
       </button>
 
-      {/* Popout */}
+      {/* Popout — rendered with position:fixed so it's never clipped by overflow:hidden parents */}
       {open && (
         <div
-          className="absolute z-50 mt-2 rounded-2xl shadow-2xl overflow-hidden"
+          className="rounded-2xl shadow-2xl overflow-hidden"
           style={{
+            position: 'fixed',
+            zIndex: 9999,
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            minWidth: 300,
+            width: Math.max(dropdownPos.width, 300),
             background: card,
             border: `1px solid ${cardBorder}`,
-            minWidth: 300,
-            left: 0,
             boxShadow: isDark ? '0 25px 50px rgba(0,0,0,0.6)' : '0 20px 40px rgba(0,0,0,0.15)',
           }}
         >

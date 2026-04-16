@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router';
 import {
   LayoutDashboard, BarChart3, Receipt, Users,
@@ -32,12 +32,46 @@ const navGroups = [
   },
 ];
 
+// ── Command items for the floating search/command button ────────────────────
+const COMMAND_ITEMS = [
+  { path: '/',            label: 'Dashboard',   icon: LayoutDashboard, color: '#6366F1' },
+  { path: '/smart-stack', label: 'Smart Stack', icon: BarChart3,       color: '#10B981' },
+  { path: '/bill-boss',   label: 'Bill Boss',   icon: Receipt,         color: '#EF4444' },
+  { path: '/stack-circle',label: 'Stack Circle',icon: Users,           color: '#0891B2' },
+  { path: '/task-list',   label: 'Task List',   icon: CheckSquare,     color: '#8B5CF6' },
+  { path: '/settings',    label: 'Settings',    icon: Settings,        color: '#F59E0B' },
+];
+
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [cmdQuery, setCmdQuery] = useState('');
+  const cmdRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { isDark, toggleTheme, currentTheme } = useTheme();
+
+  // Close command menu on outside click or Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setCmdOpen(false); setCmdQuery(''); }
+      // ⌘K / Ctrl+K shortcut
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setCmdOpen(o => !o); setCmdQuery(''); }
+    };
+    const handleClick = (e: MouseEvent) => {
+      if (cmdRef.current && !cmdRef.current.contains(e.target as Node)) { setCmdOpen(false); setCmdQuery(''); }
+    };
+    document.addEventListener('keydown', handleKey);
+    document.addEventListener('mousedown', handleClick);
+    return () => { document.removeEventListener('keydown', handleKey); document.removeEventListener('mousedown', handleClick); };
+  }, []);
+
+  const filteredItems = cmdQuery.trim()
+    ? COMMAND_ITEMS.filter(i => i.label.toLowerCase().includes(cmdQuery.toLowerCase()))
+    : COMMAND_ITEMS;
+
+  const handleCmdNavigate = (path: string) => { navigate(path); setCmdOpen(false); setCmdQuery(''); setSidebarOpen(false); };
 
   const getPageTitle = () => {
     const path = location.pathname;
@@ -247,6 +281,106 @@ export function Layout() {
           <Outlet />
           <MobileHomeButton />
         </main>
+      </div>
+
+      {/* ── Floating Command / Search Button ─────────────────────────────── */}
+      <div ref={cmdRef}>
+        {/* FAB */}
+        <button
+          onClick={() => { setCmdOpen(o => !o); setCmdQuery(''); }}
+          className="fixed z-40 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
+          style={{
+            bottom: 88,
+            right: 24,
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            background: cmdOpen
+              ? (isDark ? '#6366F1' : '#4F46E5')
+              : (isDark ? '#1E293B' : '#FFFFFF'),
+            border: `2px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: cmdOpen ? '#FFFFFF' : (isDark ? '#94A3B8' : '#64748B'),
+            cursor: 'pointer',
+            boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.4)' : '0 8px 24px rgba(0,0,0,0.12)',
+          }}
+          title="Command menu (⌘K)"
+          aria-label="Open command menu"
+        >
+          {cmdOpen ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
+        </button>
+
+        {/* Command palette popup */}
+        {cmdOpen && (
+          <div
+            className="fixed z-50 rounded-2xl overflow-hidden"
+            style={{
+              bottom: 152,
+              right: 16,
+              width: 280,
+              background: isDark ? '#1E293B' : '#FFFFFF',
+              border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+              boxShadow: isDark ? '0 20px 60px rgba(0,0,0,0.5)' : '0 20px 60px rgba(0,0,0,0.18)',
+            }}
+          >
+            {/* Search input */}
+            <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${isDark ? '#334155' : '#F1F5F9'}` }}>
+              <Search className="w-4 h-4 flex-shrink-0" style={{ color: isDark ? '#64748B' : '#94A3B8' }} />
+              <input
+                type="text"
+                placeholder="Go to..."
+                value={cmdQuery}
+                onChange={e => setCmdQuery(e.target.value)}
+                className="flex-1 bg-transparent outline-none text-sm"
+                style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}
+                autoFocus
+              />
+              <kbd className="text-xs px-1.5 py-0.5 rounded" style={{ background: isDark ? '#334155' : '#F1F5F9', color: isDark ? '#64748B' : '#94A3B8', fontSize: 10 }}>⌘K</kbd>
+            </div>
+
+            {/* Navigation items */}
+            <div className="py-1.5">
+              <div className="px-4 pb-1" style={{ fontSize: 10, fontWeight: 700, color: isDark ? '#475569' : '#CBD5E1', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                Navigate
+              </div>
+              {filteredItems.map(item => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => handleCmdNavigate(item.path)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all hover:opacity-80"
+                    style={{
+                      background: isActive ? (isDark ? '#1E1B4B' : '#EEF2FF') : 'transparent',
+                      color: isActive ? item.color : (isDark ? '#F1F5F9' : '#0F172A'),
+                      fontWeight: isActive ? 700 : 400,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div
+                      className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background: `${item.color}18` }}
+                    >
+                      <Icon className="w-3.5 h-3.5" style={{ color: item.color }} />
+                    </div>
+                    {item.label}
+                    {isActive && (
+                      <span className="ml-auto text-xs px-1.5 py-0.5 rounded-full" style={{ background: `${item.color}20`, color: item.color, fontWeight: 600 }}>
+                        Current
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {filteredItems.length === 0 && (
+                <div className="px-4 py-4 text-sm text-center" style={{ color: isDark ? '#64748B' : '#94A3B8' }}>No results</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
