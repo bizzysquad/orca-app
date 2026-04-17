@@ -856,19 +856,37 @@ export default function BillBossPage() {
     setShowAddForm(false)
   }
 
-  // Handler: Show partial payment dialog.
+  // Returns how much is still owed for a bill in a specific billing cycle.
+  // For recurring bills only alloc entries whose date falls in that cycle month/year
+  // are counted, so past-cycle partial payments never reduce the current balance.
+  const getCycleRemaining = (bill: Bill, cMonth: number, cYear: number): number => {
+    const rec = bill.recurrence || 'one-time'
+    const relevant = (rec !== 'one-time' && bill.alloc.length > 0)
+      ? bill.alloc.filter(a => {
+          const ad = new Date(a.date + 'T00:00:00')
+          return ad.getMonth() === cMonth && ad.getFullYear() === cYear
+        })
+      : bill.alloc
+    const paid = relevant.filter(a => a.paid).reduce((s, a) => s + a.amount, 0)
+    return Math.max(0, bill.amount - paid)
+  }
+
+  // Handler: open the payment bottom-sheet for a bill.
   // Pass `targetDueDate` when paying a future-month bill so the paidDate maps to the
   // correct billing cycle instead of defaulting to today.
   const handlePayFull = (billId: string, targetDueDate?: string) => {
     const bill = bills.find(b => b.id === billId)
-    if (bill) {
-      setPartialPayId(billId)
-      setPartialPayMode('full')
-      setPartialPayAmount(String(bill.amount))
-      // Only store a target date when the bill is genuinely in the future
-      const today = new Date().toISOString().split('T')[0]
-      setPaymentTargetDate(targetDueDate && targetDueDate > today ? targetDueDate : null)
-    }
+    if (!bill) return
+    const today = new Date().toISOString().split('T')[0]
+    const isFuture = !!(targetDueDate && targetDueDate > today)
+    const tDate = isFuture ? targetDueDate! : today
+    const cd = new Date(tDate + 'T00:00:00')
+    const cycleRemaining = getCycleRemaining(bill, cd.getMonth(), cd.getFullYear())
+    setPartialPayId(billId)
+    setPartialPayMode('full')
+    // Pre-fill with the amount still owed in this cycle (full bill if nothing paid yet)
+    setPartialPayAmount(String(cycleRemaining > 0 ? cycleRemaining : bill.amount))
+    setPaymentTargetDate(isFuture ? targetDueDate! : null)
   }
 
   // Handler: Apply partial or full payment
@@ -888,9 +906,14 @@ export default function BillBossPage() {
     // correctly marks the right billing cycle as paid.
     const effectiveDate = paymentTargetDate && paymentTargetDate > today ? paymentTargetDate : today
 
-    // Total already paid via alloc
-    const alreadyPaid = bill.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
-    const remaining = Math.max(0, bill.amount - alreadyPaid)
+    // Determine which billing cycle this payment belongs to
+    const cd = new Date(effectiveDate + 'T00:00:00')
+    const cycleMonth = cd.getMonth()
+    const cycleYear = cd.getFullYear()
+
+    // Use the cycle-scoped remaining so past-cycle partial payments never
+    // block the current payment from going through.
+    const remaining = getCycleRemaining(bill, cycleMonth, cycleYear)
     const effectiveAmount = Math.min(amount, remaining)
 
     if (effectiveAmount <= 0) {
@@ -901,15 +924,27 @@ export default function BillBossPage() {
       return
     }
 
+    const rec = bill.recurrence || 'one-time'
+
     if (effectiveAmount >= remaining) {
-      // Full (or completing) payment — mark bill as paid
+      // Full (or completing) payment for this cycle.
+      // For recurring bills keep alloc entries from OTHER cycles intact —
+      // only remove the entries that belong to this billing cycle.
+      const allocAfterPay = rec !== 'one-time'
+        ? bill.alloc.filter(a => {
+            const ad = new Date(a.date + 'T00:00:00')
+            return !(ad.getMonth() === cycleMonth && ad.getFullYear() === cycleYear)
+          })
+        : []
       persistBills(bills.map(b =>
         b.id === partialPayId
-          ? { ...b, status: 'paid' as const, paidDate: effectiveDate, alloc: [] }
+          ? { ...b, status: 'paid' as const, paidDate: effectiveDate, alloc: allocAfterPay }
           : b
       ))
     } else {
-      // Genuine partial payment — record as alloc entry, keep status upcoming
+      // Genuine partial payment — record as alloc entry, keep status upcoming.
+      // Future recurring cycles are completely unaffected because alloc records
+      // are scoped to their cycle date when status checks run.
       const newAlloc: BillAlloc = {
         id: gid(),
         date: effectiveDate,
@@ -1799,7 +1834,12 @@ export default function BillBossPage() {
         {partialPayId && (() => {
           const bill = bills.find(b => b.id === partialPayId)
           if (!bill) return null
-          const billTotal = bill.amount
+          // Use cycle-remaining as the "total due" so the modal always reflects
+          // what's actually owed this cycle, not the raw bill amount.
+          const today = new Date().toISOString().split('T')[0]
+          const tDate = paymentTargetDate && paymentTargetDate > today ? paymentTargetDate : today
+          const mcd = new Date(tDate + 'T00:00:00')
+          const billTotal = getCycleRemaining(bill, mcd.getMonth(), mcd.getFullYear()) || bill.amount
           const enteredAmount = parseFloat(partialPayAmount) || 0
           const clampedAmount = Math.min(enteredAmount, billTotal)
           const fillPct = billTotal > 0 ? Math.min((clampedAmount / billTotal) * 100, 100) : 0
