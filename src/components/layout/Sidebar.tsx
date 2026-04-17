@@ -15,8 +15,6 @@ import {
   Shield,
   ChevronRight,
   LogOut,
-  Sun,
-  Moon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
@@ -40,7 +38,7 @@ interface SidebarProps {
 export default function Sidebar({ userName = 'User', open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const { theme, isDark, toggleDark } = useTheme()
+  const { theme, isDark } = useTheme()
   const { data } = useOrcaData()
   const [loggingOut, setLoggingOut] = useState(false)
 
@@ -277,35 +275,20 @@ export default function Sidebar({ userName = 'User', open = false, onClose }: Si
               <div className="truncate" style={{ color: '#475569', fontSize: 10 }}>{data.user?.email || 'Active'}</div>
             </div>
           </div>
-          {/* Theme toggle + Logout row */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleDark}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 hover:opacity-80 flex-shrink-0"
-              style={{
-                background: isDark ? 'rgba(250,204,21,0.08)' : 'rgba(100,116,139,0.08)',
-                border: `1px solid ${isDark ? 'rgba(250,204,21,0.20)' : 'rgba(100,116,139,0.20)'}`,
-                color: isDark ? '#FCD34D' : '#64748B',
-              }}
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-              <span>{isDark ? 'Light' : 'Dark'}</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 hover:opacity-80 disabled:opacity-40"
-              style={{
-                background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.15)',
-                color: '#F87171',
-              }}
-            >
-              <LogOut className="w-3.5 h-3.5 flex-shrink-0" />
-              {loggingOut ? 'Signing out…' : 'Sign Out'}
-            </button>
-          </div>
+          {/* Logout button */}
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 hover:opacity-80 disabled:opacity-40"
+            style={{
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.15)',
+              color: '#F87171',
+            }}
+          >
+            <LogOut className="w-3.5 h-3.5 flex-shrink-0" />
+            {loggingOut ? 'Signing out…' : 'Sign Out'}
+          </button>
         </div>
       </div>
     </>

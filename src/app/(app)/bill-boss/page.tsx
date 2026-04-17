@@ -67,9 +67,6 @@ function getBillEffectiveStatus(bill: Bill, calMonth: number, calYear: number): 
   return 'paid'
 }
 
-// ── Payment type for the payment flow ──
-type PaymentType = 'full' | 'partial' | 'early' | 'skipped'
-
 // Category to icon mapping with Figma colors
 const CATEGORY_ICONS: Record<string, { Icon: React.ComponentType<any>, color: string }> = {
   'Housing': { Icon: Home, color: '#6366F1' },
@@ -364,9 +361,6 @@ export default function BillBossPage() {
   const [formStep, setFormStep] = useState<FormStep>(1)
   const [splitModalBillId, setSplitModalBillId] = useState<string | null>(null)
   const [customCategory, setCustomCategory] = useState('')
-  const [paymentModalBillId, setPaymentModalBillId] = useState<string | null>(null)
-  const [paymentType, setPaymentType] = useState<PaymentType>('full')
-  const [paymentAmount, setPaymentAmount] = useState('')
   const [showOccurrencePreview, setShowOccurrencePreview] = useState(false)
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
@@ -459,46 +453,6 @@ export default function BillBossPage() {
     const updated = [...bills, newBill]
     persistBills(updated)
     orcaEvents.broadcast('bill.created', { billId: newBill.id })
-  }
-
-  // ── Advanced Payment Flow ──
-  const handlePaymentSubmit = (billId: string) => {
-    const bill = bills.find(b => b.id === billId)
-    if (!bill) return
-
-    const amount = paymentType === 'full' ? bill.amount
-      : paymentType === 'skipped' ? 0
-      : parseFloat(paymentAmount) || 0
-
-    if (paymentType === 'skipped') {
-      // Mark as skipped — keep upcoming but log it
-      const updated = bills.map(b =>
-        b.id === billId ? { ...b, status: 'upcoming' as const } : b
-      )
-      persistBills(updated)
-    } else if (paymentType === 'partial' && amount < bill.amount) {
-      // Partial — create alloc entry for partial amount
-      const alloc: BillAlloc = {
-        id: gid(),
-        date: new Date().toISOString().split('T')[0],
-        amount,
-        paid: true,
-      }
-      const updated = bills.map(b =>
-        b.id === billId ? { ...b, alloc: [...b.alloc, alloc] } : b
-      )
-      persistBills(updated)
-    } else {
-      // Full or early payment
-      const updated = bills.map(b =>
-        b.id === billId ? { ...b, status: 'paid' as const, paidDate: new Date().toISOString().split('T')[0] } : b
-      )
-      persistBills(updated)
-    }
-    orcaEvents.broadcast('bill.paid', { billId, paymentType, amount })
-    setPaymentModalBillId(null)
-    setPaymentAmount('')
-    setPaymentType('full')
   }
 
   // Generate notifications from bills
@@ -871,22 +825,46 @@ export default function BillBossPage() {
     return Math.max(0, bill.amount - paid)
   }
 
+  // Returns the bill's effective due date within the currently viewed calendar month/year.
+  // For monthly bills this is the same day-of-month clamped to the viewed month's length.
+  // For yearly bills the year is updated to calYear.
+  // All other recurrence types return the original due date unchanged.
+  // This date is passed to handlePayFull so that paidDate is stamped to the correct
+  // billing cycle even when paying from the list/compact view of a future or past month.
+  const getEffectiveBillDate = (bill: Bill): string => {
+    const dueDate = new Date(bill.due + 'T00:00:00')
+    const recurrence = bill.recurrence || 'one-time'
+    if (recurrence === 'monthly') {
+      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
+      const day = Math.min(dueDate.getDate(), daysInMonth)
+      return new Date(calYear, calMonth, day).toISOString().split('T')[0]
+    }
+    if (recurrence === 'yearly') {
+      const daysInMonth = new Date(calYear, dueDate.getMonth() + 1, 0).getDate()
+      const day = Math.min(dueDate.getDate(), daysInMonth)
+      return new Date(calYear, dueDate.getMonth(), day).toISOString().split('T')[0]
+    }
+    return bill.due
+  }
+
   // Handler: open the payment bottom-sheet for a bill.
-  // Pass `targetDueDate` when paying a future-month bill so the paidDate maps to the
-  // correct billing cycle instead of defaulting to today.
+  // `targetDueDate` pins the payment to the correct billing cycle (past, current, or future).
+  // Always pass getEffectiveBillDate(bill) from list/compact view so that paidDate is
+  // stamped with the viewed-month's date and getBillEffectiveStatus resolves correctly.
   const handlePayFull = (billId: string, targetDueDate?: string) => {
     const bill = bills.find(b => b.id === billId)
     if (!bill) return
     const today = new Date().toISOString().split('T')[0]
-    const isFuture = !!(targetDueDate && targetDueDate > today)
-    const tDate = isFuture ? targetDueDate! : today
+    // Use the provided cycle date; fall back to today only when no date is given.
+    const tDate = targetDueDate || today
     const cd = new Date(tDate + 'T00:00:00')
     const cycleRemaining = getCycleRemaining(bill, cd.getMonth(), cd.getFullYear())
     setPartialPayId(billId)
     setPartialPayMode('full')
     // Pre-fill with the amount still owed in this cycle (full bill if nothing paid yet)
     setPartialPayAmount(String(cycleRemaining > 0 ? cycleRemaining : bill.amount))
-    setPaymentTargetDate(isFuture ? targetDueDate! : null)
+    // Always record the target date so handleApplyPartialPayment uses the right cycle
+    setPaymentTargetDate(targetDueDate || null)
   }
 
   // Handler: Apply partial or full payment
@@ -902,9 +880,10 @@ export default function BillBossPage() {
     if (!bill) return
 
     const today = new Date().toISOString().split('T')[0]
-    // For future-dated bills use the bill's due date so getBillEffectiveStatus
-    // correctly marks the right billing cycle as paid.
-    const effectiveDate = paymentTargetDate && paymentTargetDate > today ? paymentTargetDate : today
+    // Use the target cycle date when provided (past, current, or future month) so that
+    // paidDate is stamped with a date that getBillEffectiveStatus can match correctly.
+    // Fall back to today only when no target date was specified (e.g. hero-card pay-now).
+    const effectiveDate = paymentTargetDate || today
 
     // Determine which billing cycle this payment belongs to
     const cd = new Date(effectiveDate + 'T00:00:00')
@@ -989,6 +968,23 @@ export default function BillBossPage() {
       isPartial: remaining > 0,
       pct: Math.min(100, Math.round((totalPaid / bill.amount) * 100)),
     }
+  }
+
+  // Returns the date a bill was paid for the currently viewed billing cycle.
+  // For bills paid via handleApplyPartialPayment, paidDate is set directly.
+  // For bills paid via individual split-alloc entries (handlePayment), we derive
+  // the date from the most-recently paid alloc in the current cycle.
+  const getDisplayPaidDate = (bill: Bill): string | null => {
+    if (bill.paidDate) return bill.paidDate
+    const rec = bill.recurrence || 'one-time'
+    const cycleAllocs = (rec !== 'one-time' && bill.alloc.length > 0)
+      ? bill.alloc.filter(a => {
+          const ad = new Date(a.date + 'T00:00:00')
+          return ad.getMonth() === calMonth && ad.getFullYear() === calYear && a.paid
+        })
+      : bill.alloc.filter(a => a.paid)
+    if (cycleAllocs.length === 0) return null
+    return cycleAllocs.sort((a, b) => b.date.localeCompare(a.date))[0].date
   }
 
   // Handler: Apply split
@@ -1569,7 +1565,7 @@ export default function BillBossPage() {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => handlePayFull(bill.id)}
+                        onClick={() => handlePayFull(bill.id, getEffectiveBillDate(bill))}
                         style={{ backgroundColor: theme.accent, color: '#fff' }}
                         className="flex-1 px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-colors"
                       >
@@ -1650,7 +1646,7 @@ export default function BillBossPage() {
                   {/* Quick actions */}
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
-                      onClick={() => handlePayFull(bill.id)}
+                      onClick={() => handlePayFull(bill.id, getEffectiveBillDate(bill))}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
                       style={{ backgroundColor: theme.accent }}
                       title="Pay"
@@ -1694,69 +1690,7 @@ export default function BillBossPage() {
               )
               })}
 
-              {/* Payment Modal */}
-              <AnimatePresence>
-                {paymentModalBillId && (() => {
-                  const bill = bills.find(b => b.id === paymentModalBillId)
-                  if (!bill) return null
-                  return (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-                      onClick={(e) => { if (e.target === e.currentTarget) setPaymentModalBillId(null) }}
-                    >
-                      <motion.div
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.9, opacity: 0 }}
-                        className="rounded-2xl p-6 w-full max-w-sm space-y-4"
-                        style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-bold text-base" style={{ color: theme.text }}>Pay {bill.name}</h3>
-                          <button onClick={() => setPaymentModalBillId(null)} style={{ color: theme.textS }}>✕</button>
-                        </div>
-                        <p className="text-2xl font-bold" style={{ color: '#EF4444' }}>{fmt(bill.amount)}</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {([
-                            { value: 'full', label: '✓ Full Payment', desc: `Pay ${fmt(bill.amount)}` },
-                            { value: 'partial', label: '◑ Partial', desc: 'Pay a portion' },
-                            { value: 'early', label: '⚡ Early', desc: 'Pay before due date' },
-                            { value: 'skipped', label: '⏭ Skip', desc: 'Mark as skipped' },
-                          ] as { value: PaymentType; label: string; desc: string }[]).map(opt => (
-                            <button key={opt.value} onClick={() => setPaymentType(opt.value)}
-                              style={{
-                                backgroundColor: paymentType === opt.value ? `${theme.accent}20` : theme.bg,
-                                borderColor: paymentType === opt.value ? theme.accent : theme.border,
-                                color: paymentType === opt.value ? theme.accent : theme.textS,
-                              }}
-                              className="p-3 rounded-xl border text-left transition-all"
-                            >
-                              <div className="text-xs font-bold">{opt.label}</div>
-                              <div className="text-[10px] opacity-70">{opt.desc}</div>
-                            </button>
-                          ))}
-                        </div>
-                        {paymentType === 'partial' && (
-                          <input type="number" placeholder="Amount to pay" value={paymentAmount}
-                            onChange={(e) => setPaymentAmount(e.target.value)}
-                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                            className="w-full px-4 py-3 border rounded-xl focus:outline-none" />
-                        )}
-                        <div className="flex gap-3">
-                          <button onClick={() => setPaymentModalBillId(null)} style={{ borderColor: theme.border, color: theme.textS }}
-                            className="flex-1 px-4 py-3 rounded-xl font-bold border">Cancel</button>
-                          <button onClick={() => handlePaymentSubmit(bill.id)} style={{ backgroundColor: '#10B981', color: '#fff' }}
-                            className="flex-1 px-4 py-3 rounded-xl font-bold">Confirm</button>
-                        </div>
-                      </motion.div>
-                    </motion.div>
-                  )
-                })()}
-              </AnimatePresence>
+              {/* (Payment flow handled by the partial-pay bottom-sheet below) */}
             {visibleBills.filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming').length === 0 && (
               <div className="p-8 text-center">
                 <p className="text-sm" style={{ color: theme.textM }}>No upcoming bills</p>
@@ -1777,17 +1711,24 @@ export default function BillBossPage() {
             {viewMode === 'list' ? (
               bills
                 .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid')
-                .map(bill => (
+                .map(bill => {
+                  const paidOn = getDisplayPaidDate(bill)
+                  return (
                   <div
                     key={bill.id}
                     style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                    className="border rounded-2xl p-6 opacity-50 flex justify-between items-center"
+                    className="border rounded-2xl p-6 opacity-60 flex justify-between items-center"
                   >
                     <div className="flex items-center gap-3">
                       <Check className="w-5 h-5" style={{ color: theme.ok }} />
                       <div>
                         <p style={{ color: theme.text }} className="font-bold">{bill.name}</p>
                         <p className="text-sm" style={{ color: theme.textM }}>{bill.cat}</p>
+                        {paidOn && (
+                          <p className="text-xs font-semibold mt-0.5" style={{ color: theme.ok }}>
+                            ✓ Paid {fmtD(paidOn)}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1795,9 +1736,23 @@ export default function BillBossPage() {
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => persistBills(bills.map(b =>
-                          b.id === bill.id ? { ...b, status: 'upcoming' as const } : b
-                        ))}
+                        onClick={() => persistBills(bills.map(b => {
+                          if (b.id !== bill.id) return b
+                          // Clear paidDate and unpay any cycle alloc entries so
+                          // getBillEffectiveStatus correctly reverts to 'upcoming'.
+                          return {
+                            ...b,
+                            status: 'upcoming' as const,
+                            paidDate: undefined,
+                            alloc: b.alloc.map(a => {
+                              const ad = new Date(a.date + 'T00:00:00')
+                              if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) {
+                                return { ...a, paid: false }
+                              }
+                              return a
+                            }),
+                          }
+                        }))}
                         style={{ backgroundColor: theme.ok, color: '#fff' }}
                         className="px-4 py-1.5 text-sm font-bold rounded-lg hover:opacity-90 transition-colors"
                       >
@@ -1805,23 +1760,46 @@ export default function BillBossPage() {
                       </motion.button>
                     </div>
                   </div>
-                ))
+                  )
+                })
             ) : (
-              <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl overflow-hidden divide-y opacity-60">
-                {bills.filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid').map(bill => (
-                  <div key={bill.id} className="flex items-center gap-4 px-5 py-4" style={{ borderColor: theme.border }}>
+              <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl overflow-hidden divide-y opacity-70">
+                {bills.filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid').map(bill => {
+                  const paidOn = getDisplayPaidDate(bill)
+                  return (
+                  <div key={bill.id} className="flex items-center gap-3 px-5 py-3" style={{ borderColor: theme.border }}>
                     <Check size={14} style={{ color: theme.ok }} />
-                    <p className="text-sm flex-1 truncate" style={{ color: theme.text }}>{bill.name}</p>
-                    <p className="text-sm font-bold" style={{ color: theme.textM }}>–{fmt(bill.amount)}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate" style={{ color: theme.text }}>{bill.name}</p>
+                      {paidOn && (
+                        <p className="text-[10px] font-semibold" style={{ color: theme.ok }}>Paid {fmtD(paidOn)}</p>
+                      )}
+                    </div>
+                    <p className="text-sm font-bold flex-shrink-0" style={{ color: theme.textM }}>–{fmt(bill.amount)}</p>
                     <button
-                      onClick={() => persistBills(bills.map(b => b.id === bill.id ? { ...b, status: 'upcoming' as const } : b))}
-                      className="px-3 py-1.5 text-xs font-bold rounded-lg hover:opacity-90 transition-colors"
+                      onClick={() => persistBills(bills.map(b => {
+                        if (b.id !== bill.id) return b
+                        return {
+                          ...b,
+                          status: 'upcoming' as const,
+                          paidDate: undefined,
+                          alloc: b.alloc.map(a => {
+                            const ad = new Date(a.date + 'T00:00:00')
+                            if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) {
+                              return { ...a, paid: false }
+                            }
+                            return a
+                          }),
+                        }
+                      }))}
+                      className="flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg hover:opacity-90 transition-colors"
                       style={{ backgroundColor: theme.ok, color: '#fff' }}
                     >
                       Undo
                     </button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </motion.div>
@@ -1837,7 +1815,8 @@ export default function BillBossPage() {
           // Use cycle-remaining as the "total due" so the modal always reflects
           // what's actually owed this cycle, not the raw bill amount.
           const today = new Date().toISOString().split('T')[0]
-          const tDate = paymentTargetDate && paymentTargetDate > today ? paymentTargetDate : today
+          // Use paymentTargetDate (which encodes the billing cycle) if set; otherwise today.
+          const tDate = paymentTargetDate || today
           const mcd = new Date(tDate + 'T00:00:00')
           const billTotal = getCycleRemaining(bill, mcd.getMonth(), mcd.getFullYear()) || bill.amount
           const enteredAmount = parseFloat(partialPayAmount) || 0
@@ -1871,14 +1850,22 @@ export default function BillBossPage() {
                     <p className="text-sm mt-0.5" style={{ color: theme.textM }}>
                       Total due: <span className="font-bold" style={{ color: theme.bad }}>{fmt(billTotal)}</span>
                     </p>
-                    {paymentTargetDate && (
-                      <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: `${theme.accent}15`, border: `1px solid ${theme.accent}30` }}>
-                        <Calendar className="w-3 h-3 flex-shrink-0" style={{ color: theme.accent }} />
-                        <p className="text-xs font-semibold" style={{ color: theme.accent }}>
-                          Advance payment — applies to {new Date(paymentTargetDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} cycle
-                        </p>
-                      </div>
-                    )}
+                    {(() => {
+                      if (!paymentTargetDate) return null
+                      const targetD = new Date(paymentTargetDate + 'T00:00:00')
+                      const now = new Date()
+                      const isNonCurrentCycle = targetD.getMonth() !== now.getMonth() || targetD.getFullYear() !== now.getFullYear()
+                      if (!isNonCurrentCycle) return null
+                      const isFutureCycle = paymentTargetDate > now.toISOString().split('T')[0]
+                      return (
+                        <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: `${theme.accent}15`, border: `1px solid ${theme.accent}30` }}>
+                          <Calendar className="w-3 h-3 flex-shrink-0" style={{ color: theme.accent }} />
+                          <p className="text-xs font-semibold" style={{ color: theme.accent }}>
+                            {isFutureCycle ? 'Advance payment' : 'Back-dated payment'} — applies to {targetD.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} cycle
+                          </p>
+                        </div>
+                      )
+                    })()}
                   </div>
                   <button
                     onClick={() => { setPartialPayId(null); setPaymentTargetDate(null) }}

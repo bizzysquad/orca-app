@@ -999,12 +999,11 @@ export default function DashboardPage() {
       }
     }
 
-    // Deduplicate: prevent the same item from appearing twice on the same day
-    // Key on date + normalized label only (drop type) so the same name from
-    // different sources (e.g. "Rent" as 'bill' AND as 'paycheck') is collapsed.
+    // Deduplicate: prevent the same bill/event from appearing twice on the same day
+    // (e.g. rent showing up both from recurring expansion and a one-time entry)
     const seen = new Set<string>()
     return events.filter(ev => {
-      const key = `${ev.date}-${ev.label.toLowerCase().trim()}`
+      const key = `${ev.date}-${ev.type}-${ev.label}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
