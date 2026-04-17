@@ -23,9 +23,19 @@ type FormStep = 1 | 2 | 3
  * This prevents recurring bills from disappearing permanently after being paid once.
  */
 function getBillEffectiveStatus(bill: Bill, calMonth: number, calYear: number): 'upcoming' | 'paid' {
-  // If fully paid via alloc entries, treat as paid regardless of stored status
-  const totalAllocPaid = bill.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
-  if (bill.alloc.length > 0 && totalAllocPaid >= bill.amount) return 'paid'
+  // For recurring bills, partial payment alloc entries only count for the specific
+  // billing cycle (month/year) they were recorded in — they must not bleed into
+  // future cycles.  One-time bills use all alloc entries as usual.
+  const recurrence = bill.recurrence || 'one-time'
+  const cycleAllocs = (recurrence !== 'one-time' && bill.alloc.length > 0)
+    ? bill.alloc.filter(a => {
+        const ad = new Date(a.date + 'T00:00:00')
+        return ad.getMonth() === calMonth && ad.getFullYear() === calYear
+      })
+    : bill.alloc
+
+  const totalAllocPaid = cycleAllocs.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+  if (cycleAllocs.length > 0 && totalAllocPaid >= bill.amount) return 'paid'
 
   if (bill.status !== 'paid') return bill.status as 'upcoming' | 'paid'
   // One-time bills: paid is permanent
@@ -108,9 +118,16 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   // Compute whether a bill is effectively paid for a specific calendar month/year.
   // Mirrors the getBillEffectiveStatus logic used in the bill list.
   const isBillPaidForMonth = (b: Bill, m: number, y: number): boolean => {
-    // Fully paid via alloc entries
-    const totalAllocPaid = b.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
-    if (b.alloc.length > 0 && totalAllocPaid >= b.amount) return true
+    // For recurring bills, only count alloc entries that belong to this specific cycle
+    const rec = b.recurrence || 'one-time'
+    const cycleAllocs = (rec !== 'one-time' && b.alloc.length > 0)
+      ? b.alloc.filter(a => {
+          const ad = new Date(a.date + 'T00:00:00')
+          return ad.getMonth() === m && ad.getFullYear() === y
+        })
+      : b.alloc
+    const totalAllocPaid = cycleAllocs.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+    if (cycleAllocs.length > 0 && totalAllocPaid >= b.amount) return true
 
     if (b.status !== 'paid') return false
     if (!b.paidDate) return true // legacy: no paidDate, treat as paid
@@ -129,9 +146,17 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
     return false
   }
 
-  // Compute partial payment info for a bill
+  // Compute partial payment info for a bill scoped to the currently viewed calendar month.
+  // For recurring bills, only alloc entries from the current billing cycle are counted.
   const getBillAllocInfo = (b: Bill) => {
-    const totalPaid = b.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+    const rec = b.recurrence || 'one-time'
+    const cycleAllocs = (rec !== 'one-time' && b.alloc.length > 0)
+      ? b.alloc.filter(a => {
+          const ad = new Date(a.date + 'T00:00:00')
+          return ad.getMonth() === month && ad.getFullYear() === year
+        })
+      : b.alloc
+    const totalPaid = cycleAllocs.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
     const remaining = Math.max(0, b.amount - totalPaid)
     return { totalPaid, remaining, isPartial: totalPaid > 0 && remaining > 0 }
   }
@@ -570,8 +595,13 @@ export default function BillBossPage() {
     const candidates: { name: string; due: string; amount: number; isSplit: boolean; billId: string }[] = []
 
     bills.forEach(b => {
-      // Alloc / split items: include every unpaid entry regardless of date
-      if (b.alloc && b.alloc.length > 0) {
+      // Only treat allocs as a split-schedule when there are UNPAID future alloc entries.
+      // If all allocs are already paid (partial payment records from past cycles), fall
+      // through to the normal recurrence logic so the bill keeps appearing in future months.
+      const hasUnpaidFutureAlloc = b.alloc.some(
+        (a: any) => !a.paid && new Date(a.date + 'T00:00:00') >= today
+      )
+      if (hasUnpaidFutureAlloc) {
         b.alloc.forEach((a: any) => {
           if (!a.paid) candidates.push({ name: b.name, due: a.date, amount: a.amount, isSplit: true, billId: b.id })
         })
@@ -684,15 +714,21 @@ export default function BillBossPage() {
 
     return [...bills]
       .filter(b => {
-        // Split alloc: show if any alloc date falls in this month
+        const recurrence = b.recurrence || 'one-time'
+
         if (b.alloc.length > 0) {
-          return b.alloc.some(a => {
+          const hasCurrentCycleAlloc = b.alloc.some(a => {
             const ad = new Date(a.date + 'T00:00:00')
             return ad.getMonth() === calMonth && ad.getFullYear() === calYear
           })
+          // One-time bills: their alloc entries are the sole source of truth
+          if (recurrence === 'one-time') return hasCurrentCycleAlloc
+          // Recurring bills: current-cycle allocs keep the bill visible this month,
+          // but stale (past-cycle) allocs must NOT hide the bill in future months —
+          // fall through to recurrence-based logic below in either case.
+          if (hasCurrentCycleAlloc) return true
         }
 
-        const recurrence = b.recurrence || 'one-time'
         const dueDate = new Date(b.due + 'T00:00:00')
 
         if (recurrence === 'monthly') return true  // always visible — recurs every month
@@ -898,9 +934,18 @@ export default function BillBossPage() {
     persistBills(bills.filter(b => b.id !== billId))
   }
 
-  // Helper: compute partial payment info for a bill
+  // Helper: compute partial payment info for a bill.
+  // For recurring bills, only alloc entries from the currently viewed billing cycle
+  // are counted so past-cycle partial payments don't bleed into future months.
   const getPartialPayInfo = (bill: Bill) => {
-    const totalPaid = bill.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+    const rec = bill.recurrence || 'one-time'
+    const allocsToCount = (rec !== 'one-time' && bill.alloc.length > 0)
+      ? bill.alloc.filter(a => {
+          const ad = new Date(a.date + 'T00:00:00')
+          return ad.getMonth() === calMonth && ad.getFullYear() === calYear
+        })
+      : bill.alloc
+    const totalPaid = allocsToCount.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
     if (totalPaid <= 0) return null
     const remaining = Math.max(0, bill.amount - totalPaid)
     return {
@@ -1600,14 +1645,6 @@ export default function BillBossPage() {
                       title="Duplicate"
                     >
                       <span style={{ color: theme.accent, fontSize: 11, fontWeight: 700 }}>⊕</span>
-                    </button>
-                    <button
-                      onClick={() => { setPaymentModalBillId(bill.id); setPaymentType('full'); setPaymentAmount(String(bill.amount)) }}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: '#10B98120' }}
-                      title="Pay"
-                    >
-                      <Check size={13} style={{ color: '#10B981' }} />
                     </button>
                     <button
                       onClick={() => handleDeleteBill(bill.id)}
