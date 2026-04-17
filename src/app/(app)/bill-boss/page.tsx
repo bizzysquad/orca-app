@@ -353,6 +353,10 @@ export default function BillBossPage() {
   const [partialPayId, setPartialPayId] = useState<string | null>(null)
   const [partialPayAmount, setPartialPayAmount] = useState('')
   const [partialPayMode, setPartialPayMode] = useState<'full' | 'half' | 'custom'>('full')
+  // Target date for future-month bill payments (so paidDate maps to the right cycle)
+  const [paymentTargetDate, setPaymentTargetDate] = useState<string | null>(null)
+  // Index for cycling through upcoming bills in the hero card
+  const [nextDueIndex, setNextDueIndex] = useState(0)
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -557,6 +561,55 @@ export default function BillBossPage() {
     candidates.sort((a, b) => a.due.localeCompare(b.due))
     return candidates[0] || null
   }, [bills, calMonth, calYear])
+
+  // Full ordered list of upcoming bill instances used by the hero carousel.
+  // Monthly recurring bills show their NEXT unpaid occurrence (current or future months).
+  // This allows future-month bills to appear and be paid in advance.
+  const upcomingBillsForHero = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const candidates: { name: string; due: string; amount: number; isSplit: boolean; billId: string }[] = []
+
+    bills.forEach(b => {
+      // Alloc / split items: include every unpaid entry regardless of date
+      if (b.alloc && b.alloc.length > 0) {
+        b.alloc.forEach((a: any) => {
+          if (!a.paid) candidates.push({ name: b.name, due: a.date, amount: a.amount, isSplit: true, billId: b.id })
+        })
+        return
+      }
+
+      const recurrence = b.recurrence || 'one-time'
+      const dueDate = new Date(b.due + 'T00:00:00')
+
+      if (recurrence === 'monthly') {
+        // Walk forward up to 6 months to find the next unpaid occurrence
+        for (let offset = 0; offset < 6; offset++) {
+          const tMon = (today.getMonth() + offset) % 12
+          const tYear = today.getFullYear() + Math.floor((today.getMonth() + offset) / 12)
+          const daysInMon = new Date(tYear, tMon + 1, 0).getDate()
+          const targetDay = Math.min(dueDate.getDate(), daysInMon)
+          const targetDate = new Date(tYear, tMon, targetDay)
+          if (targetDate < dueDate) continue // hasn't started yet
+          const targetStr = targetDate.toISOString().split('T')[0]
+          const isPaid = getBillEffectiveStatus(b, tMon, tYear) === 'paid'
+          if (!isPaid) {
+            candidates.push({ name: b.name, due: targetStr, amount: b.amount, isSplit: false, billId: b.id })
+            break // Only the single next unpaid occurrence per monthly bill
+          }
+        }
+      } else if (recurrence === 'yearly') {
+        if (b.status !== 'paid') candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+      } else if (recurrence === 'one-time') {
+        if (b.status !== 'paid') candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+      } else {
+        // Weekly / custom — use stored due date as next occurrence
+        if (b.status !== 'paid') candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+      }
+    })
+
+    candidates.sort((a, b) => a.due.localeCompare(b.due))
+    return candidates
+  }, [bills])
 
   // Calculate monthly bill total for selected calendar month — expands recurring bills
   const monthlyBillTotal = useMemo(() => {
@@ -767,13 +820,18 @@ export default function BillBossPage() {
     setShowAddForm(false)
   }
 
-  // Handler: Show partial payment dialog
-  const handlePayFull = (billId: string) => {
+  // Handler: Show partial payment dialog.
+  // Pass `targetDueDate` when paying a future-month bill so the paidDate maps to the
+  // correct billing cycle instead of defaulting to today.
+  const handlePayFull = (billId: string, targetDueDate?: string) => {
     const bill = bills.find(b => b.id === billId)
     if (bill) {
       setPartialPayId(billId)
       setPartialPayMode('full')
       setPartialPayAmount(String(bill.amount))
+      // Only store a target date when the bill is genuinely in the future
+      const today = new Date().toISOString().split('T')[0]
+      setPaymentTargetDate(targetDueDate && targetDueDate > today ? targetDueDate : null)
     }
   }
 
@@ -790,6 +848,9 @@ export default function BillBossPage() {
     if (!bill) return
 
     const today = new Date().toISOString().split('T')[0]
+    // For future-dated bills use the bill's due date so getBillEffectiveStatus
+    // correctly marks the right billing cycle as paid.
+    const effectiveDate = paymentTargetDate && paymentTargetDate > today ? paymentTargetDate : today
 
     // Total already paid via alloc
     const alreadyPaid = bill.alloc.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
@@ -800,6 +861,7 @@ export default function BillBossPage() {
       setPartialPayId(null)
       setPartialPayAmount('')
       setPartialPayMode('full')
+      setPaymentTargetDate(null)
       return
     }
 
@@ -807,14 +869,14 @@ export default function BillBossPage() {
       // Full (or completing) payment — mark bill as paid
       persistBills(bills.map(b =>
         b.id === partialPayId
-          ? { ...b, status: 'paid' as const, paidDate: today, alloc: [] }
+          ? { ...b, status: 'paid' as const, paidDate: effectiveDate, alloc: [] }
           : b
       ))
     } else {
       // Genuine partial payment — record as alloc entry, keep status upcoming
       const newAlloc: BillAlloc = {
         id: gid(),
-        date: today,
+        date: effectiveDate,
         amount: effectiveAmount,
         paid: true,
       }
@@ -828,6 +890,7 @@ export default function BillBossPage() {
     setPartialPayId(null)
     setPartialPayAmount('')
     setPartialPayMode('full')
+    setPaymentTargetDate(null)
   }
 
   // Handler: Delete bill
@@ -959,28 +1022,69 @@ export default function BillBossPage() {
               </div>
             </div>
 
-            {/* Next Bill Due + Quick Pay — split-aware */}
-            {nextDueItem && (
-              <div className="mt-6 pt-6 border-t flex items-center justify-between gap-3 sm:gap-4 flex-wrap sm:flex-nowrap" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium opacity-70">Next Due</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-base sm:text-lg font-bold truncate">{nextDueItem.name}</p>
-                    {nextDueItem.isSplit && (
-                      <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>SPLIT</span>
-                    )}
+            {/* Next Bill Due + Quick Pay — arrow-nav carousel across all upcoming bills */}
+            {upcomingBillsForHero.length > 0 && (() => {
+              const safeIdx = Math.min(nextDueIndex, upcomingBillsForHero.length - 1)
+              const heroBill = upcomingBillsForHero[safeIdx]
+              const today = new Date().toISOString().split('T')[0]
+              const isFuture = heroBill.due > today
+              return (
+                <div className="mt-6 pt-6 border-t" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
+                  <div className="flex items-center gap-2">
+                    {/* ← Prev */}
+                    <button
+                      onClick={() => setNextDueIndex(i => Math.max(0, i - 1))}
+                      disabled={safeIdx === 0}
+                      className="shrink-0 p-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-25"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
+                      aria-label="Previous bill"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+
+                    {/* Bill info */}
+                    <div className="flex-1 min-w-0 px-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-medium opacity-70">Next Due</p>
+                        {upcomingBillsForHero.length > 1 && (
+                          <span className="text-[10px] opacity-40 font-semibold">{safeIdx + 1}/{upcomingBillsForHero.length}</span>
+                        )}
+                        {isFuture && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>FUTURE</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-base font-bold truncate">{heroBill.name}</p>
+                        {heroBill.isSplit && (
+                          <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>SPLIT</span>
+                        )}
+                      </div>
+                      <p className="text-xs opacity-70">{fmtD(heroBill.due)} · {fmt(heroBill.amount)}</p>
+                    </div>
+
+                    {/* → Next */}
+                    <button
+                      onClick={() => setNextDueIndex(i => Math.min(upcomingBillsForHero.length - 1, i + 1))}
+                      disabled={safeIdx >= upcomingBillsForHero.length - 1}
+                      className="shrink-0 p-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-25"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
+                      aria-label="Next bill"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+
+                    {/* Pay Now */}
+                    <button
+                      onClick={() => handlePayFull(heroBill.billId, heroBill.due)}
+                      className="shrink-0 px-3 sm:px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
+                      style={{ backgroundColor: '#fff', color: theme.accent }}
+                    >
+                      Pay Now
+                    </button>
                   </div>
-                  <p className="text-xs opacity-70 mt-1">{fmtD(nextDueItem.due)} · {fmt(nextDueItem.amount)}</p>
                 </div>
-                <button
-                  onClick={() => handlePayFull(nextDueItem.billId)}
-                  className="shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
-                  style={{ backgroundColor: '#fff', color: theme.accent }}
-                >
-                  Pay Now
-                </button>
-              </div>
-            )}
+              )
+            })()}
           </div>
         </motion.div>
 
@@ -1672,7 +1776,7 @@ export default function BillBossPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
-              onClick={() => setPartialPayId(null)}
+              onClick={() => { setPartialPayId(null); setPaymentTargetDate(null) }}
             >
               <motion.div
                 initial={{ y: 100, opacity: 0 }}
@@ -1690,9 +1794,17 @@ export default function BillBossPage() {
                     <p className="text-sm mt-0.5" style={{ color: theme.textM }}>
                       Total due: <span className="font-bold" style={{ color: theme.bad }}>{fmt(billTotal)}</span>
                     </p>
+                    {paymentTargetDate && (
+                      <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: `${theme.accent}15`, border: `1px solid ${theme.accent}30` }}>
+                        <Calendar className="w-3 h-3 flex-shrink-0" style={{ color: theme.accent }} />
+                        <p className="text-xs font-semibold" style={{ color: theme.accent }}>
+                          Advance payment — applies to {new Date(paymentTargetDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} cycle
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <button
-                    onClick={() => setPartialPayId(null)}
+                    onClick={() => { setPartialPayId(null); setPaymentTargetDate(null) }}
                     className="p-2 rounded-xl transition-colors mt-1"
                     style={{ backgroundColor: theme.border }}
                   >
