@@ -1,21 +1,30 @@
 @echo off
+title ORCA Deploy
+color 0A
+cd /d "%~dp0"
+
 echo.
-echo  Deploying ORCA to production...
+echo  ================================
+echo   ORCA -- Deploying to Production
 echo  ================================
 echo.
 
-cd /d "%~dp0"
-
-echo  [1/3] Saving changes to GitHub...
+echo  [1/3]  Saving to GitHub...
 git add -A
 git commit -m "update" --allow-empty
 git push origin main --force
+if errorlevel 1 (
+  echo  [!] GitHub push failed -- retrying...
+  git push origin main --force
+)
 
 echo.
-echo  [2/3] Deploying to Vercel...
+echo  [2/3]  Deploying to Vercel...
 npx vercel --prod --yes
 
 echo.
-echo  [3/3] Done! Visit orcafin.app
+echo  ================================
+echo   Done! Open orcafin.app
+echo  ================================
 echo.
 pause
