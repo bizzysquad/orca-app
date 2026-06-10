@@ -1,820 +1,185 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import Image from 'next/image'
-import Link from 'next/link'
-import {
-  Eye,
-  EyeOff,
-  Mail,
-  Lock,
-  ArrowRight,
-  CheckCircle,
-  CheckCircle2,
-  BarChart3,
-  Receipt,
-  PiggyBank,
-  Users,
-  CheckSquare,
-  Calendar,
-  Shield,
-  User as UserIcon,
-  ChevronRight,
-  AlertCircle,
-} from 'lucide-react'
-import Input from '@/components/ui/Input'
-import { createBrowserClient } from '@supabase/ssr'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Delete } from 'lucide-react'
+
+const GOLD = '#F59E0B'
+const INDIGO = '#6366F1'
 
 export default function LoginPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
-      <LoginPageInner />
-    </Suspense>
-  )
-}
-
-function LoginPageInner() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  // Custom logo
-  const [customLogo, setCustomLogo] = useState<string | null>(null)
-  useEffect(() => {
-    setCustomLogo(localStorage.getItem('orca-custom-logo') || null)
-  }, [])
-
-  // Tab state (Member Login vs Create Account)
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [showForgotPassword, setShowForgotPassword] = useState(false)
-
-  // Email/Password/Full Name
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('')
-
-  // General
-  const [loading, setLoading] = useState(false)
+  const [pin, setPin] = useState('')
   const [error, setError] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
-  const [forgotPasswordMessage, setForgotPasswordMessage] = useState('')
-  const [forgotPasswordError, setForgotPasswordError] = useState('')
-  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [shake, setShake] = useState(false)
 
-  // Invite flow: returnTo + invite banner
-  const returnTo = searchParams.get('returnTo') || ''
-  const isInviteFlow = searchParams.get('invite') === '1'
-
-  // Check for success message from signup redirect, and handle invite context
-  useEffect(() => {
-    const message = searchParams.get('message')
-    if (message === 'account-created') {
-      setSuccessMessage('Account created! Please check your email to verify, then sign in.')
-      setIsSignUp(false)
-    }
-    if (message === 'email-verified') {
-      setSuccessMessage('Email verified successfully! You can now sign in.')
-      setIsSignUp(false)
-    }
-    if (message === 'verify-email') {
-      setSuccessMessage('Please check your email for a verification link, then sign in.')
-      setIsSignUp(false)
-    }
-
-    // Store returnTo in sessionStorage so it survives email-verify flow
-    if (returnTo) {
-      try { sessionStorage.setItem('orca-invite-returnto', returnTo) } catch {}
-    }
-  }, [searchParams, returnTo])
-
-  // Forgot password handler
-  const handleForgotPassword = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setForgotPasswordError('')
-    setForgotPasswordMessage('')
-    setForgotPasswordLoading(true)
-
-    if (!forgotPasswordEmail) {
-      setForgotPasswordError('Please enter your email address')
-      setForgotPasswordLoading(false)
-      return
-    }
-
-    try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      )
-
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
-        redirectTo: `${window.location.origin}/auth/login`,
-      })
-
-      if (error) {
-        setForgotPasswordError(error.message || 'Failed to send reset email. Please try again.')
-      } else {
-        setForgotPasswordMessage('Check your email for a password reset link')
-        setForgotPasswordEmail('')
-      }
-    } catch {
-      setForgotPasswordError('An unexpected error occurred. Please try again.')
-    } finally {
-      setForgotPasswordLoading(false)
-    }
-  }
-
-  // Email sign in - real Supabase auth
-  const handleEmailSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setError('')
-    setSuccessMessage('')
+  const submit = async (finalPin: string) => {
     setLoading(true)
-
-    const form = e.currentTarget
-    const formEmail = (form.elements.namedItem('email') as HTMLInputElement)?.value || email
-    const formPassword = (form.elements.namedItem('password') as HTMLInputElement)?.value || password
-
-    if (!formEmail || !formPassword) {
-      setError('Please enter your email and password')
-      setLoading(false)
-      return
-    }
-
+    setError('')
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/pin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formEmail, password: formPassword }),
+        body: JSON.stringify({ pin: finalPin }),
       })
-
       const data = await res.json()
-
       if (!res.ok) {
-        if (data.code === 'EMAIL_NOT_CONFIRMED') {
-          setError('Please verify your email before signing in. Check your inbox for a confirmation link.')
-        } else {
-          setError(data.error || 'Sign in failed. Please try again.')
-        }
-        setLoading(false)
-        return
-      }
-
-      // Success - redirect to returnTo (invite flow) or dashboard
-      const storedReturnTo = returnTo || (() => {
-        try { return sessionStorage.getItem('orca-invite-returnto') || '' } catch { return '' }
-      })()
-      if (storedReturnTo) {
-        try { sessionStorage.removeItem('orca-invite-returnto') } catch {}
-        router.push(storedReturnTo)
+        setShake(true)
+        setPin('')
+        setError(data.error || 'Wrong passcode')
+        setTimeout(() => setShake(false), 600)
       } else {
         router.push('/dashboard')
+        router.refresh()
       }
-      router.refresh()
     } catch {
-      setError('An unexpected error occurred. Please try again.')
+      setError('Connection error. Try again.')
+      setPin('')
+    } finally {
       setLoading(false)
     }
   }
 
-  // Email sign up - real Supabase auth
-  const handleEmailSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const handleDigit = (d: string) => {
+    if (loading || pin.length >= 6) return
+    const next = pin + d
+    setPin(next)
     setError('')
-    setSuccessMessage('')
-    setLoading(true)
-
-    const form = e.currentTarget
-    const formEmail = (form.elements.namedItem('email') as HTMLInputElement)?.value || email
-    const formPassword = (form.elements.namedItem('password') as HTMLInputElement)?.value || password
-    const formName = (form.elements.namedItem('fullName') as HTMLInputElement)?.value || fullName
-    const formConfirmPassword =
-      (form.elements.namedItem('confirmPassword') as HTMLInputElement)?.value || confirmPassword
-
-    if (!formEmail || !formPassword || !formName || !formConfirmPassword) {
-      setError('Please fill in all fields')
-      setLoading(false)
-      return
-    }
-
-    if (formPassword !== formConfirmPassword) {
-      setError('Passwords do not match')
-      setLoading(false)
-      return
-    }
-
-    try {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formEmail, password: formPassword, fullName: formName }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error || 'Sign up failed. Please try again.')
-        setLoading(false)
-        return
-      }
-
-      // Success - show message and switch to sign-in tab
-      const inviteMsg = (returnTo || (() => { try { return sessionStorage.getItem('orca-invite-returnto') || '' } catch { return '' } })())
-        ? ' After verifying, sign in here to complete joining your group.'
-        : ''
-      setSuccessMessage(`Account created! Please check your email to verify, then sign in.${inviteMsg}`)
-      setIsSignUp(false)
-      setEmail('')
-      setPassword('')
-      setConfirmPassword('')
-      setFullName('')
-    } catch {
-      setError('An unexpected error occurred. Please try again.')
-      setLoading(false)
-    }
+    if (next.length === 6) submit(next)
   }
 
-  // Feature cards data
-  const features = [
-    {
-      icon: BarChart3,
-      title: 'Smart Stack',
-      description:
-        'Track every dollar in and out. Plan paychecks, split bills, and see exactly how much is safe to spend.',
-      color: 'indigo',
-    },
-    {
-      icon: Receipt,
-      title: 'Bill Boss',
-      description:
-        'Never miss a bill. See all dues in one place, mark payments, and stay ahead of every deadline.',
-      color: 'red',
-    },
-    {
-      icon: PiggyBank,
-      title: 'Savings Goals',
-      description:
-        'Set targets, track progress, and watch your savings grow with visual goal trackers.',
-      color: 'green',
-    },
-    {
-      icon: Users,
-      title: 'Stack Circle',
-      description:
-        'Save together with friends or family. Create group goals, invite members, and share progress.',
-      color: 'amber',
-    },
-    {
-      icon: CheckSquare,
-      title: 'Task List',
-      description:
-        'Organize to-dos, groceries, meetings, and notes — all linked to your financial life.',
-      color: 'blue',
-    },
-    {
-      icon: Calendar,
-      title: 'Calendar View',
-      description:
-        'See bills, payments, and events on a unified calendar so nothing sneaks up on you.',
-      color: 'purple',
-    },
-  ]
-
-  const steps = [
-    {
-      number: '01',
-      title: 'Create your account',
-      description: 'Sign up in seconds — no credit card required.',
-    },
-    {
-      number: '02',
-      title: 'Add your income & bills',
-      description: 'Enter what you earn and what you owe each month.',
-    },
-    {
-      number: '03',
-      title: 'See your Safe to Spend',
-      description: "ORCA calculates what's truly available after bills.",
-    },
-    {
-      number: '04',
-      title: 'Take control',
-      description: 'Pay bills, hit goals, and build wealth — all in one place.',
-    },
-  ]
-
-  const getIconColor = (color: string) => {
-    const colors: Record<string, string> = {
-      indigo: '#6366F1',
-      red: '#EF4444',
-      green: '#10B981',
-      amber: '#F59E0B',
-      blue: '#3B82F6',
-      purple: '#8B5CF6',
-    }
-    return colors[color] || '#64748B'
+  const handleDelete = () => {
+    if (loading) return
+    setPin(p => p.slice(0, -1))
+    setError('')
   }
+
+  const KEYS = [
+    ['1','2','3'],
+    ['4','5','6'],
+    ['7','8','9'],
+    ['','0','⌫'],
+  ]
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
-      {/* Left Panel - Info/Marketing (55%) */}
-      <div
-        className="hidden lg:flex lg:w-[55%] flex-col justify-between p-10 xl:p-14"
-        style={{
-          background: 'linear-gradient(160deg, #080808 0%, #0F1218 50%, #080808 100%)',
-          borderRight: '1px solid rgba(255,255,255,0.05)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
+    <div
+      className="min-h-screen flex flex-col items-center justify-center px-6"
+      style={{ background: '#070B14' }}
+    >
+      {/* Logo */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="flex flex-col items-center mb-12"
       >
-        {/* Top: Logo + Branding */}
-        <div>
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-12 h-12 flex items-center justify-center">
-              {customLogo ? (
-                <img src={customLogo} alt="ORCA" width={48} height={48} className="rounded-xl object-cover" />
-              ) : (
-                <img src="/ORCA-Logo.png" alt="ORCA" width={48} height={48} className="rounded-xl object-cover" />
-              )}
-            </div>
-            <div>
-              <h1 className="text-xl font-black" style={{ color: '#F59E0B', letterSpacing: '0.08em' }}>
-                ORCA
-              </h1>
-              <p className="text-xs text-slate-500" style={{ letterSpacing: '0.14em', fontWeight: 600 }}>
-                FINANCIAL COMMAND CENTER
-              </p>
-            </div>
-          </div>
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+          style={{ background: `linear-gradient(135deg, ${INDIGO}, #4F46E5)`, boxShadow: `0 0 40px ${INDIGO}40` }}
+        >
+          <span className="text-white font-black text-2xl">O</span>
+        </div>
+        <h1 className="text-2xl font-black tracking-widest" style={{ color: GOLD }}>ORCA</h1>
+        <p className="text-xs font-semibold tracking-widest mt-1" style={{ color: '#475569' }}>
+          COMMAND CENTER
+        </p>
+      </motion.div>
 
-          {/* Gold badge — matches brand */}
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs mb-6"
-            style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.25)', color: '#D4AF37', fontWeight: 600 }}
+      {/* PIN dots */}
+      <motion.div
+        animate={shake ? { x: [-10, 10, -10, 10, -6, 6, 0] } : { x: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex gap-4 mb-8"
+      >
+        {[0,1,2,3,4,5].map(i => (
+          <motion.div
+            key={i}
+            animate={{
+              scale: i < pin.length ? 1.15 : 1,
+              backgroundColor: i < pin.length ? GOLD : 'transparent',
+            }}
+            transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+            className="w-3.5 h-3.5 rounded-full"
+            style={{
+              border: `2px solid ${i < pin.length ? GOLD : '#1E2A45'}`,
+            }}
+          />
+        ))}
+      </motion.div>
+
+      {/* Error */}
+      <AnimatePresence>
+        {error && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="text-sm mb-6 font-medium"
+            style={{ color: '#EF4444' }}
           >
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#D4AF37' }} />
-            Know exactly what's safe to spend
-          </div>
+            {error}
+          </motion.p>
+        )}
+      </AnimatePresence>
 
-          {/* Hero heading */}
-          <div className="mb-4">
-            <h2 className="text-4xl font-black text-white mb-2" style={{ lineHeight: 1.15 }}>
-              Take complete control
-            </h2>
-            <h2 className="text-4xl font-black" style={{ color: '#F59E0B', lineHeight: 1.15 }}>
-              of your money
-            </h2>
-          </div>
+      {!error && <div className="mb-6 h-5" />}
 
-          {/* Description */}
-          <p className="text-base text-slate-300 mb-12 max-w-md" style={{ lineHeight: 1.7 }}>
-            ORCA is a personal finance command center that shows you exactly where your money goes, what's safe to
-            spend, and how to hit your financial goals — all in one beautifully designed platform.
-          </p>
+      {/* Keypad */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.4 }}
+        className="grid grid-cols-3 gap-4 w-64"
+      >
+        {KEYS.flat().map((key, i) => {
+          if (!key) return <div key={i} />
+          const isDelete = key === '⌫'
+          return (
+            <motion.button
+              key={i}
+              whileTap={{ scale: 0.88 }}
+              onClick={() => isDelete ? handleDelete() : handleDigit(key)}
+              disabled={loading}
+              className="h-16 rounded-2xl flex items-center justify-center text-xl font-semibold select-none disabled:opacity-40"
+              style={{
+                background: '#111827',
+                border: '1px solid #1E2A45',
+                color: isDelete ? '#475569' : '#F8FAFC',
+              }}
+            >
+              {isDelete ? <Delete size={18} /> : key}
+            </motion.button>
+          )
+        })}
+      </motion.div>
 
-          {/* HOW IT WORKS Section */}
-          <div className="mb-8">
-            <p className="text-xs mb-5" style={{ color: '#475569', fontWeight: 700, letterSpacing: '0.12em' }}>
-              HOW IT WORKS
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {steps.map((step) => (
-                <div
-                  key={step.number}
-                  className="rounded-2xl p-4"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
-                >
-                  <div className="mb-2 font-black" style={{ fontSize: 11, color: '#F59E0B', letterSpacing: '0.08em' }}>
-                    {step.number}
-                  </div>
-                  <div className="text-sm mb-1 font-bold" style={{ color: '#F1F5F9' }}>
-                    {step.title}
-                  </div>
-                  <div className="text-xs" style={{ color: '#64748B', lineHeight: 1.5 }}>
-                    {step.description}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom: Features Section */}
-        <div>
-          <p className="text-xs mb-4" style={{ color: '#475569', fontWeight: 700, letterSpacing: '0.12em' }}>
-            EVERYTHING INCLUDED
-          </p>
-          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-            {features.map((feature) => {
-              const IconComponent = feature.icon
-              return (
-                <div
-                  key={feature.title}
-                  className="flex items-start gap-3 p-3 rounded-xl"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
-                >
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${getIconColor(feature.color)}20` }}>
-                    <IconComponent className="w-4 h-4" style={{ color: getIconColor(feature.color) }} />
-                  </div>
-                  <div>
-                    <div className="text-xs mb-0.5" style={{ fontWeight: 700, color: '#E2E8F0' }}>
-                      {feature.title}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#64748B', lineHeight: 1.4 }}>
-                      {feature.description}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Right Panel - Login Form (45% on desktop, 100% on mobile) */}
-      <div className="flex-1 flex flex-col items-center justify-center px-5 py-10 sm:px-10" style={{ background: '#0F172A' }}>
-        {/* Mobile logo + description */}
-        <div className="flex flex-col items-center mb-8 lg:hidden">
-          {customLogo ? (
-            <img src={customLogo} alt="ORCA" width={64} height={64} className="rounded-2xl object-cover mb-3" />
-          ) : (
-            <img src="/ORCA-Logo.png" alt="ORCA" width={64} height={64} className="rounded-2xl object-cover mb-3" />
-          )}
-          <div style={{ color: '#F59E0B', fontWeight: 900, fontSize: 22, letterSpacing: '0.08em' }}>ORCA</div>
-          <div style={{ color: '#64748B', fontSize: 11, letterSpacing: '0.14em', fontWeight: 600 }} className="mb-4">FINANCIAL COMMAND CENTER</div>
-
-          {/* Mobile app description */}
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs mb-4"
-            style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.25)', color: '#D4AF37', fontWeight: 600 }}
+      {/* Loading state */}
+      <AnimatePresence>
+        {loading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="mt-8 flex gap-1.5"
           >
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#D4AF37' }} />
-            Know exactly what&apos;s safe to spend
-          </div>
+            {[0,1,2].map(i => (
+              <motion.div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: GOLD }}
+                animate={{ opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          <p className="text-center text-sm mb-5 px-2" style={{ color: '#94A3B8', lineHeight: 1.6 }}>
-            Track every dollar, manage bills, hit savings goals, and see exactly what's safe to spend — all in one beautifully designed platform.
-          </p>
-
-          {/* Quick feature highlights */}
-          <div className="grid grid-cols-3 gap-2 w-full px-1 mb-2">
-            {[
-              { icon: BarChart3, label: 'Smart Stack', color: '#6366F1' },
-              { icon: Receipt, label: 'Bill Boss', color: '#EF4444' },
-              { icon: PiggyBank, label: 'Savings', color: '#10B981' },
-            ].map((f) => {
-              const FIcon = f.icon
-              return (
-                <div
-                  key={f.label}
-                  className="flex flex-col items-center gap-1.5 p-2.5 rounded-xl"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
-                >
-                  <FIcon className="w-4 h-4" style={{ color: f.color }} />
-                  <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600 }}>{f.label}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="w-full" style={{ maxWidth: 400 }}>
-          {!showForgotPassword ? (
-            <>
-              {/* Tabs */}
-              <div
-                className="flex gap-1 p-1 rounded-xl mb-7"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                {(['login', 'signup'] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => {
-                      setIsSignUp(m === 'signup')
-                      setError('')
-                    }}
-                    className="flex-1 py-2.5 rounded-lg text-sm capitalize transition-all"
-                    style={{
-                      background: isSignUp === (m === 'signup') ? '#D4AF37' : 'transparent',
-                      color: isSignUp === (m === 'signup') ? '#0A0A0A' : '#64748B',
-                      fontWeight: isSignUp === (m === 'signup') ? 700 : 500,
-                    }}
-                  >
-                    {m === 'login' ? 'Member Login' : 'Create Account'}
-                  </button>
-                ))}
-              </div>
-
-              {/* Desktop logo (inside form panel) */}
-              <div className="hidden lg:flex flex-col items-center mb-6">
-                {customLogo ? (
-                  <img
-                    src={customLogo}
-                    alt="ORCA"
-                    width={56}
-                    height={56}
-                    className="rounded-2xl object-cover mb-3"
-                    style={{ boxShadow: '0 0 32px rgba(245,158,11,0.3)' }}
-                  />
-                ) : (
-                  <img
-                    src="/ORCA-Logo.png"
-                    alt="ORCA"
-                    width={56}
-                    height={56}
-                    className="rounded-2xl object-cover mb-3"
-                    style={{ boxShadow: '0 0 32px rgba(245,158,11,0.3)' }}
-                  />
-                )}
-                <div style={{ color: '#F59E0B', fontWeight: 900, fontSize: 20, letterSpacing: '0.08em' }}>ORCA</div>
-                <div style={{ color: '#475569', fontSize: 10, letterSpacing: '0.12em', fontWeight: 600 }}>
-                  FINANCIAL COMMAND CENTER
-                </div>
-              </div>
-
-              {/* Heading */}
-              <div className="mb-6">
-                <h2 style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9' }}>
-                  {isSignUp ? 'Get started free' : 'Welcome back'}
-                </h2>
-                <p className="text-sm mt-1" style={{ color: '#64748B' }}>
-                  {isSignUp ? 'Join thousands taking control of their finances' : 'Sign in to your financial command center'}
-                </p>
-              </div>
-
-              {/* Invite banner */}
-              {isInviteFlow && !successMessage && (
-                <div
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-4"
-                  style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.35)' }}
-                >
-                  <Users size={16} style={{ color: '#D4AF37', flexShrink: 0 }} />
-                  <span style={{ color: 'rgba(212,175,55,0.9)' }}>You were invited to a Stack Circle group. Sign in or create an account to join.</span>
-                </div>
-              )}
-
-              {/* Success Message */}
-              {successMessage && (
-                <div
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-6"
-                  style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)' }}
-                >
-                  <CheckCircle size={16} style={{ color: '#6EE7B7', flexShrink: 0 }} />
-                  <span style={{ color: '#6EE7B7' }}>{successMessage}</span>
-                </div>
-              )}
-
-              {/* Error */}
-              {error && (
-                <div
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-6"
-                  style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}
-                >
-                  <AlertCircle size={16} style={{ color: '#FCA5A5', flexShrink: 0 }} />
-                  <span style={{ color: '#FCA5A5' }}>{error}</span>
-                </div>
-              )}
-
-              {/* Form */}
-              <form onSubmit={isSignUp ? handleEmailSignUp : handleEmailSignIn} className="space-y-4">
-                {isSignUp && (
-                  <div>
-                    <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Full Name
-                    </label>
-                    <div className="relative">
-                      <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
-                      <input
-                        type="text"
-                        name="fullName"
-                        placeholder="Your full name"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl text-sm outline-none"
-                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
-                        required={isSignUp}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
-                    <input
-                      type="email"
-                      name="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl text-sm outline-none"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      name="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-12 py-3 rounded-xl text-sm outline-none"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-lg"
-                      style={{ color: '#475569' }}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {!isSignUp && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowForgotPassword(true)
-                        setError('')
-                      }}
-                      className="text-xs mt-2 transition-all hover:opacity-80"
-                      style={{ color: '#D4AF37', fontWeight: 700, opacity: 0.8 }}
-                    >
-                      Forgot Password?
-                    </button>
-                  )}
-                </div>
-
-                {isSignUp && (
-                  <div>
-                    <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Confirm Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        name="confirmPassword"
-                        placeholder="••••••••"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full pl-10 pr-12 py-3 rounded-xl text-sm outline-none"
-                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
-                        required={isSignUp}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-lg"
-                        style={{ color: '#475569' }}
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm transition-all hover:opacity-90 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                  style={{ background: 'linear-gradient(135deg, #D4AF37 0%, #F5D76E 50%, #D4AF37 100%)', backgroundSize: '200% 100%', color: '#0A0A0A', fontWeight: 700, boxShadow: '0 0 20px rgba(212,175,55,0.2)' }}
-                >
-                  {loading ? (isSignUp ? 'Creating account...' : 'Signing in...') : (isSignUp ? 'Create My Account' : 'Sign In →')}
-                  {!loading && <ArrowRight className="w-4 h-4" />}
-                </button>
-              </form>
-
-              {/* Toggle */}
-              <div className="text-center mt-5">
-                <span className="text-sm" style={{ color: '#475569' }}>
-                  {isSignUp ? "Already a member? " : "Don't have an account? "}
-                </span>
-                <button
-                  onClick={() => {
-                    setIsSignUp(!isSignUp)
-                    setError('')
-                  }}
-                  className="text-sm transition-all hover:opacity-80"
-                  style={{ color: '#D4AF37', fontWeight: 700 }}
-                >
-                  {isSignUp ? 'Sign in' : 'Create one free'}
-                </button>
-              </div>
-
-              {/* Security note */}
-              <div className="flex items-center justify-center gap-4 mt-6">
-                <div className="flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5" style={{ color: '#334155' }} />
-                  <span style={{ color: '#334155', fontSize: 11 }}>End-to-end encrypted</span>
-                </div>
-                <div className="w-px h-3 bg-slate-800" />
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle className="w-3.5 h-3.5" style={{ color: '#334155' }} />
-                  <span style={{ color: '#334155', fontSize: 11 }}>No card required</span>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Forgot Password Form */}
-              <div className="mb-6">
-                <h2 style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9' }}>Reset Password</h2>
-                <p className="text-sm mt-1" style={{ color: '#64748B' }}>
-                  Enter your email to receive a password reset link
-                </p>
-              </div>
-
-              {forgotPasswordMessage && (
-                <div
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-6"
-                  style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)' }}
-                >
-                  <CheckCircle size={16} style={{ color: '#6EE7B7', flexShrink: 0 }} />
-                  <span style={{ color: '#6EE7B7' }}>{forgotPasswordMessage}</span>
-                </div>
-              )}
-
-              {forgotPasswordError && (
-                <div
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mb-6"
-                  style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}
-                >
-                  <AlertCircle size={16} style={{ color: '#FCA5A5', flexShrink: 0 }} />
-                  <span style={{ color: '#FCA5A5' }}>{forgotPasswordError}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleForgotPassword} className="space-y-4">
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#475569' }} />
-                    <input
-                      type="email"
-                      placeholder="you@example.com"
-                      value={forgotPasswordEmail}
-                      onChange={(e) => setForgotPasswordEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl text-sm outline-none"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#F1F5F9' }}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={forgotPasswordLoading}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm transition-all hover:opacity-90 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                  style={{ background: 'linear-gradient(135deg, #D4AF37 0%, #F5D76E 50%, #D4AF37 100%)', backgroundSize: '200% 100%', color: '#0A0A0A', fontWeight: 700 }}
-                >
-                  {forgotPasswordLoading ? 'Sending...' : 'Send Reset Link'}
-                  {!forgotPasswordLoading && <ArrowRight className="w-4 h-4" />}
-                </button>
-              </form>
-
-              {/* Back to Login Link */}
-              <div className="text-center mt-5">
-                <button
-                  onClick={() => {
-                    setShowForgotPassword(false)
-                    setForgotPasswordEmail('')
-                    setForgotPasswordMessage('')
-                    setForgotPasswordError('')
-                  }}
-                  className="text-sm transition-all hover:opacity-80"
-                  style={{ color: '#D4AF37', fontWeight: 700 }}
-                >
-                  Back to login
-                </button>
-              </div>
-
-              {/* Security note */}
-              <div className="flex items-center justify-center gap-1.5 mt-6">
-                <Shield className="w-3.5 h-3.5" style={{ color: '#334155' }} />
-                <span style={{ color: '#334155', fontSize: 11 }}>Secured with end-to-end encryption</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      <p className="absolute bottom-8 text-xs" style={{ color: '#1E2A45' }}>
+        orcafin.app
+      </p>
     </div>
   )
 }
