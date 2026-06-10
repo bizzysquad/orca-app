@@ -1,11 +1,15 @@
 'use client'
 
 import React, { useState } from 'react'
-import Sidebar from './Sidebar'
-import DesktopTopBar from './DesktopTopBar'
+import Link from 'next/link'
+import { Settings2 } from 'lucide-react'
 import BottomNav from './BottomNav'
+import SettingsSheet from './SettingsSheet'
 import { useTheme } from '@/context/ThemeContext'
 import { QuickActions } from '@/components/QuickActions'
+import { useOrcaData } from '@/context/OrcaDataContext'
+import { createBrowserClient } from '@supabase/ssr'
+import { useEffect } from 'react'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -13,44 +17,81 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children, userName = 'User' }: AppShellProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const { theme } = useTheme()
+  const { data } = useOrcaData()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [userEmail, setUserEmail] = useState<string | undefined>()
+
+  useEffect(() => {
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+      supabase.auth.getUser().then(({ data: d }) => {
+        if (d.user?.email) setUserEmail(d.user.email)
+      })
+    } catch {}
+  }, [])
+
+  const displayName = (data?.user?.name?.trim()) || userName
 
   return (
     <div
-      className="relative w-full min-h-screen flex overflow-x-hidden max-w-[100vw]"
-      style={{ backgroundColor: theme.bg, color: theme.text, transition: 'background 0.2s' }}
+      className="relative w-full min-h-screen flex flex-col overflow-x-hidden max-w-[100vw]"
+      style={{ backgroundColor: theme.bg, color: theme.text }}
     >
-      {/* Sidebar — desktop only */}
-      <Sidebar
-        userName={userName}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col lg:ml-[240px] min-w-0 max-w-full overflow-x-hidden">
-        {/* Desktop Top Bar */}
-        <DesktopTopBar
-          onMenuToggle={() => setSidebarOpen(true)}
-          userName={userName}
-        />
-
-        {/* Content */}
-        <main
-          className="flex-1 overflow-y-auto overflow-x-hidden"
-          style={{ backgroundColor: theme.bg, transition: 'background 0.2s' }}
-        >
-          <div className="w-full max-w-full">
-            {children}
+      {/* ── Minimal Top Bar ── */}
+      <div
+        className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 shrink-0"
+        style={{
+          backgroundColor: `${theme.bg}f0`,
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: `1px solid ${theme.border}`,
+        }}
+      >
+        {/* Logo */}
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs"
+            style={{ background: `linear-gradient(135deg, #6366F1, #4F46E5)`, color: '#fff' }}
+          >
+            O
           </div>
-        </main>
+          <span className="font-black text-sm tracking-widest" style={{ color: theme.accent }}>
+            ORCA
+          </span>
+        </Link>
+
+        {/* Settings trigger */}
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="p-2 rounded-xl transition-opacity hover:opacity-70"
+          style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+          aria-label="Open settings"
+        >
+          <Settings2 size={16} style={{ color: theme.subtext }} />
+        </button>
       </div>
 
-      {/* Mobile Bottom Navigation */}
+      {/* ── Page Content ── */}
+      <main className="flex-1 overflow-x-hidden" style={{ backgroundColor: theme.bg }}>
+        {children}
+      </main>
+
+      {/* ── Bottom Navigation ── */}
       <BottomNav />
 
-      {/* Global Quick Actions Command Palette (Cmd+K) */}
+      {/* ── Settings / Admin Sheet ── */}
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        userName={displayName}
+        userEmail={userEmail}
+      />
+
+      {/* ── Global Quick Actions (Cmd+K) ── */}
       <QuickActions />
     </div>
   )
