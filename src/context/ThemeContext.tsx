@@ -170,6 +170,13 @@ function makeDark(lightTheme: Theme): Theme {
 }
 
 export const THEMES: Record<string, Theme> = {
+  'bentley-dark': withAliases({
+    id: 'bentley-dark', name: 'Bentley Dark',
+    bg: '#070B14', surface: '#0F1629', card: '#111827',
+    text: '#F8FAFC', subtext: '#94A3B8', accent: '#6366F1',
+    border: '#1E2A45', input: '#141B2D', nav: '#0B1120',
+    ...BASE_DARK_THEME_PROPS,
+  }),
   'ocean-blue': withAliases({
     id: 'ocean-blue', name: 'Ocean Blue',
     bg: '#EAF3FF', surface: '#FFFFFF', card: '#DCEBFF',
@@ -259,14 +266,14 @@ type ThemeContextType = {
   toggleDark: () => void
 }
 
-const defaultTheme = THEMES['ocean-blue']
+const defaultTheme = THEMES['bentley-dark']
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: defaultTheme,
-  themeId: 'ocean-blue',
+  themeId: 'bentley-dark',
   setThemeId: () => {},
   allThemes: THEME_LIST,
-  isDark: false,
+  isDark: true,
   toggleDark: () => {},
 })
 
@@ -274,7 +281,7 @@ const THEME_ID_KEY = 'orca-theme-id'
 const DARK_MODE_KEY = 'orca-dark-mode'
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [themeId, setThemeIdState] = useState<string>('ocean-blue')
+  const [themeId, setThemeIdState] = useState<string>('bentley-dark')
   const [isDarkMode, setIsDarkModeState] = useState<boolean>(false)
 
   const baseTheme = THEMES[themeId] || THEMES['ocean-blue']
@@ -309,8 +316,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         setThemeIdState(saved)
         if (typeof console !== 'undefined') console.log('[ORCA Theme] Loaded theme:', saved)
       } else {
-        setThemeIdState('ocean-blue')
-        if (typeof console !== 'undefined') console.log('[ORCA Theme] Using default theme: ocean-blue')
+        setThemeIdState('bentley-dark')
+        if (typeof console !== 'undefined') console.log('[ORCA Theme] Using default theme: bentley-dark')
       }
 
       const savedDarkMode = localStorage.getItem(DARK_MODE_KEY)

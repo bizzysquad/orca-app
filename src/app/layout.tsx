@@ -3,8 +3,8 @@ import './globals.css'
 import { ThemeProvider } from '@/context/ThemeContext'
 
 export const metadata: Metadata = {
-  title: 'ORCA - Financial Command Center',
-  description: 'Premium income-based financial command center. Split income, manage bills, build savings, and boost your credit score.',
+  title: 'ORCA — Organize Resources Control Assets',
+  description: 'Personal AI operating system powered by Bentley. Manage fitness, music, business, money, DJ gigs, groceries, and life — all in one command center.',
   icons: { icon: '/logo-sm.png' },
 }
 

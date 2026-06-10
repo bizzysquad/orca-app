@@ -1,442 +1,204 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronRight, Users, Copy, ChevronLeft, ChevronUp, ChevronDown,
-  DollarSign, Receipt, Palmtree, Calendar,
-  Pin, PinOff, PiggyBank, Wallet, Zap,
-  TrendingUp, ArrowUpRight, ArrowDownRight, CreditCard,
-  Bell,
+  MessageSquare, Zap, Target, TrendingUp, Music, Briefcase,
+  Dumbbell, ShoppingCart, ChevronRight, Check, Circle,
+  DollarSign, Receipt, Calendar, Bell, Mic2, Car,
+  RefreshCw, Sparkles, ArrowRight, Plus, Coffee,
+  Scale, Flame, Droplets, Star, Clock,
 } from 'lucide-react'
-
-import { useOrcaData } from '@/context/OrcaDataContext'
-import { fmt, fmtD, daysTo, calcAlloc, pct } from '@/lib/utils'
-import { createBrowserClient } from '@supabase/ssr'
 import { useTheme } from '@/context/ThemeContext'
-import type { Bill } from '@/lib/types'
-import DashboardSkeleton from '@/components/layout/DashboardSkeleton'
-import SetupBanner from '@/components/layout/SetupBanner'
-import {
-  calcSafeToSpend,
-  paymentsToEvents,
-  getNextCycleDate,
-  getRecurringBillDates,
-  type IncomingPayment,
-} from '@/lib/income-engine'
-import { useFinancialEngine, type NextAction } from '@/lib/financialEngine'
-import { orcaEvents } from '@/lib/eventBus'
+import { useOrcaData } from '@/context/OrcaDataContext'
+import { fmt } from '@/lib/utils'
+import type { DailyPriority, WeightLog, MealLog, Song, Business } from '@/lib/types'
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 20, scale: 0.98 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 200, damping: 24 } },
+  hidden: { opacity: 0, y: 16, scale: 0.98 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 280, damping: 26 } },
 }
 
-function CreditScoreRing({ score, limit, theme }: { score: number; limit: number; theme: any }) {
-  const circ = 2 * Math.PI * 42
-  const offset = circ - (score / limit) * circ
+const BENTLEY_GOLD = '#F59E0B'
+const BENTLEY_INDIGO = '#6366F1'
+const BENTLEY_GREEN = '#10B981'
+const BENTLEY_RED = '#EF4444'
 
-  let color = '#ef4444'
-  let label = 'Poor'
-
-  if (score >= 800) {
-    color = '#22c55e'
-    label = 'Excellent'
-  } else if (score >= 740) {
-    color = '#22c55e'
-    label = 'Very Good'
-  } else if (score >= 670) {
-    color = '#f59e0b'
-    label = 'Good'
-  } else if (score >= 580) {
-    color = '#f59e0b'
-    label = 'Fair'
+function getGreeting(name: string): { greeting: string; line: string } {
+  const h = new Date().getHours()
+  const firstName = name?.split(' ')[0] || 'Boss'
+  if (h < 6) return {
+    greeting: `Working late, ${firstName}?`,
+    line: "Respect the grind. Don't forget sleep is part of the gains.",
   }
-
-  return (
-    <div className="relative w-24 h-24">
-      <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="42" fill="none" stroke={theme.border} strokeWidth="4" />
-        <motion.circle
-          cx="50" cy="50" r="42" fill="none" stroke={color} strokeWidth="4"
-          strokeDasharray={circ} strokeDashoffset={circ} strokeLinecap="round"
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.4, ease: 'easeOut' }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-          <p className="text-xl font-bold" style={{ color: theme.text }}>{score}</p>
-          <p className="text-xs font-semibold text-center" style={{ color }}>{label}</p>
-        </motion.div>
-      </div>
-    </div>
-  )
+  if (h < 12) return {
+    greeting: `Morning briefing, ${firstName}.`,
+    line: "Stack the priorities early. The day isn't waiting for you.",
+  }
+  if (h < 17) return {
+    greeting: `Midday check-in, ${firstName}.`,
+    line: "How's the execution? Intentions are nothing without action.",
+  }
+  return {
+    greeting: `Evening report, ${firstName}.`,
+    line: "What did you actually finish today? Let's review.",
+  }
 }
 
-function ProgressBar({ current, target, color = '#6366F1', theme }: { current: number; target: number; color?: string; theme: any }) {
-  const percentage = Math.min((current / target) * 100, 100)
-  return (
-    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
-      <motion.div
-        initial={{ width: 0 }}
-        animate={{ width: `${percentage}%` }}
-        transition={{ duration: 1, ease: 'easeOut' }}
-        className="h-full rounded-full"
-        style={{ backgroundColor: color }}
-      />
-    </div>
-  )
-}
-
-// Calendar event types
-interface CalendarEvent {
-  date: number
-  type: 'paycheck' | 'bill' | 'dayoff' | 'task' | 'group'
+interface StatCardProps {
+  icon: React.ElementType
   label: string
-  amount?: number
+  value: string
+  sub?: string
+  color: string
+  href?: string
+  alert?: boolean
 }
 
-function MonthlyCalendar({ events, month, year, onMonthChange, onDayClick, selectedDay, theme }: {
-  events: CalendarEvent[]
-  month: number
-  year: number
-  onMonthChange: (dir: number) => void
-  onDayClick?: (day: number) => void
-  selectedDay?: number | null
-  theme: any
-}) {
-  const firstDay = new Date(year, month, 1).getDay()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const todayDate = new Date()
-  const isCurrentMonth = todayDate.getFullYear() === year && todayDate.getMonth() === month
-  const todayDay = isCurrentMonth ? todayDate.getDate() : -1
-
-  const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-
-  const getEventsForDay = (day: number) => events.filter(e => e.date === day)
-
-  const eventDot = (type: string) => {
-    if (type === 'paycheck') return '#10B981'
-    if (type === 'bill') return '#EF4444'
-    if (type === 'dayoff') return '#3b82f6'
-    if (type === 'task') return '#a855f7'
-    if (type === 'group') return '#F59E0B'
-    return theme.textM
-  }
-
-  const cells = []
-  for (let i = 0; i < firstDay; i++) {
-    cells.push(<div key={`empty-${i}`} className="aspect-square" />)
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dayEvents = getEventsForDay(d)
-    const isToday = d === todayDay
-    cells.push(
-      <div
-        key={d}
-        onClick={() => onDayClick?.(d)}
-        className={`aspect-square rounded-lg flex flex-col items-center justify-center relative transition-all text-xs sm:text-sm cursor-pointer ${
-          isToday
-            ? 'border'
-            : selectedDay === d
-            ? 'border'
-            : 'hover:opacity-70'
-        }`}
-        style={{
-          backgroundColor: isToday ? '#6366F120' : selectedDay === d ? '#6366F110' : 'transparent',
-          borderColor: isToday ? '#6366F1' : selectedDay === d ? '#6366F150' : 'transparent',
-        }}
-      >
-        <span style={{ color: isToday ? '#6366F1' : theme.textS, fontWeight: 500 }}>
-          {d}
-        </span>
-        {dayEvents.length > 0 && (
-          <div className="flex gap-0.5 mt-0.5">
-            {dayEvents.slice(0, 3).map((ev, i) => (
-              <div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ backgroundColor: eventDot(ev.type) }}
-              />
-            ))}
-          </div>
+function StatCard({ icon: Icon, label, value, sub, color, href, alert }: StatCardProps) {
+  const { theme } = useTheme()
+  const inner = (
+    <motion.div
+      variants={fadeUp}
+      whileTap={{ scale: 0.97 }}
+      className="rounded-2xl p-4 flex flex-col gap-1 relative overflow-hidden"
+      style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div className="p-1.5 rounded-lg" style={{ background: `${color}18` }}>
+          <Icon size={15} style={{ color }} />
+        </div>
+        {alert && (
+          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: BENTLEY_RED }} />
         )}
       </div>
-    )
+      <div className="text-xl font-bold tracking-tight" style={{ color: theme.text }}>{value}</div>
+      <div className="text-xs font-medium" style={{ color }}>{label}</div>
+      {sub && <div className="text-xs" style={{ color: theme.subtext }}>{sub}</div>}
+    </motion.div>
+  )
+  return href ? <Link href={href}>{inner}</Link> : inner
+}
+
+interface PriorityItemProps {
+  item: { id: string; text: string; area: string; completed: boolean; addedByBentley: boolean }
+  onToggle: (id: string) => void
+  index: number
+}
+
+function PriorityItem({ item, onToggle, index }: PriorityItemProps) {
+  const { theme } = useTheme()
+  const areaColors: Record<string, string> = {
+    fitness: BENTLEY_GREEN,
+    money: '#10B981',
+    music: '#A78BFA',
+    business: BENTLEY_GOLD,
+    dj: '#EC4899',
+    lyft: '#F97316',
+    personal: BENTLEY_INDIGO,
   }
-
-  return (
-    <div className="rounded-2xl p-5" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => onMonthChange(-1)} className="p-2 rounded-lg transition-colors" style={{ color: theme.textS }}>
-          <ChevronLeft size={18} />
-        </button>
-        <div className="flex items-center gap-2">
-          <Calendar size={16} style={{ color: '#0891B2' }} />
-          <h3 className="font-semibold" style={{ color: theme.text }}>{monthName}</h3>
-        </div>
-        <button onClick={() => onMonthChange(1)} className="p-2 rounded-lg transition-colors" style={{ color: theme.textS }}>
-          <ChevronRight size={18} />
-        </button>
-      </div>
-
-      <div className="grid grid-cols-7 gap-1 mb-2">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-          <div key={i} className="text-center text-[10px] sm:text-xs font-semibold py-1" style={{ color: theme.textM }}>
-            {d}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
-        {cells}
-      </div>
-
-      <div className="flex flex-wrap gap-3 sm:gap-4 mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10B981' }} />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Payment</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#EF4444' }} />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Bill Due</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#3b82f6' }} />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Day Off</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#a855f7' }} />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Task</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F59E0B' }} />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textS }}>Group</span>
-        </div>
-      </div>
-
-      {selectedDay && (
-        <div className="mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold" style={{ color: theme.text }}>
-              {new Date(year, month, selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            </p>
-            <button onClick={() => onDayClick?.(0)} className="text-xs" style={{ color: theme.textS }}>Close</button>
-          </div>
-          {getEventsForDay(selectedDay).length > 0 ? (
-            <div className="space-y-2">
-              {getEventsForDay(selectedDay).map((ev, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: `${theme.border}40` }}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: eventDot(ev.type) }} />
-                    <div>
-                      <p className="text-sm font-medium" style={{ color: theme.text }}>{ev.label}</p>
-                      <p className="text-xs" style={{ color: theme.textM }}>
-                        {new Date(year, month, selectedDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    </div>
-                  </div>
-                  {ev.amount && (
-                    <p className="text-sm font-bold" style={{ color: eventDot(ev.type) }}>
-                      {ev.type === 'bill' ? '-' : '+'}{fmt(ev.amount)}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm" style={{ color: theme.textM }}>No events scheduled</p>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Risk Level Badge ──
-function RiskBadge({ level, theme }: { level: 'on_track' | 'tight' | 'shortfall'; theme: any }) {
-  const config = {
-    on_track: { label: 'On Track', color: '#10B981', bg: '#10B98115' },
-    tight: { label: 'Tight', color: '#F59E0B', bg: '#F59E0B15' },
-    shortfall: { label: 'Shortfall', color: '#EF4444', bg: '#EF444415' },
-  }[level]
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold" style={{ color: config.color, backgroundColor: config.bg }}>
-      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: config.color }} />
-      {config.label}
-    </span>
-  )
-}
-
-// ── Next Action Card ──
-function NextActionCard({ action, theme, onDismiss }: { action: NextAction; theme: any; onDismiss?: () => void }) {
-  const urgencyColor = action.urgency === 'high' ? '#EF4444' : action.urgency === 'medium' ? '#F59E0B' : '#10B981'
-  const urgencyBg = action.urgency === 'high' ? '#EF444415' : action.urgency === 'medium' ? '#F59E0B15' : '#10B98115'
-  const actionIcon = action.type === 'pay_bill' ? '💸' : action.type === 'shortfall_warning' ? '⚠️' : action.type === 'savings_move' ? '💰' : action.type === 'delay_transfer' ? '⏸️' : '➡️'
+  const color = areaColors[item.area] || BENTLEY_INDIGO
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl p-4 flex items-start gap-3"
-      style={{ background: urgencyBg, border: `1px solid ${urgencyColor}40` }}
+      variants={fadeUp}
+      className="flex items-center gap-3 p-3 rounded-xl group"
+      style={{ background: item.completed ? `${theme.border}30` : `${theme.card}` }}
     >
-      <span className="text-xl mt-0.5">{actionIcon}</span>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <p className="text-sm font-bold" style={{ color: urgencyColor }}>{action.title}</p>
-          {action.urgency === 'high' && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: urgencyColor, color: '#fff' }}>URGENT</span>
-          )}
-        </div>
-        <p className="text-xs" style={{ color: theme.textS }}>{action.description}</p>
-        {action.amount && (
-          <p className="text-sm font-bold mt-1" style={{ color: urgencyColor }}>{fmt(action.amount)}</p>
-        )}
+      <div className="text-xs font-bold w-5 text-center shrink-0" style={{ color: theme.subtext }}>
+        {index + 1}
       </div>
-      {onDismiss && (
-        <button onClick={onDismiss} className="text-xs opacity-50 hover:opacity-100 shrink-0" style={{ color: theme.textS }}>✕</button>
-      )}
+      <button
+        onClick={() => onToggle(item.id)}
+        className="shrink-0 transition-all"
+        style={{
+          width: 20, height: 20, borderRadius: '50%',
+          border: `2px solid ${item.completed ? color : theme.border}`,
+          background: item.completed ? color : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        {item.completed && <Check size={11} color="#fff" />}
+      </button>
+      <span
+        className="flex-1 text-sm font-medium leading-snug"
+        style={{
+          color: item.completed ? theme.subtext : theme.text,
+          textDecoration: item.completed ? 'line-through' : 'none',
+        }}
+      >
+        {item.text}
+      </span>
+      <div
+        className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0"
+        style={{ background: `${color}18`, color }}
+      >
+        {item.area}
+      </div>
     </motion.div>
   )
 }
 
-// ── Why This Number? Breakdown ──
-function SafeToSpendBreakdown({ breakdown, theme }: {
-  breakdown: { balance: number; buffer: number; reservedBills: number; reservedSavings: number; safeToSpend: number }
-  theme: any
-}) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1 text-xs opacity-60 hover:opacity-100 transition-opacity mt-2"
-        style={{ color: '#fff' }}
-      >
-        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        Why this number?
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden mt-2"
-          >
-            <div className="rounded-xl p-3 space-y-1.5 text-xs" style={{ background: 'rgba(0,0,0,0.2)' }}>
-              <div className="flex justify-between">
-                <span style={{ color: 'rgba(255,255,255,0.7)' }}>Account balance</span>
-                <span style={{ color: '#fff', fontWeight: 700 }}>{fmt(breakdown.balance)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: 'rgba(255,255,255,0.7)' }}>− Safety buffer</span>
-                <span style={{ color: '#F87171', fontWeight: 700 }}>−{fmt(breakdown.buffer)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: 'rgba(255,255,255,0.7)' }}>− Reserved for bills</span>
-                <span style={{ color: '#F87171', fontWeight: 700 }}>−{fmt(breakdown.reservedBills)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: 'rgba(255,255,255,0.7)' }}>− Reserved for savings</span>
-                <span style={{ color: '#F87171', fontWeight: 700 }}>−{fmt(breakdown.reservedSavings)}</span>
-              </div>
-              <div className="flex justify-between border-t border-white/20 pt-1.5">
-                <span style={{ color: '#fff', fontWeight: 700 }}>= Safe to Spend</span>
-                <span style={{ color: '#6EE7B7', fontWeight: 800 }}>{fmt(breakdown.safeToSpend)}</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
+interface BentleyBriefingProps {
+  bills: any[]
+  checkingBalance: number
+  name: string
 }
 
-function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, isLast, isReordering, isPinned, onTogglePin, theme }: {
-  id: string
-  children: React.ReactNode
-  index: number
-  onMoveUp: (index: number) => void
-  onMoveDown: (index: number) => void
-  isFirst: boolean
-  isLast: boolean
-  isReordering: boolean
-  isPinned: boolean
-  onTogglePin: (id: string) => void
-  theme: any
-}) {
-  const sectionLabels: Record<string, string> = {
-    'financial-cards': 'Financial Overview',
-    'spend-paycheck': 'Spending & Income',
-    'rent-tracker': 'Rent Tracker',
-    'calendar': 'Calendar',
-    'credit-score': 'Credit Score',
-    'stack-circle': 'Stack Circle',
-  }
+function BentleyBriefing({ bills, checkingBalance, name }: BentleyBriefingProps) {
+  const { theme } = useTheme()
+  const [expanded, setExpanded] = useState(false)
+
+  const upcomingBills = bills.filter(b => b.status === 'upcoming').length
+  const totalBillAmount = bills.filter(b => b.status === 'upcoming').reduce((s, b) => s + b.amount, 0)
+
+  const insights = useMemo(() => {
+    const list: string[] = []
+    if (upcomingBills > 0)
+      list.push(`${upcomingBills} bill${upcomingBills > 1 ? 's' : ''} upcoming — ${fmt(totalBillAmount)} due.`)
+    list.push("You haven't logged a workout today. Don't let the streak die.")
+    list.push("Music: Check your release pipeline. Consistency is the whole game.")
+    list.push("BizzyPlug: Any leads you haven't followed up on this week?")
+    return list.slice(0, 3)
+  }, [upcomingBills, totalBillAmount])
 
   return (
-    <motion.div variants={fadeUp} className="relative">
-      {isReordering && (
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-2 mb-2"
-        >
-          <motion.button
-            whileTap={{ scale: 0.85 }}
-            onClick={() => onTogglePin(id)}
-            style={{
-              backgroundColor: isPinned ? '#6366F130' : theme.border,
-              color: isPinned ? '#6366F1' : theme.textM,
-              borderColor: isPinned ? '#6366F1' : theme.border,
-            }}
-            className="w-8 h-8 rounded-lg flex items-center justify-center border"
-            title={isPinned ? 'Unpin from top' : 'Pin to top'}
-          >
-            {isPinned ? <Pin size={14} /> : <PinOff size={14} />}
-          </motion.button>
-          {!isPinned && (
-            <div className="flex items-center gap-1">
-              <motion.button
-                whileTap={{ scale: 0.85 }}
-                onClick={() => onMoveUp(index)}
-                disabled={isFirst}
-                style={{
-                  backgroundColor: isFirst ? theme.border : '#6366F1',
-                  color: isFirst ? theme.textM : '#fff',
-                }}
-                className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
-              >
-                <ChevronUp size={16} />
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.85 }}
-                onClick={() => onMoveDown(index)}
-                disabled={isLast}
-                style={{
-                  backgroundColor: isLast ? theme.border : '#6366F1',
-                  color: isLast ? theme.textM : '#fff',
-                }}
-                className="w-8 h-8 rounded-lg flex items-center justify-center disabled:cursor-not-allowed"
-              >
-                <ChevronDown size={16} />
-              </motion.button>
-            </div>
-          )}
-          <span style={{ color: theme.textS }} className="text-sm font-medium">
-            {sectionLabels[id] || id}
-            {isPinned && <span style={{ color: '#6366F1' }} className="ml-2 text-xs font-bold">PINNED</span>}
-          </span>
-        </motion.div>
-      )}
-      <div style={isReordering ? { borderColor: isPinned ? '#6366F160' : '#6366F140', borderWidth: 1, borderStyle: isPinned ? 'solid' : 'dashed', borderRadius: 12, padding: 4 } : {}}>
-        {children}
+    <motion.div
+      variants={fadeUp}
+      className="rounded-2xl p-5 relative overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, #0F1A35 0%, #141B2D 100%)`,
+        border: `1px solid ${BENTLEY_GOLD}25`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className="p-1.5 rounded-lg" style={{ background: `${BENTLEY_GOLD}20` }}>
+          <Sparkles size={14} style={{ color: BENTLEY_GOLD }} />
+        </div>
+        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: BENTLEY_GOLD }}>
+          Bentley's Briefing
+        </span>
       </div>
+
+      <div className="space-y-2.5">
+        {insights.map((insight, i) => (
+          <div key={i} className="flex items-start gap-2.5">
+            <div className="mt-1 shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: BENTLEY_GOLD }} />
+            <p className="text-sm leading-relaxed" style={{ color: '#CBD5E1' }}>{insight}</p>
+          </div>
+        ))}
+      </div>
+
+      <Link href="/bentley">
+        <motion.div
+          whileTap={{ scale: 0.97 }}
+          className="mt-4 flex items-center gap-2 text-xs font-semibold"
+          style={{ color: BENTLEY_GOLD }}
+        >
+          Talk to Bentley <ArrowRight size={12} />
+        </motion.div>
+      </Link>
     </motion.div>
   )
 }
@@ -444,10 +206,8 @@ function DraggableSection({ id, children, index, onMoveUp, onMoveDown, isFirst, 
 export default function DashboardPage() {
   const { theme } = useTheme()
   const { data, loading } = useOrcaData()
-  const { user, income, goals, groups } = data
-  const group = groups[0] || null
+  const { user, income, bills, goals } = data
 
-  // Re-render trigger for when cloud data is hydrated into localStorage
   const [syncReady, setSyncReady] = useState(0)
   useEffect(() => {
     const handler = () => setSyncReady(c => c + 1)
@@ -455,1142 +215,500 @@ export default function DashboardPage() {
     return () => window.removeEventListener('orca-sync-ready', handler)
   }, [])
 
-  // Re-render trigger for local writes (e.g. Smart Stack adds a payment)
-  const [localWriteTick, setLocalWriteTick] = useState(0)
-  useEffect(() => {
-    const handler = (e: any) => {
-      const key = e?.detail?.key || ''
-      if (key.includes('payment') || key.includes('savings') || key.includes('bills') || key.includes('task') || key.includes('stack-circle')) {
-        setLocalWriteTick(c => c + 1)
-      }
-    }
-    window.addEventListener('orca-local-write', handler)
-    return () => window.removeEventListener('orca-local-write', handler)
-  }, [])
+  // User display name
+  const displayName = user?.name?.trim() || 'Boss'
+  const { greeting, line } = getGreeting(displayName)
 
-  // Bills: use context data, fallback to localStorage
-  const bills: Bill[] = useMemo(() => {
-    if (data.bills && data.bills.length > 0) return data.bills
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('orca-bills')
-        if (saved) return JSON.parse(saved) as Bill[]
-      } catch {}
-    }
-    return []
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.bills, syncReady])
-
-  // Fetch real user name from Supabase auth, with fallback chain
-  const [realUserName, setRealUserName] = useState<string | null>(null)
-  useEffect(() => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    supabase.auth.getUser().then(({ data: authData }) => {
-      const name = authData.user?.user_metadata?.full_name
-        || authData.user?.user_metadata?.display_name
-        || authData.user?.email?.split('@')[0]
-        || null
-      setRealUserName(name)
-    })
-  }, [])
-
-  // Priority: OrcaData user.name (persisted / editable in Settings) > Supabase auth name > fallback
-  const displayName = useMemo(() => {
-    if (user.name && user.name.trim() && user.name !== '') return user.name
-    if (realUserName) return realUserName
-    return ''
-  }, [user.name, realUserName])
-
-  const firstName = displayName ? displayName.split(' ')[0] : ''
-
-  const [calMonth, setCalMonth] = useState(new Date().getMonth())
-  const [calYear, setCalYear] = useState(new Date().getFullYear())
-  const [calendarView, setCalendarView] = useState<'monthly' | 'weekly'>('monthly')
-  const [payMonthOffset, setPayMonthOffset] = useState(0) // 0 = current month for payments view
-  const [weekOffset, setWeekOffset] = useState(0)
-  const [spendView, setSpendView] = useState<'weekly' | 'daily'>('weekly')
-  const [selectedDay, setSelectedDay] = useState<number | null>(null)
-  const [selectedWeekDay, setSelectedWeekDay] = useState<Date | null>(null)
-  const [safeToSpendView, setSafeToSpendView] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
-  const [sectionOrder, setSectionOrder] = useState<string[]>([
-    'financial-cards',
-    'spend-paycheck',
-    'calendar',
-    'credit-score',
-    'stack-circle',
-  ])
-
-  // Load section order from localStorage — merge in any new sections that were added
-  useEffect(() => {
-    const defaultSections = ['financial-cards', 'spend-paycheck', 'calendar', 'credit-score', 'stack-circle']
-    const saved = localStorage.getItem('orca-dashboard-order')
-    if (saved) {
-      try {
-        // Filter out any removed sections (e.g. task-list was removed from dashboard)
-        const parsed: string[] = JSON.parse(saved).filter((s: string) => defaultSections.includes(s))
-        // Find any sections that exist in defaults but not in saved order
-        const missing = defaultSections.filter(s => !parsed.includes(s))
-        if (missing.length > 0) {
-          const merged = [...parsed, ...missing]
-          setSectionOrder(merged)
-          localStorage.setItem('orca-dashboard-order', JSON.stringify(merged))
-        } else {
-          setSectionOrder(parsed)
-        }
-      } catch (e) {
-        // Keep default order if parsing fails
-      }
-    }
-  }, [])
-
-  const handleMonthChange = (dir: number) => {
-    let m = calMonth + dir
-    let y = calYear
-    if (m < 0) { m = 11; y-- }
-    if (m > 11) { m = 0; y++ }
-    setCalMonth(m)
-    setCalYear(y)
-  }
-
-  const allocation = useMemo(() => calcAlloc(income, bills, goals), [income, bills, goals])
-
-  // Checking / Spending Account balance (from Settings)
+  // ── Checking balance ──
   const checkingBalance = useMemo(() => {
-    // Primary: context data
     if (user.checkingBalance && user.checkingBalance > 0) return user.checkingBalance
-    // Fallback: localStorage user-settings
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('orca-user-settings')
-        if (saved) {
-          const parsed = JSON.parse(saved)
-          if (parsed.checkingBalance && parsed.checkingBalance > 0) return parsed.checkingBalance
-        }
-      } catch {}
-    }
-    return 0
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.checkingBalance, syncReady, localWriteTick])
-
-  // ── Canonical Financial Engine (placed after checkingBalance is declared) ──
-  const engine = useFinancialEngine({
-    incomeSources: income,
-    bills,
-    savingsGoals: goals,
-    accountSettings: {
-      balance: checkingBalance,
-      buffer: user.safeToSpendBuffer || 0,
-    },
-  })
-
-  // Safe to Spend — current month only: checking balance + this month's income minus this month's unpaid bills
-  const safeToSpend = useMemo(() => {
-    // Get all incoming payments
-    let payments: any[] = []
-    if (data.incomingPayments && data.incomingPayments.length > 0) {
-      payments = data.incomingPayments
-    }
-    if (payments.length === 0 && typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('orca-payment-entries')
-        if (stored) payments = JSON.parse(stored)
-      } catch {}
-    }
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const currentMonth = today.getMonth()
-    const currentYear = today.getFullYear()
-    const monthStart = new Date(currentYear, currentMonth, 1)
-    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
-
-    // Total income from ALL payments in the current month (received + expected)
-    const totalIncome = payments
-      .filter((p: any) => {
-        const pDate = new Date(p.date + 'T23:59:59')
-        return pDate >= monthStart && pDate <= monthEnd
-      })
-      .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
-
-    // Total bills due in the current month (all, regardless of paid status — matches Bill Boss total)
-    const totalBills = bills
-      .filter(b => {
-        const dueDate = new Date(b.due + 'T00:00:00')
-        return dueDate >= monthStart && dueDate <= monthEnd
-      })
-      .reduce((sum, b) => sum + b.amount, 0)
-
-    // Savings allocation
-    const savingsPerCycle = goals
-      .filter(g => g.active && g.current < g.target)
-      .reduce((sum, g) => sum + (g.cVal || 0), 0)
-
-    const buffer = user.safeToSpendBuffer || 0
-
-    // Available funds = checking balance + this month's income
-    const totalAvailable = checkingBalance + totalIncome
-    const totalObligations = totalBills + savingsPerCycle + buffer
-    const amount = Math.max(0, totalAvailable - totalObligations)
-
-    // Days remaining in the current month for daily/weekly rate
-    const daysInMonth = monthEnd.getDate()
-    return {
-      amount,
-      weekly: (amount / daysInMonth) * 7,
-      daily: amount / daysInMonth,
-      totalIncome,
-      totalBills,
-      totalAvailable,
-      totalObligations,
-      checkingBalance,
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bills, goals, user.safeToSpendBuffer, data.incomingPayments, checkingBalance, syncReady, localWriteTick])
-
-  const totalSavings = useMemo(() => {
-    // Include savings accounts from localStorage
-    let total = goals.reduce((sum, g) => sum + g.current, 0)
-    if (typeof window !== 'undefined') {
-      try {
-        const savedAccounts = localStorage.getItem('orca-savings-accounts')
-        if (savedAccounts) {
-          const accounts = JSON.parse(savedAccounts)
-          const acctTotal = accounts.reduce((sum: number, a: any) => sum + (a.amount || 0), 0)
-          // Only add if goals don't already include savings-acct- entries
-          if (!goals.some(g => g.id?.startsWith('savings-acct-'))) {
-            total += acctTotal
-          }
-        }
-      } catch {}
-    }
-    return total
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goals, syncReady])
-
-  const allUpcomingBills = useMemo(
-    () => bills.filter(b => b.status === 'upcoming').sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime()),
-    [bills]
-  )
-
-  // Next upcoming bill for preview on dashboard — respects split payments
-  const nextBill = useMemo(() => allUpcomingBills[0] || null, [allUpcomingBills])
-
-  // Next due item considering split alloc payments across all upcoming bills
-  const nextDueItem = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10)
-    // Collect all unpaid split alloc entries across all bills
-    const splitItems: { name: string; due: string; amount: number; isSplit: boolean }[] = []
-    bills.forEach(b => {
-      if (b.status === 'paid') return
-      if (b.alloc && b.alloc.length > 0) {
-        b.alloc.forEach((a: any) => {
-          if (!a.paid && a.date >= todayStr) {
-            splitItems.push({ name: b.name, due: a.date, amount: a.amount, isSplit: true })
-          }
-        })
-      } else if (b.status === 'upcoming') {
-        splitItems.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false })
-      }
-    })
-    splitItems.sort((a, b) => a.due.localeCompare(b.due))
-    return splitItems[0] || null
-  }, [bills])
-
-  // Bills due this week (or today)
-  const billsDueThisWeek = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const endOfWeek = new Date(today)
-    endOfWeek.setDate(endOfWeek.getDate() + 7)
-
-    return bills
-      .filter(b => {
-        if (b.status === 'paid') return false
-        const due = new Date(b.due + 'T00:00:00')
-        return due >= today && due <= endOfWeek
-      })
-      .reduce((sum, b) => sum + b.amount, 0)
-  }, [bills])
-
-  const billsDueToday = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    return bills
-      .filter(b => b.status !== 'paid' && b.due === today)
-      .reduce((sum, b) => sum + b.amount, 0)
-  }, [bills])
-
-  // Also check all bills sorted by due date for the next one coming up
-  const nextBillAny = useMemo(() => {
-    if (nextBill) return nextBill
-    const sorted = [...bills].sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
-    return sorted[0] || null
-  }, [nextBill, bills])
-
-  // Next incoming payment from payment entries — current month only
-  const nextIncomingPayment = useMemo(() => {
-    let entries: any[] = []
-    // Primary: context data (written by Smart Stack on add/edit)
-    if (data.incomingPayments && data.incomingPayments.length > 0) {
-      entries = data.incomingPayments
-    }
-    // Fallback: localStorage
-    if (entries.length === 0 && typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('orca-payment-entries')
-        if (stored) entries = JSON.parse(stored)
-      } catch {}
-    }
-    if (entries.length === 0) return null
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const currentMonth = today.getMonth()
-    const currentYear = today.getFullYear()
-    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
-    const upcoming = entries
-      .filter((p: any) => {
-        const pDate = new Date(p.date + 'T23:59:59')
-        return pDate >= today && pDate <= monthEnd && p.status !== 'received'
-      })
-      .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    return upcoming[0] || null
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.incomingPayments, syncReady, localWriteTick])
-
-  // Total income from payment entries in the current month only
-  const totalUpcomingIncome = useMemo(() => {
-    let entries: any[] = []
-    if (data.incomingPayments && data.incomingPayments.length > 0) {
-      entries = data.incomingPayments
-    }
-    if (entries.length === 0 && typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('orca-payment-entries')
-        if (stored) entries = JSON.parse(stored)
-      } catch {}
-    }
-    const today = new Date()
-    const currentMonth = today.getMonth()
-    const currentYear = today.getFullYear()
-    const monthStart = new Date(currentYear, currentMonth, 1)
-    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
-    return entries
-      .filter((p: any) => {
-        const pDate = new Date(p.date + 'T23:59:59')
-        return pDate >= monthStart && pDate <= monthEnd
-      })
-      .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.incomingPayments, syncReady, localWriteTick])
-
-  // Total monthly bills for the current month (all bills, regardless of paid status — mirrors Bill Boss)
-  const totalMonthlyBills = useMemo(() => {
-    const today = new Date()
-    const currentMonth = today.getMonth()
-    const currentYear = today.getFullYear()
-    const monthStart = new Date(currentYear, currentMonth, 1)
-    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
-    let total = 0
-    bills.forEach(b => {
-      // If split: sum only the alloc amounts falling in this month
-      if (b.alloc && b.alloc.length > 0) {
-        b.alloc.forEach((a: any) => {
-          if (!a.date) return
-          const ad = new Date(a.date + 'T00:00:00')
-          if (ad >= monthStart && ad <= monthEnd) total += a.amount ?? b.amount
-        })
-      } else {
-        const dueDate = new Date(b.due + 'T00:00:00')
-        if (dueDate >= monthStart && dueDate <= monthEnd) total += b.amount
-      }
-    })
-    return total
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bills, syncReady])
-
-  // Savings goal total for progress tracking
-  const savingsGoalTotal = useMemo(() => {
-    let goalTotal = goals.reduce((sum, g) => sum + g.target, 0)
-    if (typeof window !== 'undefined') {
-      try {
-        const savedAccounts = localStorage.getItem('orca-savings-accounts')
-        if (savedAccounts) {
-          const accounts = JSON.parse(savedAccounts)
-          const acctGoalTotal = accounts.reduce((sum: number, a: any) => sum + (a.goal || 0), 0)
-          if (!goals.some(g => g.id?.startsWith('savings-acct-'))) {
-            goalTotal += acctGoalTotal
-          }
-        }
-      } catch {}
-    }
-    return goalTotal
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goals, syncReady])
-
-  // Stack Circle stats from localStorage (all groups)
-  const stackCircleStats = useMemo(() => {
-    const allGroups: any[] = []
-    if (group) allGroups.push(group)
     try {
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('orca-stack-circle-groups')
-        if (saved) {
-          const parsed = JSON.parse(saved)
-          parsed.forEach((g: any) => {
-            if (!allGroups.some(eg => eg.id === g.id)) allGroups.push(g)
-          })
-        }
-      }
+      const s = localStorage.getItem('orca-user-settings')
+      if (s) { const p = JSON.parse(s); if (p.checkingBalance > 0) return p.checkingBalance }
     } catch {}
-    return {
-      groups: allGroups,
-      totalGroups: allGroups.length,
-      totalMembers: allGroups.reduce((sum: number, g: any) => sum + (g.members?.length || 0), 0),
-      totalSaved: allGroups.reduce((sum: number, g: any) => sum + (g.current || 0), 0),
-      totalTarget: allGroups.reduce((sum: number, g: any) => sum + (g.target || 0), 0),
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group, syncReady, localWriteTick])
+    return 0
+  }, [user.checkingBalance, syncReady])
 
-  // Build calendar events for the selected month — Incoming Payments are the only income source
-  const calendarEvents = useMemo(() => {
-    const events: CalendarEvent[] = []
+  // ── Bills summary ──
+  const billsData = useMemo(() => {
+    const upcoming = bills.filter(b => b.status === 'upcoming')
+    const totalDue = upcoming.reduce((s, b) => s + b.amount, 0)
+    const nextBill = upcoming.sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0]
+    return { upcoming, totalDue, nextBill }
+  }, [bills])
 
-    bills.forEach(bill => {
-      // If the bill has split alloc entries, show only those on the calendar
-      // (prevents double-counting: original due date + alloc payment dates)
-      if (bill.alloc && bill.alloc.length > 0) {
-        bill.alloc.forEach((a: any) => {
-          if (!a.date) return
-          const ad = new Date(a.date + 'T00:00:00')
-          if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) {
-            events.push({
-              date: ad.getDate(),
-              type: 'bill',
-              label: `${bill.name}${bill.alloc.length > 1 ? ' (split)' : ''}`,
-              amount: a.amount ?? bill.amount,
-            })
-          }
-        })
-        return // skip standard recurring/one-time logic for split bills
-      }
+  // ── Daily priorities ──
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const [priorities, setPriorities] = useState<DailyPriority['items']>([])
 
-      if (bill.recurrence && bill.recurrence !== 'one-time') {
-        // Expand recurring bills into the viewed month
-        const recurDates = getRecurringBillDates(bill, 24)
-        recurDates.forEach(dateStr => {
-          const rd = new Date(dateStr + 'T00:00:00')
-          if (rd.getMonth() === calMonth && rd.getFullYear() === calYear) {
-            events.push({ date: rd.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
-          }
-        })
-      } else {
-        const d = new Date(bill.due + 'T00:00:00')
-        if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
-          events.push({ date: d.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
-        }
-      }
-    })
-
-    // Add tasks from localStorage (deduplicated)
-    if (typeof window !== 'undefined') {
-      const seenTasks = new Set<string>()
-      const allTasks: any[] = []
-      try {
-        const savedTasks = localStorage.getItem('orca-tasks')
-        if (savedTasks) allTasks.push(...JSON.parse(savedTasks))
-      } catch {}
-      if ((window as any).__ORCA_TASKS) {
-        allTasks.push(...(window as any).__ORCA_TASKS)
-      }
-      allTasks.forEach((task: any) => {
-        if (task.dueDate) {
-          const taskDate = new Date(task.dueDate + 'T00:00:00')
-          if (taskDate.getMonth() === calMonth && taskDate.getFullYear() === calYear) {
-            const label = task.title || task.name || task.text || 'Task'
-            const key = `${taskDate.getDate()}-${label}`
-            if (!seenTasks.has(key)) {
-              seenTasks.add(key)
-              events.push({ date: taskDate.getDate(), type: 'task', label })
-            }
-          }
-        }
-      })
-    }
-
-    // Add group dates from all groups in localStorage
-    if (typeof window !== 'undefined') {
-      try {
-        const savedGroups = localStorage.getItem('orca-stack-circle-groups')
-        if (savedGroups) {
-          const allGroups = JSON.parse(savedGroups)
-          allGroups.forEach((g: any) => {
-            if (g.date) {
-              const gd = new Date(g.date + 'T00:00:00')
-              if (gd.getMonth() === calMonth && gd.getFullYear() === calYear) {
-                events.push({ date: gd.getDate(), type: 'group', label: g.customName || g.name || 'Stack Circle' })
-              }
-            }
-          })
-        }
-      } catch {}
-
-      // Add Incoming Payment entries (expand recurring into visible month)
-      try {
-        const savedPayments = localStorage.getItem('orca-payment-entries')
-        if (savedPayments) {
-          const payments = JSON.parse(savedPayments)
-          payments.forEach((p: any) => {
-            if (!p.date) return
-            const baseDate = new Date(p.date + 'T00:00:00')
-            const recurrence = p.recurrence || 'none'
-
-            if (recurrence === 'none') {
-              // One-time: show only if in viewed month
-              if (baseDate.getMonth() === calMonth && baseDate.getFullYear() === calYear) {
-                events.push({ date: baseDate.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
-              }
-            } else {
-              // Recurring: generate occurrences for the viewed month
-              const intervalDays = recurrence === 'weekly' ? 7 : recurrence === 'biweekly' ? 14 : 0
-              const monthStart = new Date(calYear, calMonth, 1)
-              const monthEnd = new Date(calYear, calMonth + 1, 0)
-
-              if (recurrence === 'monthly') {
-                // Monthly: same day each month (clamped to month length)
-                const day = Math.min(baseDate.getDate(), monthEnd.getDate())
-                const candidate = new Date(calYear, calMonth, day)
-                if (candidate >= baseDate) {
-                  events.push({ date: candidate.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
-                }
-              } else if (intervalDays > 0) {
-                // Weekly / biweekly: step from base date into the viewed month
-                const cursor = new Date(baseDate)
-                // Fast-forward to near the month start
-                if (cursor < monthStart) {
-                  const daysGap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
-                  cursor.setDate(cursor.getDate() + daysGap)
-                }
-                // Step backward once in case we overshot
-                while (cursor > monthEnd) cursor.setDate(cursor.getDate() - intervalDays)
-                // Walk forward and collect hits
-                while (cursor <= monthEnd) {
-                  if (cursor >= monthStart && cursor >= baseDate) {
-                    events.push({ date: cursor.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
-                  }
-                  cursor.setDate(cursor.getDate() + intervalDays)
-                }
-              }
-            }
-          })
-        }
-      } catch {}
-    }
-
-    // Fallback: add group date from context if exists
-    if (group?.date) {
-      const groupDate = new Date(group.date + 'T00:00:00')
-      if (groupDate.getMonth() === calMonth && groupDate.getFullYear() === calYear) {
-        if (!events.some(e => e.type === 'group' && e.date === groupDate.getDate())) {
-          events.push({ date: groupDate.getDate(), type: 'group', label: `${group.name} Event` })
-        }
-      }
-    }
-
-    // Deduplicate: prevent the same item from appearing twice on the same day
-    // Key on date + normalized label only (drop type) so the same name from
-    // different sources (e.g. "Rent" as 'bill' AND as 'paycheck') is collapsed.
-    const seen = new Set<string>()
-    return events.filter(ev => {
-      const key = `${ev.date}-${ev.label.toLowerCase().trim()}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calMonth, calYear, bills, group, syncReady, localWriteTick])
-
-  // Compute current week dates for weekly view
-  const weekDates = useMemo(() => {
-    const today = new Date()
-    const dayOfWeek = today.getDay()
-    const sunday = new Date(today)
-    sunday.setDate(today.getDate() - dayOfWeek + (weekOffset * 7))
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(sunday)
-      d.setDate(sunday.getDate() + i)
-      return d
-    })
-  }, [weekOffset])
-
-  // Build events scoped to the visible week (handles cross-month weeks)
-  const weeklyEvents = useMemo(() => {
-    if (!weekDates.length) return new Map<string, CalendarEvent[]>()
-    const weekStart = weekDates[0]
-    const weekEnd = weekDates[6]
-    const dateKey = (d: Date) => d.toISOString().slice(0, 10)
-    const inWeek = (d: Date) => d >= weekStart && d <= weekEnd
-    const map = new Map<string, CalendarEvent[]>()
-    weekDates.forEach(d => map.set(dateKey(d), []))
-
-    const pushEv = (d: Date, ev: CalendarEvent) => {
-      const k = dateKey(d)
-      if (map.has(k)) map.get(k)!.push(ev)
-    }
-
-    // Bills
-    bills.forEach(bill => {
-      const d = new Date(bill.due + 'T00:00:00')
-      if (inWeek(d)) pushEv(d, { date: d.getDate(), type: 'bill', label: bill.name, amount: bill.amount })
-    })
-
-    // Tasks
-    if (typeof window !== 'undefined') {
-      const seenTasks = new Set<string>()
-      const allTasks: any[] = []
-      try { const s = localStorage.getItem('orca-tasks'); if (s) allTasks.push(...JSON.parse(s)) } catch {}
-      if ((window as any).__ORCA_TASKS) allTasks.push(...(window as any).__ORCA_TASKS)
-      allTasks.forEach((task: any) => {
-        if (task.dueDate) {
-          const td = new Date(task.dueDate + 'T00:00:00')
-          if (inWeek(td)) {
-            const label = task.title || task.name || task.text || 'Task'
-            const key = `${dateKey(td)}-${label}`
-            if (!seenTasks.has(key)) { seenTasks.add(key); pushEv(td, { date: td.getDate(), type: 'task', label }) }
-          }
-        }
-      })
-
-      // Groups
-      try {
-        const sg = localStorage.getItem('orca-stack-circle-groups')
-        if (sg) JSON.parse(sg).forEach((g: any) => {
-          if (g.date) { const gd = new Date(g.date + 'T00:00:00'); if (inWeek(gd)) pushEv(gd, { date: gd.getDate(), type: 'group', label: g.customName || g.name || 'Stack Circle' }) }
-        })
-      } catch {}
-
-      // Payments
-      try {
-        const sp = localStorage.getItem('orca-payment-entries')
-        if (sp) JSON.parse(sp).forEach((p: any) => {
-          if (!p.date) return
-          const base = new Date(p.date + 'T00:00:00')
-          const rec = p.recurrence || 'none'
-          if (rec === 'none') { if (inWeek(base)) pushEv(base, { date: base.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount }) }
-          else if (rec === 'monthly') {
-            // Check if this month's occurrence falls in the week
-            weekDates.forEach(wd => {
-              const candidate = new Date(wd.getFullYear(), wd.getMonth(), Math.min(base.getDate(), new Date(wd.getFullYear(), wd.getMonth() + 1, 0).getDate()))
-              if (candidate >= base && dateKey(candidate) === dateKey(wd)) pushEv(candidate, { date: candidate.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
-            })
-          } else {
-            const interval = rec === 'weekly' ? 7 : rec === 'biweekly' ? 14 : 0
-            if (interval > 0) {
-              const cursor = new Date(base)
-              if (cursor < weekStart) {
-                const gap = Math.floor((weekStart.getTime() - cursor.getTime()) / (86400000 * interval)) * interval
-                cursor.setDate(cursor.getDate() + gap)
-              }
-              while (cursor <= weekEnd) {
-                if (cursor >= weekStart && cursor >= base) pushEv(new Date(cursor), { date: cursor.getDate(), type: 'paycheck', label: p.description || 'Payment', amount: p.amount })
-                cursor.setDate(cursor.getDate() + interval)
-              }
-            }
-          }
-        })
-      } catch {}
-    }
-
-    if (group?.date) {
-      const gd = new Date(group.date + 'T00:00:00')
-      if (inWeek(gd)) {
-        const k = dateKey(gd)
-        if (map.has(k) && !map.get(k)!.some(e => e.type === 'group')) pushEv(gd, { date: gd.getDate(), type: 'group', label: `${group.name} Event` })
-      }
-    }
-
-    return map
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekDates, bills, group, syncReady, localWriteTick])
-
-  const upcomingEvents = useMemo(() => {
-    return calendarEvents
-      .sort((a, b) => a.date - b.date)
-      .slice(0, 5)
-  }, [calendarEvents])
-
-  // Metrics dashboard hide/show
-  const [showMetrics, setShowMetrics] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('orca-dashboard-show-metrics')
-      return saved === null ? true : saved === 'true'
-    }
-    return true
-  })
-
-  // Amount masking helper — replaces values with bullets when amounts are hidden
-  const m = (val: number) => showMetrics ? fmt(val) : '••••'
-
-  const toggleMetrics = () => {
-    setShowMetrics((prev: boolean) => {
-      const next = !prev
-      localStorage.setItem('orca-dashboard-show-metrics', String(next))
-      return next
-    })
-  }
-
-  // Drag and drop handlers
-  const [pinnedSections, setPinnedSections] = useState<string[]>([])
-
-  // Load pinned sections from localStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('orca-dashboard-pinned')
-      if (saved) setPinnedSections(JSON.parse(saved))
+      const saved = localStorage.getItem(`orca-priorities-${todayKey}`)
+      if (saved) {
+        setPriorities(JSON.parse(saved))
+      } else {
+        const defaults: DailyPriority['items'] = [
+          { id: '1', text: 'Hit your calorie goal (3,200 cal)', area: 'fitness', completed: false, addedByBentley: true },
+          { id: '2', text: 'Work on your top business task', area: 'business', completed: false, addedByBentley: true },
+          { id: '3', text: 'Check music release pipeline', area: 'music', completed: false, addedByBentley: true },
+        ]
+        setPriorities(defaults)
+      }
     } catch {}
-  }, [])
+  }, [todayKey])
 
-  const handleTogglePin = (id: string) => {
-    setPinnedSections(prev => {
-      const next = prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-      localStorage.setItem('orca-dashboard-pinned', JSON.stringify(next))
+  const togglePriority = useCallback((id: string) => {
+    setPriorities(prev => {
+      const next = prev.map(p => p.id === id ? { ...p, completed: !p.completed } : p)
+      try { localStorage.setItem(`orca-priorities-${todayKey}`, JSON.stringify(next)) } catch {}
       return next
     })
-  }
+  }, [todayKey])
 
-  // Sort sections: pinned first (in their original order), then unpinned
-  const sortedSectionOrder = useMemo(() => {
-    const pinned = sectionOrder.filter(s => pinnedSections.includes(s))
-    const unpinned = sectionOrder.filter(s => !pinnedSections.includes(s))
-    return [...pinned, ...unpinned]
-  }, [sectionOrder, pinnedSections])
+  const prioritiesCompleted = priorities.filter(p => p.completed).length
 
-  const handleMoveUp = (index: number) => {
-    // Find index in the unpinned portion only
-    const unpinned = sortedSectionOrder.filter(s => !pinnedSections.includes(s))
-    const unpinnedIndex = unpinned.indexOf(sortedSectionOrder[index])
-    if (unpinnedIndex <= 0) return
-    ;[unpinned[unpinnedIndex - 1], unpinned[unpinnedIndex]] = [unpinned[unpinnedIndex], unpinned[unpinnedIndex - 1]]
-    const newOrder = [...pinnedSections.filter(s => sectionOrder.includes(s)), ...unpinned]
-    setSectionOrder(newOrder)
-    localStorage.setItem('orca-dashboard-order', JSON.stringify(newOrder))
-  }
-
-  const handleMoveDown = (index: number) => {
-    const unpinned = sortedSectionOrder.filter(s => !pinnedSections.includes(s))
-    const unpinnedIndex = unpinned.indexOf(sortedSectionOrder[index])
-    if (unpinnedIndex < 0 || unpinnedIndex >= unpinned.length - 1) return
-    ;[unpinned[unpinnedIndex], unpinned[unpinnedIndex + 1]] = [unpinned[unpinnedIndex + 1], unpinned[unpinnedIndex]]
-    const newOrder = [...pinnedSections.filter(s => sectionOrder.includes(s)), ...unpinned]
-    setSectionOrder(newOrder)
-    localStorage.setItem('orca-dashboard-order', JSON.stringify(newOrder))
-  }
-
-  // Calculate actual user credit score
-  const userCreditScore = useMemo(() => {
-    // Try to get from context data first
-    if (user?.creditScore) {
-      return user.creditScore
-    }
-
-    // If per-bureau scores exist, calculate average
-    if (user?.creditScoreTransUnion || user?.creditScoreEquifax || user?.creditScoreExperian) {
-      const scores = [
-        user.creditScoreTransUnion,
-        user.creditScoreEquifax,
-        user.creditScoreExperian,
-      ].filter((score): score is number => typeof score === 'number')
-      if (scores.length > 0) {
-        return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+  // ── Fitness data ──
+  const fitnessData = useMemo(() => {
+    try {
+      const wl = localStorage.getItem('orca-weight-logs')
+      const ml = localStorage.getItem('orca-meal-logs')
+      const weightLogs: WeightLog[] = wl ? JSON.parse(wl) : []
+      const mealLogs: MealLog[] = ml ? JSON.parse(ml) : []
+      const latest = weightLogs.sort((a, b) => b.date.localeCompare(a.date))[0]
+      const todayMeals = mealLogs.filter(m => m.date === todayKey)
+      const todayCalories = todayMeals.reduce((s, m) => s + m.calories, 0)
+      const todayProtein = todayMeals.reduce((s, m) => s + m.protein, 0)
+      return {
+        currentWeight: latest?.weight || 159,
+        goalWeight: 200,
+        todayCalories,
+        todayProtein,
+        calorieGoal: 3200,
+        proteinGoal: 180,
       }
+    } catch {
+      return { currentWeight: 159, goalWeight: 200, todayCalories: 0, todayProtein: 0, calorieGoal: 3200, proteinGoal: 180 }
     }
+  }, [todayKey, syncReady])
 
-    // Fallback to localStorage
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('orca-user-settings')
-        if (saved) {
-          const settings = JSON.parse(saved)
-          if (settings.creditScore) return settings.creditScore
-        }
-      } catch {}
+  // ── Music data ──
+  const musicData = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('orca-songs')
+      const songs: Song[] = saved ? JSON.parse(saved) : []
+      const readyToRelease = songs.filter(s => s.status === 'uploaded' || s.status === 'release-date-set').length
+      const inPipeline = songs.filter(s => s.status !== 'released').length
+      return { readyToRelease, inPipeline, total: songs.length }
+    } catch {
+      return { readyToRelease: 0, inPipeline: 0, total: 0 }
     }
+  }, [syncReady])
 
-    // Default fallback
-    return 648
-  }, [user?.creditScore, user?.creditScoreTransUnion, user?.creditScoreEquifax, user?.creditScoreExperian])
-
-  const renderSection = (sectionId: string, index: number) => {
-    switch (sectionId) {
-      case 'financial-cards':
-        return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            {/* Metrics header with hide/show toggle */}
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: theme.textS }}>Metrics</p>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleMetrics}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all"
-                style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.textM }}
-              >
-                {showMetrics ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                {showMetrics ? 'Hide Amounts' : 'Show Amounts'}
-              </motion.button>
-            </div>
-            <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Next Payment Card */}
-              {/* Incoming Payments Card — month-navigable */}
-              {(() => {
-                const now = new Date()
-                const viewDate = new Date(now.getFullYear(), now.getMonth() + payMonthOffset, 1)
-                const viewMonth = viewDate.getMonth()
-                const viewYear = viewDate.getFullYear()
-                const viewLabel = viewDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                const monthStart = new Date(viewYear, viewMonth, 1)
-                const monthEnd = new Date(viewYear, viewMonth + 1, 0, 23, 59, 59)
-
-                let allEntries: any[] = []
-                if (data.incomingPayments && data.incomingPayments.length > 0) {
-                  allEntries = data.incomingPayments
-                } else if (typeof window !== 'undefined') {
-                  try {
-                    const stored = localStorage.getItem('orca-payment-entries')
-                    if (stored) allEntries = JSON.parse(stored)
-                  } catch {}
-                }
-
-                const monthEntries = allEntries.filter((p: any) => {
-                  const pDate = new Date(p.date + 'T23:59:59')
-                  return pDate >= monthStart && pDate <= monthEnd
-                })
-                const monthTotal = monthEntries.reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
-                const monthCount = monthEntries.length
-
-                // Next upcoming payment in the viewed month
-                const todayStr = now.toISOString().slice(0, 10)
-                const upcoming = monthEntries
-                  .filter((p: any) => p.date >= todayStr)
-                  .sort((a: any, b: any) => a.date.localeCompare(b.date))[0]
-
-                return (
-                  <div className="rounded-2xl p-5 transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                    {/* Header row: label + month nav */}
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                        <TrendingUp className="w-4 h-4" style={{ color: '#10B981' }} />
-                        Incoming Payments
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          onClick={e => { e.stopPropagation(); setPayMonthOffset(o => o - 1) }}
-                          className="p-1 rounded-lg transition-colors"
-                          style={{ color: theme.textM }}
-                        >
-                          <ChevronLeft size={14} />
-                        </button>
-                        <span className="text-[10px] font-semibold" style={{ color: theme.textS, minWidth: 56, textAlign: 'center' }}>{viewLabel}</span>
-                        <button
-                          onClick={e => { e.stopPropagation(); setPayMonthOffset(o => o + 1) }}
-                          className="p-1 rounded-lg transition-colors"
-                          style={{ color: theme.textM }}
-                        >
-                          <ChevronRight size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>
-                      {monthTotal > 0 ? `+${m(monthTotal)}` : '$0.00'}
-                    </div>
-                    <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                      {upcoming
-                        ? `Next: ${upcoming.description || 'Income'} · ${new Date(upcoming.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                        : monthCount > 0
-                          ? `${monthCount} payment${monthCount !== 1 ? 's' : ''} this month`
-                          : `No payments for ${viewLabel}`}
-                    </div>
-                    {monthCount > 0 && (
-                      <div className="mt-2 pt-2 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${theme.border}`, color: theme.textS }}>
-                        <span>{monthCount} payment{monthCount !== 1 ? 's' : ''}</span>
-                        <span style={{ color: '#10B981', fontWeight: 700 }}>{monthTotal > 0 ? `+${m(monthTotal)}` : '$0.00'} total</span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-
-              {/* Bills Due Card */}
-              <Link href="/bill-boss">
-                <div className="rounded-2xl p-5 cursor-pointer transition-all duration-200 group" style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = theme.border)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                      <Receipt className="w-4 h-4" style={{ color: '#EF4444' }} />
-                      Bills Due
-                    </div>
-                    <ArrowDownRight className="w-4 h-4" style={{ color: '#EF4444' }} />
-                  </div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: '#EF4444' }}>
-                    {nextDueItem ? `−${m(nextDueItem.amount)}` : '$0.00'}
-                  </div>
-                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                    {nextDueItem
-                      ? `Next: ${nextDueItem.name}${nextDueItem.isSplit ? ' (split)' : ''} · ${new Date(nextDueItem.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${m(billsDueThisWeek)} this week`
-                      : 'All paid up'}
-                  </div>
-                  {totalMonthlyBills > 0 && (
-                    <div className="mt-2 pt-2 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${theme.border}`, color: theme.textS }}>
-                      <span>Monthly total</span>
-                      <span style={{ color: '#EF4444', fontWeight: 700 }}>{m(totalMonthlyBills)}</span>
-                    </div>
-                  )}
-                </div>
-              </Link>
-
-              {/* Total Saved Card */}
-              <Link href="/smart-stack?tab=savings">
-                <div className="rounded-2xl p-5 cursor-pointer transition-all duration-200" style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = theme.border)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.textS }}>
-                      <PiggyBank className="w-4 h-4" style={{ color: '#6366F1' }} />
-                      Total Saved
-                    </div>
-                    <ArrowUpRight className="w-4 h-4" style={{ color: '#6366F1' }} />
-                  </div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: '#6366F1' }}>
-                    {m(totalSavings)}
-                  </div>
-                  <div className="text-sm mt-1" style={{ color: theme.textS }}>
-                    Across all accounts
-                  </div>
-                </div>
-              </Link>
-            </motion.div>
-          </DraggableSection>
-        )
-
-      case 'spend-paycheck':
-        return null
-
-      case 'calendar':
-        return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <MonthlyCalendar events={calendarEvents} month={calMonth} year={calYear} onMonthChange={handleMonthChange} onDayClick={setSelectedDay} selectedDay={selectedDay} theme={theme} />
-          </DraggableSection>
-        )
-
-      case 'credit-score':
-        return (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <Link href="/settings?tab=financial">
-              <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-bold" style={{ color: theme.text }}>Credit Score</h3>
-                  <Link href="/settings?tab=financial" onClick={(e) => e.stopPropagation()}>
-                    <button className="text-xs hover:opacity-80" style={{ color: '#6366F1' }}>Update</button>
-                  </Link>
-                </div>
-                <div className="flex items-center gap-4">
-                  <CreditScoreRing score={userCreditScore} limit={850} theme={theme} />
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>Fair</div>
-                    <div className="text-xs mt-0.5" style={{ color: theme.textS }}>34% utilization</div>
-                    <div className="text-xs mt-1" style={{ color: theme.textS }}>Range: 300–850</div>
-                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 5, background: theme.border, width: 120 }}>
-                      <div className="h-full rounded-full" style={{ width: `${(userCreditScore / 850) * 100}%`, background: '#F59E0B' }} />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </Link>
-          </DraggableSection>
-        )
-
-      case 'stack-circle':
-        return stackCircleStats.totalGroups > 0 ? (
-          <DraggableSection key={sectionId} id={sectionId} index={index} onMoveUp={handleMoveUp} onMoveDown={handleMoveDown} isFirst={index === 0} isLast={index === sortedSectionOrder.length - 1} isReordering={false} isPinned={pinnedSections.includes(sectionId)} onTogglePin={handleTogglePin} theme={theme}>
-            <Link href="/stack-circle">
-              <motion.div variants={fadeUp} className="rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Users size={18} style={{ color: '#6366F1' }} />
-                    <p className="text-base font-semibold" style={{ color: theme.text }}>My Circle</p>
-                  </div>
-                  <span className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ backgroundColor: '#6366F115', color: '#6366F1' }}>
-                    {stackCircleStats.totalGroups} group{stackCircleStats.totalGroups !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                {/* Aggregate stats */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div>
-                    <p className="text-xs" style={{ color: theme.textM }}>Members</p>
-                    <p className="text-lg font-bold" style={{ color: theme.text }}>{stackCircleStats.totalMembers}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs" style={{ color: theme.textM }}>Saved</p>
-                    <p className="text-lg font-bold" style={{ color: '#10B981' }}>{m(stackCircleStats.totalSaved)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs" style={{ color: theme.textM }}>Goal</p>
-                    <p className="text-lg font-bold" style={{ color: '#6366F1' }}>{m(stackCircleStats.totalTarget)}</p>
-                  </div>
-                </div>
-                {/* Progress bar */}
-                {stackCircleStats.totalTarget > 0 && (
-                  <ProgressBar current={stackCircleStats.totalSaved} target={stackCircleStats.totalTarget} color="#6366F1" theme={theme} />
-                )}
-                {/* Show first group name from stats (works with localStorage groups) */}
-                {stackCircleStats.groups[0] && (
-                  <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${theme.border}40` }}>
-                    <p className="text-sm font-medium" style={{ color: theme.textS }}>{stackCircleStats.groups[0].customName || stackCircleStats.groups[0].name}</p>
-                    <div className="flex items-center gap-1.5">
-                      <code className="text-xs font-mono" style={{ color: '#6366F1' }}>{stackCircleStats.groups[0].code}</code>
-                      <Copy size={12} style={{ color: '#6366F1' }} />
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            </Link>
-          </DraggableSection>
-        ) : null
-
-      default:
-        return null
+  // ── Business data ──
+  const businessData = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('orca-businesses')
+      const businesses: Business[] = saved ? JSON.parse(saved) : []
+      const totalRevenue = businesses.reduce((s, b) => s + b.currentMonthRevenue, 0)
+      const pendingTasks = businesses.reduce((s, b) => s + b.tasks.filter(t => t.status !== 'done').length, 0)
+      return { totalRevenue, pendingTasks, count: businesses.length }
+    } catch {
+      return { totalRevenue: 0, pendingTasks: 0, count: 0 }
     }
-  }
+  }, [syncReady])
+
+  // ── DJ data ──
+  const djData = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('orca-dj-gigs')
+      const gigs = saved ? JSON.parse(saved) : []
+      const upcoming = gigs.filter((g: any) => g.status === 'confirmed' && g.date >= todayKey)
+      return { upcoming: upcoming.length, nextGig: upcoming[0] || null }
+    } catch {
+      return { upcoming: 0, nextGig: null }
+    }
+  }, [syncReady, todayKey])
+
+  // ── Lyft data ──
+  const lyftData = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('orca-lyft-sessions')
+      const sessions = saved ? JSON.parse(saved) : []
+      const monday = new Date()
+      monday.setDate(monday.getDate() - monday.getDay() + 1)
+      const weekStr = monday.toISOString().slice(0, 10)
+      const thisWeek = sessions.filter((s: any) => s.date >= weekStr)
+      const weekEarnings = thisWeek.reduce((sum: number, s: any) => sum + (s.earnings || 0), 0)
+      return { weekEarnings, weekGoal: 400 }
+    } catch {
+      return { weekEarnings: 0, weekGoal: 400 }
+    }
+  }, [syncReady])
+
+  // ── Upcoming events (today + next 3 days) ──
+  const upcomingEvents = useMemo(() => {
+    const events: { label: string; date: string; type: string; color: string }[] = []
+    const today = new Date()
+    bills
+      .filter(b => b.status === 'upcoming')
+      .slice(0, 2)
+      .forEach(b => events.push({ label: b.name, date: b.due, type: 'bill', color: BENTLEY_RED }))
+    if (djData.nextGig) {
+      events.push({ label: `DJ: ${djData.nextGig.venue || 'Gig'}`, date: djData.nextGig.date, type: 'dj', color: '#EC4899' })
+    }
+    return events.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4)
+  }, [bills, djData])
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: theme.bg, minHeight: '100vh' }}>
-        <DashboardSkeleton theme={theme} />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: theme.bg }}>
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+        >
+          <RefreshCw size={24} style={{ color: BENTLEY_INDIGO }} />
+        </motion.div>
       </div>
     )
   }
 
-  // Determine new-user setup state
-  const hasBalance = checkingBalance > 0
-  const hasIncome = income && income.length > 0
-  const hasBills = bills && bills.length > 0
+  const caloriesPct = Math.min((fitnessData.todayCalories / fitnessData.calorieGoal) * 100, 100)
+  const weightPct = Math.min(((fitnessData.currentWeight - 159) / (fitnessData.goalWeight - 159)) * 100, 100)
+  const lyftPct = Math.min((lyftData.weekEarnings / lyftData.weekGoal) * 100, 100)
 
   return (
-    <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh' }} className="overflow-x-hidden max-w-full">
+    <div
+      className="min-h-screen overflow-x-hidden pb-28"
+      style={{ background: theme.bg, color: theme.text }}
+    >
       <motion.div
         initial="hidden"
         animate="show"
-        variants={{ show: { transition: { staggerChildren: 0.08 } } }}
-        className="px-3 sm:px-5 py-4 sm:py-6 pb-12 space-y-4 sm:space-y-6 max-w-5xl mx-auto w-full"
+        variants={{ show: { transition: { staggerChildren: 0.06 } } }}
+        className="px-4 pt-6 pb-4 max-w-lg mx-auto space-y-5"
       >
-        {/* Welcome Message */}
-        <motion.div variants={fadeUp} className="space-y-1">
-          <h1 className="text-2xl sm:text-4xl font-bold" style={{ color: theme.text, letterSpacing: '-0.02em' }}>
-            {firstName
-              ? `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, ${firstName} 👋`
-              : 'Welcome back'}
-          </h1>
-          <p className="text-sm" style={{ color: theme.textS }}>
-            {hasBalance && hasIncome
-              ? "Here\u2019s your financial snapshot for today."
-              : "Let\u2019s get your finances set up \u2014 takes about 2 minutes."}
-          </p>
+        {/* ── Header ── */}
+        <motion.div variants={fadeUp} className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: BENTLEY_GOLD }} />
+              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: BENTLEY_GOLD }}>
+                ORCA · Command Center
+              </span>
+            </div>
+            <h1 className="text-2xl font-bold leading-tight" style={{ color: theme.text }}>{greeting}</h1>
+            <p className="text-sm mt-0.5" style={{ color: theme.subtext }}>{line}</p>
+          </div>
+          <Link href="/bentley">
+            <motion.div
+              whileTap={{ scale: 0.93 }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold"
+              style={{
+                background: `linear-gradient(135deg, ${BENTLEY_GOLD}22, ${BENTLEY_GOLD}10)`,
+                border: `1px solid ${BENTLEY_GOLD}40`,
+                color: BENTLEY_GOLD,
+              }}
+            >
+              <MessageSquare size={13} />
+              Bentley
+            </motion.div>
+          </Link>
         </motion.div>
 
-        {/* New-user setup guide — only shown when onboarding is incomplete */}
-        {(!hasBalance || !hasIncome || !hasBills) && (
-          <motion.div variants={fadeUp}>
-            <SetupBanner
-              hasBalance={hasBalance}
-              hasIncome={!!hasIncome}
-              hasBills={!!hasBills}
-              theme={theme}
-            />
-          </motion.div>
-        )}
-
-        {/* Safe to Spend Hero Card — Action-First */}
-        <motion.div
-          variants={fadeUp}
-          className="rounded-2xl p-5 sm:p-6 relative overflow-hidden"
-          style={{ background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}CC 100%)`, color: '#fff' }}
-        >
-          {/* Subtle inner texture */}
+        {/* ── Today's Command ── */}
+        <motion.div variants={fadeUp}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Target size={14} style={{ color: BENTLEY_INDIGO }} />
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>
+                Today's Command
+              </span>
+            </div>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: `${BENTLEY_INDIGO}18`, color: BENTLEY_INDIGO }}>
+              {prioritiesCompleted}/{priorities.length} done
+            </span>
+          </div>
           <div
-            aria-hidden
-            className="absolute inset-0 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse 80% 50% at 10% 20%, rgba(255,255,255,0.08) 0%, transparent 70%)' }}
-          />
-
-          <div className="relative flex flex-col gap-2">
-            {/* Header row */}
-            <div className="flex items-center justify-between mb-0.5">
-              <div className="flex items-center gap-2">
-                <Wallet size={14} className="opacity-70" />
-                <span className="text-sm font-semibold opacity-80">Safe to Spend</span>
+            className="rounded-2xl overflow-hidden"
+            style={{ border: `1px solid ${theme.border}` }}
+          >
+            {priorities.map((item, i) => (
+              <div key={item.id} style={{ borderBottom: i < priorities.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
+                <PriorityItem item={item} onToggle={togglePriority} index={i} />
               </div>
-              <RiskBadge level={engine.riskLevel} theme={theme} />
-            </div>
+            ))}
+          </div>
+          {prioritiesCompleted === priorities.length && priorities.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-2 text-center text-xs font-semibold py-2 rounded-xl"
+              style={{ background: `${BENTLEY_GREEN}15`, color: BENTLEY_GREEN }}
+            >
+              All 3 done. That's what I'm talking about.
+            </motion.div>
+          )}
+        </motion.div>
 
-            {/* Big number */}
-            <div style={{ fontSize: 52, fontWeight: 900, lineHeight: 1.05, letterSpacing: '-0.03em' }}>
-              {safeToSpendView === 'daily'
-                ? m(engine.safeToSpendDaily)
-                : safeToSpendView === 'weekly'
-                ? m(engine.safeToSpendWeekly)
-                : m(engine.safeToSpendTotal)}
-            </div>
+        {/* ── Bentley's Briefing ── */}
+        <BentleyBriefing
+          bills={bills}
+          checkingBalance={checkingBalance}
+          name={displayName}
+        />
 
-            {/* Context line */}
-            <div className="text-xs opacity-60 -mt-1">
-              {safeToSpendView === 'daily' && 'per day this month — after bills & savings'}
-              {safeToSpendView === 'weekly' && 'per week this month — after bills & savings'}
-              {safeToSpendView === 'monthly' && 'remaining this month — after bills & savings'}
-            </div>
-
-            {/* Bills alert */}
-            {engine.billsDueBeforeNextIncome > 0 && (
-              <div
-                className="flex items-center gap-2 text-xs rounded-xl px-3 py-2 mt-1"
-                style={{ background: 'rgba(239,68,68,0.22)', border: '1px solid rgba(239,68,68,0.3)' }}
-              >
-                <Receipt size={12} className="flex-shrink-0" />
-                <span>
-                  <strong>{fmt(engine.billsDueBeforeNextIncome)}</strong> in bills due before next payday
-                  {engine.daysUntilNextIncome > 0 && ` (${engine.daysUntilNextIncome}d away)`}
-                </span>
-              </div>
-            )}
-
-            {/* View toggles */}
-            <div className="flex gap-1.5 mt-1">
-              {(['daily', 'weekly', 'monthly'] as const).map(v => (
-                <button
-                  key={v}
-                  onClick={() => setSafeToSpendView(v)}
-                  className="px-3 py-1 rounded-lg text-xs capitalize font-semibold transition-all duration-150"
-                  style={{
-                    background: v === safeToSpendView ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.1)',
-                    fontWeight: v === safeToSpendView ? 700 : 400,
-                    boxShadow: v === safeToSpendView ? 'inset 0 1px 0 rgba(255,255,255,0.2)' : 'none',
-                  }}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            <SafeToSpendBreakdown breakdown={engine.breakdown} theme={theme} />
+        {/* ── Life Metrics Grid ── */}
+        <motion.div variants={fadeUp}>
+          <div className="flex items-center gap-2 mb-3">
+            <Zap size={14} style={{ color: BENTLEY_GOLD }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>
+              Life Metrics
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard
+              icon={Scale}
+              label="Weight"
+              value={`${fitnessData.currentWeight} lbs`}
+              sub={`Goal: ${fitnessData.goalWeight} lbs`}
+              color={BENTLEY_GREEN}
+              href="/fitness"
+            />
+            <StatCard
+              icon={Flame}
+              label="Calories Today"
+              value={`${fitnessData.todayCalories}`}
+              sub={`/ ${fitnessData.calorieGoal} goal`}
+              color={fitnessData.todayCalories < fitnessData.calorieGoal * 0.5 ? BENTLEY_RED : BENTLEY_GREEN}
+              href="/fitness"
+              alert={fitnessData.todayCalories < 800}
+            />
+            <StatCard
+              icon={DollarSign}
+              label="Safe to Spend"
+              value={checkingBalance > 0 ? fmt(Math.max(0, checkingBalance - billsData.totalDue)) : '—'}
+              sub={billsData.totalDue > 0 ? `${fmt(billsData.totalDue)} in bills` : 'No bills due'}
+              color={BENTLEY_INDIGO}
+              href="/bill-boss"
+              alert={billsData.upcoming.length > 0}
+            />
+            <StatCard
+              icon={Music}
+              label="Music Pipeline"
+              value={`${musicData.inPipeline}`}
+              sub={`${musicData.readyToRelease} ready to release`}
+              color="#A78BFA"
+              href="/music"
+              alert={musicData.readyToRelease > 0}
+            />
+            <StatCard
+              icon={Briefcase}
+              label="Business"
+              value={businessData.totalRevenue > 0 ? fmt(businessData.totalRevenue) : `${businessData.pendingTasks} tasks`}
+              sub={businessData.totalRevenue > 0 ? 'this month' : 'pending'}
+              color={BENTLEY_GOLD}
+              href="/business"
+            />
+            <StatCard
+              icon={Mic2}
+              label="DJ Gigs"
+              value={`${djData.upcoming}`}
+              sub={djData.nextGig ? `Next: ${new Date(djData.nextGig.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'None upcoming'}
+              color="#EC4899"
+              href="/dj"
+              alert={djData.upcoming > 0}
+            />
+            <StatCard
+              icon={Car}
+              label="Lyft This Week"
+              value={fmt(lyftData.weekEarnings)}
+              sub={`/ ${fmt(lyftData.weekGoal)} goal`}
+              color={lyftData.weekEarnings >= lyftData.weekGoal ? BENTLEY_GREEN : '#F97316'}
+              href="/business"
+            />
+            <StatCard
+              icon={ShoppingCart}
+              label="Grocery"
+              value="Tap to log"
+              sub="Inventory tracker"
+              color="#14B8A6"
+              href="/grocery"
+            />
           </div>
         </motion.div>
 
-        {/* Render sections in order — pinned first, then unpinned */}
-        {sortedSectionOrder.map((sectionId, index) => renderSection(sectionId, index))}
+        {/* ── Upcoming Events ── */}
+        {upcomingEvents.length > 0 && (
+          <motion.div variants={fadeUp}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Calendar size={14} style={{ color: BENTLEY_INDIGO }} />
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>
+                  Upcoming
+                </span>
+              </div>
+              <Link href="/bill-boss">
+                <span className="text-xs" style={{ color: BENTLEY_INDIGO }}>View all</span>
+              </Link>
+            </div>
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+            >
+              {upcomingEvents.map((ev, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 px-4 py-3"
+                  style={{ borderBottom: i < upcomingEvents.length - 1 ? `1px solid ${theme.border}` : 'none' }}
+                >
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: ev.color }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: theme.text }}>{ev.label}</p>
+                  </div>
+                  <p className="text-xs font-semibold shrink-0" style={{ color: ev.color }}>
+                    {new Date(ev.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── Fitness Progress ── */}
+        <motion.div variants={fadeUp}>
+          <Link href="/fitness">
+            <div
+              className="rounded-2xl p-4"
+              style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Dumbbell size={14} style={{ color: BENTLEY_GREEN }} />
+                  <span className="text-sm font-bold" style={{ color: theme.text }}>Fitness Progress</span>
+                </div>
+                <ChevronRight size={14} style={{ color: theme.subtext }} />
+              </div>
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="text-center">
+                  <div className="text-lg font-bold" style={{ color: theme.text }}>{fitnessData.currentWeight}</div>
+                  <div className="text-xs" style={{ color: theme.subtext }}>Current lbs</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold" style={{ color: BENTLEY_GOLD }}>{fitnessData.goalWeight}</div>
+                  <div className="text-xs" style={{ color: theme.subtext }}>Goal lbs</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold" style={{ color: BENTLEY_GREEN }}>{fitnessData.goalWeight - fitnessData.currentWeight}</div>
+                  <div className="text-xs" style={{ color: theme.subtext }}>lbs to go</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <div className="flex justify-between text-xs mb-1" style={{ color: theme.subtext }}>
+                    <span>Weight Goal</span>
+                    <span style={{ color: BENTLEY_GREEN }}>{weightPct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: theme.border }}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${weightPct}%` }}
+                      transition={{ duration: 1.2, ease: 'easeOut' }}
+                      className="h-full rounded-full"
+                      style={{ background: BENTLEY_GREEN }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs mb-1" style={{ color: theme.subtext }}>
+                    <span>Calories Today</span>
+                    <span style={{ color: caloriesPct < 50 ? BENTLEY_RED : BENTLEY_GREEN }}>
+                      {fitnessData.todayCalories} / {fitnessData.calorieGoal}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: theme.border }}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${caloriesPct}%` }}
+                      transition={{ duration: 1.2, ease: 'easeOut', delay: 0.2 }}
+                      className="h-full rounded-full"
+                      style={{ background: caloriesPct < 50 ? BENTLEY_RED : BENTLEY_GREEN }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </motion.div>
+
+        {/* ── Quick Action Row ── */}
+        <motion.div variants={fadeUp}>
+          <div className="flex items-center gap-2 mb-3">
+            <Zap size={14} style={{ color: BENTLEY_INDIGO }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>
+              Quick Actions
+            </span>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: 'Log Meal', icon: Coffee, href: '/fitness', color: BENTLEY_GREEN },
+              { label: 'Log Weight', icon: Scale, href: '/fitness', color: BENTLEY_GOLD },
+              { label: 'Music Task', icon: Music, href: '/music', color: '#A78BFA' },
+              { label: 'Ask Bentley', icon: MessageSquare, href: '/bentley', color: BENTLEY_INDIGO },
+            ].map(({ label, icon: Icon, href, color }) => (
+              <Link key={label} href={href}>
+                <motion.div
+                  whileTap={{ scale: 0.94 }}
+                  className="rounded-xl p-3 flex flex-col items-center gap-1.5 text-center"
+                  style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+                >
+                  <div className="p-2 rounded-lg" style={{ background: `${color}18` }}>
+                    <Icon size={14} style={{ color }} />
+                  </div>
+                  <span className="text-[10px] font-medium leading-tight" style={{ color: theme.subtext }}>{label}</span>
+                </motion.div>
+              </Link>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* ── Financial Summary ── */}
+        <motion.div variants={fadeUp}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <DollarSign size={14} style={{ color: BENTLEY_GREEN }} />
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>
+                Money
+              </span>
+            </div>
+            <Link href="/smart-stack">
+              <span className="text-xs" style={{ color: BENTLEY_INDIGO }}>Details</span>
+            </Link>
+          </div>
+          <div
+            className="rounded-2xl p-4 grid grid-cols-3 gap-3"
+            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+          >
+            <div>
+              <div className="text-xs mb-1" style={{ color: theme.subtext }}>Balance</div>
+              <div className="text-base font-bold" style={{ color: theme.text }}>
+                {checkingBalance > 0 ? fmt(checkingBalance) : '—'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: theme.subtext }}>Bills Due</div>
+              <div className="text-base font-bold" style={{ color: billsData.totalDue > 0 ? BENTLEY_RED : BENTLEY_GREEN }}>
+                {fmt(billsData.totalDue)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: theme.subtext }}>Savings</div>
+              <div className="text-base font-bold" style={{ color: BENTLEY_INDIGO }}>
+                {fmt(goals.reduce((s, g) => s + g.current, 0))}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
       </motion.div>
     </div>
   )

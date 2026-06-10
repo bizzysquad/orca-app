@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Sidebar from './Sidebar'
 import DesktopTopBar from './DesktopTopBar'
-import MobileHomeButton from './MobileHomeButton'
+import BottomNav from './BottomNav'
 import { useTheme } from '@/context/ThemeContext'
 import { QuickActions } from '@/components/QuickActions'
 
@@ -14,24 +14,21 @@ interface AppShellProps {
 
 export default function AppShell({ children, userName = 'User' }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { theme, isDark } = useTheme()
-
-  const pageBg = theme.bg
-  const textColor = theme.text
+  const { theme } = useTheme()
 
   return (
     <div
       className="relative w-full min-h-screen flex overflow-x-hidden max-w-[100vw]"
-      style={{ backgroundColor: pageBg, color: textColor, transition: 'background 0.2s' }}
+      style={{ backgroundColor: theme.bg, color: theme.text, transition: 'background 0.2s' }}
     >
-      {/* Sidebar Navigation */}
+      {/* Sidebar — desktop only */}
       <Sidebar
         userName={userName}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
 
-      {/* Main Content Area — lg breakpoint matches V10 (1024px) */}
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col lg:ml-[240px] min-w-0 max-w-full overflow-x-hidden">
         {/* Desktop Top Bar */}
         <DesktopTopBar
@@ -40,15 +37,18 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
         />
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: pageBg, transition: 'background 0.2s' }}>
+        <main
+          className="flex-1 overflow-y-auto overflow-x-hidden"
+          style={{ backgroundColor: theme.bg, transition: 'background 0.2s' }}
+        >
           <div className="w-full max-w-full">
             {children}
           </div>
         </main>
       </div>
 
-      {/* Mobile floating scroll-to-top button */}
-      <MobileHomeButton />
+      {/* Mobile Bottom Navigation */}
+      <BottomNav />
 
       {/* Global Quick Actions Command Palette (Cmd+K) */}
       <QuickActions />
