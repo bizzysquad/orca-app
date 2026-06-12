@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Mic2, Car, Palette, ArrowRight, DollarSign, TrendingUp, Users, Calendar } from 'lucide-react'
+import { Mic2, Car, Palette, ArrowRight, DollarSign, TrendingUp, Users, Calendar, Building2, Inbox } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { fmt } from '@/lib/utils'
 import type { DJGig, LyftSession } from '@/lib/types'
@@ -62,6 +62,19 @@ export default function WorkHubPage() {
   }, [])
 
   const cards = [
+    {
+      id: 'dj-hub',
+      href: '/dj-hub',
+      icon: Building2,
+      color: '#6366F1',
+      title: 'DJ Business Hub',
+      description: 'Booking requests, client database, invoices, and email',
+      stats: [
+        { label: 'Bookings', value: '—', icon: Inbox },
+        { label: 'Clients', value: '—', icon: Users },
+        { label: 'Invoices', value: '—', icon: Calendar },
+      ],
+    },
     {
       id: 'dj',
       href: '/dj',
