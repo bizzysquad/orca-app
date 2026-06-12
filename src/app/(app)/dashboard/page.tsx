@@ -19,6 +19,15 @@ const BENTLEY_INDIGO = '#6366F1'
 const BENTLEY_GREEN = '#10B981'
 const BENTLEY_RED = '#EF4444'
 
+function to12Hour(time: string): string {
+  if (!time) return ''
+  const [h, m] = time.split(':').map(Number)
+  if (isNaN(h)) return time
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour = h % 12 || 12
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`
+}
+
 const fadeUp = {
   hidden: { opacity: 0, y: 14, scale: 0.98 },
   show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 280, damping: 26 } },
@@ -459,7 +468,7 @@ function DayDetail({
                   <Mic2 size={13} style={{ color: '#EC4899' }} />
                   <div className="flex-1">
                     <p className="text-sm font-medium" style={{ color: theme.text }}>{g.venue || g.clientName || 'Gig'}</p>
-                    {g.startTime && <p className="text-xs" style={{ color: theme.subtext }}>{g.startTime}{g.endTime ? ` – ${g.endTime}` : ''}</p>}
+                    {g.startTime && <p className="text-xs" style={{ color: theme.subtext }}>{to12Hour(g.startTime)}{g.endTime ? ` – ${to12Hour(g.endTime)}` : ''}</p>}
                   </div>
                   {g.payment && <span className="text-xs font-bold" style={{ color: '#EC4899' }}>{fmt(g.payment)}</span>}
                 </div>
@@ -604,14 +613,19 @@ export default function DashboardPage() {
       const s = localStorage.getItem('orca-user-settings')
       if (s) { const p = JSON.parse(s); if (p.checkingBalance > 0) setCheckingBalance(p.checkingBalance) }
     } catch {}
-    // Load all priority dates this month
+    // Load all priority dates — scan last 6 months and next 6 months
     const loadPriorities: Record<string, DailyPriority['items']> = {}
-    for (let d = 1; d <= 31; d++) {
-      const ds = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      try {
-        const saved = localStorage.getItem(`orca-priorities-${ds}`)
-        if (saved) loadPriorities[ds] = JSON.parse(saved)
-      } catch {}
+    const now = new Date()
+    for (let monthOffset = -6; monthOffset <= 6; monthOffset++) {
+      const ref = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+      const daysInMonth = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate()
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ds = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+        try {
+          const saved = localStorage.getItem(`orca-priorities-${ds}`)
+          if (saved) loadPriorities[ds] = JSON.parse(saved)
+        } catch {}
+      }
     }
     // Default today priorities if none
     if (!loadPriorities[todayStr]) {

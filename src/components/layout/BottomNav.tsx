@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Sparkles, DollarSign, Briefcase, Activity,
+  LayoutDashboard, Sparkles, DollarSign, Mic2, Activity,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useTheme } from '@/context/ThemeContext'
@@ -24,7 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'home', name: 'Home', icon: LayoutDashboard, href: '/dashboard', accent: BENTLEY_INDIGO },
   { id: 'bentley', name: 'Bentley', icon: Sparkles, href: '/bentley', accent: BENTLEY_GOLD },
   { id: 'money', name: 'Money', icon: DollarSign, href: '/bill-boss', accent: '#10B981' },
-  { id: 'work', name: 'Work', icon: Briefcase, href: '/business', accent: '#F59E0B' },
+  { id: 'dj', name: 'DJ', icon: Mic2, href: '/dj', accent: '#F43F5E' },
   { id: 'life', name: 'Life', icon: Activity, href: '/fitness', accent: '#EC4899' },
 ]
 
@@ -35,8 +35,8 @@ const BottomNav = React.forwardRef<HTMLDivElement, {}>((_, ref) => {
   const isActive = (item: NavItem) => {
     if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     if (item.href === '/bill-boss') return pathname.startsWith('/bill-boss') || pathname.startsWith('/smart-stack')
-    if (item.href === '/business') return pathname.startsWith('/business') || pathname.startsWith('/dj') || pathname.startsWith('/music') || pathname.startsWith('/grocery')
-    if (item.href === '/fitness') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery')
+    if (item.href === '/dj') return pathname.startsWith('/dj') || pathname.startsWith('/dj-hub') || pathname.startsWith('/business')
+    if (item.href === '/fitness') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery') || pathname.startsWith('/music')
     return pathname.startsWith(item.href)
   }
 

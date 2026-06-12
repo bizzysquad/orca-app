@@ -552,6 +552,13 @@ export interface Business {
 export type GigStatus = 'inquiry' | 'pending' | 'confirmed' | 'completed' | 'cancelled'
 export type GigType = 'wedding' | 'birthday' | 'corporate' | 'nightclub' | 'bar' | 'festival' | 'private' | 'other'
 
+export interface DJPartialPayment {
+  id: string
+  amount: number
+  date: string
+  note?: string
+}
+
 export interface DJGig {
   id: string
   clientName: string
@@ -562,11 +569,13 @@ export interface DJGig {
   startTime: string
   endTime: string
   venue: string
-  address?: string
+  eventAddress?: string
   status: GigStatus
+  contractAmount: number
   fee: number
-  depositAmount?: number
+  depositAmount: number
   depositPaid: boolean
+  partialPayments: DJPartialPayment[]
   balancePaid: boolean
   playlist?: string[]
   musicPreferences?: string
@@ -574,6 +583,7 @@ export interface DJGig {
   invoiceNumber?: string
   notes?: string
   createdAt: string
+  isLead?: boolean
 }
 
 export interface DJBookingRequest {

@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import nodemailer from 'nodemailer'
 
+function formatTime12h(t: string): string {
+  if (!t) return ''
+  const [h, m] = t.split(':').map(Number)
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour = h % 12 || 12
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`
+}
+
 async function sendNotification(data: Record<string, unknown>) {
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return
   try {
@@ -9,25 +17,45 @@ async function sendNotification(data: Record<string, unknown>) {
       service: 'gmail',
       auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
     })
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#070B14;color:#F1F5F9;padding:32px;border-radius:16px;">
+        <div style="background:linear-gradient(135deg,#6366F1,#4F46E5);padding:20px;border-radius:12px;text-align:center;margin-bottom:24px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;">🎧 New Quote Request</h1>
+          <p style="margin:8px 0 0;color:#C7D2FE;font-size:14px;">Mask Off Da DJ — Website Submission</p>
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;">
+          ${[
+            ['Name', data.client_name],
+            ['Email', data.client_email],
+            ['Phone', data.client_phone || 'N/A'],
+            ['Event Type', data.event_type],
+            ['Date', data.date],
+            ['Time', `${formatTime12h(String(data.start_time || ''))} – ${formatTime12h(String(data.end_time || ''))}`],
+            ['Location', `${data.location || ''} ${data.city || ''}`.trim() || 'N/A'],
+            ['Guest Count', data.guest_count || 'N/A'],
+            ['MC Services', data.mc_needed === 'Yes' ? 'Yes' : 'No'],
+            ['Notes', data.special_requests || 'None'],
+          ].map(([k, v]) => `
+            <tr>
+              <td style="padding:10px 12px;border-bottom:1px solid #1E2D4A;color:#94A3B8;font-size:13px;width:130px;">${k}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #1E2D4A;color:#F1F5F9;font-size:13px;">${v}</td>
+            </tr>
+          `).join('')}
+        </table>
+
+        <div style="margin-top:24px;padding:16px;background:#0D1525;border-radius:12px;border:1px solid #1E2D4A;">
+          <p style="margin:0;color:#94A3B8;font-size:13px;">This lead has been automatically saved to your DJ Gig Manager. Log into ORCA to review and follow up.</p>
+        </div>
+      </div>
+    `
+
     await t.sendMail({
       from: `"ORCA Booking" <${process.env.GMAIL_USER}>`,
-      to: process.env.GMAIL_USER,
-      subject: `🎧 New Booking Request — ${data.client_name} (${data.event_type})`,
-      html: `
-        <h2>New DJ Booking Request</h2>
-        <p><strong>Name:</strong> ${data.client_name}</p>
-        <p><strong>Email:</strong> ${data.client_email}</p>
-        <p><strong>Phone:</strong> ${data.client_phone || 'N/A'}</p>
-        <p><strong>Event Type:</strong> ${data.event_type}</p>
-        <p><strong>Date:</strong> ${data.date}</p>
-        <p><strong>Time:</strong> ${data.start_time || '?'} – ${data.end_time || '?'}</p>
-        <p><strong>Location:</strong> ${data.location || 'N/A'}, ${data.city || ''}</p>
-        <p><strong>Guest Count:</strong> ${data.guest_count || 'N/A'}</p>
-        <p><strong>MC Needed:</strong> ${data.mc_needed ? 'Yes' : 'No'}</p>
-        <p><strong>Budget:</strong> ${data.budget_range || 'N/A'}</p>
-        <p><strong>Special Requests:</strong> ${data.special_requests || 'None'}</p>
-        <br/><p>View and manage this booking in your <a href="https://orcafin.app/dj-hub">ORCA DJ Hub</a>.</p>
-      `,
+      to: 'maskoffdadj@gmail.com',
+      subject: `🎧 New Quote Request — ${data.client_name} · ${data.event_type} on ${data.date}`,
+      html,
     })
   } catch (e) {
     console.error('Booking notification email failed:', e)
@@ -38,21 +66,24 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const {
-      date, startTime, endTime, eventType, guestCount, location,
-      city, mcNeeded, specialRequests, name, email, phone, budget,
+      date, startTime, endTime, eventType, customEventType,
+      guestCount, location, city, mcNeeded, specialRequests,
+      name, email, phone,
     } = body
 
-    if (!name || !email || !date || !eventType) {
+    if (!name || !email || !date) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    const resolvedEventType = customEventType || eventType || 'Other'
     const supabase = await createClient()
 
+    // Store in booking_requests table
     const { error } = await supabase.from('booking_requests').insert({
       date,
       start_time: startTime,
       end_time: endTime,
-      event_type: eventType,
+      event_type: resolvedEventType,
       guest_count: guestCount ? parseInt(guestCount) : null,
       location,
       city,
@@ -61,23 +92,21 @@ export async function POST(req: NextRequest) {
       client_name: name,
       client_email: email,
       client_phone: phone,
-      budget_range: budget,
       status: 'new',
       created_at: new Date().toISOString(),
     })
 
     if (error) {
       console.error('Supabase booking insert error:', error)
-    } else {
-      // Fire-and-forget notification email
-      const notifData = {
-        client_name: name, client_email: email, client_phone: phone,
-        event_type: eventType, date, start_time: startTime, end_time: endTime,
-        location, city, guest_count: guestCount, mc_needed: mcNeeded,
-        budget_range: budget, special_requests: specialRequests,
-      }
-      sendNotification(notifData)
     }
+
+    // Fire-and-forget notification email
+    sendNotification({
+      client_name: name, client_email: email, client_phone: phone,
+      event_type: resolvedEventType, date, start_time: startTime, end_time: endTime,
+      location, city, guest_count: guestCount, mc_needed: mcNeeded,
+      special_requests: specialRequests,
+    })
 
     return NextResponse.json({ success: true, message: 'Booking request received' })
   } catch (err) {
