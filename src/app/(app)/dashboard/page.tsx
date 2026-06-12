@@ -477,7 +477,8 @@ function DayDetail({
           </div>
         )}
 
-        {/* Tasks */}
+        {/* Tasks hidden from dashboard — manage via Bentley */}
+        {false && priorities.length > 0 && (
         <div>
           <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: BENTLEY_INDIGO }}>
             Tasks ({priorities.filter(p => p.completed).length}/{priorities.length})
@@ -555,6 +556,7 @@ function DayDetail({
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   )
@@ -627,14 +629,6 @@ export default function DashboardPage() {
         } catch {}
       }
     }
-    // Default today priorities if none
-    if (!loadPriorities[todayStr]) {
-      loadPriorities[todayStr] = [
-        { id: '1', text: 'Hit your calorie goal (3,200 cal)', area: 'fitness', completed: false, addedByBentley: true },
-        { id: '2', text: 'Work on your top business task', area: 'business', completed: false, addedByBentley: true },
-        { id: '3', text: 'Check music release pipeline', area: 'music', completed: false, addedByBentley: true },
-      ]
-    }
     setAllPriorities(loadPriorities)
   }, [todayStr])
 
@@ -682,15 +676,46 @@ export default function DashboardPage() {
     [bills]
   )
 
-  const totalDue = useMemo(() =>
-    bills.filter(b => b.status !== 'paid').reduce((s, b) => s + b.amount, 0),
-    [bills]
-  )
+  // Bills due in the currently viewed calendar month (month-aware, handles recurrence + partial payments)
+  const totalDue = useMemo(() => {
+    const monthEnd = new Date(calYear, calMonth + 1, 0)
+    let total = 0
+    bills.forEach(b => {
+      const rec = b.recurrence || 'one-time'
+      const dueDate = new Date(b.due + 'T00:00:00')
+      let appearsThisMonth = false
+      if (rec === 'one-time') {
+        appearsThisMonth = dueDate.getMonth() === calMonth && dueDate.getFullYear() === calYear
+      } else if (rec === 'monthly') {
+        appearsThisMonth = dueDate <= monthEnd
+      } else if (rec === 'yearly') {
+        appearsThisMonth = dueDate.getMonth() === calMonth && calYear >= dueDate.getFullYear()
+      }
+      if (!appearsThisMonth) return
+      // Cycle-aware paid check
+      const cycleAllocs = (rec !== 'one-time' && b.alloc.length > 0)
+        ? b.alloc.filter(a => { const ad = new Date(a.date + 'T00:00:00'); return ad.getMonth() === calMonth && ad.getFullYear() === calYear })
+        : b.alloc
+      const paid = cycleAllocs.filter(a => a.paid).reduce((s, a) => s + a.amount, 0)
+      if (paid >= b.amount) return
+      if (b.status === 'paid' && rec === 'one-time') return
+      if (rec === 'monthly' && b.status === 'paid' && b.paidDate) {
+        const pd = new Date(b.paidDate + 'T00:00:00')
+        if (pd.getMonth() === calMonth && pd.getFullYear() === calYear) return
+      }
+      total += Math.max(0, b.amount - paid)
+    })
+    return total
+  }, [bills, calMonth, calYear])
 
-  const upcomingGigs = useMemo(() =>
-    gigs.filter(g => g.date >= todayStr && g.status !== 'cancelled').sort((a, b) => a.date.localeCompare(b.date)).slice(0, 2),
-    [gigs, todayStr]
-  )
+  const upcomingGigs = useMemo(() => {
+    const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`
+    const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(new Date(calYear, calMonth + 1, 0).getDate()).padStart(2, '0')}`
+    return gigs
+      .filter(g => g.date >= monthStart && g.date <= monthEnd && g.status !== 'cancelled')
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 2)
+  }, [gigs, calMonth, calYear])
 
   if (loading) {
     return (

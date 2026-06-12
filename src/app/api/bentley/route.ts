@@ -200,8 +200,9 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}))
-      const msg = (err as any)?.error?.message || `DeepSeek error ${response.status}`
-      return NextResponse.json({ error: msg }, { status: response.status })
+      const msg = (err as any)?.error?.message || `DeepSeek API error ${response.status}: ${response.statusText}`
+      console.error('[Bentley] DeepSeek error:', response.status, msg)
+      return NextResponse.json({ error: msg }, { status: response.status >= 500 ? 500 : response.status })
     }
 
     const data = await response.json() as any

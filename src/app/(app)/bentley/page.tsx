@@ -290,8 +290,8 @@ export default function BentleyPage() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: apiMissing
-          ? "I'm offline right now — the DEEPSEEK_API_KEY hasn't been set. Grab a key at platform.deepseek.com, add it to .env.local, then restart. Costs almost nothing to run."
-          : "Hit a snag on my end. Try again in a sec.",
+          ? "I'm offline — DEEPSEEK_API_KEY isn't set in your environment. Add it to Vercel's environment variables and redeploy."
+          : `Hit a snag: ${err?.message || 'Unknown error'}. If this keeps happening, check that your DeepSeek API key is set correctly in Vercel.`,
         timestamp: new Date().toISOString(),
       }
       setMessages(prev => {

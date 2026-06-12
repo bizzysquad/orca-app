@@ -186,8 +186,37 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
         </div>
       )}
 
-      {/* Add partial payment */}
-      {!showAddPayment ? (
+      {/* Payment quick actions + form */}
+      {remaining > 0 && !showAddPayment && (
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => { setPayAmount(String(remaining)); setShowAddPayment(true) }}
+            className="py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5"
+            style={{ background: `${BENTLEY_GREEN}18`, color: BENTLEY_GREEN, border: `1px solid ${BENTLEY_GREEN}35` }}
+          >
+            <Check size={13} />
+            Paid Full
+          </button>
+          <button
+            onClick={() => { setPayAmount(String(Math.round(remaining / 2 * 100) / 100)); setShowAddPayment(true) }}
+            className="py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5"
+            style={{ background: `${BENTLEY_GOLD}18`, color: BENTLEY_GOLD, border: `1px solid ${BENTLEY_GOLD}35` }}
+          >
+            <DollarSign size={13} />
+            Paid Half
+          </button>
+          <button
+            onClick={() => { setPayAmount(''); setShowAddPayment(true) }}
+            className="py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5"
+            style={{ background: `${BENTLEY_INDIGO}18`, color: BENTLEY_INDIGO, border: `1px dashed ${BENTLEY_INDIGO}40` }}
+          >
+            <Plus size={13} />
+            Custom
+          </button>
+        </div>
+      )}
+
+      {remaining <= 0 && !showAddPayment && (
         <button
           onClick={() => setShowAddPayment(true)}
           className="w-full py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
@@ -195,7 +224,9 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
         >
           <Plus size={12} /> Log Payment
         </button>
-      ) : (
+      )}
+
+      {showAddPayment && (
         <div className="rounded-xl p-3 space-y-2" style={{ background: `${BENTLEY_INDIGO}08`, border: `1px solid ${BENTLEY_INDIGO}30` }}>
           <p className="text-xs font-bold" style={{ color: BENTLEY_INDIGO }}>Log Payment</p>
           <div className="grid grid-cols-2 gap-2">

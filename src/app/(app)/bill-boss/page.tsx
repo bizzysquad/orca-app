@@ -509,12 +509,19 @@ export default function BillBossPage() {
     setCalYear(y)
   }
 
-  // Calculate unpaid total (uses effective status for the currently viewed month)
+  // Calculate unpaid total — subtracts any partial payments made in this billing cycle
   const unpaidTotal = bills
     .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
-    .reduce((sum, b) => sum + b.amount, 0)
+    .reduce((sum, b) => {
+      const rec = b.recurrence || 'one-time'
+      const cycleAllocs = (rec !== 'one-time' && b.alloc.length > 0)
+        ? b.alloc.filter(a => { const ad = new Date(a.date + 'T00:00:00'); return ad.getMonth() === calMonth && ad.getFullYear() === calYear })
+        : b.alloc
+      const partialPaid = cycleAllocs.filter(a => a.paid).reduce((s, a) => s + a.amount, 0)
+      return sum + Math.max(0, b.amount - partialPaid)
+    }, 0)
 
-  // Calculate paid total (uses effective status for the currently viewed month)
+  // Calculate paid total — uses effective status for the currently viewed month
   const paidTotal = bills
     .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid')
     .reduce((sum, b) => sum + b.amount, 0)

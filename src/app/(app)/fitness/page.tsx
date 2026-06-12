@@ -797,13 +797,16 @@ export default function FitnessPage() {
   const [showWeightModal, setShowWeightModal] = useState(false)
   const [newWeight, setNewWeight] = useState('')
   const [newMeal, setNewMeal] = useState({ name: '', calories: '', protein: '', meal: 'breakfast' as MealLog['meal'] })
+  const [inventoryItems, setInventoryItems] = useState<{ id: string; name: string; category: string; consumed: boolean }[]>([])
 
   useEffect(() => {
     try {
       const wl = localStorage.getItem('orca-weight-logs')
       const ml = localStorage.getItem('orca-meal-logs')
+      const gr = localStorage.getItem('orca-grocery')
       if (wl) setWeightLogs(JSON.parse(wl))
       if (ml) setMealLogs(JSON.parse(ml))
+      if (gr) setInventoryItems(JSON.parse(gr))
     } catch {}
   }, [])
 
@@ -980,18 +983,35 @@ export default function FitnessPage() {
               )}
             </motion.div>
 
-            {/* Quick Add Meals */}
+            {/* Quick Add — from grocery inventory or fallback meals */}
             <motion.div variants={fadeUp}>
               <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: theme.subtext }}>Quick Add</p>
-              <div className="grid grid-cols-2 gap-2">
-                {QUICK_MEALS.map(qm => (
-                  <motion.button key={qm.name} whileTap={{ scale: 0.96 }} onClick={() => logMeal(qm)}
-                    className="rounded-xl p-3 text-left" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                    <p className="text-sm font-semibold" style={{ color: theme.text }}>{qm.name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: theme.subtext }}>{qm.cal} cal · {qm.protein}g protein</p>
-                  </motion.button>
-                ))}
-              </div>
+              {inventoryItems.filter(g => !g.consumed).length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {inventoryItems.filter(g => !g.consumed).slice(0, 8).map(item => (
+                    <motion.button
+                      key={item.id}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => setNewMeal(p => ({ ...p, name: item.name }))}
+                      className="rounded-xl p-3 text-left"
+                      style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+                    >
+                      <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{item.name}</p>
+                      <p className="text-xs mt-0.5" style={{ color: theme.subtext }}>{item.category}</p>
+                    </motion.button>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {QUICK_MEALS.map(qm => (
+                    <motion.button key={qm.name} whileTap={{ scale: 0.96 }} onClick={() => logMeal(qm)}
+                      className="rounded-xl p-3 text-left" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                      <p className="text-sm font-semibold" style={{ color: theme.text }}>{qm.name}</p>
+                      <p className="text-xs mt-0.5" style={{ color: theme.subtext }}>{qm.cal} cal · {qm.protein}g protein</p>
+                    </motion.button>
+                  ))}
+                </div>
+              )}
             </motion.div>
 
             {/* Smoothies */}

@@ -42,7 +42,6 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: 'work', name: 'Work', icon: Briefcase, href: '/work', accent: '#F59E0B',
     children: [
-      { id: 'dj-hub', name: 'DJ Business Hub', href: '/dj-hub', icon: Building2 },
       { id: 'dj', name: 'DJ Gig Manager', href: '/dj', icon: Mic2 },
       { id: 'lyft', name: 'Lyft Metrics', href: '/lyft', icon: Car },
       { id: 'bizzplug', name: 'BizzyPlug', href: '/bizzplug', icon: Palette },
@@ -65,7 +64,7 @@ export default function SideSidebar({ open, onClose, userName }: SideSidebarProp
   const isParentActive = (item: NavItem): boolean => {
     if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     if (item.id === 'finances') return pathname.startsWith('/bill-boss') || pathname.startsWith('/smart-stack')
-    if (item.id === 'work') return pathname.startsWith('/work') || pathname.startsWith('/dj') || pathname.startsWith('/lyft') || pathname.startsWith('/bizzplug') || pathname.startsWith('/dj-hub')
+    if (item.id === 'work') return pathname.startsWith('/work') || pathname.startsWith('/dj') || pathname.startsWith('/lyft') || pathname.startsWith('/bizzplug')
     if (item.id === 'life') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery')
     return pathname.startsWith(item.href)
   }

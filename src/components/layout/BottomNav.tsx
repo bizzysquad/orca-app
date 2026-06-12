@@ -35,7 +35,7 @@ const BottomNav = React.forwardRef<HTMLDivElement, {}>((_, ref) => {
   const isActive = (item: NavItem) => {
     if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     if (item.href === '/bill-boss') return pathname.startsWith('/bill-boss') || pathname.startsWith('/smart-stack')
-    if (item.href === '/dj') return pathname.startsWith('/dj') || pathname.startsWith('/dj-hub') || pathname.startsWith('/business')
+    if (item.href === '/dj') return pathname.startsWith('/dj') || pathname.startsWith('/business')
     if (item.href === '/fitness') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery') || pathname.startsWith('/music')
     return pathname.startsWith(item.href)
   }
