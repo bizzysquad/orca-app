@@ -2,9 +2,9 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Edit3, Home, Phone, Car, CreditCard, Heart, Utensils, BookOpen, Zap } from 'lucide-react'
+import { Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Edit3, Home, Car, CreditCard, Heart, Utensils, BookOpen, Zap } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
-import { fmt, fmtD, daysTo, gid } from '@/lib/utils'
+import { fmt, fmtD, gid } from '@/lib/utils'
 import { getRecurringBillDates } from '@/lib/income-engine'
 import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
@@ -23,9 +23,6 @@ type FormStep = 1 | 2 | 3
  * This prevents recurring bills from disappearing permanently after being paid once.
  */
 function getBillEffectiveStatus(bill: Bill, calMonth: number, calYear: number): 'upcoming' | 'paid' {
-  // For recurring bills, partial payment alloc entries only count for the specific
-  // billing cycle (month/year) they were recorded in — they must not bleed into
-  // future cycles.  One-time bills use all alloc entries as usual.
   const recurrence = bill.recurrence || 'one-time'
   const cycleAllocs = (recurrence !== 'one-time' && bill.alloc.length > 0)
     ? bill.alloc.filter(a => {
@@ -46,22 +43,22 @@ function getBillEffectiveStatus(bill: Bill, calMonth: number, calYear: number): 
   const pd = new Date(bill.paidDate + 'T00:00:00')
 
   if (bill.recurrence === 'monthly') {
-    // Paid only in the calendar month/year matching paidDate
     if (pd.getMonth() === calMonth && pd.getFullYear() === calYear) return 'paid'
     return 'upcoming'
   }
   if (bill.recurrence === 'yearly') {
-    // Paid only in the calendar year matching paidDate
     if (pd.getFullYear() === calYear) return 'paid'
     return 'upcoming'
   }
   if (bill.recurrence === 'weekly' || bill.recurrence === 'custom') {
-    // Paid for one interval from paidDate
+    // Use the first day of the viewed month as the reference point so that
+    // viewing past/future months gives a stable, cycle-correct result.
     const intervalDays = bill.recurrence === 'weekly' ? 7 : (bill.customRecurrenceDays || 30)
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-    const diffDays = Math.floor((now.getTime() - pd.getTime()) / 86400000)
-    if (diffDays < intervalDays) return 'paid'
+    const viewRef = new Date(calYear, calMonth, 1)
+    viewRef.setHours(0, 0, 0, 0)
+    const diffDays = Math.floor((viewRef.getTime() - pd.getTime()) / 86400000)
+    // Paid if the viewRef falls within one interval after the paidDate
+    if (diffDays >= 0 && diffDays < intervalDays) return 'paid'
     return 'upcoming'
   }
   return 'paid'
@@ -94,7 +91,6 @@ const CATEGORIES = [
   'Other',
 ]
 
-const RECURRENCE_OPTIONS: BillRecurrence[] = ['one-time', 'weekly', 'monthly', 'yearly', 'custom']
 
 function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedDay, theme }: {
   bills: Bill[]
@@ -354,7 +350,7 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
 
 export default function BillBossPage() {
   const { data, setData, loading } = useOrcaData()
-  const { theme, isDark } = useTheme()
+  const { theme } = useTheme()
 
   const [bills, setBills] = useState<Bill[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
@@ -399,15 +395,24 @@ export default function BillBossPage() {
       if (ub.status === 'paid') {
         const prev = previousBills.find(pb => pb.id === ub.id);
         if (prev && prev.status !== 'paid') {
+          // One-time or first-time payment — status flipped to paid
+          deductTotal += ub.amount;
+        } else if (prev && prev.status === 'paid' && ub.paidDate && ub.paidDate !== prev.paidDate) {
+          // Recurring bill paid again in a new cycle — paidDate changed
           deductTotal += ub.amount;
         }
       }
-      // Check for newly paid split allocations
+      // Check for newly paid split allocations (both newly added paid allocs and
+      // existing allocs that just had their paid flag flipped to true)
       ub.alloc.forEach(ua => {
         if (ua.paid) {
           const prevBill = previousBills.find(pb => pb.id === ub.id);
           const prevAlloc = prevBill?.alloc.find(pa => pa.id === ua.id);
-          if (prevAlloc && !prevAlloc.paid) {
+          if (!prevAlloc) {
+            // Brand-new alloc that is already marked paid (partial payment just recorded)
+            deductTotal += ua.amount;
+          } else if (!prevAlloc.paid) {
+            // Existing alloc that was just marked paid via handlePayment
             deductTotal += ua.amount;
           }
         }
@@ -480,7 +485,7 @@ export default function BillBossPage() {
     })
   }, [bills])
 
-  const activeNotifCount = notifications.filter(n => !n.dismissed).length
+  void notifications // notifications used for dismissal state only
 
   const [formData, setFormData] = useState({
     name: '',
@@ -514,32 +519,6 @@ export default function BillBossPage() {
     .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid')
     .reduce((sum, b) => sum + b.amount, 0)
 
-  // Next bill due (soonest upcoming, using effective status)
-  const nextBillDue = useMemo(() => {
-    return bills
-      .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
-      .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0] || null
-  }, [bills, calMonth, calYear])
-
-  // Next due item — split-aware: if a bill has unpaid alloc entries, surface the nearest one
-  const nextDueItem = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10)
-    const candidates: { name: string; due: string; amount: number; isSplit: boolean; billId: string }[] = []
-    bills.forEach(b => {
-      if (getBillEffectiveStatus(b, calMonth, calYear) === 'paid') return
-      if (b.alloc && b.alloc.length > 0) {
-        b.alloc.forEach((a: any) => {
-          if (!a.paid && a.date >= todayStr) {
-            candidates.push({ name: b.name, due: a.date, amount: a.amount, isSplit: true, billId: b.id })
-          }
-        })
-      } else if (b.status === 'upcoming') {
-        candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
-      }
-    })
-    candidates.sort((a, b) => a.due.localeCompare(b.due))
-    return candidates[0] || null
-  }, [bills, calMonth, calYear])
 
   // Full ordered list of upcoming bill instances used by the hero carousel.
   // Monthly recurring bills show their NEXT unpaid occurrence (current or future months).
@@ -582,12 +561,17 @@ export default function BillBossPage() {
           }
         }
       } else if (recurrence === 'yearly') {
-        if (b.status !== 'paid') candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+        // Use getBillEffectiveStatus scoped to the bill's own due month/year so that
+        // yearly bills reappear correctly in future years after being paid once.
+        const dueDate2 = new Date(b.due + 'T00:00:00')
+        const isPaid = getBillEffectiveStatus(b, dueDate2.getMonth(), today.getFullYear()) === 'paid'
+        if (!isPaid) candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
       } else if (recurrence === 'one-time') {
         if (b.status !== 'paid') candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
       } else {
-        // Weekly / custom — use stored due date as next occurrence
-        if (b.status !== 'paid') candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+        // Weekly / custom — check effective status for current month so paid status resets properly
+        const isPaid = getBillEffectiveStatus(b, today.getMonth(), today.getFullYear()) === 'paid'
+        if (!isPaid) candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
       }
     })
 
@@ -1084,7 +1068,7 @@ export default function BillBossPage() {
           <div className="relative overflow-hidden rounded-2xl p-4 sm:p-8 w-full max-w-full box-border" style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)`, color: '#fff' }}>
             <div className="text-center mb-6">
               <p className="text-sm font-medium opacity-80 mb-2">Total Monthly Bills</p>
-              <p className="text-3xl sm:text-5xl font-bold mb-4 break-words">{fmt(unpaidTotal)}</p>
+              <p className="text-3xl sm:text-5xl font-bold mb-4 break-words">{fmt(unpaidTotal + paidTotal)}</p>
               <div className="rounded-full inline-flex gap-4 px-5 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
                 <div>
                   <p className="text-xs opacity-70">Paid</p>
@@ -1093,7 +1077,7 @@ export default function BillBossPage() {
                 <div style={{ width: '1px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
                 <div>
                   <p className="text-xs opacity-70">Remaining</p>
-                  <p className="text-sm font-bold">{fmt(unpaidTotal - paidTotal)}</p>
+                  <p className="text-sm font-bold">{fmt(unpaidTotal)}</p>
                 </div>
               </div>
             </div>
@@ -1443,7 +1427,6 @@ export default function BillBossPage() {
               .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
               .map((bill, idx) => {
                 const iconConfig = CATEGORY_ICONS[bill.cat] || CATEGORY_ICONS['Other']
-                const Icon = iconConfig.Icon
                 return (
                 <motion.div
                   key={bill.id}
@@ -1838,7 +1821,7 @@ export default function BillBossPage() {
                 initial={{ y: 100, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 100, opacity: 0 }}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
                 style={{ backgroundColor: theme.card, borderColor: theme.border }}
                 className="w-full max-w-full border-t rounded-t-3xl p-5 sm:p-6 space-y-4 overflow-hidden"
               >
@@ -1999,7 +1982,7 @@ export default function BillBossPage() {
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
               className="w-full border-t rounded-t-3xl p-8 space-y-5"
             >

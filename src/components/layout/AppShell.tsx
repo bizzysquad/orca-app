@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { Settings2 } from 'lucide-react'
-import BottomNav from './BottomNav'
+import { Menu, Settings2 } from 'lucide-react'
 import SettingsSheet from './SettingsSheet'
+import SideSidebar from './SideSidebar'
 import { useTheme } from '@/context/ThemeContext'
 import { QuickActions } from '@/components/QuickActions'
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -20,6 +20,7 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
   const { theme } = useTheme()
   const { data } = useOrcaData()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userEmail, setUserEmail] = useState<string | undefined>()
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
       className="relative w-full min-h-screen flex flex-col overflow-x-hidden max-w-[100vw]"
       style={{ backgroundColor: theme.bg, color: theme.text }}
     >
-      {/* ── Minimal Top Bar ── */}
+      {/* ── Top Bar ── */}
       <div
         className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 shrink-0"
         style={{
@@ -51,18 +52,28 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
           borderBottom: `1px solid ${theme.border}`,
         }}
       >
-        {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs"
-            style={{ background: `linear-gradient(135deg, #6366F1, #4F46E5)`, color: '#fff' }}
+        {/* Hamburger + Logo */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-xl transition-opacity hover:opacity-70"
+            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+            aria-label="Open navigation"
           >
-            O
-          </div>
-          <span className="font-black text-sm tracking-widest" style={{ color: theme.accent }}>
-            ORCA
-          </span>
-        </Link>
+            <Menu size={16} style={{ color: theme.subtext }} />
+          </button>
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs"
+              style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)', color: '#fff' }}
+            >
+              O
+            </div>
+            <span className="font-black text-sm tracking-widest" style={{ color: theme.accent }}>
+              ORCA
+            </span>
+          </Link>
+        </div>
 
         {/* Settings trigger */}
         <button
@@ -80,8 +91,12 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
         {children}
       </main>
 
-      {/* ── Bottom Navigation ── */}
-      <BottomNav />
+      {/* ── Side Sidebar Navigation ── */}
+      <SideSidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        userName={displayName}
+      />
 
       {/* ── Settings / Admin Sheet ── */}
       <SettingsSheet
