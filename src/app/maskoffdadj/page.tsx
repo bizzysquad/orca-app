@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic2, Calendar, ChevronLeft, ChevronRight, Check,
@@ -138,8 +138,16 @@ export default function MaskOffBookingPage() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showEventCustom, setShowEventCustom] = useState(false)
+  const formRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { fetchBookedDates().then(setBookedDates) }, [])
+
+  const openBookingForm = (toStep: FormStep = 'calendar') => {
+    setStep(toStep)
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }
 
   const f = (field: Partial<BookingForm>) => setForm(p => ({ ...p, ...field }))
 
@@ -223,14 +231,14 @@ export default function MaskOffBookingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
-              onClick={() => setStep('calendar')}
+              onClick={() => openBookingForm('calendar')}
               className="px-8 py-4 rounded-2xl font-bold text-lg shadow-lg transition-transform hover:scale-105"
               style={{ background: `linear-gradient(135deg, ${DJ_ACCENT}, #4F46E5)`, color: '#fff', boxShadow: `0 8px 30px ${DJ_ACCENT}40` }}
             >
               Request a Quote
             </button>
             <button
-              onClick={() => setStep('calendar')}
+              onClick={() => openBookingForm('calendar')}
               className="px-8 py-4 rounded-2xl font-bold text-lg border transition-transform hover:scale-105"
               style={{ borderColor: DJ_ACCENT, color: DJ_ACCENT }}
             >
@@ -326,7 +334,7 @@ export default function MaskOffBookingPage() {
       </div>
 
       {/* ── BOOKING FORM SECTION ── */}
-      <div id="quote" className="px-4 sm:px-6 py-12 max-w-3xl mx-auto">
+      <div id="quote" ref={formRef} className="px-4 sm:px-6 py-12 max-w-3xl mx-auto">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold mb-2" style={{ color: DJ_TEXT }}>Request a Quote</h2>
           <p className="text-base" style={{ color: DJ_SUBTEXT }}>Simple, fast, and professional. Fill out the form below and I'll get back to you within 24 hours.</p>

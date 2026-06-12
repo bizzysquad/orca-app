@@ -728,8 +728,21 @@ export default function DJPage() {
     } catch {}
   }, [])
 
+  const syncAvailability = (g: DJGig[]) => {
+    const dates = g
+      .filter(x => x.status === 'confirmed' || x.status === 'pending')
+      .map(x => x.date)
+      .filter(Boolean)
+    fetch('/api/dj-availability', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dates }),
+    }).catch(() => {})
+  }
+
   const save = (g: DJGig[]) => {
     try { localStorage.setItem('orca-dj-gigs', JSON.stringify(g)) } catch {}
+    syncAvailability(g)
   }
 
   const addGig = (gig: DJGig) => {
