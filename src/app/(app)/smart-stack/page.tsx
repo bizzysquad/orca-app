@@ -919,7 +919,6 @@ export default function SmartStackPage() {
           {[
             { key: 'lyft', label: 'Lyft Metrics', icon: Car },
             { key: 'dj', label: 'DJ Gig Manager', icon: Mic2 },
-            { key: 'check', label: 'Check Projection', icon: BarChart3 },
             { key: 'calculator', label: 'Projection Calculator', icon: Calculator },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -992,11 +991,6 @@ export default function SmartStackPage() {
               )}
             </div>
 
-            <a href="/lyft" className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
-              style={{ backgroundColor: '#22D3EE', color: '#070B14' }}>
-              <Car className="w-4 h-4" />
-              Open Lyft Metrics
-            </a>
           </motion.div>
         )}
 
@@ -1303,8 +1297,6 @@ export default function SmartStackPage() {
           </motion.div>
         )}
 
-        {projectionMode === 'check' && renderCheckProjectionWithCalendar()}
-
         {projectionMode === 'calculator' && <ProjectionCalculator theme={theme} />}
       </motion.div>
     );
@@ -1574,14 +1566,6 @@ export default function SmartStackPage() {
 
             {/* CTA row */}
             <div className="flex gap-2">
-              <button
-                onClick={() => { setActiveTab('income'); setProjectionMode('lyft'); }}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
-                style={{ backgroundColor: 'rgba(255,255,255,0.22)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)' }}
-              >
-                <Car className="w-4 h-4" />
-                Lyft Income
-              </button>
               <button
                 onClick={() => {
                   const name = window.prompt('Account name (e.g., Emergency Fund):');
