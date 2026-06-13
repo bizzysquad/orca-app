@@ -282,7 +282,7 @@ export default function SmartStackPage() {
     return [];
   });
   const [newAccountName, setNewAccountName] = useState('');
-  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj' | 'check' | 'calculator'>('lyft');
+  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj' | 'calculator'>('lyft');
 
   // ── Income source data from localStorage ──
   const [lyftSessions, setLyftSessions] = useState<{id:string;date:string;earnings:number;trips:number;miles?:number;gasExpense?:number}[]>([])
