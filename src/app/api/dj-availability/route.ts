@@ -30,11 +30,12 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { dates } = await req.json() as { dates: string[] }
 
-    // Delete previous DJ-side blocks
+    // Delete only manual blocks — preserve __DJ_GIG__ entries (managed by DJ Gig Manager auto-sync)
     await supabase
       .from('booking_requests')
       .delete()
       .eq('status', 'dj_blocked')
+      .eq('client_name', '__DJ_BLOCK__')
 
     // Insert new blocks for each confirmed/pending gig date
     if (dates && dates.length > 0) {

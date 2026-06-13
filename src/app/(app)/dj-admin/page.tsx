@@ -65,7 +65,7 @@ function fmtDate(d: string) {
 
 function gid() { return Math.random().toString(36).slice(2, 9) }
 
-type PageTab = 'requests' | 'availability' | 'posterboard' | 'profile'
+type PageTab = 'requests' | 'availability' | 'posterboard' | 'profile' | 'activity'
 
 export default function DJAdminPage() {
   const { theme } = useTheme()
@@ -98,6 +98,7 @@ export default function DJAdminPage() {
     instagram: '',
   })
   const [profileSaved, setProfileSaved] = useState(false)
+  const [activityLog, setActivityLog] = useState<any[]>([])
 
   // ── Toast helpers ──────────────────────────────────────────────────────────
 
@@ -147,28 +148,34 @@ export default function DJAdminPage() {
       const p = localStorage.getItem('orca-dj-profile')
       if (p) setProfile(JSON.parse(p))
     } catch {}
+    try {
+      const log = localStorage.getItem('orca-dj-activity')
+      if (log) setActivityLog(JSON.parse(log))
+    } catch {}
   }, [fetchRequests, fetchBlockedDates, loadGigs])
 
-  // ── Sync DJ Gig Manager dates → availability calendar ──────────────────────
+  // ── Sync DJ Gig Manager → availability + posterboard ──────────────────────
 
   const syncGigDates = async () => {
     setAvailLoading(true)
     try {
-      const today = new Date().toISOString().slice(0, 10)
-      const activeDates = djGigs
-        .filter(g => ['confirmed', 'pending', 'inquiry'].includes(g.status) && g.date >= today)
-        .map(g => g.date)
-        .filter(Boolean)
-
-      const r = await fetch('/api/dj-availability', {
+      const r = await fetch('/api/dj/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dates: activeDates }),
+        body: JSON.stringify({ gigs: djGigs }),
       })
       const d = await r.json()
       if (d.error) throw new Error(d.error)
-      toast('success', `Synced ${d.synced} gig date${d.synced !== 1 ? 's' : ''} to availability calendar`)
+      const hasConflicts = d.conflicts && d.conflicts.length > 0
+      toast(
+        hasConflicts ? 'error' : 'success',
+        `Synced ${d.synced} gig${d.synced !== 1 ? 's' : ''} → calendar & posterboard${hasConflicts ? ` — ${d.conflicts.length} conflict(s) detected!` : ''}`
+      )
       await fetchBlockedDates()
+      try {
+        const log = localStorage.getItem('orca-dj-activity')
+        if (log) setActivityLog(JSON.parse(log))
+      } catch {}
     } catch (e: any) {
       toast('error', `Sync failed: ${e.message}`)
     }
@@ -264,7 +271,23 @@ export default function DJAdminPage() {
       const updated = [...existing, newGig]
       localStorage.setItem('orca-dj-gigs', JSON.stringify(updated))
       setDjGigs(updated)
-      toast('success', `Gig added to DJ Gig Manager! Go sync availability.`)
+
+      // Auto-sync new gig to availability + posterboard
+      fetch('/api/dj/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gigs: updated }),
+      }).then(r => r.json()).then(d => {
+        if (!d.error) {
+          fetchBlockedDates()
+          try {
+            const log2 = localStorage.getItem('orca-dj-activity')
+            if (log2) setActivityLog(JSON.parse(log2))
+          } catch {}
+        }
+      }).catch(() => {})
+
+      toast('success', 'Gig added to DJ Gig Manager & synced to calendar!')
     } catch (e: any) {
       toast('error', `Convert failed: ${e.message}`)
     }
@@ -273,23 +296,33 @@ export default function DJAdminPage() {
   // ── Manual date block/unblock ──────────────────────────────────────────────
 
   const toggleDateBlock = async (dateStr: string) => {
+    // Dates managed by DJ Gig Manager (auto-synced) cannot be toggled here
+    const gigDates = djGigs.filter(g => g.status !== 'cancelled').map(g => g.date).filter(Boolean)
+    if (gigDates.includes(dateStr)) {
+      toast('info', 'This date is auto-blocked by the DJ Gig Manager. Edit or cancel the gig there to change it.')
+      return
+    }
+
     const isBlocked = blockedDates.includes(dateStr)
-    const newDates = isBlocked
+    const newAllDates = isBlocked
       ? blockedDates.filter(d => d !== dateStr)
       : [...blockedDates, dateStr]
 
-    setBlockedDates(newDates)
+    setBlockedDates(newAllDates)
+
+    // Only send manual blocks to the API — the API now only manages __DJ_BLOCK__ rows
+    const manualDates = newAllDates.filter(d => !gigDates.includes(d))
     try {
       const res = await fetch('/api/dj-availability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dates: newDates }),
+        body: JSON.stringify({ dates: manualDates }),
       })
       const d = await res.json()
       if (d.error) throw new Error(d.error)
-      toast('success', isBlocked ? 'Date unblocked' : 'Date blocked')
+      toast('success', isBlocked ? 'Date unblocked' : 'Date manually blocked')
     } catch (e: any) {
-      setBlockedDates(isBlocked ? [...blockedDates] : blockedDates.filter(d => d !== dateStr))
+      setBlockedDates(blockedDates)
       toast('error', `Failed to update availability: ${e.message}`)
     }
   }
@@ -344,8 +377,9 @@ export default function DJAdminPage() {
 
   const TABS: { id: PageTab; label: string; badge?: number }[] = [
     { id: 'requests', label: 'Requests', badge: newCount > 0 ? newCount : undefined },
-    { id: 'availability', label: 'Availability' },
-    { id: 'posterboard', label: 'Posterboard' },
+    { id: 'availability', label: 'Calendar' },
+    { id: 'posterboard', label: 'Gigs' },
+    { id: 'activity', label: 'Activity' },
     { id: 'profile', label: 'Profile' },
   ]
 
@@ -627,22 +661,27 @@ export default function DJAdminPage() {
       {tab === 'availability' && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
 
-          <div className="flex items-start justify-between rounded-2xl p-4 gap-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-            <div>
-              <p className="text-sm font-bold" style={{ color: theme.text }}>Sync DJ Gig Manager → Calendar</p>
-              <p className="text-xs mt-0.5" style={{ color: theme.textM }}>
-                Pushes confirmed/pending gig dates so clients can't book those days.
-              </p>
-              <p className="text-xs mt-1 font-semibold" style={{ color: DJ_INDIGO }}>
-                {djGigs.filter(g => ['confirmed', 'pending'].includes(g.status) && g.date >= today).length} active gig dates
-              </p>
+          <div className="rounded-2xl p-4" style={{ backgroundColor: `${DJ_GREEN}12`, border: `1px solid ${DJ_GREEN}30` }}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <CheckCircle2 size={13} style={{ color: DJ_GREEN }} />
+                  <p className="text-sm font-bold" style={{ color: theme.text }}>Auto-Sync Active</p>
+                </div>
+                <p className="text-xs" style={{ color: theme.textM }}>
+                  Every gig change in DJ Gig Manager auto-blocks the date and updates the public posterboard.
+                </p>
+                <p className="text-xs mt-1 font-semibold" style={{ color: DJ_GREEN }}>
+                  {djGigs.filter(g => g.status !== 'cancelled' && g.date).length} gigs synced · {djGigs.filter(g => ['confirmed', 'pending'].includes(g.status) && g.date >= today).length} upcoming blocked
+                </p>
+              </div>
+              <button onClick={syncGigDates} disabled={availLoading}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl font-bold text-xs hover:opacity-90 transition-all disabled:opacity-50 shrink-0"
+                style={{ backgroundColor: `${DJ_INDIGO}20`, color: DJ_INDIGO, border: `1px solid ${DJ_INDIGO}40` }}>
+                <RefreshCw size={12} className={availLoading ? 'animate-spin' : ''} />
+                {availLoading ? 'Syncing...' : 'Force Sync'}
+              </button>
             </div>
-            <button onClick={syncGigDates} disabled={availLoading}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white hover:opacity-90 transition-all disabled:opacity-50 shrink-0"
-              style={{ backgroundColor: DJ_PINK }}>
-              <RefreshCw size={14} className={availLoading ? 'animate-spin' : ''} />
-              {availLoading ? 'Syncing...' : 'Sync Now'}
-            </button>
           </div>
 
           <div className="rounded-2xl p-4 sm:p-5" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
@@ -685,7 +724,7 @@ export default function DJAdminPage() {
                       cursor: isPast ? 'not-allowed' : 'pointer',
                       opacity: isPast ? 0.5 : 1,
                     }}
-                    title={isPast ? '' : isBlocked ? 'Click to unblock' : 'Click to block'}>
+                    title={isPast ? '' : hasGig ? 'Managed by DJ Gig Manager' : isBlocked ? 'Click to unblock' : 'Click to block'}>
                     {d}
                     {isBlocked && <Lock size={6} className="absolute bottom-0.5" style={{ color: DJ_PINK }} />}
                     {hasRequest && !isBlocked && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: DJ_GOLD }} />}
@@ -696,7 +735,7 @@ export default function DJAdminPage() {
 
             <div className="flex gap-4 mt-4 flex-wrap">
               {[
-                { color: DJ_PINK, label: 'Blocked / Booked' },
+                { color: DJ_PINK, label: 'DJ Gig (auto)' },
                 { color: DJ_GOLD, label: 'Has Request' },
                 { color: DJ_INDIGO, label: 'Today' },
               ].map(({ color, label }) => (
@@ -705,11 +744,15 @@ export default function DJAdminPage() {
                   {label}
                 </div>
               ))}
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: theme.textM }}>
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: `${DJ_PINK}20`, border: `1px solid ${DJ_PINK}60` }} />
+                Manual block
+              </div>
             </div>
           </div>
 
           <p className="text-xs text-center" style={{ color: theme.textM }}>
-            Click any future date to manually block or unblock it. Use Sync Now to push gig dates automatically.
+            DJ gig dates are auto-blocked. Click any unmanaged future date to add/remove a manual block.
           </p>
         </motion.div>
       )}
@@ -810,6 +853,86 @@ export default function DJAdminPage() {
               style={{ backgroundColor: DJ_PINK }}>
               <Mic2 size={14} /> Open DJ Gig Manager
             </a>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── ACTIVITY TAB ── */}
+      {tab === 'activity' && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold" style={{ color: theme.text }}>Activity Log</h2>
+            <button
+              onClick={() => {
+                localStorage.removeItem('orca-dj-activity')
+                setActivityLog([])
+                toast('success', 'Activity log cleared')
+              }}
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold"
+              style={{ color: theme.textM, backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
+            >
+              Clear Log
+            </button>
+          </div>
+
+          {activityLog.length === 0 ? (
+            <div className="text-center py-12 rounded-2xl" style={{ color: theme.textM, backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <CheckCircle2 size={24} className="mx-auto mb-3" style={{ color: theme.textM }} />
+              <p className="font-semibold">No activity yet</p>
+              <p className="text-xs mt-1">Actions in DJ Gig Manager will appear here.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {activityLog.map((entry: any, i: number) => {
+                const actionColors: Record<string, string> = {
+                  created: DJ_GREEN,
+                  deleted: '#EF4444',
+                  status_changed: DJ_GOLD,
+                  sync: DJ_INDIGO,
+                }
+                const actionLabels: Record<string, string> = {
+                  created: 'Gig Created',
+                  deleted: 'Gig Deleted',
+                  status_changed: 'Status Changed',
+                  sync: 'Synced',
+                }
+                const color = actionColors[entry.action] || theme.textM
+                const label = actionLabels[entry.action] || entry.action
+                const at = new Date(entry.at)
+                const timeStr = at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+
+                return (
+                  <div key={i} className="flex items-start gap-3 rounded-xl px-3 py-2.5"
+                    style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+                    <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: color }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold" style={{ color }}>{label}</span>
+                        {entry.client && <span className="text-xs font-semibold truncate" style={{ color: theme.text }}>{entry.client}</span>}
+                        {entry.date && <span className="text-[10px]" style={{ color: theme.textM }}>{entry.date}</span>}
+                      </div>
+                      {entry.action === 'status_changed' && (
+                        <p className="text-[11px] mt-0.5" style={{ color: theme.textM }}>
+                          {entry.from} → {entry.to}
+                        </p>
+                      )}
+                      {entry.action === 'sync' && (
+                        <p className="text-[11px] mt-0.5" style={{ color: theme.textM }}>
+                          {entry.synced} gig{entry.synced !== 1 ? 's' : ''} synced to Supabase
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[10px] shrink-0" style={{ color: theme.textM }}>{timeStr}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="rounded-2xl p-4" style={{ backgroundColor: `${DJ_INDIGO}10`, border: `1px solid ${DJ_INDIGO}20` }}>
+            <p className="text-xs" style={{ color: DJ_INDIGO }}>
+              Activity is logged locally on this device. Logs persist across sessions and cap at 50 entries.
+            </p>
           </div>
         </motion.div>
       )}

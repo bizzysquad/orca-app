@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic2, Plus, Sparkles, Calendar, DollarSign,
   Check, Clock, MapPin, Phone, Mail, Trash2, ChevronRight,
   Edit3, X, Users, FileText, ChevronDown, ChevronUp,
-  AlertCircle, Star, TrendingUp,
+  AlertCircle, Star, TrendingUp, CheckCircle, AlertTriangle,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import type { DJGig, GigStatus, GigType, DJPartialPayment } from '@/lib/types'
@@ -741,13 +741,14 @@ export default function DJPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [filterStatus, setFilterStatus] = useState<GigStatus | 'all' | 'leads'>('all')
   const [activeSection, setActiveSection] = useState<'gigs' | 'crm'>('gigs')
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
+  const [conflicts, setConflicts] = useState<{ date: string; clientName: string }[]>([])
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('orca-dj-gigs')
       if (saved) {
         const parsed = JSON.parse(saved)
-        // Migrate old gigs: ensure partialPayments and contractAmount exist
         const migrated = parsed.map((g: any) => ({
           ...g,
           contractAmount: g.contractAmount || g.fee || 0,
@@ -755,25 +756,44 @@ export default function DJPage() {
           partialPayments: g.partialPayments || [],
         }))
         setGigs(migrated)
+        // Sync on load to recover from any missed mutations
+        autoSyncGigs(migrated)
       }
     } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const syncAvailability = (g: DJGig[]) => {
-    const dates = g
-      .filter(x => x.status === 'confirmed' || x.status === 'pending')
-      .map(x => x.date)
-      .filter(Boolean)
-    fetch('/api/dj-availability', {
+  const autoSyncGigs = useCallback((gigList: DJGig[]) => {
+    setSyncStatus('syncing')
+    setConflicts([])
+    fetch('/api/dj/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dates }),
-    }).catch(() => {})
-  }
+      body: JSON.stringify({ gigs: gigList }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          setSyncStatus('error')
+        } else {
+          setSyncStatus('synced')
+          if (data.conflicts && data.conflicts.length > 0) {
+            setConflicts(data.conflicts)
+          }
+          // Log activity
+          try {
+            const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
+            log.unshift({ at: new Date().toISOString(), action: 'sync', synced: data.synced })
+            localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+          } catch {}
+        }
+      })
+      .catch(() => setSyncStatus('error'))
+  }, [])
 
   const save = (g: DJGig[]) => {
     try { localStorage.setItem('orca-dj-gigs', JSON.stringify(g)) } catch {}
-    syncAvailability(g)
+    autoSyncGigs(g)
   }
 
   const addGig = (gig: DJGig) => {
@@ -781,18 +801,42 @@ export default function DJPage() {
     setGigs(next)
     save(next)
     setShowAdd(false)
+    // Log create
+    try {
+      const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
+      log.unshift({ at: new Date().toISOString(), action: 'created', gigId: gig.id, client: gig.clientName, date: gig.date })
+      localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+    } catch {}
   }
 
   const updateGig = (updated: DJGig) => {
+    const prev = gigs.find(g => g.id === updated.id)
     const next = gigs.map(g => g.id === updated.id ? updated : g)
     setGigs(next)
     save(next)
+    // Log status change
+    if (prev && prev.status !== updated.status) {
+      try {
+        const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
+        log.unshift({ at: new Date().toISOString(), action: 'status_changed', gigId: updated.id, client: updated.clientName, from: prev.status, to: updated.status })
+        localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+      } catch {}
+    }
   }
 
   const deleteGig = (id: string) => {
+    const gig = gigs.find(g => g.id === id)
     const next = gigs.filter(g => g.id !== id)
     setGigs(next)
     save(next)
+    // Log delete
+    if (gig) {
+      try {
+        const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
+        log.unshift({ at: new Date().toISOString(), action: 'deleted', gigId: id, client: gig.clientName, date: gig.date })
+        localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+      } catch {}
+    }
   }
 
   const today = new Date().toISOString().slice(0, 10)
@@ -828,9 +872,24 @@ export default function DJPage() {
       >
         <div>
           <h1 className="text-lg font-bold" style={{ color: theme.text }}>DJ Gig Manager</h1>
-          <p className="text-xs" style={{ color: theme.subtext }}>{gigs.length} gig{gigs.length !== 1 ? 's' : ''} · {stats.leads} lead{stats.leads !== 1 ? 's' : ''}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs" style={{ color: theme.subtext }}>{gigs.length} gig{gigs.length !== 1 ? 's' : ''} · {stats.leads} lead{stats.leads !== 1 ? 's' : ''}</p>
+            {syncStatus === 'syncing' && <span className="text-[10px] font-bold animate-pulse" style={{ color: BENTLEY_GOLD }}>Syncing…</span>}
+            {syncStatus === 'synced' && conflicts.length === 0 && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_GREEN }}><CheckCircle size={9} /> Synced</span>}
+            {(syncStatus === 'error') && <span className="text-[10px] font-bold" style={{ color: BENTLEY_RED }}>Sync error</span>}
+            {conflicts.length > 0 && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_RED }}><AlertTriangle size={9} /> Conflict</span>}
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            onClick={() => autoSyncGigs(gigs)}
+            className="px-2 py-2 rounded-xl text-xs font-semibold flex items-center gap-1"
+            title="Force sync now"
+            style={{ background: `${BENTLEY_GREEN}15`, color: BENTLEY_GREEN, border: `1px solid ${BENTLEY_GREEN}30` }}
+          >
+            <CheckCircle size={12} /> Sync
+          </motion.button>
           <motion.button
             whileTap={{ scale: 0.94 }}
             onClick={() => {
@@ -859,6 +918,28 @@ export default function DJPage() {
           </motion.button>
         </div>
       </div>
+
+      {/* Double-booking conflict banner */}
+      <AnimatePresence>
+        {conflicts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mx-4 mt-2 rounded-xl p-3 flex items-start gap-2"
+            style={{ background: `${BENTLEY_RED}15`, border: `1px solid ${BENTLEY_RED}30` }}
+          >
+            <AlertTriangle size={14} style={{ color: BENTLEY_RED, shrink: 0, marginTop: 1 }} />
+            <div>
+              <p className="text-xs font-bold" style={{ color: BENTLEY_RED }}>Double-booking conflict detected</p>
+              <p className="text-[11px] mt-0.5" style={{ color: theme.subtext }}>
+                {conflicts.map(c => c.date).join(', ')} already has a client booking request. Review in DJ Admin.
+              </p>
+            </div>
+            <button onClick={() => setConflicts([])} className="ml-auto p-0.5" style={{ color: theme.subtext }}><X size={12} /></button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <motion.div
         initial="hidden"
