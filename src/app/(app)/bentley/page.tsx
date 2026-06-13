@@ -269,8 +269,8 @@ export default function BentleyPage() {
       const json = await res.json()
 
       if (!res.ok) {
-        if (res.status === 503) setApiMissing(true)
-        throw new Error(json.error || 'Failed')
+        if (res.status === 503 || res.status === 401 || res.status === 402) setApiMissing(true)
+        throw new Error(json.error || `Error ${res.status}`)
       }
 
       const assistantMsg: BentleyMessage = {

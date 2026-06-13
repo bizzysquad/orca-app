@@ -8,7 +8,7 @@ import {
   AlertCircle, CheckCircle, Zap, Check, Calendar, Briefcase,
   Home, ExternalLink, Layers, ChevronLeft, ChevronRight,
   Wallet, BarChart3, Calculator, Clock,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Car, Mic2, Palette,
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
@@ -254,6 +254,13 @@ export default function SmartStackPage() {
     else if (tab === 'income') setActiveTab('income');
   }, [searchParams]);
 
+  // Load income source data
+  useEffect(() => {
+    try { const ls = localStorage.getItem('orca-lyft-sessions'); if (ls) setLyftSessions(JSON.parse(ls)) } catch {}
+    try { const dj = localStorage.getItem('orca-dj-gigs'); if (dj) setDjGigs(JSON.parse(dj)) } catch {}
+    try { const biz = localStorage.getItem('orca-bizzplug-clients'); if (biz) setBizzplugClients(JSON.parse(biz)) } catch {}
+  }, [])
+
   const [budgetLocked, setBudgetLocked] = useState(false);
   const [paycheckHistory, setPaycheckHistory] = useState<PaycheckEntry[]>([]);
   const [frequency, setFrequency] = useState<'weekly' | 'biweekly'>('biweekly');
@@ -275,7 +282,12 @@ export default function SmartStackPage() {
     return [];
   });
   const [newAccountName, setNewAccountName] = useState('');
-  const [projectionMode, setProjectionMode] = useState<'payment' | 'check' | 'calculator'>('payment');
+  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj' | 'check' | 'calculator'>('lyft');
+
+  // ── Income source data from localStorage ──
+  const [lyftSessions, setLyftSessions] = useState<{id:string;date:string;earnings:number;trips:number;miles?:number;gasExpense?:number}[]>([])
+  const [djGigs, setDjGigs] = useState<{id:string;date:string;clientName?:string;eventType?:string;contractAmount?:number;fee?:number;depositPaid?:boolean;depositAmount?:number;partialPayments?:{amount:number}[];status:string}[]>([])
+  const [bizzplugClients, setBizzplugClients] = useState<{id:string;quote:number;paid:number;status:string}[]>([])
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
   const [collapsedAccounts, setCollapsedAccounts] = useState<Record<string, boolean>>({});
   const [scheduledPaymentsCollapsed, setScheduledPaymentsCollapsed] = useState(false);
@@ -525,17 +537,35 @@ export default function SmartStackPage() {
 
   const checkAmount = projectedCheckAmount;
 
-  // Live summary totals — recompute any time payments or savings change
+  // ── Consolidated income totals across all income sources ──
+  const lyftGross = useMemo(() => lyftSessions.reduce((s, sess) => s + (sess.earnings || 0), 0), [lyftSessions])
+  const lyftGas = useMemo(() => lyftSessions.reduce((s, sess) => s + (sess.gasExpense || 0), 0), [lyftSessions])
+  const lyftNet = useMemo(() => lyftGross - lyftGas, [lyftGross, lyftGas])
+  const lyftTrips = useMemo(() => lyftSessions.reduce((s, sess) => s + (sess.trips || 0), 0), [lyftSessions])
+
+  const djEarned = useMemo(() => djGigs.reduce((s, gig) => {
+    const deposit = gig.depositPaid ? (gig.depositAmount || 0) : 0
+    const partials = (gig.partialPayments || []).reduce((sp, p) => sp + p.amount, 0)
+    return s + deposit + partials
+  }, 0), [djGigs])
+  const djBooked = useMemo(() => djGigs
+    .filter(g => ['confirmed', 'pending', 'inquiry'].includes(g.status))
+    .reduce((s, gig) => s + (gig.contractAmount || gig.fee || 0), 0), [djGigs])
+  const djUpcoming = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return djGigs.filter(g => g.date >= today && g.status !== 'cancelled').length
+  }, [djGigs])
+
+  const bizzplugEarned = useMemo(() => bizzplugClients.reduce((s, c) => s + (c.paid || 0), 0), [bizzplugClients])
+  const bizzplugPending = useMemo(() => bizzplugClients.reduce((s, c) => s + Math.max(0, (c.quote || 0) - (c.paid || 0)), 0), [bizzplugClients])
+
+  const totalIncome = lyftNet + djEarned + bizzplugEarned
+
+  // Live summary totals — recompute any time income sources or savings change
   const summaryTotals = useMemo(() => {
-    const totalIncoming = paymentEntries
-      .filter(p => p.status !== 'received')
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-    const totalSavings = savingsAccounts
-      .reduce((sum, a) => sum + (a.amount || 0), 0);
-    const receivedCount = paymentEntries.filter(p => p.status === 'received').length;
-    const pendingCount = paymentEntries.filter(p => p.status !== 'received').length;
-    return { totalIncoming, totalSavings, receivedCount, pendingCount };
-  }, [paymentEntries, savingsAccounts]);
+    const totalSavings = savingsAccounts.reduce((sum, a) => sum + (a.amount || 0), 0);
+    return { totalIncome, totalSavings };
+  }, [totalIncome, savingsAccounts]);
 
   const renderCheckProjectionWithCalendar = () => {
     const period = effectivePeriod;
@@ -887,7 +917,8 @@ export default function SmartStackPage() {
 
         <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
           {[
-            { key: 'payment', label: 'Incoming Payments', icon: Wallet },
+            { key: 'lyft', label: 'Lyft Metrics', icon: Car },
+            { key: 'dj', label: 'DJ Gig Manager', icon: Mic2 },
             { key: 'check', label: 'Check Projection', icon: BarChart3 },
             { key: 'calculator', label: 'Projection Calculator', icon: Calculator },
           ].map(({ key, label, icon: Icon }) => (
@@ -907,7 +938,136 @@ export default function SmartStackPage() {
           ))}
         </div>
 
-        {projectionMode === 'payment' && (
+        {projectionMode === 'lyft' && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#22D3EE20' }}>
+                <Car className="w-5 h-5" style={{ color: '#22D3EE' }} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Lyft Metrics</h2>
+                <p className="text-xs" style={{ color: theme.textM }}>{lyftSessions.length} sessions logged · {lyftTrips} total trips</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              {[
+                { label: 'Gross Earnings', value: fmt(lyftGross), color: '#22D3EE' },
+                { label: 'Net (After Gas)', value: fmt(lyftNet), color: '#10B981' },
+                { label: 'Total Trips', value: String(lyftTrips), color: theme.text },
+                { label: 'Gas Spent', value: fmt(lyftGas), color: '#EF4444' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="rounded-xl p-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: theme.textM }}>{label}</p>
+                  <p className="text-xl font-black" style={{ color }}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Recent Sessions</p>
+              {lyftSessions.length === 0 ? (
+                <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
+                  No sessions yet — log your first Lyft shift
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {[...lyftSessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map((sess) => (
+                    <div key={sess.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                      <div>
+                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
+                          {new Date(sess.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </p>
+                        <p className="text-xs" style={{ color: theme.textM }}>{sess.trips || 0} trips{sess.miles ? ` · ${sess.miles} mi` : ''}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-black" style={{ color: '#10B981' }}>+{fmt(sess.earnings)}</p>
+                        {(sess.gasExpense || 0) > 0 && (
+                          <p className="text-xs" style={{ color: '#EF4444' }}>-{fmt(sess.gasExpense || 0)} gas</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <a href="/lyft" className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
+              style={{ backgroundColor: '#22D3EE', color: '#070B14' }}>
+              <Car className="w-4 h-4" />
+              Open Lyft Metrics
+            </a>
+          </motion.div>
+        )}
+
+        {projectionMode === 'dj' && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#F43F5E20' }}>
+                <Mic2 className="w-5 h-5" style={{ color: '#F43F5E' }} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>DJ Gig Manager</h2>
+                <p className="text-xs" style={{ color: theme.textM }}>{djGigs.length} gigs · {djUpcoming} upcoming</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              {[
+                { label: 'Total Earned', value: fmt(djEarned), color: '#10B981' },
+                { label: 'Booked Value', value: fmt(djBooked), color: '#F43F5E' },
+                { label: 'Upcoming', value: String(djUpcoming), color: theme.text },
+                { label: 'BizzyPlug Paid', value: fmt(bizzplugEarned), color: '#F59E0B' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="rounded-xl p-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: theme.textM }}>{label}</p>
+                  <p className="text-xl font-black" style={{ color }}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Recent Gigs</p>
+              {djGigs.length === 0 ? (
+                <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
+                  No gigs yet — add your first DJ gig
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {[...djGigs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map((gig) => (
+                    <div key={gig.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                      <div>
+                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
+                          {gig.clientName || 'Client'} · {gig.eventType || 'Event'}
+                        </p>
+                        <p className="text-xs" style={{ color: theme.textM }}>
+                          {gig.date ? new Date(gig.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'}
+                          {' · '}<span style={{ textTransform: 'capitalize' }}>{gig.status}</span>
+                        </p>
+                      </div>
+                      <p className="text-sm font-black" style={{ color: '#F43F5E' }}>{fmt(gig.contractAmount || gig.fee || 0)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <a href="/dj" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
+                style={{ backgroundColor: '#F43F5E', color: '#fff' }}>
+                <Mic2 className="w-4 h-4" />
+                DJ Gig Manager
+              </a>
+              <a href="/bizzplug" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
+                style={{ backgroundColor: '#F59E0B', color: '#fff' }}>
+                <Palette className="w-4 h-4" />
+                BizzyPlug
+              </a>
+            </div>
+          </motion.div>
+        )}
+
+        {false && (
           <motion.div ref={paymentSectionRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${theme.accent}20` }}>
@@ -1351,16 +1511,16 @@ export default function SmartStackPage() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
                 <div className="flex items-center gap-1.5 mb-1">
-                  <Wallet className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
+                  <DollarSign className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
                   <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                    Incoming Payments
+                    Total Income
                   </p>
                 </div>
                 <p className="text-xl font-black text-white tabular-nums">
-                  ${summaryTotals.totalIncoming.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${summaryTotals.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  {summaryTotals.pendingCount} pending · {summaryTotals.receivedCount} received
+                  Lyft · DJ Gigs · BizzyPlug
                 </p>
               </div>
               <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
@@ -1379,81 +1539,48 @@ export default function SmartStackPage() {
               </div>
             </div>
 
-            {/* Incoming Payments by Month — navigable */}
-            {(() => {
-              const now = new Date();
-              const viewDate = new Date(now.getFullYear(), now.getMonth() + payMonthOffset, 1);
-              const viewMonth = viewDate.getMonth();
-              const viewYear = viewDate.getFullYear();
-              const viewLabel = viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-              const filtered = paymentEntries.filter(p => {
-                if (!p.date) return false;
-                const d = new Date(p.date + 'T00:00:00');
-                return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
-              });
-
-              const total = filtered.reduce((sum, p) => sum + (p.amount || 0), 0);
-              const count = filtered.length;
-
-              return (
-                <div className="mb-4 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                  {/* Header with navigation */}
-                  <div className="flex items-center justify-between px-3 pt-3 pb-2">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
-                      <p className="text-xs font-bold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>Payments by Month</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setPayMonthOffset(o => o - 1)}
-                        className="p-1 rounded-lg transition-colors"
-                        style={{ color: 'rgba(255,255,255,0.8)' }}
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-[10px] font-semibold px-1" style={{ color: 'rgba(255,255,255,0.9)', minWidth: 80, textAlign: 'center' }}>{viewLabel}</span>
-                      <button
-                        onClick={() => setPayMonthOffset(o => o + 1)}
-                        className="p-1 rounded-lg transition-colors"
-                        style={{ color: 'rgba(255,255,255,0.8)' }}
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+            {/* Income by Source breakdown */}
+            <div className="mb-4 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
+              <div className="px-3 pt-3 pb-2">
+                <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'rgba(255,255,255,0.8)' }}>Income by Source</p>
+              </div>
+              <div className="px-3 pb-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Car className="w-3 h-3" style={{ color: '#22D3EE' }} />
+                    <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>Lyft</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{lyftSessions.length} sessions · {lyftTrips} trips</span>
                   </div>
-                  {/* Data row */}
-                  <div className="px-3 pb-3">
-                    {count === 0 ? (
-                      <p className="text-xs text-center py-2" style={{ color: 'rgba(255,255,255,0.5)' }}>No payments for {viewLabel}</p>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{count} payment{count !== 1 ? 's' : ''}</p>
-                        <p className="text-sm font-black text-white tabular-nums">
-                          +${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  <span className="text-sm font-black text-white tabular-nums">${lyftNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-              );
-            })()}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Mic2 className="w-3 h-3" style={{ color: '#F43F5E' }} />
+                    <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>DJ Gigs</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{djGigs.length} gigs</span>
+                  </div>
+                  <span className="text-sm font-black text-white tabular-nums">${djEarned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Palette className="w-3 h-3" style={{ color: '#F59E0B' }} />
+                    <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>BizzyPlug</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{bizzplugClients.length} clients</span>
+                  </div>
+                  <span className="text-sm font-black text-white tabular-nums">${bizzplugEarned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
 
             {/* CTA row */}
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  setActiveTab('income');
-                  setProjectionMode('payment');
-                  setTimeout(() => {
-                    paymentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 120);
-                }}
+                onClick={() => { setActiveTab('income'); setProjectionMode('lyft'); }}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
                 style={{ backgroundColor: 'rgba(255,255,255,0.22)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)' }}
               >
-                <Plus className="w-4 h-4" />
-                Add Payment
+                <Car className="w-4 h-4" />
+                Lyft Income
               </button>
               <button
                 onClick={() => {

@@ -153,12 +153,33 @@ RULES:
 - For DJ quotes: never skip the intake questions. A half-baked quote wastes everyone's time.
 - You call your boss "Boss" occasionally but not every message`
 
+// GET — health check / key validation
+export async function GET() {
+  const apiKey = process.env.DEEPSEEK_API_KEY
+  if (!apiKey || apiKey.trim() === '') {
+    return NextResponse.json({ ok: false, reason: 'DEEPSEEK_API_KEY not set' }, { status: 503 })
+  }
+  // Quick probe: list models (cheap, no tokens consumed)
+  try {
+    const probe = await fetch('https://api.deepseek.com/models', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+    if (probe.status === 401) {
+      return NextResponse.json({ ok: false, reason: 'Invalid DeepSeek API key (401)' }, { status: 401 })
+    }
+    return NextResponse.json({ ok: true, reason: 'DeepSeek API key is valid' })
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, reason: `Connection error: ${e?.message}` }, { status: 502 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.DEEPSEEK_API_KEY
-    if (!apiKey) {
+    if (!apiKey || apiKey.trim() === '') {
+      console.error('[Bentley] DEEPSEEK_API_KEY is not set in environment variables')
       return NextResponse.json(
-        { error: 'DEEPSEEK_API_KEY not configured. Add it to your .env.local file. Get yours at platform.deepseek.com' },
+        { error: 'DEEPSEEK_API_KEY not configured. Add it to Vercel Environment Variables and redeploy, or to .env.local for local dev. Get your key at platform.deepseek.com' },
         { status: 503 }
       )
     }
@@ -166,7 +187,7 @@ export async function POST(req: NextRequest) {
     const { messages, context } = await req.json()
 
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request: messages array required' }, { status: 400 })
     }
 
     const systemContent = context
@@ -199,20 +220,44 @@ export async function POST(req: NextRequest) {
     })
 
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}))
-      const msg = (err as any)?.error?.message || `DeepSeek API error ${response.status}: ${response.statusText}`
-      console.error('[Bentley] DeepSeek error:', response.status, msg)
-      return NextResponse.json({ error: msg }, { status: response.status >= 500 ? 500 : response.status })
+      const errBody = await response.json().catch(() => ({}))
+      const errMsg = (errBody as any)?.error?.message || `DeepSeek API error ${response.status}: ${response.statusText}`
+      console.error('[Bentley] DeepSeek API error:', response.status, errMsg)
+
+      if (response.status === 401) {
+        return NextResponse.json(
+          { error: 'DeepSeek API key is invalid or expired. Check your DEEPSEEK_API_KEY in Vercel and redeploy.' },
+          { status: 401 }
+        )
+      }
+      if (response.status === 429) {
+        return NextResponse.json(
+          { error: 'DeepSeek rate limit reached. Try again in a moment.' },
+          { status: 429 }
+        )
+      }
+      if (response.status === 402) {
+        return NextResponse.json(
+          { error: 'DeepSeek account has insufficient balance. Add credits at platform.deepseek.com' },
+          { status: 402 }
+        )
+      }
+      return NextResponse.json({ error: errMsg }, { status: response.status >= 500 ? 500 : 502 })
     }
 
     const data = await response.json() as any
     const text: string = data?.choices?.[0]?.message?.content || ''
 
+    if (!text) {
+      console.error('[Bentley] Empty response from DeepSeek:', JSON.stringify(data))
+      return NextResponse.json({ error: 'DeepSeek returned an empty response.' }, { status: 502 })
+    }
+
     return NextResponse.json({ message: text })
   } catch (err: any) {
-    console.error('[Bentley/DeepSeek]', err)
+    console.error('[Bentley/DeepSeek] Unexpected error:', err)
     return NextResponse.json(
-      { error: err?.message || 'Bentley is offline. Check your DeepSeek API key.' },
+      { error: err?.message || 'Bentley is offline. Check your DeepSeek API key and network connection.' },
       { status: 500 }
     )
   }

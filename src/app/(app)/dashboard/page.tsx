@@ -587,6 +587,10 @@ export default function DashboardPage() {
   const [currentWeight, setCurrentWeight] = useState(159)
   // Checking balance
   const [checkingBalance, setCheckingBalance] = useState(0)
+  // Income source totals (synced with Smart Stack)
+  const [lyftNetIncome, setLyftNetIncome] = useState(0)
+  const [djEarnedIncome, setDjEarnedIncome] = useState(0)
+  const [bizzplugEarnedIncome, setBizzplugEarnedIncome] = useState(0)
 
   useEffect(() => {
     try {
@@ -614,6 +618,35 @@ export default function DashboardPage() {
     try {
       const s = localStorage.getItem('orca-user-settings')
       if (s) { const p = JSON.parse(s); if (p.checkingBalance > 0) setCheckingBalance(p.checkingBalance) }
+    } catch {}
+    // Load income source data (Lyft, DJ, BizzyPlug)
+    try {
+      const ls = localStorage.getItem('orca-lyft-sessions')
+      if (ls) {
+        const sessions = JSON.parse(ls)
+        const net = sessions.reduce((s: number, x: any) => s + (x.earnings || 0) - (x.gasExpense || 0), 0)
+        setLyftNetIncome(net)
+      }
+    } catch {}
+    try {
+      const djData = localStorage.getItem('orca-dj-gigs')
+      if (djData) {
+        const djList = JSON.parse(djData)
+        const earned = djList.reduce((s: number, gig: any) => {
+          const dep = gig.depositPaid ? (gig.depositAmount || 0) : 0
+          const parts = (gig.partialPayments || []).reduce((sp: number, p: any) => sp + p.amount, 0)
+          return s + dep + parts
+        }, 0)
+        setDjEarnedIncome(earned)
+      }
+    } catch {}
+    try {
+      const biz = localStorage.getItem('orca-bizzplug-clients')
+      if (biz) {
+        const clients = JSON.parse(biz)
+        const paid = clients.reduce((s: number, c: any) => s + (c.paid || 0), 0)
+        setBizzplugEarnedIncome(paid)
+      }
     } catch {}
     // Load all priority dates — scan last 6 months and next 6 months
     const loadPriorities: Record<string, DailyPriority['items']> = {}
@@ -765,10 +798,16 @@ export default function DashboardPage() {
               <p className="font-bold text-base" style={{ color: BENTLEY_RED }}>{fmt(totalDue)}</p>
             </div>
           </Link>
-          <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-            <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>Balance</p>
-            <p className="font-bold text-base" style={{ color: BENTLEY_INDIGO }}>{checkingBalance > 0 ? fmt(checkingBalance) : '—'}</p>
-          </div>
+          <Link href="/smart-stack">
+            <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>Income</p>
+              <p className="font-bold text-base" style={{ color: BENTLEY_GREEN }}>
+                {(lyftNetIncome + djEarnedIncome + bizzplugEarnedIncome) > 0
+                  ? fmt(lyftNetIncome + djEarnedIncome + bizzplugEarnedIncome)
+                  : checkingBalance > 0 ? fmt(checkingBalance) : '—'}
+              </p>
+            </div>
+          </Link>
           <Link href="/dj">
             <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
               <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>DJ Gigs</p>

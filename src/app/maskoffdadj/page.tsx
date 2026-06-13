@@ -139,8 +139,12 @@ export default function MaskOffBookingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [showEventCustom, setShowEventCustom] = useState(false)
   const formRef = useRef<HTMLDivElement>(null)
+  const [scheduleEvents, setScheduleEvents] = useState<{id:string;date:string;event_type:string;city?:string;start_time?:string;end_time?:string;status:string}[]>([])
 
-  useEffect(() => { fetchBookedDates().then(setBookedDates) }, [])
+  useEffect(() => {
+    fetchBookedDates().then(setBookedDates)
+    fetch('/api/dj/schedule').then(r => r.json()).then(d => setScheduleEvents(d.events || [])).catch(() => {})
+  }, [])
 
   const openBookingForm = (toStep: FormStep = 'calendar') => {
     setStep(toStep)
@@ -322,6 +326,67 @@ export default function MaskOffBookingPage() {
           </div>
         </div>
       </div>
+
+      {/* ── BOOKING POSTERBOARD ── */}
+      {scheduleEvents.length > 0 && (
+        <div className="px-4 sm:px-6 py-10 max-w-4xl mx-auto">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: DJ_TEXT }}>
+              Upcoming <span style={{ color: DJ_ACCENT }}>Schedule</span>
+            </h2>
+            <p className="text-sm" style={{ color: DJ_SUBTEXT }}>Confirmed upcoming events — follow the activity below.</p>
+          </div>
+          <div className="grid gap-3">
+            {scheduleEvents.map(ev => {
+              const evDate = ev.date ? new Date(ev.date + 'T00:00:00') : null
+              const dateLabel = evDate ? evDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '—'
+              const today2 = new Date(); today2.setHours(0,0,0,0)
+              const daysAway = evDate ? Math.ceil((evDate.getTime() - today2.getTime()) / 86400000) : null
+              return (
+                <motion.div
+                  key={ev.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  className="flex items-center gap-4 rounded-2xl px-5 py-4"
+                  style={{ backgroundColor: DJ_CARD, border: `1px solid ${DJ_BORDER}` }}
+                >
+                  <div className="w-14 h-14 rounded-2xl flex flex-col items-center justify-center flex-shrink-0"
+                    style={{ background: `linear-gradient(135deg, ${DJ_ACCENT}30, ${DJ_ACCENT}15)`, border: `1px solid ${DJ_ACCENT}40` }}>
+                    <span className="text-xs font-bold uppercase" style={{ color: DJ_SUBTEXT }}>
+                      {evDate ? evDate.toLocaleDateString('en-US', { month: 'short' }) : ''}
+                    </span>
+                    <span className="text-xl font-black leading-tight" style={{ color: DJ_ACCENT }}>
+                      {evDate ? evDate.getDate() : '?'}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <p className="text-sm font-bold" style={{ color: DJ_TEXT }}>{ev.event_type}</p>
+                      {daysAway !== null && daysAway >= 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ backgroundColor: `${DJ_ACCENT}25`, color: DJ_ACCENT }}>
+                          {daysAway === 0 ? 'Today!' : daysAway === 1 ? 'Tomorrow' : `In ${daysAway} days`}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs" style={{ color: DJ_SUBTEXT }}>
+                      {dateLabel}{ev.city ? ` · ${ev.city}` : ''}
+                      {(ev.start_time || ev.end_time) && ` · ${ev.start_time || ''} – ${ev.end_time || ''}`}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    <span className="px-3 py-1.5 rounded-xl text-xs font-bold"
+                      style={{ backgroundColor: `${DJ_GREEN}20`, color: DJ_GREEN }}>
+                      Booked
+                    </span>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── MUSIC GENRES ── */}
       <div className="px-4 sm:px-6 py-8 max-w-4xl mx-auto">

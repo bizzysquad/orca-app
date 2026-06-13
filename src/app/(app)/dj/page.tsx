@@ -830,14 +830,34 @@ export default function DJPage() {
           <h1 className="text-lg font-bold" style={{ color: theme.text }}>DJ Gig Manager</h1>
           <p className="text-xs" style={{ color: theme.subtext }}>{gigs.length} gig{gigs.length !== 1 ? 's' : ''} · {stats.leads} lead{stats.leads !== 1 ? 's' : ''}</p>
         </div>
-        <motion.button
-          whileTap={{ scale: 0.94 }}
-          onClick={() => setShowAdd(true)}
-          className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"
-          style={{ background: `${DJ_PINK}18`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}
-        >
-          <Plus size={12} /> Add Gig
-        </motion.button>
+        <div className="flex items-center gap-2">
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            onClick={() => {
+              const data = JSON.stringify(gigs, null, 2)
+              const blob = new Blob([data], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `dj-gigs-backup-${new Date().toISOString().slice(0,10)}.json`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            className="px-2 py-2 rounded-xl text-xs font-semibold flex items-center gap-1"
+            title="Export gig data backup"
+            style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}
+          >
+            <FileText size={12} /> Backup
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            onClick={() => setShowAdd(true)}
+            className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"
+            style={{ background: `${DJ_PINK}18`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}
+          >
+            <Plus size={12} /> Add Gig
+          </motion.button>
+        </div>
       </div>
 
       <motion.div

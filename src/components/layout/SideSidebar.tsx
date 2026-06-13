@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Sparkles, DollarSign, Briefcase, Activity,
-  X, CreditCard, Star, Mic2, Car, Palette, ChevronDown, ChevronRight, Building2,
+  X, CreditCard, Star, Mic2, Car, Palette, ChevronDown, ChevronRight, Building2, Shield,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '@/context/ThemeContext'
@@ -43,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
     id: 'work', name: 'Work', icon: Briefcase, href: '/work', accent: '#F59E0B',
     children: [
       { id: 'dj', name: 'DJ Gig Manager', href: '/dj', icon: Mic2 },
+      { id: 'dj-admin', name: 'DJ Admin', href: '/dj-admin', icon: Shield },
       { id: 'lyft', name: 'Lyft Metrics', href: '/lyft', icon: Car },
       { id: 'bizzplug', name: 'BizzyPlug', href: '/bizzplug', icon: Palette },
     ],
@@ -64,7 +65,7 @@ export default function SideSidebar({ open, onClose, userName }: SideSidebarProp
   const isParentActive = (item: NavItem): boolean => {
     if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     if (item.id === 'finances') return pathname.startsWith('/bill-boss') || pathname.startsWith('/smart-stack')
-    if (item.id === 'work') return pathname.startsWith('/work') || pathname.startsWith('/dj') || pathname.startsWith('/lyft') || pathname.startsWith('/bizzplug')
+    if (item.id === 'work') return pathname.startsWith('/work') || pathname.startsWith('/dj') || pathname.startsWith('/lyft') || pathname.startsWith('/bizzplug') || pathname.startsWith('/dj-admin')
     if (item.id === 'life') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery')
     return pathname.startsWith(item.href)
   }
