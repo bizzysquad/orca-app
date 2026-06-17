@@ -381,7 +381,7 @@ export default function BusinessPage() {
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.05 } } }}
-        className="px-4 pt-4 space-y-5 max-w-lg mx-auto"
+        className="px-4 pt-4 space-y-5 max-w-lg mx-auto lg:max-w-3xl"
       >
         {/* ── Stats ── */}
         <motion.div variants={fadeUp} className="grid grid-cols-2 gap-3">

@@ -1,1279 +1,2181 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Inbox, Users, FileText, Mail, RefreshCw, Plus,
-  Check, X, Phone, Calendar, MapPin, Clock, DollarSign,
-  Send, Sparkles, Trash2, Edit3, AlertCircle,
+  LayoutDashboard, MessageSquare, Calendar, Users, FileText, Mail,
+  ChevronDown, ChevronUp, RefreshCw, Send, Check, X, Edit3,
+  Loader2, AlertTriangle, Clock, Plus, Eye, ArrowRight, Zap,
+  Music2, DollarSign, Star, Phone, MapPin, User, ExternalLink,
+  CheckCircle2, XCircle, Copy, Trash2, ChevronLeft, ChevronRight,
+  Ban, Bell,
 } from 'lucide-react'
-import { useTheme, type Theme } from '@/context/ThemeContext'
+
+// ── Color palette ─────────────────────────────────────────────────────────────
+
+const C = {
+  bg: '#0A0E1A',
+  surface: '#111827',
+  surface2: '#1F2937',
+  surface3: '#374151',
+  border: '#1F2937',
+  borderLight: '#374151',
+  text: '#F9FAFB',
+  muted: '#9CA3AF',
+  mutedDark: '#6B7280',
+  blue: '#3B82F6',
+  blueLight: '#1D4ED8',
+  blueBg: '#1E3A5F',
+  gold: '#F59E0B',
+  goldBg: '#451A03',
+  green: '#22C55E',
+  greenBg: '#052E16',
+  red: '#EF4444',
+  redBg: '#450A0A',
+  amber: '#F97316',
+  amberBg: '#431407',
+  purple: '#A78BFA',
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type BookingStatus = 'new' | 'contacted' | 'pending' | 'confirmed' | 'declined'
-type InvoiceStatus = 'draft' | 'sent' | 'viewed' | 'paid' | 'overdue' | 'cancelled'
-
-interface Booking {
+interface BookingRequest {
   id: string
   client_name: string
   client_email: string
   client_phone?: string
   event_type: string
   date: string
+  city: string
+  location?: string
   start_time?: string
   end_time?: string
-  location?: string
-  city?: string
   guest_count?: number
   mc_needed?: boolean
-  budget_range?: string
   special_requests?: string
-  status: BookingStatus
-  notes?: string
+  budget_range?: string
+  status: 'new' | 'reviewed' | 'quoted' | 'booked' | 'declined' | 'dj_blocked'
   created_at: string
 }
 
-interface Client {
+interface LocalGig {
+  id: string
+  clientName: string
+  eventType: string
+  date: string
+  venue: string
+  status: 'confirmed' | 'completed' | 'cancelled' | 'inquiry' | 'pending'
+  contractAmount?: number
+  fee?: number
+  depositPaid?: boolean
+  balancePaid?: boolean
+  clientEmail?: string
+  clientPhone?: string
+  notes?: string
+}
+
+interface DJClient {
   id: string
   name: string
-  email?: string
+  email: string
   phone?: string
-  source?: string
-  notes?: string
-  tags?: string[]
   created_at: string
+  total_gigs?: number
+  total_revenue?: number
 }
 
-interface LineItem {
-  description: string
-  quantity: number
-  unit_price: number
-  total: number
-}
-
-interface Invoice {
+interface DJInvoice {
   id: string
-  invoice_number: string
-  client_name?: string
-  client_email?: string
-  client_phone?: string
-  event_date?: string
-  event_type?: string
-  status: InvoiceStatus
-  line_items: LineItem[]
-  subtotal: number
-  deposit_amount: number
-  deposit_paid: boolean
-  balance_due: number
-  due_date?: string
-  notes?: string
+  client_name: string
+  client_email: string
+  amount: number
+  status: 'draft' | 'sent' | 'paid'
+  due_date: string
   created_at: string
-  sent_at?: string
-  paid_at?: string
-  dj_clients?: { name: string; email: string }
+  event_type?: string
+  event_date?: string
 }
+
+interface EmailTemplate {
+  id: string
+  name: string
+  subject: string
+  body: string
+  type: 'inquiry' | 'confirmation' | 'invoice' | 'followup' | 'custom'
+  createdAt: string
+}
+
+type TabId = 'overview' | 'requests' | 'gigs' | 'clients' | 'invoices' | 'email'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BOOKING_STATUS_COLORS: Record<BookingStatus, string> = {
-  new: '#6366F1',
-  contacted: '#F59E0B',
-  pending: '#3B82F6',
-  confirmed: '#10B981',
-  declined: '#EF4444',
+const STATUS_LABELS: Record<string, string> = {
+  new: 'New',
+  reviewed: 'Reviewed',
+  quoted: 'Quoted',
+  booked: 'Booked',
+  declined: 'Declined',
 }
 
-const INVOICE_STATUS_COLORS: Record<InvoiceStatus, string> = {
-  draft: '#6B7280',
-  sent: '#6366F1',
-  viewed: '#F59E0B',
-  paid: '#10B981',
-  overdue: '#EF4444',
-  cancelled: '#9CA3AF',
+const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  new: { bg: '#451A03', text: '#F97316' },
+  reviewed: { bg: '#1E3A5F', text: '#60A5FA' },
+  quoted: { bg: '#2E1065', text: '#A78BFA' },
+  booked: { bg: '#052E16', text: '#4ADE80' },
+  declined: { bg: '#450A0A', text: '#F87171' },
 }
 
-const TABS = [
-  { id: 'bookings', label: 'Bookings', icon: Inbox },
-  { id: 'clients', label: 'Clients', icon: Users },
-  { id: 'invoices', label: 'Invoices', icon: FileText },
-  { id: 'email', label: 'Email', icon: Mail },
-] as const
+const DEFAULT_TEMPLATES: EmailTemplate[] = [
+  {
+    id: 'tpl-confirm',
+    name: 'Booking Confirmation',
+    type: 'confirmation',
+    subject: 'Your Booking is Confirmed – {eventType} on {date}',
+    body: 'Hi {clientName},\n\nGreat news — your booking for a {eventType} on {date} at {venue} is officially confirmed!\n\nLooking forward to making it an incredible event.\n\nMask Off Da DJ\nmaskoffdadj@gmail.com',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'tpl-followup',
+    name: 'Follow-up',
+    type: 'followup',
+    subject: 'Following Up – DJ Services for Your {eventType}',
+    body: "Hi {clientName},\n\nJust following up on your inquiry for a {eventType} on {date}. I'd love to connect and discuss how I can make your event unforgettable.\n\nFeel free to reply or reach out directly.\n\nMask Off Da DJ\nmaskoffdadj@gmail.com",
+    createdAt: new Date().toISOString(),
+  },
+]
 
-type Tab = typeof TABS[number]['id']
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(n: number) {
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const fmt = (n: number) =>
+  `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+
+const fmtDate = (d: string) => {
+  try {
+    return new Date(d + (d.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  } catch {
+    return d
+  }
 }
 
-function fmtDate(d: string) {
-  if (!d) return '—'
-  return new Date(d + (d.includes('T') ? '' : 'T12:00:00')).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  })
+const fmtDateLong = (d: string) => {
+  try {
+    return new Date(d + (d.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  } catch {
+    return d
+  }
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Shared style ──────────────────────────────────────────────────────────────
+
+const cardStyle: React.CSSProperties = {
+  background: C.surface,
+  border: `1px solid ${C.border}`,
+  borderRadius: 12,
+  padding: 20,
+}
+
+// ── Status badge ──────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string }) {
+  const colors = STATUS_COLORS[status] || { bg: C.surface2, text: C.muted }
+  return (
+    <span
+      style={{
+        background: colors.bg,
+        color: colors.text,
+        borderRadius: 6,
+        padding: '2px 8px',
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {STATUS_LABELS[status] || status}
+    </span>
+  )
+}
+
+// ── GIG STATUS badge ──────────────────────────────────────────────────────────
+
+function GigStatusBadge({ status }: { status: LocalGig['status'] }) {
+  const map: Record<string, { bg: string; text: string }> = {
+    confirmed: { bg: '#052E16', text: '#4ADE80' },
+    completed: { bg: '#1E3A5F', text: '#60A5FA' },
+    cancelled: { bg: C.surface2, text: C.muted },
+    inquiry: { bg: '#2E1065', text: '#A78BFA' },
+    pending: { bg: '#451A03', text: '#F97316' },
+  }
+  const colors = map[status] || { bg: C.surface2, text: C.muted }
+  return (
+    <span
+      style={{
+        background: colors.bg,
+        color: colors.text,
+        borderRadius: 6,
+        padding: '2px 8px',
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: '0.04em',
+        textTransform: 'capitalize',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {status}
+    </span>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function DJHubPage() {
-  const { theme } = useTheme()
-  const [tab, setTab] = useState<Tab>('bookings')
+  // Tab
+  const [activeTab, setActiveTab] = useState<TabId>('overview')
 
-  // Data state
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [clients, setClients] = useState<Client[]>([])
-  const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [loading, setLoading] = useState(false)
+  // Core data
+  const [requests, setRequests] = useState<BookingRequest[]>([])
+  const [localGigs, setLocalGigs] = useState<LocalGig[]>([])
+  const [clients, setClients] = useState<DJClient[]>([])
+  const [invoices, setInvoices] = useState<DJInvoice[]>([])
 
-  // UI state
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
-  const [showNewClient, setShowNewClient] = useState(false)
-  const [showNewInvoice, setShowNewInvoice] = useState(false)
-  const [bookingFilter, setBookingFilter] = useState<BookingStatus | 'all'>('all')
+  // Request loading / reply state
+  const [loadingRequests, setLoadingRequests] = useState(false)
+  const [selectedRequest, setSelectedRequest] = useState<BookingRequest | null>(null)
+  const [generatingReply, setGeneratingReply] = useState(false)
+  const [generatedReply, setGeneratedReply] = useState('')
+  const [replySubject, setReplySubject] = useState('')
+  const [sendingReply, setSendingReply] = useState(false)
+  const [replyError, setReplyError] = useState('')
+  const [sendSuccess, setSendSuccess] = useState('')
 
-  // Email composer state
+  // Requests filter
+  const [requestFilter, setRequestFilter] = useState<string>('all')
+
+  // Gigs sub-tab
+  const [gigsSubTab, setGigsSubTab] = useState<'mygigs' | 'blocked'>('mygigs')
+  const [gigStatusFilter, setGigStatusFilter] = useState<string>('all')
+
+  // Block date
+  const [blockedDate, setBlockedDate] = useState('')
+  const [blockingDate, setBlockingDate] = useState(false)
+  const [blockSuccess, setBlockSuccess] = useState('')
+
+  // Clients
+  const [clientSearch, setClientSearch] = useState('')
+
+  // Email templates
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
   const [emailTo, setEmailTo] = useState('')
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
-  const [emailContext, setEmailContext] = useState('')
-  const [emailLoading, setEmailLoading] = useState(false)
-  const [emailSending, setEmailSending] = useState(false)
-  const [emailSent, setEmailSent] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailSuccess, setEmailSuccess] = useState('')
 
-  // ── Data fetching ────────────────────────────────────────────────────────────
+  // Hover states
+  const [hoveredReq, setHoveredReq] = useState<string | null>(null)
+  const [hoveredGig, setHoveredGig] = useState<string | null>(null)
 
-  const fetchBookings = useCallback(async () => {
-    setLoading(true)
+  // ── Data loading ───────────────────────────────────────────────────────────
+
+  const loadRequests = useCallback(async () => {
+    setLoadingRequests(true)
     try {
-      const r = await fetch('/api/dj/bookings')
-      const d = await r.json()
-      if (d.bookings) setBookings(d.bookings)
-    } finally {
-      setLoading(false)
+      const res = await fetch('/api/dj/bookings')
+      if (res.ok) {
+        const data = await res.json()
+        setRequests(
+          (data.bookings || data || []).filter(
+            (r: BookingRequest) => r.status !== 'dj_blocked'
+          )
+        )
+      }
+    } catch {}
+    setLoadingRequests(false)
+  }, [])
+
+  // Load local gigs from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('orca-dj-gigs')
+      if (raw) setLocalGigs(JSON.parse(raw))
+    } catch {}
+  }, [])
+
+  // Load email templates from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('orca-dj-email-templates')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        setEmailTemplates(parsed.length ? parsed : DEFAULT_TEMPLATES)
+      } else {
+        setEmailTemplates(DEFAULT_TEMPLATES)
+      }
+    } catch {
+      setEmailTemplates(DEFAULT_TEMPLATES)
     }
   }, [])
 
-  const fetchClients = useCallback(async () => {
-    const r = await fetch('/api/dj/clients')
-    const d = await r.json()
-    if (d.clients) setClients(d.clients)
-  }, [])
-
-  const fetchInvoices = useCallback(async () => {
-    const r = await fetch('/api/dj/invoices')
-    const d = await r.json()
-    if (d.invoices) setInvoices(d.invoices)
-  }, [])
+  // Load clients / invoices on tab switch
+  useEffect(() => {
+    if (activeTab === 'clients') {
+      fetch('/api/dj/clients')
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+          if (d) setClients(d.clients || d || [])
+        })
+        .catch(() => {})
+    }
+    if (activeTab === 'invoices') {
+      fetch('/api/dj/invoices')
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+          if (d) setInvoices(d.invoices || d || [])
+        })
+        .catch(() => {})
+    }
+  }, [activeTab])
 
   useEffect(() => {
-    fetchBookings()
-    fetchClients()
-    fetchInvoices()
-  }, [fetchBookings, fetchClients, fetchInvoices])
+    loadRequests()
+  }, [loadRequests])
 
-  // ── Actions ──────────────────────────────────────────────────────────────────
+  // ── Stats ──────────────────────────────────────────────────────────────────
 
-  async function updateBookingStatus(id: string, status: BookingStatus, notes?: string) {
-    const payload: Record<string, unknown> = { id, status }
-    if (notes !== undefined) payload.notes = notes
-    await fetch('/api/dj/bookings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status, ...(notes !== undefined ? { notes } : {}) } : b))
-    if (selectedBooking?.id === id) setSelectedBooking(prev => prev ? { ...prev, status } : null)
-  }
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]
+    const newReqs = requests.filter(r => r.status === 'new').length
+    const upcoming = localGigs.filter(
+      g => g.date >= today && g.status === 'confirmed'
+    )
+    const totalEarned = localGigs
+      .filter(g => g.status === 'completed')
+      .reduce((s, g) => s + (g.contractAmount || g.fee || 0), 0)
+    const bookedValue = upcoming.reduce(
+      (s, g) => s + (g.contractAmount || g.fee || 0),
+      0
+    )
+    const nextGig = [...upcoming].sort((a, b) => a.date.localeCompare(b.date))[0]
+    return { newReqs, upcoming: upcoming.length, totalEarned, bookedValue, nextGig }
+  }, [requests, localGigs])
 
-  async function createClientFromBooking(b: Booking) {
-    const r = await fetch('/api/dj/clients', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: b.client_name, email: b.client_email, phone: b.client_phone, source: 'booking_form' }),
-    })
-    const d = await r.json()
-    if (d.client) setClients(prev => [d.client, ...prev])
-    return d.client
-  }
+  // ── Actions ────────────────────────────────────────────────────────────────
 
-  async function updateInvoiceStatus(id: string, status: InvoiceStatus) {
-    await fetch('/api/dj/invoices', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) })
-    setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status } : inv))
-    if (selectedInvoice?.id === id) setSelectedInvoice(prev => prev ? { ...prev, status } : null)
-  }
-
-  // ── Bentley email draft ──────────────────────────────────────────────────────
-
-  async function bentleyDraftEmail() {
-    if (!emailContext.trim()) return
-    setEmailLoading(true)
+  const generateReply = async (type: 'inquiry' | 'decline' = 'inquiry') => {
+    if (!selectedRequest) return
+    setGeneratingReply(true)
+    setReplyError('')
     try {
-      const prompt = `Draft a professional DJ booking email. Context: ${emailContext}.
-To: ${emailTo || 'client'}. Subject should match the context.
-Write the email body only (no subject line at the top). Keep it professional, warm, and concise.
-End with: "Best regards,\nMask Off Da DJ\nmaskoffdadj@gmail.com"`
-      const r = await fetch('/api/bentley', {
+      const res = await fetch('/api/dj/generate-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ booking: selectedRequest, type }),
       })
-      const d = await r.json()
-      if (d.message) {
-        setEmailBody(d.message)
-        if (!emailSubject && emailContext) {
-          const subjectPrompt = `Write only a short email subject line (under 10 words) for this DJ booking email context: ${emailContext}`
-          const sr = await fetch('/api/bentley', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: [{ role: 'user', content: subjectPrompt }] }),
-          })
-          const sd = await sr.json()
-          if (sd.message) setEmailSubject(sd.message.replace(/^["']|["']$/g, ''))
-        }
-      }
-    } finally {
-      setEmailLoading(false)
+      if (!res.ok) throw new Error('Generation failed')
+      const data = await res.json()
+      setGeneratedReply(data.reply || '')
+      setReplySubject(data.subject || '')
+    } catch (e: unknown) {
+      setReplyError(e instanceof Error ? e.message : 'Generation failed')
     }
+    setGeneratingReply(false)
   }
 
-  async function sendEmail() {
+  const sendReply = async () => {
+    if (!selectedRequest || !generatedReply) return
+    setSendingReply(true)
+    setReplyError('')
+    try {
+      const res = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: selectedRequest.client_email,
+          subject: replySubject,
+          body: generatedReply,
+        }),
+      })
+      if (!res.ok) throw new Error('Send failed')
+      await fetch('/api/dj/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedRequest.id, status: 'reviewed' }),
+      })
+      setSendSuccess(`Reply sent to ${selectedRequest.client_email}`)
+      setRequests(prev =>
+        prev.map(r =>
+          r.id === selectedRequest.id ? { ...r, status: 'reviewed' } : r
+        )
+      )
+      setTimeout(() => setSendSuccess(''), 4000)
+    } catch (e: unknown) {
+      setReplyError(e instanceof Error ? e.message : 'Send failed')
+    }
+    setSendingReply(false)
+  }
+
+  const updateRequestStatus = async (
+    id: string,
+    status: BookingRequest['status']
+  ) => {
+    try {
+      await fetch('/api/dj/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      })
+      setRequests(prev => prev.map(r => (r.id === id ? { ...r, status } : r)))
+    } catch {}
+  }
+
+  const blockDate = async () => {
+    if (!blockedDate) return
+    setBlockingDate(true)
+    try {
+      await fetch('/api/dj/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blocks: [{ date: blockedDate, reason: 'Manual block' }],
+        }),
+      })
+      setBlockSuccess(`${fmtDate(blockedDate)} has been blocked.`)
+      setBlockedDate('')
+      setTimeout(() => setBlockSuccess(''), 4000)
+    } catch {}
+    setBlockingDate(false)
+  }
+
+  const sendEmail = async () => {
     if (!emailTo || !emailSubject || !emailBody) return
-    setEmailSending(true)
+    setSendingEmail(true)
     try {
-      const r = await fetch('/api/email/send', {
+      const res = await fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: emailTo, subject: emailSubject, html: emailBody.replace(/\n/g, '<br/>') }),
+        body: JSON.stringify({ to: emailTo, subject: emailSubject, body: emailBody }),
       })
-      const d = await r.json()
-      if (d.success) {
-        setEmailSent(true)
-        setTimeout(() => { setEmailSent(false); setEmailTo(''); setEmailSubject(''); setEmailBody(''); setEmailContext('') }, 3000)
-      }
-    } finally {
-      setEmailSending(false)
-    }
+      if (!res.ok) throw new Error('Send failed')
+      setEmailSuccess(`Email sent to ${emailTo}`)
+      setEmailTo('')
+      setEmailSubject('')
+      setEmailBody('')
+      setTimeout(() => setEmailSuccess(''), 4000)
+    } catch {}
+    setSendingEmail(false)
   }
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
+  // ── Derived ────────────────────────────────────────────────────────────────
 
-  const filteredBookings = bookingFilter === 'all' ? bookings : bookings.filter(b => b.status === bookingFilter)
-  const newCount = bookings.filter(b => b.status === 'new').length
-  const totalRevenue = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.subtotal || 0), 0)
-  const pendingRevenue = invoices.filter(i => ['sent', 'viewed'].includes(i.status)).reduce((s, i) => s + (i.balance_due || 0), 0)
+  const filteredRequests =
+    requestFilter === 'all'
+      ? requests
+      : requests.filter(r => r.status === requestFilter)
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  const filteredGigs =
+    gigStatusFilter === 'all'
+      ? localGigs
+      : localGigs.filter(g => g.status === gigStatusFilter)
+
+  const filteredClients = clients.filter(
+    c =>
+      !clientSearch ||
+      c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+      c.email.toLowerCase().includes(clientSearch.toLowerCase())
+  )
+
+  const today = new Date().toISOString().split('T')[0]
+
+  // ── Shared input style ─────────────────────────────────────────────────────
+
+  const inputStyle: React.CSSProperties = {
+    background: C.surface2,
+    border: `1px solid ${C.borderLight}`,
+    borderRadius: 8,
+    color: C.text,
+    padding: '8px 12px',
+    fontSize: 14,
+    width: '100%',
+    outline: 'none',
+  }
+
+  const btnPrimary = (color = C.blue): React.CSSProperties => ({
+    background: color,
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    padding: '8px 16px',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  })
+
+  const btnGhost = (color = C.muted): React.CSSProperties => ({
+    background: 'transparent',
+    color,
+    border: `1px solid ${C.borderLight}`,
+    borderRadius: 8,
+    padding: '8px 16px',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  })
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ backgroundColor: theme.bg }} className="min-h-screen pb-12">
-      {/* Header */}
+    <div
+      style={{
+        background: C.bg,
+        minHeight: '100vh',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        color: C.text,
+      }}
+    >
+      {/* ── HEADER ── */}
       <div
-        className="sticky top-0 z-30 backdrop-blur-xl border-b px-4 py-4 sm:px-6"
-        style={{ backgroundColor: `${theme.bg}95`, borderColor: theme.border }}
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          padding: '24px 24px 0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
       >
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-black" style={{ color: theme.text }}>DJ Business Hub</h1>
-              <p className="text-xs mt-0.5" style={{ color: theme.textM }}>
-                {newCount > 0 && <span className="text-indigo-400 font-semibold">{newCount} new {newCount === 1 ? 'booking' : 'bookings'} · </span>}
-                {clients.length} clients · {fmt(totalRevenue)} collected · {fmt(pendingRevenue)} pending
-              </p>
-            </div>
-            <button
-              onClick={() => { fetchBookings(); fetchClients(); fetchInvoices() }}
-              className="p-2 rounded-xl transition-opacity hover:opacity-70"
-              style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-            >
-              <RefreshCw size={15} style={{ color: theme.textM }} />
-            </button>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Music2 size={22} color={C.gold} />
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: 0 }}>
+              DJ Control Center
+            </h1>
           </div>
-
-          {/* Tab bar */}
-          <div className="flex gap-1 mt-3">
-            {TABS.map(t => {
-              const Icon = t.icon
-              const active = tab === t.id
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
-                  style={{
-                    backgroundColor: active ? '#6366F1' : theme.card,
-                    color: active ? '#fff' : theme.textM,
-                    border: `1px solid ${active ? '#6366F1' : theme.border}`,
-                  }}
-                >
-                  <Icon size={12} />
-                  {t.label}
-                  {t.id === 'bookings' && newCount > 0 && (
-                    <span className="ml-0.5 bg-white/30 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black">
-                      {newCount}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+          <p style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>Mask Off Da DJ</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={loadRequests}
+            title="Refresh"
+            style={{
+              background: C.surface,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              padding: 8,
+              cursor: 'pointer',
+              color: C.muted,
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            {loadingRequests ? (
+              <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+          </button>
+          <a
+            href="/dj"
+            style={{
+              color: C.gold,
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              background: C.goldBg,
+              border: `1px solid ${C.gold}40`,
+              borderRadius: 8,
+              padding: '6px 12px',
+            }}
+          >
+            Open Gig Manager <ArrowRight size={13} />
+          </a>
         </div>
       </div>
 
-      <div className="p-4 sm:p-6 max-w-3xl mx-auto">
-
-        {/* ── BOOKINGS TAB ───────────────────────────────────────────────────── */}
-        {tab === 'bookings' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            {/* Status filter */}
-            <div className="flex gap-1.5 flex-wrap mb-4">
-              {(['all', 'new', 'contacted', 'pending', 'confirmed', 'declined'] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setBookingFilter(s)}
-                  className="px-3 py-1 rounded-full text-xs font-semibold capitalize transition-all"
-                  style={{
-                    backgroundColor: bookingFilter === s
-                      ? (s === 'all' ? '#6366F1' : BOOKING_STATUS_COLORS[s as BookingStatus])
-                      : theme.card,
-                    color: bookingFilter === s ? '#fff' : theme.textM,
-                    border: `1px solid ${theme.border}`,
-                  }}
-                >
-                  {s}
-                  {s !== 'all' && ` (${bookings.filter(b => b.status === s).length})`}
-                </button>
-              ))}
-            </div>
-
-            {loading && (
-              <div className="text-center py-12" style={{ color: theme.textM }}>Loading bookings…</div>
-            )}
-
-            {!loading && filteredBookings.length === 0 && (
-              <div className="text-center py-16" style={{ color: theme.textM }}>
-                <Inbox size={40} className="mx-auto mb-3 opacity-30" />
-                <p className="font-semibold">No {bookingFilter !== 'all' ? bookingFilter : ''} bookings yet</p>
-                <p className="text-sm mt-1">They'll appear here when customers submit requests at orcafin.app/maskoffdadj</p>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {filteredBookings.map(b => (
-                <motion.div
-                  key={b.id}
-                  layoutId={b.id}
-                  className="rounded-2xl p-4 cursor-pointer transition-all hover:scale-[1.01]"
-                  style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-                  onClick={() => setSelectedBooking(b)}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm" style={{ color: theme.text }}>{b.client_name}</span>
-                        <span
-                          className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide"
-                          style={{ backgroundColor: `${BOOKING_STATUS_COLORS[b.status]}20`, color: BOOKING_STATUS_COLORS[b.status] }}
-                        >
-                          {b.status}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        <span className="flex items-center gap-1 text-xs" style={{ color: theme.textM }}>
-                          <Calendar size={11} />{fmtDate(b.date)}
-                        </span>
-                        <span className="text-xs capitalize" style={{ color: theme.textM }}>{b.event_type?.replace(/-/g, ' ')}</span>
-                        {b.city && (
-                          <span className="flex items-center gap-1 text-xs" style={{ color: theme.textM }}>
-                            <MapPin size={11} />{b.city}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs mt-1" style={{ color: theme.textM }}>{b.client_email}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      {b.budget_range && (
-                        <p className="text-xs font-semibold" style={{ color: '#10B981' }}>{b.budget_range}</p>
-                      )}
-                      <p className="text-[10px] mt-0.5" style={{ color: theme.textM }}>
-                        {new Date(b.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── CLIENTS TAB ────────────────────────────────────────────────────── */}
-        {tab === 'clients' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <div className="flex justify-between items-center mb-4">
-              <p className="text-sm font-semibold" style={{ color: theme.textM }}>{clients.length} clients</p>
+      {/* ── TAB BAR ── */}
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          background: C.bg,
+          zIndex: 50,
+          maxWidth: 1200,
+          margin: '0 auto',
+          padding: '12px 24px 0',
+          borderBottom: `1px solid ${C.border}`,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            gap: 0,
+            overflowX: 'auto',
+          }}
+        >
+          {(
+            [
+              { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+              { id: 'requests', label: 'Requests', icon: MessageSquare, badge: stats.newReqs },
+              { id: 'gigs', label: 'Gigs', icon: Calendar },
+              { id: 'clients', label: 'Clients', icon: Users },
+              { id: 'invoices', label: 'Invoices', icon: FileText },
+              { id: 'email', label: 'Email', icon: Mail },
+            ] as Array<{ id: TabId; label: string; icon: React.ElementType; badge?: number }>
+          ).map(tab => {
+            const Icon = tab.icon
+            const active = activeTab === tab.id
+            return (
               <button
-                onClick={() => setShowNewClient(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-                style={{ backgroundColor: '#6366F1', color: '#fff' }}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: active ? `2px solid ${C.gold}` : '2px solid transparent',
+                  padding: '10px 16px',
+                  cursor: 'pointer',
+                  color: active ? C.gold : C.muted,
+                  fontWeight: active ? 700 : 500,
+                  fontSize: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  whiteSpace: 'nowrap',
+                  transition: 'color 0.15s',
+                }}
               >
-                <Plus size={13} /> Add Client
-              </button>
-            </div>
-
-            {clients.length === 0 && (
-              <div className="text-center py-16" style={{ color: theme.textM }}>
-                <Users size={40} className="mx-auto mb-3 opacity-30" />
-                <p className="font-semibold">No clients yet</p>
-                <p className="text-sm mt-1">Add clients manually or promote booking requests to clients</p>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {clients.map(c => (
-                <div
-                  key={c.id}
-                  className="rounded-2xl p-4"
-                  style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-bold text-sm" style={{ color: theme.text }}>{c.name}</p>
-                      {c.email && <p className="text-xs mt-0.5" style={{ color: theme.textM }}>{c.email}</p>}
-                      {c.phone && (
-                        <p className="flex items-center gap-1 text-xs mt-0.5" style={{ color: theme.textM }}>
-                          <Phone size={11} />{c.phone}
-                        </p>
-                      )}
-                      {c.notes && <p className="text-xs mt-2 italic" style={{ color: theme.textM }}>{c.notes}</p>}
-                    </div>
-                    <div className="flex gap-2">
-                      {c.email && (
-                        <button
-                          onClick={() => { setTab('email'); setEmailTo(c.email || '') }}
-                          className="p-2 rounded-xl"
-                          style={{ backgroundColor: `#6366F120`, color: '#6366F1' }}
-                          title="Email this client"
-                        >
-                          <Mail size={13} />
-                        </button>
-                      )}
-                      <button
-                        onClick={async () => {
-                          await fetch(`/api/dj/clients?id=${c.id}`, { method: 'DELETE' })
-                          setClients(prev => prev.filter(x => x.id !== c.id))
-                        }}
-                        className="p-2 rounded-xl"
-                        style={{ backgroundColor: `#EF444420`, color: '#EF4444' }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    {c.source && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
-                        style={{ backgroundColor: `#6366F115`, color: '#6366F1' }}>
-                        {c.source.replace(/_/g, ' ')}
-                      </span>
-                    )}
-                    {c.tags?.map(tag => (
-                      <span key={tag} className="px-2 py-0.5 rounded-full text-[10px]"
-                        style={{ backgroundColor: theme.border, color: theme.textM }}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── INVOICES TAB ───────────────────────────────────────────────────── */}
-        {tab === 'invoices' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <p className="text-sm font-semibold" style={{ color: theme.textM }}>{invoices.length} invoices</p>
-              </div>
-              <button
-                onClick={() => setShowNewInvoice(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-                style={{ backgroundColor: '#6366F1', color: '#fff' }}
-              >
-                <Plus size={13} /> New Invoice
-              </button>
-            </div>
-
-            {/* Revenue summary */}
-            {invoices.length > 0 && (
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                {[
-                  { label: 'Collected', value: fmt(totalRevenue), color: '#10B981' },
-                  { label: 'Pending', value: fmt(pendingRevenue), color: '#F59E0B' },
-                  { label: 'Drafts', value: String(invoices.filter(i => i.status === 'draft').length), color: '#6B7280' },
-                ].map(s => (
-                  <div key={s.label} className="rounded-xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                    <p className="text-[10px] font-semibold mb-1" style={{ color: theme.textM }}>{s.label}</p>
-                    <p className="font-black text-base" style={{ color: s.color }}>{s.value}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {invoices.length === 0 && (
-              <div className="text-center py-16" style={{ color: theme.textM }}>
-                <FileText size={40} className="mx-auto mb-3 opacity-30" />
-                <p className="font-semibold">No invoices yet</p>
-                <p className="text-sm mt-1">Create invoices from booking requests or manually</p>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {invoices.map(inv => {
-                const clientName = inv.client_name || inv.dj_clients?.name || 'Unknown Client'
-                return (
-                  <div
-                    key={inv.id}
-                    className="rounded-2xl p-4 cursor-pointer transition-all hover:scale-[1.005]"
-                    style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-                    onClick={() => setSelectedInvoice(inv)}
+                <Icon size={15} />
+                {tab.label}
+                {tab.badge ? (
+                  <span
+                    style={{
+                      background: C.amber,
+                      color: '#000',
+                      borderRadius: 10,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      padding: '1px 6px',
+                      lineHeight: '16px',
+                    }}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs font-bold" style={{ color: theme.textM }}>
-                            {inv.invoice_number}
-                          </span>
-                          <span
-                            className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
-                            style={{ backgroundColor: `${INVOICE_STATUS_COLORS[inv.status]}20`, color: INVOICE_STATUS_COLORS[inv.status] }}
-                          >
-                            {inv.status}
-                          </span>
-                        </div>
-                        <p className="font-bold text-sm mt-1" style={{ color: theme.text }}>{clientName}</p>
-                        {inv.event_date && (
-                          <p className="flex items-center gap-1 text-xs mt-0.5" style={{ color: theme.textM }}>
-                            <Calendar size={11} />{fmtDate(inv.event_date)}
-                            {inv.event_type && ` · ${inv.event_type}`}
-                          </p>
-                        )}
+                    {tab.badge}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── CONTENT ── */}
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          padding: '0 24px 60px',
+        }}
+      >
+        {/* ================================================================= */}
+        {/* OVERVIEW TAB */}
+        {/* ================================================================= */}
+        {activeTab === 'overview' && (
+          <div style={{ paddingTop: 24 }}>
+            {/* Stats grid */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: 16,
+                marginBottom: 24,
+              }}
+            >
+              {[
+                {
+                  label: 'New Requests',
+                  value: stats.newReqs,
+                  icon: Bell,
+                  color: C.amber,
+                  bg: C.amberBg,
+                },
+                {
+                  label: 'Upcoming Gigs',
+                  value: stats.upcoming,
+                  icon: Calendar,
+                  color: C.blue,
+                  bg: C.blueBg,
+                },
+                {
+                  label: 'Booked Value',
+                  value: fmt(stats.bookedValue),
+                  icon: DollarSign,
+                  color: C.green,
+                  bg: C.greenBg,
+                },
+                {
+                  label: 'Total Earned',
+                  value: fmt(stats.totalEarned),
+                  icon: Star,
+                  color: C.gold,
+                  bg: C.goldBg,
+                },
+              ].map(s => {
+                const Icon = s.icon
+                return (
+                  <div key={s.label} style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div
+                        style={{
+                          background: s.bg,
+                          borderRadius: 8,
+                          padding: 8,
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Icon size={16} color={s.color} />
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-black text-lg" style={{ color: theme.text }}>{fmt(inv.subtotal)}</p>
-                        {inv.deposit_paid && (
-                          <p className="text-[10px] text-green-400">Deposit paid</p>
-                        )}
-                        {inv.balance_due > 0 && inv.status !== 'paid' && (
-                          <p className="text-[10px]" style={{ color: theme.textM }}>
-                            {fmt(inv.balance_due)} due
-                          </p>
-                        )}
-                      </div>
+                      <span style={{ color: C.muted, fontSize: 12, fontWeight: 600 }}>
+                        {s.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: C.text }}>
+                      {s.value}
                     </div>
                   </div>
                 )
               })}
             </div>
-          </motion.div>
+
+            {/* Next Gig alert */}
+            {stats.nextGig && (
+              <div
+                style={{
+                  background: C.goldBg,
+                  border: `1px solid ${C.gold}50`,
+                  borderRadius: 12,
+                  padding: 20,
+                  marginBottom: 24,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      color: C.gold,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      marginBottom: 4,
+                    }}
+                  >
+                    Next Gig
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 17 }}>
+                    {stats.nextGig.clientName}
+                    <span style={{ color: C.muted, fontWeight: 400, fontSize: 14 }}>
+                      {' '}
+                      — {stats.nextGig.eventType}
+                    </span>
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
+                    {fmtDateLong(stats.nextGig.date)} · {stats.nextGig.venue}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab('gigs')}
+                  style={btnGhost(C.gold)}
+                >
+                  View in Gigs <ArrowRight size={13} />
+                </button>
+              </div>
+            )}
+
+            {/* Two-column: Recent Requests + Recent Gigs */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                gap: 20,
+                marginBottom: 24,
+              }}
+            >
+              {/* Recent Requests */}
+              <div style={cardStyle}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 14,
+                  }}
+                >
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+                    Recent Requests
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab('requests')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: C.gold,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    View All <ArrowRight size={12} />
+                  </button>
+                </div>
+                {requests.length === 0 && (
+                  <p style={{ color: C.muted, fontSize: 13 }}>No requests yet.</p>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {requests.slice(0, 3).map(r => (
+                    <div
+                      key={r.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        padding: '10px 0',
+                        borderBottom: `1px solid ${C.border}`,
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>
+                          {r.client_name}
+                        </div>
+                        <div style={{ color: C.muted, fontSize: 12 }}>
+                          {r.event_type} · {fmtDate(r.date)} · {r.city}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <StatusBadge status={r.status} />
+                        <button
+                          onClick={() => {
+                            setActiveTab('requests')
+                            setSelectedRequest(r)
+                            setGeneratedReply('')
+                            setReplySubject('')
+                            setReplyError('')
+                          }}
+                          style={{
+                            background: C.goldBg,
+                            color: C.gold,
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Reply
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Upcoming Gigs */}
+              <div style={cardStyle}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 14,
+                  }}
+                >
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+                    Upcoming Gigs
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab('gigs')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: C.gold,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    View All <ArrowRight size={12} />
+                  </button>
+                </div>
+                {localGigs.filter(g => g.date >= today).length === 0 && (
+                  <p style={{ color: C.muted, fontSize: 13 }}>No upcoming gigs.</p>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {localGigs
+                    .filter(g => g.date >= today)
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .slice(0, 3)
+                    .map(g => (
+                      <div
+                        key={g.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          padding: '10px 0',
+                          borderBottom: `1px solid ${C.border}`,
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>
+                            {g.clientName}
+                          </div>
+                          <div style={{ color: C.muted, fontSize: 12 }}>
+                            {g.eventType} · {fmtDate(g.date)}
+                          </div>
+                        </div>
+                        <GigStatusBadge status={g.status} />
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div style={cardStyle}>
+              <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 700 }}>
+                Quick Actions
+              </h3>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <a
+                  href="/dj"
+                  style={{
+                    ...btnPrimary(C.blue),
+                    textDecoration: 'none',
+                  }}
+                >
+                  <Plus size={15} /> Add Gig
+                </a>
+                <button
+                  onClick={() => {
+                    setActiveTab('gigs')
+                    setGigsSubTab('blocked')
+                  }}
+                  style={btnGhost(C.muted)}
+                >
+                  <Ban size={15} /> Block a Date
+                </button>
+                <button
+                  onClick={() => setActiveTab('email')}
+                  style={btnGhost(C.muted)}
+                >
+                  <Mail size={15} /> Send Email
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
-        {/* ── EMAIL TAB ──────────────────────────────────────────────────────── */}
-        {tab === 'email' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-            <div
-              className="rounded-2xl p-5 space-y-4"
-              style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-            >
-              <h2 className="font-bold text-base" style={{ color: theme.text }}>Compose Email</h2>
+        {/* ================================================================= */}
+        {/* REQUESTS TAB */}
+        {/* ================================================================= */}
+        {activeTab === 'requests' && (
+          <div style={{ paddingTop: 24 }}>
+            {/* Filter row */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              {['all', 'new', 'reviewed', 'quoted', 'booked', 'declined'].map(s => {
+                const active = requestFilter === s
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setRequestFilter(s)}
+                    style={{
+                      background: active
+                        ? s === 'all'
+                          ? C.blue
+                          : STATUS_COLORS[s]?.bg || C.surface2
+                        : C.surface2,
+                      color: active
+                        ? s === 'all'
+                          ? '#fff'
+                          : STATUS_COLORS[s]?.text || C.text
+                        : C.muted,
+                      border: `1px solid ${active ? 'transparent' : C.borderLight}`,
+                      borderRadius: 20,
+                      padding: '5px 14px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {s === 'all' ? 'All' : STATUS_LABELS[s] || s}
+                    {s !== 'all' && (
+                      <span style={{ marginLeft: 4, opacity: 0.7 }}>
+                        ({requests.filter(r => r.status === s).length})
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
 
-              {/* To field */}
-              <div>
-                <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>To</label>
-                <input
-                  type="email"
-                  value={emailTo}
-                  onChange={e => setEmailTo(e.target.value)}
-                  placeholder="client@email.com"
-                  className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                  style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-                />
-                {/* Quick-fill from clients */}
-                {clients.filter(c => c.email).length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap mt-2">
-                    {clients.filter(c => c.email).slice(0, 5).map(c => (
-                      <button
-                        key={c.id}
-                        onClick={() => setEmailTo(c.email || '')}
-                        className="px-2 py-0.5 rounded-full text-[10px] transition-all"
-                        style={{ backgroundColor: emailTo === c.email ? '#6366F1' : theme.border, color: emailTo === c.email ? '#fff' : theme.textM }}
+            <p style={{ color: C.mutedDark, fontSize: 13, marginBottom: 14 }}>
+              {filteredRequests.length} request
+              {filteredRequests.length !== 1 ? 's' : ''} found
+            </p>
+
+            {loadingRequests && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  color: C.muted,
+                  padding: '40px 0',
+                }}
+              >
+                <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                Loading requests…
+              </div>
+            )}
+
+            {!loadingRequests && filteredRequests.length === 0 && (
+              <div
+                style={{
+                  ...cardStyle,
+                  textAlign: 'center',
+                  padding: '48px 24px',
+                  color: C.muted,
+                }}
+              >
+                <MessageSquare size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
+                <p style={{ fontWeight: 600 }}>No requests found</p>
+                <p style={{ fontSize: 13, marginTop: 4 }}>
+                  Booking requests from your website will appear here.
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {filteredRequests.map(r => {
+                const isExpanded = selectedRequest?.id === r.id
+                const isHovered = hoveredReq === r.id && !isExpanded
+                return (
+                  <div
+                    key={r.id}
+                    style={{
+                      ...cardStyle,
+                      padding: 0,
+                      overflow: 'hidden',
+                      background: isHovered ? C.surface2 : C.surface,
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    {/* Collapsed row */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        padding: '14px 18px',
+                        cursor: 'pointer',
+                        flexWrap: 'wrap',
+                      }}
+                      onMouseEnter={() => setHoveredReq(r.id)}
+                      onMouseLeave={() => setHoveredReq(null)}
+                      onClick={() => {
+                        if (isExpanded) {
+                          setSelectedRequest(null)
+                        } else {
+                          setSelectedRequest(r)
+                          setGeneratedReply('')
+                          setReplySubject('')
+                          setReplyError('')
+                          setSendSuccess('')
+                        }
+                      }}
+                    >
+                      {/* Left: status badge + name + type */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          flex: 1,
+                          minWidth: 0,
+                        }}
                       >
-                        {c.name}
+                        <StatusBadge status={r.status} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>
+                            {r.client_name}
+                          </div>
+                          <div style={{ color: C.muted, fontSize: 12, marginTop: 1 }}>
+                            {r.event_type}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Middle: date + city + guests */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 14,
+                          color: C.muted,
+                          fontSize: 12,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Calendar size={12} />
+                          {fmtDate(r.date)}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <MapPin size={12} />
+                          {r.city}
+                        </span>
+                        {r.guest_count && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Users size={12} />
+                            {r.guest_count} guests
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Right: button */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span
+                          style={{
+                            background: C.goldBg,
+                            color: C.gold,
+                            border: `1px solid ${C.gold}40`,
+                            borderRadius: 7,
+                            padding: '5px 12px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          {isExpanded ? (
+                            <>
+                              Close <ChevronUp size={12} />
+                            </>
+                          ) : (
+                            <>
+                              View & Reply <ChevronDown size={12} />
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Expanded panel */}
+                    {isExpanded && (
+                      <div
+                        style={{
+                          borderTop: `1px solid ${C.border}`,
+                          padding: '20px 18px',
+                          background: C.bg,
+                        }}
+                      >
+                        {/* Request Details */}
+                        <h4 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: C.muted }}>
+                          Request Details
+                        </h4>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                            gap: '10px 24px',
+                            marginBottom: 20,
+                          }}
+                        >
+                          {[
+                            { label: 'Name', value: r.client_name },
+                            { label: 'Email', value: r.client_email },
+                            { label: 'Phone', value: r.client_phone || '—' },
+                            { label: 'Event Type', value: r.event_type },
+                            { label: 'Date', value: fmtDateLong(r.date) },
+                            { label: 'City', value: r.city },
+                            { label: 'Venue', value: r.location || '—' },
+                            { label: 'Start Time', value: r.start_time || '—' },
+                            { label: 'End Time', value: r.end_time || '—' },
+                            { label: 'Guests', value: r.guest_count ? String(r.guest_count) : '—' },
+                            { label: 'MC Services', value: r.mc_needed ? 'Yes' : 'No' },
+                            { label: 'Budget', value: r.budget_range || '—' },
+                          ].map(f => (
+                            <div key={f.label}>
+                              <div
+                                style={{ fontSize: 11, color: C.mutedDark, fontWeight: 600, marginBottom: 2 }}
+                              >
+                                {f.label}
+                              </div>
+                              <div style={{ fontSize: 14, color: C.text }}>{f.value}</div>
+                            </div>
+                          ))}
+                          {r.special_requests && (
+                            <div style={{ gridColumn: '1 / -1' }}>
+                              <div
+                                style={{ fontSize: 11, color: C.mutedDark, fontWeight: 600, marginBottom: 2 }}
+                              >
+                                Special Requests
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 13,
+                                  color: C.muted,
+                                  background: C.surface2,
+                                  borderRadius: 8,
+                                  padding: '8px 12px',
+                                  fontStyle: 'italic',
+                                }}
+                              >
+                                {r.special_requests}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Generate Reply */}
+                        <h4
+                          style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: C.muted }}
+                        >
+                          Generate Reply
+                        </h4>
+                        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                          <button
+                            onClick={() => generateReply('inquiry')}
+                            disabled={generatingReply}
+                            style={btnPrimary(C.blue)}
+                          >
+                            {generatingReply ? (
+                              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <Edit3 size={14} />
+                            )}
+                            Draft Inquiry Reply
+                          </button>
+                          <button
+                            onClick={() => generateReply('decline')}
+                            disabled={generatingReply}
+                            style={{
+                              ...btnGhost(C.red),
+                              borderColor: `${C.red}60`,
+                            }}
+                          >
+                            {generatingReply ? (
+                              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <XCircle size={14} />
+                            )}
+                            Draft Decline
+                          </button>
+                        </div>
+
+                        {replyError && (
+                          <div
+                            style={{
+                              background: C.redBg,
+                              color: C.red,
+                              borderRadius: 8,
+                              padding: '8px 12px',
+                              fontSize: 13,
+                              marginBottom: 12,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                            }}
+                          >
+                            <AlertTriangle size={14} />
+                            {replyError}
+                          </div>
+                        )}
+
+                        {generatedReply && (
+                          <div style={{ marginBottom: 16 }}>
+                            <label
+                              style={{
+                                display: 'block',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: C.mutedDark,
+                                marginBottom: 6,
+                              }}
+                            >
+                              Subject
+                            </label>
+                            <input
+                              value={replySubject}
+                              onChange={e => setReplySubject(e.target.value)}
+                              style={{ ...inputStyle, marginBottom: 10 }}
+                            />
+                            <label
+                              style={{
+                                display: 'block',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: C.mutedDark,
+                                marginBottom: 6,
+                              }}
+                            >
+                              Message
+                            </label>
+                            <textarea
+                              value={generatedReply}
+                              onChange={e => setGeneratedReply(e.target.value)}
+                              rows={8}
+                              style={{
+                                ...inputStyle,
+                                resize: 'vertical',
+                                minHeight: 200,
+                                fontFamily: 'inherit',
+                              }}
+                            />
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                                marginTop: 10,
+                              }}
+                            >
+                              <button
+                                onClick={sendReply}
+                                disabled={sendingReply}
+                                style={btnPrimary(C.green)}
+                              >
+                                {sendingReply ? (
+                                  <Loader2
+                                    size={14}
+                                    style={{ animation: 'spin 1s linear infinite' }}
+                                  />
+                                ) : (
+                                  <Send size={14} />
+                                )}
+                                Send to {r.client_email}
+                              </button>
+                              <button
+                                onClick={() =>
+                                  navigator.clipboard.writeText(generatedReply)
+                                }
+                                style={btnGhost(C.muted)}
+                              >
+                                <Copy size={13} /> Copy
+                              </button>
+                              {sendSuccess && (
+                                <span
+                                  style={{
+                                    color: C.green,
+                                    fontSize: 13,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                >
+                                  <CheckCircle2 size={14} />
+                                  {sendSuccess}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Status update row */}
+                        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: C.mutedDark,
+                              fontWeight: 600,
+                              marginBottom: 8,
+                            }}
+                          >
+                            Update Status
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {(
+                              ['new', 'reviewed', 'quoted', 'booked'] as Array<
+                                BookingRequest['status']
+                              >
+                            ).map(s => (
+                              <button
+                                key={s}
+                                onClick={() => {
+                                  updateRequestStatus(r.id, s)
+                                  setSelectedRequest({ ...r, status: s })
+                                }}
+                                style={{
+                                  background:
+                                    r.status === s
+                                      ? STATUS_COLORS[s]?.bg || C.surface2
+                                      : C.surface2,
+                                  color:
+                                    r.status === s
+                                      ? STATUS_COLORS[s]?.text || C.muted
+                                      : C.muted,
+                                  border: `1px solid ${
+                                    r.status === s
+                                      ? STATUS_COLORS[s]?.text + '60' || C.border
+                                      : C.borderLight
+                                  }`,
+                                  borderRadius: 7,
+                                  padding: '5px 12px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  textTransform: 'capitalize',
+                                }}
+                              >
+                                {STATUS_LABELS[s]}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => {
+                                updateRequestStatus(r.id, 'declined')
+                                setSelectedRequest({ ...r, status: 'declined' })
+                              }}
+                              style={{
+                                background:
+                                  r.status === 'declined' ? C.redBg : C.surface2,
+                                color: r.status === 'declined' ? C.red : C.muted,
+                                border: `1px solid ${
+                                  r.status === 'declined'
+                                    ? C.red + '60'
+                                    : C.borderLight
+                                }`,
+                                borderRadius: 7,
+                                padding: '5px 12px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* GIGS TAB */}
+        {/* ================================================================= */}
+        {activeTab === 'gigs' && (
+          <div style={{ paddingTop: 24 }}>
+            {/* Sub-tabs */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 0,
+                borderBottom: `1px solid ${C.border}`,
+                marginBottom: 20,
+              }}
+            >
+              {(
+                [
+                  { id: 'mygigs', label: 'My Gigs' },
+                  { id: 'blocked', label: 'Blocked Dates' },
+                ] as Array<{ id: 'mygigs' | 'blocked'; label: string }>
+              ).map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setGigsSubTab(t.id)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom:
+                      gigsSubTab === t.id
+                        ? `2px solid ${C.blue}`
+                        : '2px solid transparent',
+                    padding: '8px 18px',
+                    cursor: 'pointer',
+                    color: gigsSubTab === t.id ? C.blue : C.muted,
+                    fontWeight: gigsSubTab === t.id ? 700 : 500,
+                    fontSize: 14,
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {gigsSubTab === 'mygigs' && (
+              <div>
+                {/* Top row */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 14,
+                    flexWrap: 'wrap',
+                    gap: 10,
+                  }}
+                >
+                  {/* Status filters */}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {['all', 'confirmed', 'completed', 'cancelled'].map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setGigStatusFilter(s)}
+                        style={{
+                          background:
+                            gigStatusFilter === s ? C.surface3 : C.surface2,
+                          color: gigStatusFilter === s ? C.text : C.muted,
+                          border: `1px solid ${
+                            gigStatusFilter === s ? C.borderLight : C.border
+                          }`,
+                          borderRadius: 20,
+                          padding: '5px 14px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {s === 'all' ? 'All' : s}
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
-
-              {/* Subject */}
-              <div>
-                <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>Subject</label>
-                <input
-                  type="text"
-                  value={emailSubject}
-                  onChange={e => setEmailSubject(e.target.value)}
-                  placeholder="Email subject"
-                  className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                  style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-                />
-              </div>
-
-              {/* Bentley draft assistant */}
-              <div
-                className="rounded-xl p-3 space-y-2"
-                style={{ backgroundColor: `#F59E0B10`, border: `1px solid #F59E0B30` }}
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles size={13} style={{ color: '#F59E0B' }} />
-                  <span className="text-xs font-bold" style={{ color: '#F59E0B' }}>Bentley Draft Assistant</span>
+                  <a
+                    href="/dj"
+                    style={{
+                      color: C.gold,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    Open Full Gig Manager <ExternalLink size={12} />
+                  </a>
                 </div>
-                <input
-                  type="text"
-                  value={emailContext}
-                  onChange={e => setEmailContext(e.target.value)}
-                  placeholder="Tell Bentley what to write… e.g. 'follow-up for Sarah's wedding quote from last week'"
-                  className="w-full rounded-lg px-3 py-2 text-xs outline-none"
-                  style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
-                  onKeyDown={e => { if (e.key === 'Enter') bentleyDraftEmail() }}
-                />
-                <button
-                  onClick={bentleyDraftEmail}
-                  disabled={emailLoading || !emailContext.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
-                  style={{ backgroundColor: '#F59E0B', color: '#000' }}
-                >
-                  {emailLoading ? <RefreshCw size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                  {emailLoading ? 'Drafting…' : 'Draft Email'}
-                </button>
-              </div>
 
-              {/* Body */}
+                {filteredGigs.length === 0 && (
+                  <div
+                    style={{
+                      ...cardStyle,
+                      textAlign: 'center',
+                      padding: '48px 24px',
+                      color: C.muted,
+                    }}
+                  >
+                    <Calendar size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
+                    <p style={{ fontWeight: 600 }}>No gigs yet</p>
+                    <p style={{ fontSize: 13, marginTop: 4 }}>
+                      Add your first gig in the Gig Manager.
+                    </p>
+                    <a
+                      href="/dj"
+                      style={{
+                        ...btnPrimary(C.blue),
+                        display: 'inline-flex',
+                        marginTop: 14,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      <Plus size={14} /> Add Gig
+                    </a>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {filteredGigs
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .map(g => (
+                      <div
+                        key={g.id}
+                        style={{
+                          ...cardStyle,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          flexWrap: 'wrap',
+                          background:
+                            hoveredGig === g.id ? C.surface2 : C.surface,
+                          transition: 'background 0.15s',
+                          cursor: 'default',
+                        }}
+                        onMouseEnter={() => setHoveredGig(g.id)}
+                        onMouseLeave={() => setHoveredGig(null)}
+                      >
+                        <div
+                          style={{ display: 'flex', alignItems: 'center', gap: 10 }}
+                        >
+                          <GigStatusBadge status={g.status} />
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 14 }}>
+                              {g.clientName}
+                            </div>
+                            <div style={{ color: C.muted, fontSize: 12, marginTop: 1 }}>
+                              {g.eventType}
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 16,
+                            color: C.muted,
+                            fontSize: 13,
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Calendar size={13} />
+                            {fmtDate(g.date)}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <MapPin size={13} />
+                            {g.venue}
+                          </span>
+                          {(g.contractAmount || g.fee) && (
+                            <span
+                              style={{
+                                color: C.green,
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                            >
+                              <DollarSign size={13} />
+                              {fmt(g.contractAmount || g.fee || 0)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {gigsSubTab === 'blocked' && (
               <div>
-                <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>Message</label>
-                <textarea
-                  value={emailBody}
-                  onChange={e => setEmailBody(e.target.value)}
-                  rows={10}
-                  placeholder="Email body — or let Bentley draft it above"
-                  className="w-full rounded-xl px-3 py-2.5 text-sm outline-none resize-none"
-                  style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-                />
+                <div style={{ ...cardStyle, maxWidth: 520 }}>
+                  <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700 }}>
+                    Block a Date
+                  </h3>
+                  <p style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>
+                    Manually block dates on your public booking website to prevent
+                    customers from requesting those dates.
+                  </p>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                    <input
+                      type="date"
+                      value={blockedDate}
+                      onChange={e => setBlockedDate(e.target.value)}
+                      style={{ ...inputStyle, width: 'auto', flex: 1 }}
+                    />
+                    <button
+                      onClick={blockDate}
+                      disabled={blockingDate || !blockedDate}
+                      style={btnPrimary(C.red)}
+                    >
+                      {blockingDate ? (
+                        <Loader2
+                          size={14}
+                          style={{ animation: 'spin 1s linear infinite' }}
+                        />
+                      ) : (
+                        <Ban size={14} />
+                      )}
+                      Block This Date
+                    </button>
+                  </div>
+                  {blockSuccess && (
+                    <div
+                      style={{
+                        color: C.green,
+                        fontSize: 13,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <CheckCircle2 size={14} />
+                      {blockSuccess}
+                    </div>
+                  )}
+                  <p style={{ color: C.mutedDark, fontSize: 12, marginTop: 4 }}>
+                    Note: Confirmed gigs from your Gig Manager are automatically
+                    blocked.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* CLIENTS TAB */}
+        {/* ================================================================= */}
+        {activeTab === 'clients' && (
+          <div style={{ paddingTop: 24 }}>
+            <p style={{ color: C.muted, fontSize: 13, marginBottom: 14 }}>
+              Clients are pulled from your DJ booking database.
+            </p>
+            <input
+              type="text"
+              placeholder="Search clients…"
+              value={clientSearch}
+              onChange={e => setClientSearch(e.target.value)}
+              style={{ ...inputStyle, maxWidth: 360, marginBottom: 20 }}
+            />
+
+            {filteredClients.length === 0 && (
+              <div
+                style={{
+                  ...cardStyle,
+                  textAlign: 'center',
+                  padding: '48px 24px',
+                  color: C.muted,
+                }}
+              >
+                <Users size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
+                <p style={{ fontWeight: 600 }}>No clients found</p>
+              </div>
+            )}
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: 14,
+              }}
+            >
+              {filteredClients.map(c => (
+                <div key={c.id} style={cardStyle}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+                    {c.name}
+                  </div>
+                  <div
+                    style={{
+                      color: C.muted,
+                      fontSize: 13,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Mail size={12} />
+                      {c.email}
+                    </span>
+                    {c.phone && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Phone size={12} />
+                        {c.phone}
+                      </span>
+                    )}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Clock size={12} />
+                      Since {fmtDate(c.created_at)}
+                    </span>
+                  </div>
+                  {(c.total_gigs !== undefined || c.total_revenue !== undefined) && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 12,
+                        marginTop: 10,
+                        paddingTop: 10,
+                        borderTop: `1px solid ${C.border}`,
+                        fontSize: 12,
+                        color: C.muted,
+                      }}
+                    >
+                      {c.total_gigs !== undefined && (
+                        <span>
+                          <strong style={{ color: C.text }}>{c.total_gigs}</strong> gigs
+                        </span>
+                      )}
+                      {c.total_revenue !== undefined && (
+                        <span>
+                          <strong style={{ color: C.green }}>
+                            {fmt(c.total_revenue)}
+                          </strong>{' '}
+                          revenue
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* INVOICES TAB */}
+        {/* ================================================================= */}
+        {activeTab === 'invoices' && (
+          <div style={{ paddingTop: 24 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 20,
+              }}
+            >
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Invoices</h2>
+              <button
+                onClick={() => alert('Invoice creation coming soon')}
+                style={btnPrimary(C.blue)}
+              >
+                <Plus size={14} /> Create Invoice
+              </button>
+            </div>
+
+            {invoices.length === 0 && (
+              <div
+                style={{
+                  ...cardStyle,
+                  textAlign: 'center',
+                  padding: '48px 24px',
+                  color: C.muted,
+                }}
+              >
+                <FileText size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
+                <p style={{ fontWeight: 600 }}>No invoices yet</p>
+              </div>
+            )}
+
+            {invoices.length > 0 && (
+              <div style={{ overflowX: 'auto' }}>
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    fontSize: 14,
+                  }}
+                >
+                  <thead>
+                    <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                      {['Client', 'Event', 'Amount', 'Due Date', 'Status', 'Actions'].map(
+                        col => (
+                          <th
+                            key={col}
+                            style={{
+                              textAlign: 'left',
+                              padding: '10px 12px',
+                              color: C.mutedDark,
+                              fontWeight: 600,
+                              fontSize: 12,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                            }}
+                          >
+                            {col}
+                          </th>
+                        )
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoices.map(inv => {
+                      const statusColors: Record<
+                        string,
+                        { bg: string; text: string }
+                      > = {
+                        draft: { bg: C.surface2, text: C.muted },
+                        sent: { bg: C.blueBg, text: C.blue },
+                        paid: { bg: C.greenBg, text: C.green },
+                      }
+                      const sc = statusColors[inv.status] || { bg: C.surface2, text: C.muted }
+                      return (
+                        <tr
+                          key={inv.id}
+                          style={{
+                            borderBottom: `1px solid ${C.border}`,
+                          }}
+                        >
+                          <td style={{ padding: '12px', fontWeight: 600 }}>
+                            {inv.client_name}
+                          </td>
+                          <td style={{ padding: '12px', color: C.muted }}>
+                            {inv.event_type || '—'}
+                            {inv.event_date && (
+                              <div style={{ fontSize: 12, marginTop: 2 }}>
+                                {fmtDate(inv.event_date)}
+                              </div>
+                            )}
+                          </td>
+                          <td
+                            style={{
+                              padding: '12px',
+                              fontWeight: 700,
+                              color: C.green,
+                            }}
+                          >
+                            {fmt(inv.amount)}
+                          </td>
+                          <td style={{ padding: '12px', color: C.muted }}>
+                            {fmtDate(inv.due_date)}
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <span
+                              style={{
+                                background: sc.bg,
+                                color: sc.text,
+                                borderRadius: 6,
+                                padding: '3px 10px',
+                                fontSize: 12,
+                                fontWeight: 700,
+                                textTransform: 'capitalize',
+                              }}
+                            >
+                              {inv.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <button
+                              onClick={() => {}}
+                              style={{
+                                background: C.surface2,
+                                color: C.muted,
+                                border: `1px solid ${C.borderLight}`,
+                                borderRadius: 6,
+                                padding: '5px 12px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                            >
+                              <Eye size={12} /> View
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* EMAIL TAB */}
+        {/* ================================================================= */}
+        {activeTab === 'email' && (
+          <div style={{ paddingTop: 24 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1.5fr',
+                gap: 20,
+                alignItems: 'start',
+              }}
+            >
+              {/* Left: Template library */}
+              <div style={cardStyle}>
+                <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 700 }}>
+                  Templates
+                </h3>
+                {emailTemplates.length === 0 && (
+                  <p style={{ color: C.muted, fontSize: 13 }}>No templates saved.</p>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {emailTemplates.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setEmailSubject(t.subject)
+                        setEmailBody(t.body)
+                      }}
+                      style={{
+                        background: C.surface2,
+                        border: `1px solid ${C.borderLight}`,
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        color: C.text,
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e =>
+                        ((e.currentTarget as HTMLButtonElement).style.background =
+                          C.surface3)
+                      }
+                      onMouseLeave={e =>
+                        ((e.currentTarget as HTMLButtonElement).style.background =
+                          C.surface2)
+                      }
+                    >
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
+                      <div style={{ color: C.mutedDark, fontSize: 11, marginTop: 3 }}>
+                        {t.type}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Send button */}
-              <button
-                onClick={sendEmail}
-                disabled={emailSending || !emailTo || !emailSubject || !emailBody || emailSent}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all disabled:opacity-50"
-                style={{ backgroundColor: emailSent ? '#10B981' : '#6366F1', color: '#fff' }}
-              >
-                {emailSending ? <RefreshCw size={14} className="animate-spin" /> : emailSent ? <Check size={14} /> : <Send size={14} />}
-                {emailSending ? 'Sending…' : emailSent ? 'Sent!' : 'Send Email'}
-              </button>
-
-              <p className="text-[10px] text-center" style={{ color: theme.textM }}>
-                Sent from maskoffdadj@gmail.com · Add GMAIL_USER + GMAIL_APP_PASSWORD to env to enable
-              </p>
+              {/* Right: Compose */}
+              <div style={cardStyle}>
+                <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>
+                  Compose Email
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: C.mutedDark,
+                        marginBottom: 6,
+                      }}
+                    >
+                      To
+                    </label>
+                    <input
+                      type="email"
+                      value={emailTo}
+                      onChange={e => setEmailTo(e.target.value)}
+                      placeholder="client@email.com"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: C.mutedDark,
+                        marginBottom: 6,
+                      }}
+                    >
+                      Subject
+                    </label>
+                    <input
+                      type="text"
+                      value={emailSubject}
+                      onChange={e => setEmailSubject(e.target.value)}
+                      placeholder="Email subject"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: C.mutedDark,
+                        marginBottom: 6,
+                      }}
+                    >
+                      Message
+                    </label>
+                    <textarea
+                      value={emailBody}
+                      onChange={e => setEmailBody(e.target.value)}
+                      rows={9}
+                      placeholder="Email body…"
+                      style={{
+                        ...inputStyle,
+                        resize: 'vertical',
+                        minHeight: 200,
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={sendEmail}
+                    disabled={sendingEmail || !emailTo || !emailSubject || !emailBody}
+                    style={{
+                      ...btnPrimary(C.blue),
+                      justifyContent: 'center',
+                      opacity:
+                        sendingEmail || !emailTo || !emailSubject || !emailBody
+                          ? 0.5
+                          : 1,
+                    }}
+                  >
+                    {sendingEmail ? (
+                      <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <Send size={14} />
+                    )}
+                    {sendingEmail ? 'Sending…' : 'Send Email'}
+                  </button>
+                  {emailSuccess && (
+                    <div
+                      style={{
+                        color: C.green,
+                        fontSize: 13,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <CheckCircle2 size={14} />
+                      {emailSuccess}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </motion.div>
+          </div>
         )}
       </div>
 
-      {/* ── BOOKING DETAIL MODAL ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {selectedBooking && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4"
-            onClick={() => setSelectedBooking(null)}
-          >
-            <motion.div
-              initial={{ y: 60, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 60, opacity: 0 }}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="w-full max-w-lg rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
-              style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="font-black text-lg" style={{ color: theme.text }}>{selectedBooking.client_name}</h2>
-                  <span
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase mt-1 inline-block"
-                    style={{ backgroundColor: `${BOOKING_STATUS_COLORS[selectedBooking.status]}20`, color: BOOKING_STATUS_COLORS[selectedBooking.status] }}
-                  >
-                    {selectedBooking.status}
-                  </span>
-                </div>
-                <button onClick={() => setSelectedBooking(null)} className="p-2 rounded-xl" style={{ backgroundColor: theme.border }}>
-                  <X size={14} style={{ color: theme.textM }} />
-                </button>
-              </div>
-
-              {/* Event details */}
-              <div className="space-y-2 text-sm" style={{ color: theme.text }}>
-                {[
-                  { icon: Calendar, label: 'Date', value: fmtDate(selectedBooking.date) },
-                  { icon: Clock, label: 'Time', value: selectedBooking.start_time && selectedBooking.end_time ? `${selectedBooking.start_time} – ${selectedBooking.end_time}` : '—' },
-                  { icon: MapPin, label: 'Location', value: [selectedBooking.location, selectedBooking.city].filter(Boolean).join(', ') || '—' },
-                  { icon: Users, label: 'Guests', value: selectedBooking.guest_count ? String(selectedBooking.guest_count) : '—' },
-                  { icon: DollarSign, label: 'Budget', value: selectedBooking.budget_range || '—' },
-                  { icon: Phone, label: 'Phone', value: selectedBooking.client_phone || '—' },
-                  { icon: Mail, label: 'Email', value: selectedBooking.client_email },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="flex items-center gap-3">
-                    <Icon size={13} style={{ color: '#6366F1' }} className="shrink-0" />
-                    <span className="text-xs font-semibold w-16 shrink-0" style={{ color: theme.textM }}>{label}</span>
-                    <span className="text-sm">{value}</span>
-                  </div>
-                ))}
-                {selectedBooking.event_type && (
-                  <div className="flex items-center gap-3">
-                    <Inbox size={13} style={{ color: '#6366F1' }} className="shrink-0" />
-                    <span className="text-xs font-semibold w-16 shrink-0" style={{ color: theme.textM }}>Type</span>
-                    <span className="text-sm capitalize">{selectedBooking.event_type.replace(/-/g, ' ')}</span>
-                  </div>
-                )}
-                {selectedBooking.mc_needed && (
-                  <div className="flex items-center gap-3">
-                    <AlertCircle size={13} style={{ color: '#F59E0B' }} className="shrink-0" />
-                    <span className="text-xs font-semibold w-16 shrink-0" style={{ color: theme.textM }}>MC</span>
-                    <span className="text-sm text-amber-400">MC/Host requested</span>
-                  </div>
-                )}
-                {selectedBooking.special_requests && (
-                  <div className="flex gap-3 mt-1">
-                    <Edit3 size={13} style={{ color: '#6366F1' }} className="shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-xs font-semibold block mb-0.5" style={{ color: theme.textM }}>Special Requests</span>
-                      <p className="text-sm italic">{selectedBooking.special_requests}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Status actions */}
-              <div>
-                <p className="text-xs font-bold mb-2" style={{ color: theme.textM }}>Update Status</p>
-                <div className="flex gap-1.5 flex-wrap">
-                  {(['contacted', 'pending', 'confirmed', 'declined'] as BookingStatus[]).map(s => (
-                    <button
-                      key={s}
-                      onClick={() => updateBookingStatus(selectedBooking.id, s)}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all"
-                      style={{
-                        backgroundColor: selectedBooking.status === s ? BOOKING_STATUS_COLORS[s] : `${BOOKING_STATUS_COLORS[s]}20`,
-                        color: selectedBooking.status === s ? '#fff' : BOOKING_STATUS_COLORS[s],
-                      }}
-                    >
-                      {s === 'confirmed' && <Check size={10} className="inline mr-1" />}
-                      {s === 'declined' && <X size={10} className="inline mr-1" />}
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Quick actions */}
-              <div className="flex gap-2 flex-wrap pt-2 border-t" style={{ borderColor: theme.border }}>
-                <button
-                  onClick={() => { setTab('email'); setEmailTo(selectedBooking.client_email); setSelectedBooking(null) }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-1"
-                  style={{ backgroundColor: `#6366F120`, color: '#6366F1', border: `1px solid #6366F140` }}
-                >
-                  <Mail size={12} /> Email Client
-                </button>
-                <button
-                  onClick={async () => {
-                    await createClientFromBooking(selectedBooking)
-                    setSelectedBooking(null)
-                    setTab('clients')
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-1"
-                  style={{ backgroundColor: `#10B98120`, color: '#10B981', border: `1px solid #10B98140` }}
-                >
-                  <Users size={12} /> Save as Client
-                </button>
-                <button
-                  onClick={() => {
-                    setShowNewInvoice(true)
-                    setSelectedBooking(null)
-                    setTab('invoices')
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-1"
-                  style={{ backgroundColor: `#F59E0B20`, color: '#F59E0B', border: `1px solid #F59E0B40` }}
-                >
-                  <FileText size={12} /> Create Invoice
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── INVOICE DETAIL MODAL ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {selectedInvoice && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4"
-            onClick={() => setSelectedInvoice(null)}
-          >
-            <motion.div
-              initial={{ y: 60, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 60, opacity: 0 }}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="w-full max-w-lg rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
-              style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-mono text-xs font-bold" style={{ color: theme.textM }}>{selectedInvoice.invoice_number}</p>
-                  <h2 className="font-black text-lg mt-0.5" style={{ color: theme.text }}>
-                    {selectedInvoice.client_name || selectedInvoice.dj_clients?.name || 'Invoice'}
-                  </h2>
-                  <span
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase mt-1 inline-block"
-                    style={{ backgroundColor: `${INVOICE_STATUS_COLORS[selectedInvoice.status]}20`, color: INVOICE_STATUS_COLORS[selectedInvoice.status] }}
-                  >
-                    {selectedInvoice.status}
-                  </span>
-                </div>
-                <button onClick={() => setSelectedInvoice(null)} className="p-2 rounded-xl" style={{ backgroundColor: theme.border }}>
-                  <X size={14} style={{ color: theme.textM }} />
-                </button>
-              </div>
-
-              {/* Line items */}
-              {selectedInvoice.line_items?.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-bold" style={{ color: theme.textM }}>Services</p>
-                  {selectedInvoice.line_items.map((item, i) => (
-                    <div key={i} className="flex justify-between items-center py-1.5 border-b" style={{ borderColor: theme.border }}>
-                      <div>
-                        <p className="text-sm" style={{ color: theme.text }}>{item.description}</p>
-                        <p className="text-xs" style={{ color: theme.textM }}>
-                          {item.quantity} × {fmt(item.unit_price)}
-                        </p>
-                      </div>
-                      <p className="font-bold text-sm" style={{ color: theme.text }}>{fmt(item.total)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Totals */}
-              <div className="space-y-2 pt-1">
-                <div className="flex justify-between">
-                  <span className="text-sm" style={{ color: theme.textM }}>Subtotal</span>
-                  <span className="font-bold" style={{ color: theme.text }}>{fmt(selectedInvoice.subtotal)}</span>
-                </div>
-                {selectedInvoice.deposit_amount > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-sm" style={{ color: theme.textM }}>
-                      Deposit {selectedInvoice.deposit_paid ? '(paid ✓)' : '(due)'}
-                    </span>
-                    <span className="font-bold" style={{ color: selectedInvoice.deposit_paid ? '#10B981' : '#F59E0B' }}>
-                      {fmt(selectedInvoice.deposit_amount)}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between pt-1 border-t" style={{ borderColor: theme.border }}>
-                  <span className="font-bold" style={{ color: theme.text }}>Balance Due</span>
-                  <span className="font-black text-lg" style={{ color: selectedInvoice.status === 'paid' ? '#10B981' : theme.text }}>
-                    {fmt(selectedInvoice.balance_due)}
-                  </span>
-                </div>
-              </div>
-
-              {selectedInvoice.notes && (
-                <p className="text-xs italic" style={{ color: theme.textM }}>{selectedInvoice.notes}</p>
-              )}
-
-              {/* Invoice status actions */}
-              <div className="flex gap-2 flex-wrap pt-2 border-t" style={{ borderColor: theme.border }}>
-                {selectedInvoice.status === 'draft' && (
-                  <>
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedInvoice.id, 'sent')}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-1"
-                      style={{ backgroundColor: '#6366F1', color: '#fff' }}
-                    >
-                      <Send size={12} /> Mark Sent
-                    </button>
-                    {selectedInvoice.client_email && (
-                      <button
-                        onClick={() => { setTab('email'); setEmailTo(selectedInvoice.client_email || ''); setEmailSubject(`Invoice ${selectedInvoice.invoice_number} — Mask Off Da DJ`); setSelectedInvoice(null) }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-1"
-                        style={{ backgroundColor: `#6366F120`, color: '#6366F1', border: `1px solid #6366F140` }}
-                      >
-                        <Mail size={12} /> Email Invoice
-                      </button>
-                    )}
-                  </>
-                )}
-                {['sent', 'viewed', 'overdue'].includes(selectedInvoice.status) && (
-                  <>
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedInvoice.id, 'paid')}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-1"
-                      style={{ backgroundColor: '#10B981', color: '#fff' }}
-                    >
-                      <Check size={12} /> Mark Paid
-                    </button>
-                    {!selectedInvoice.deposit_paid && selectedInvoice.deposit_amount > 0 && (
-                      <button
-                        onClick={() => {
-                          fetch('/api/dj/invoices', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selectedInvoice.id, deposit_paid: true }) })
-                          setInvoices(prev => prev.map(i => i.id === selectedInvoice.id ? { ...i, deposit_paid: true } : i))
-                          setSelectedInvoice(prev => prev ? { ...prev, deposit_paid: true } : null)
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-1"
-                        style={{ backgroundColor: `#F59E0B20`, color: '#F59E0B', border: `1px solid #F59E0B40` }}
-                      >
-                        <DollarSign size={12} /> Deposit Paid
-                      </button>
-                    )}
-                  </>
-                )}
-                <button
-                  onClick={() => { updateInvoiceStatus(selectedInvoice.id, 'overdue'); setSelectedInvoice(null) }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
-                  style={{ backgroundColor: `#EF444420`, color: '#EF4444', border: `1px solid #EF444440` }}
-                >
-                  <AlertCircle size={12} /> Overdue
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── NEW CLIENT FORM ──────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showNewClient && (
-          <NewClientModal
-            theme={theme}
-            onClose={() => setShowNewClient(false)}
-            onSave={async (data) => {
-              const r = await fetch('/api/dj/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-              const d = await r.json()
-              if (d.client) setClients(prev => [d.client, ...prev])
-              setShowNewClient(false)
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── NEW INVOICE FORM ─────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showNewInvoice && (
-          <NewInvoiceModal
-            theme={theme}
-            clients={clients}
-            onClose={() => setShowNewInvoice(false)}
-            onSave={async (data) => {
-              const r = await fetch('/api/dj/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-              const d = await r.json()
-              if (d.invoice) setInvoices(prev => [d.invoice, ...prev])
-              setShowNewInvoice(false)
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {/* Spin keyframe via a style tag */}
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
-  )
-}
-
-// ── New Client Modal ──────────────────────────────────────────────────────────
-
-function NewClientModal({ theme, onClose, onSave }: {
-  theme: Theme
-  onClose: () => void
-  onSave: (data: Record<string, string>) => void
-}) {
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [notes, setNotes] = useState('')
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/60 flex items-end justify-center"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ y: 80 }}
-        animate={{ y: 0 }}
-        exit={{ y: 80 }}
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-t-3xl p-5 space-y-4"
-        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-lg" style={{ color: theme.text }}>Add Client</h2>
-          <button onClick={onClose} className="p-2 rounded-xl" style={{ backgroundColor: theme.border }}>
-            <X size={14} style={{ color: theme.textM }} />
-          </button>
-        </div>
-        {[
-          { label: 'Name *', value: name, set: setName, type: 'text', placeholder: 'Client full name' },
-          { label: 'Email', value: email, set: setEmail, type: 'email', placeholder: 'client@email.com' },
-          { label: 'Phone', value: phone, set: setPhone, type: 'tel', placeholder: '+1 (555) 000-0000' },
-          { label: 'Notes', value: notes, set: setNotes, type: 'text', placeholder: 'Any notes…' },
-        ].map(f => (
-          <div key={f.label}>
-            <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>{f.label}</label>
-            <input
-              type={f.type}
-              value={f.value}
-              onChange={e => f.set(e.target.value)}
-              placeholder={f.placeholder}
-              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-              style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-            />
-          </div>
-        ))}
-        <button
-          onClick={() => name.trim() && onSave({ name, email, phone, notes })}
-          disabled={!name.trim()}
-          className="w-full py-3 rounded-xl font-bold text-sm disabled:opacity-40"
-          style={{ backgroundColor: '#6366F1', color: '#fff' }}
-        >
-          Save Client
-        </button>
-      </motion.div>
-    </motion.div>
-  )
-}
-
-// ── New Invoice Modal ─────────────────────────────────────────────────────────
-
-function NewInvoiceModal({ theme, clients, onClose, onSave }: {
-  theme: Theme
-  clients: Client[]
-  onClose: () => void
-  onSave: (data: Record<string, unknown>) => void
-}) {
-  const [clientId, setClientId] = useState('')
-  const [clientName, setClientName] = useState('')
-  const [clientEmail, setClientEmail] = useState('')
-  const [eventDate, setEventDate] = useState('')
-  const [eventType, setEventType] = useState('')
-  const [items, setItems] = useState<LineItem[]>([{ description: 'DJ Services', quantity: 1, unit_price: 0, total: 0 }])
-  const [depositPct, setDepositPct] = useState(25)
-  const [dueDate, setDueDate] = useState('')
-  const [notes, setNotes] = useState('')
-
-  const subtotal = items.reduce((s, i) => s + i.total, 0)
-  const depositAmount = Math.round(subtotal * (depositPct / 100))
-  const balanceDue = subtotal - depositAmount
-
-  function updateItem(idx: number, field: keyof LineItem, val: string | number) {
-    setItems(prev => prev.map((item, i) => {
-      if (i !== idx) return item
-      const updated = { ...item, [field]: val }
-      if (field === 'quantity' || field === 'unit_price') {
-        updated.total = Number(updated.quantity) * Number(updated.unit_price)
-      }
-      return updated
-    }))
-  }
-
-  function handleClientSelect(id: string) {
-    setClientId(id)
-    const c = clients.find(c => c.id === id)
-    if (c) { setClientName(c.name); setClientEmail(c.email || '') }
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/60 flex items-end justify-center"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ y: 80 }}
-        animate={{ y: 0 }}
-        exit={{ y: 80 }}
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-t-3xl p-5 space-y-4 max-h-[92vh] overflow-y-auto"
-        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-lg" style={{ color: theme.text }}>New Invoice</h2>
-          <button onClick={onClose} className="p-2 rounded-xl" style={{ backgroundColor: theme.border }}>
-            <X size={14} style={{ color: theme.textM }} />
-          </button>
-        </div>
-
-        {/* Client */}
-        {clients.length > 0 && (
-          <div>
-            <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>Select Client</label>
-            <select
-              value={clientId}
-              onChange={e => handleClientSelect(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-              style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-            >
-              <option value="">— Select existing client —</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        )}
-        {[
-          { label: 'Client Name *', value: clientName, set: setClientName, placeholder: 'Full name', type: 'text' },
-          { label: 'Client Email', value: clientEmail, set: setClientEmail, placeholder: 'email@example.com', type: 'email' },
-          { label: 'Event Date', value: eventDate, set: setEventDate, placeholder: '', type: 'date' },
-          { label: 'Event Type', value: eventType, set: setEventType, placeholder: 'e.g. Wedding, Corporate', type: 'text' },
-        ].map(f => (
-          <div key={f.label}>
-            <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>{f.label}</label>
-            <input
-              type={f.type}
-              value={f.value}
-              onChange={e => f.set(e.target.value)}
-              placeholder={f.placeholder}
-              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-              style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-            />
-          </div>
-        ))}
-
-        {/* Line items */}
-        <div>
-          <label className="text-xs font-semibold block mb-2" style={{ color: theme.textM }}>Services</label>
-          <div className="space-y-2">
-            {items.map((item, idx) => (
-              <div key={idx} className="flex gap-2">
-                <input
-                  type="text"
-                  value={item.description}
-                  onChange={e => updateItem(idx, 'description', e.target.value)}
-                  placeholder="Description"
-                  className="flex-1 rounded-xl px-3 py-2 text-xs outline-none"
-                  style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-                />
-                <input
-                  type="number"
-                  value={item.unit_price || ''}
-                  onChange={e => updateItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
-                  placeholder="$"
-                  className="w-20 rounded-xl px-2 py-2 text-xs outline-none text-center"
-                  style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-                />
-                <button
-                  onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
-                  className="p-2 rounded-xl"
-                  style={{ backgroundColor: `#EF444415`, color: '#EF4444' }}
-                >
-                  <X size={11} />
-                </button>
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={() => setItems(prev => [...prev, { description: '', quantity: 1, unit_price: 0, total: 0 }])}
-            className="flex items-center gap-1.5 mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg"
-            style={{ backgroundColor: `#6366F115`, color: '#6366F1' }}
-          >
-            <Plus size={11} /> Add Line Item
-          </button>
-        </div>
-
-        {/* Deposit % */}
-        <div>
-          <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>
-            Deposit: {depositPct}% ({subtotal > 0 ? `$${depositAmount}` : '$0'})
-          </label>
-          <select
-            value={depositPct}
-            onChange={e => setDepositPct(Number(e.target.value))}
-            className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-            style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-          >
-            {[0, 25, 50, 100].map(p => <option key={p} value={p}>{p}%</option>)}
-          </select>
-        </div>
-
-        {/* Due date */}
-        <div>
-          <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>Payment Due Date</label>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={e => setDueDate(e.target.value)}
-            className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-            style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-          />
-        </div>
-
-        {/* Totals preview */}
-        {subtotal > 0 && (
-          <div className="rounded-xl p-3 space-y-1" style={{ backgroundColor: `#6366F110`, border: `1px solid #6366F130` }}>
-            <div className="flex justify-between text-xs" style={{ color: theme.textM }}>
-              <span>Subtotal</span><span>${subtotal}</span>
-            </div>
-            <div className="flex justify-between text-xs" style={{ color: theme.textM }}>
-              <span>Deposit ({depositPct}%)</span><span>${depositAmount}</span>
-            </div>
-            <div className="flex justify-between text-sm font-bold" style={{ color: theme.text }}>
-              <span>Balance Due</span><span>${balanceDue}</span>
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label className="text-xs font-semibold block mb-1.5" style={{ color: theme.textM }}>Notes</label>
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            rows={2}
-            placeholder="Payment terms, cancellation policy, etc."
-            className="w-full rounded-xl px-3 py-2.5 text-xs outline-none resize-none"
-            style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }}
-          />
-        </div>
-
-        <button
-          onClick={() => clientName.trim() && onSave({
-            client_id: clientId || null,
-            client_name: clientName,
-            client_email: clientEmail,
-            event_date: eventDate || null,
-            event_type: eventType || null,
-            line_items: items.filter(i => i.description),
-            subtotal,
-            deposit_amount: depositAmount,
-            balance_due: balanceDue,
-            due_date: dueDate || null,
-            notes,
-          })}
-          disabled={!clientName.trim()}
-          className="w-full py-3 rounded-xl font-bold text-sm disabled:opacity-40"
-          style={{ backgroundColor: '#6366F1', color: '#fff' }}
-        >
-          Create Invoice
-        </button>
-      </motion.div>
-    </motion.div>
   )
 }

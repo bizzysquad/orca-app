@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
-  Sparkles, Check, DollarSign, Receipt, Calendar,
-  Mic2, Car, Plus, Trash2, Flame, Scale, MessageSquare,
-  ChevronLeft, ChevronRight, Send, X, Target, Loader2,
-  Coffee, Utensils,
+  Check, DollarSign, Calendar,
+  Mic2, Flame, Scale,
+  ChevronLeft, ChevronRight, Target, Loader2,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -51,188 +50,6 @@ interface DayEvent {
   paid?: boolean
 }
 
-// ── Bentley Chat Panel ──
-function BentleyDayPlan({ date, priorities, bills, groceryItems }: {
-  date: string
-  priorities: DailyPriority['items']
-  bills: Bill[]
-  groceryItems: any[]
-}) {
-  const { theme } = useTheme()
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
-  const [autoLoaded, setAutoLoaded] = useState(false)
-  const endRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const loadDayPlan = useCallback(async () => {
-    if (autoLoaded) return
-    setAutoLoaded(true)
-    setLoading(true)
-    const incompleteTasks = priorities.filter(p => !p.completed).length
-    const dueBills = bills.filter(b => b.due === date && b.status !== 'paid')
-    const availableFood = groceryItems.filter((g: any) => !g.consumed).slice(0, 8).map((g: any) => g.name).join(', ')
-    const prompt = `Give me a quick day plan for today (${date}). Include: 1) The top 3 tasks I should focus on, 2) A suggested meal plan for hitting 3,200 calories and 180g protein. Available food: ${availableFood || 'not specified'}. ${dueBills.length > 0 ? `Bills due today: ${dueBills.map(b => b.name + ' $' + b.amount).join(', ')}.` : ''} ${incompleteTasks} tasks still to complete. Keep it tight — bullet points, no fluff.`
-    try {
-      const res = await fetch('/api/bentley', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: prompt }],
-          context: `The user wants a day plan for ${date}.`,
-        }),
-      })
-      const data = await res.json()
-      setMessages([{ role: 'assistant', content: data.message || 'Ready to build your day plan. What do you need?' }])
-    } catch {
-      setMessages([{ role: 'assistant', content: "I'm here. Tell me what's on your plate today and I'll help you build a plan." }])
-    } finally {
-      setLoading(false)
-    }
-  }, [date, priorities, bills, groceryItems, autoLoaded])
-
-  const handleSend = async () => {
-    if (!input.trim() || loading) return
-    const userMsg = input.trim()
-    setInput('')
-    const next = [...messages, { role: 'user' as const, content: userMsg }]
-    setMessages(next)
-    setLoading(true)
-    try {
-      const res = await fetch('/api/bentley', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next }),
-      })
-      const data = await res.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: data.message || '...' }])
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Connection error. Try again.' }])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!open) {
-    return (
-      <motion.button
-        variants={fadeUp}
-        onClick={() => { setOpen(true); loadDayPlan() }}
-        className="w-full flex items-center gap-3 p-4 rounded-2xl text-left"
-        style={{ background: `linear-gradient(135deg, ${BENTLEY_GOLD}15, ${BENTLEY_INDIGO}10)`, border: `1px solid ${BENTLEY_GOLD}30` }}
-      >
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `linear-gradient(135deg, ${BENTLEY_GOLD}, #D97706)` }}>
-          <Sparkles size={18} color="#fff" />
-        </div>
-        <div className="flex-1">
-          <p className="font-bold text-sm" style={{ color: BENTLEY_GOLD }}>Bentley's Day Plan</p>
-          <p className="text-xs mt-0.5" style={{ color: theme.subtext }}>Tap to get your game plan: tasks + meal suggestions</p>
-        </div>
-        <ChevronRight size={16} style={{ color: BENTLEY_GOLD }} />
-      </motion.button>
-    )
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl overflow-hidden"
-      style={{ border: `1px solid ${BENTLEY_GOLD}40` }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3" style={{ background: `${BENTLEY_GOLD}15`, borderBottom: `1px solid ${BENTLEY_GOLD}25` }}>
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BENTLEY_GOLD}, #D97706)` }}>
-            <Sparkles size={13} color="#fff" />
-          </div>
-          <span className="text-sm font-bold" style={{ color: BENTLEY_GOLD }}>Bentley</span>
-          <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: `${BENTLEY_GOLD}20`, color: BENTLEY_GOLD }}>Day Plan</span>
-        </div>
-        <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg" style={{ color: theme.subtext }}>
-          <X size={14} />
-        </button>
-      </div>
-
-      {/* Messages */}
-      <div className="p-4 space-y-3 max-h-80 overflow-y-auto" style={{ background: theme.card }}>
-        {messages.length === 0 && loading && (
-          <div className="flex justify-start">
-            <div className="flex gap-1.5 px-4 py-3 rounded-2xl" style={{ background: theme.bg }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: BENTLEY_GOLD, animationDelay: `${i * 0.15}s` }} />
-              ))}
-            </div>
-          </div>
-        )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className="max-w-[90%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap"
-              style={{
-                background: msg.role === 'user' ? BENTLEY_INDIGO : theme.bg,
-                color: msg.role === 'user' ? '#fff' : theme.text,
-                borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-              }}
-            >
-              {msg.content}
-            </div>
-          </div>
-        ))}
-        {loading && messages.length > 0 && (
-          <div className="flex justify-start">
-            <div className="flex gap-1.5 px-4 py-3 rounded-2xl" style={{ background: theme.bg }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: BENTLEY_GOLD, animationDelay: `${i * 0.15}s` }} />
-              ))}
-            </div>
-          </div>
-        )}
-        <div ref={endRef} />
-      </div>
-
-      {/* Input */}
-      <div className="p-3 border-t" style={{ background: theme.card, borderColor: theme.border }}>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Ask Bentley anything about your day..."
-            className="flex-1 px-3 py-2.5 rounded-xl border text-sm"
-            style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}
-          />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || loading}
-            className="p-2.5 rounded-xl disabled:opacity-40"
-            style={{ background: BENTLEY_INDIGO, color: '#fff' }}
-          >
-            <Send size={15} />
-          </button>
-        </div>
-        <div className="flex gap-2 mt-2 flex-wrap">
-          {['Build my meal plan', 'What should I focus on?', 'Quick wins for today'].map(q => (
-            <button
-              key={q}
-              onClick={() => setInput(q)}
-              className="px-2.5 py-1 rounded-full text-xs border"
-              style={{ borderColor: theme.border, color: theme.subtext }}
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  )
-}
 
 // ── Main Calendar Component ──
 function DashboardCalendar({
@@ -477,86 +294,6 @@ function DayDetail({
           </div>
         )}
 
-        {/* Tasks hidden from dashboard — manage via Bentley */}
-        {false && priorities.length > 0 && (
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: BENTLEY_INDIGO }}>
-            Tasks ({priorities.filter(p => p.completed).length}/{priorities.length})
-          </p>
-          <div className="space-y-1.5">
-            {priorities.map((item, i) => {
-              const color = AREA_COLORS[item.area] || BENTLEY_INDIGO
-              return (
-                <div key={item.id} className="flex items-center gap-2 group">
-                  <button
-                    onClick={() => onTogglePriority(item.id)}
-                    className="shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all"
-                    style={{
-                      borderColor: item.completed ? color : theme.border,
-                      backgroundColor: item.completed ? color : 'transparent',
-                    }}
-                  >
-                    {item.completed && <Check size={10} color="#fff" />}
-                  </button>
-                  <span
-                    className="flex-1 text-sm"
-                    style={{
-                      color: item.completed ? theme.subtext : theme.text,
-                      textDecoration: item.completed ? 'line-through' : 'none',
-                    }}
-                  >
-                    {item.text}
-                  </span>
-                  <div className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: `${color}18`, color }}>
-                    {item.area}
-                  </div>
-                  <button
-                    onClick={() => onDeletePriority(item.id)}
-                    className="shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity"
-                    style={{ color: theme.subtext }}
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Add task */}
-          <div className="flex gap-2 mt-3">
-            <input
-              type="text"
-              value={newTask}
-              onChange={e => setNewTask(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && newTask.trim()) {
-                  onAddPriority(newTask.trim(), newArea)
-                  setNewTask('')
-                }
-              }}
-              placeholder="Add a task for this day..."
-              className="flex-1 px-3 py-2 rounded-xl border text-xs"
-              style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-            />
-            <select
-              value={newArea}
-              onChange={e => setNewArea(e.target.value)}
-              className="px-2 py-2 rounded-xl border text-xs"
-              style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-            >
-              {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-            <button
-              onClick={() => { if (newTask.trim()) { onAddPriority(newTask.trim(), newArea); setNewTask('') } }}
-              disabled={!newTask.trim()}
-              className="p-2 rounded-xl disabled:opacity-40"
-              style={{ backgroundColor: BENTLEY_INDIGO, color: '#fff' }}
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-        </div>
-        )}
       </div>
     </div>
   )
@@ -580,8 +317,6 @@ export default function DashboardPage() {
 
   // DJ gigs
   const [gigs, setGigs] = useState<any[]>([])
-  // Grocery items
-  const [groceryItems, setGroceryItems] = useState<any[]>([])
   // Fitness
   const [todayCalories, setTodayCalories] = useState(0)
   const [currentWeight, setCurrentWeight] = useState(159)
@@ -596,10 +331,6 @@ export default function DashboardPage() {
     try {
       const saved = localStorage.getItem('orca-dj-gigs')
       if (saved) setGigs(JSON.parse(saved))
-    } catch {}
-    try {
-      const saved = localStorage.getItem('orca-grocery')
-      if (saved) setGroceryItems(JSON.parse(saved))
     } catch {}
     try {
       const wl = localStorage.getItem('orca-weight-logs')
@@ -760,133 +491,168 @@ export default function DashboardPage() {
 
   const caloriesPct = Math.min(Math.round((todayCalories / 3200) * 100), 100)
 
+  // ── Shared widget renderers ───────────────────────────────────────────────
+
+  const QuickStatsRow = () => (
+    <div className="grid grid-cols-3 gap-2">
+      <Link href="/bill-boss">
+        <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+          <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>Bills Due</p>
+          <p className="font-bold text-base" style={{ color: BENTLEY_RED }}>{fmt(totalDue)}</p>
+        </div>
+      </Link>
+      <Link href="/smart-stack">
+        <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+          <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>Income</p>
+          <p className="font-bold text-base" style={{ color: BENTLEY_GREEN }}>
+            {(lyftNetIncome + djEarnedIncome + bizzplugEarnedIncome) > 0
+              ? fmt(lyftNetIncome + djEarnedIncome + bizzplugEarnedIncome)
+              : checkingBalance > 0 ? fmt(checkingBalance) : '—'}
+          </p>
+        </div>
+      </Link>
+      <Link href="/dj">
+        <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+          <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>DJ Gigs</p>
+          <p className="font-bold text-base" style={{ color: '#EC4899' }}>{upcomingGigs.length}</p>
+        </div>
+      </Link>
+    </div>
+  )
+
+  const FitnessBar = () => (
+    <Link href="/fitness">
+      <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Flame size={14} style={{ color: BENTLEY_GREEN }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Fitness Today</span>
+          </div>
+          <div className="flex items-center gap-3 text-xs font-semibold" style={{ color: theme.subtext }}>
+            <span><Scale size={11} className="inline mr-1" style={{ color: BENTLEY_GREEN }} />{currentWeight} lbs</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mb-1.5">
+          <span className="text-xs" style={{ color: theme.subtext }}>Calories</span>
+          <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+            <div className="h-full rounded-full transition-all" style={{ width: `${caloriesPct}%`, backgroundColor: caloriesPct > 80 ? BENTLEY_GREEN : caloriesPct > 40 ? BENTLEY_GOLD : BENTLEY_RED }} />
+          </div>
+          <span className="text-xs font-bold tabular-nums" style={{ color: theme.text }}>{todayCalories}/{3200}</span>
+        </div>
+      </div>
+    </Link>
+  )
+
+  const UpcomingGigsList = () => upcomingGigs.length === 0 ? null : (
+    <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+      <div className="flex items-center gap-2 mb-3">
+        <Mic2 size={14} style={{ color: '#EC4899' }} />
+        <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Upcoming Gigs</span>
+      </div>
+      <div className="space-y-2">
+        {upcomingGigs.map((g: any) => (
+          <Link key={g.id} href="/dj">
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ backgroundColor: '#EC489910' }}>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{g.venue || g.clientName || 'Gig'}</p>
+                <p className="text-xs" style={{ color: theme.subtext }}>{g.date}{g.startTime ? ` · ${g.startTime}` : ''}</p>
+              </div>
+              <span className="text-xs font-bold ml-2" style={{ color: '#EC4899' }}>{g.contractAmount > 0 ? fmt(g.contractAmount) : ''}</span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+
   return (
-    <div className="min-h-screen pb-16" style={{ background: theme.bg, color: theme.text }}>
-      <motion.div
-        initial="hidden"
-        animate="show"
-        variants={{ show: { transition: { staggerChildren: 0.07 } } }}
-        className="px-4 pt-5 pb-4 max-w-lg mx-auto space-y-4"
-      >
-        {/* Header */}
-        <motion.div variants={fadeUp} className="flex items-start justify-between">
-          <div>
+    <div className="min-h-screen pb-16 lg:pb-0" style={{ background: theme.bg, color: theme.text }}>
+      <div className="px-4 pt-5 lg:px-8 lg:pt-8 max-w-lg mx-auto lg:max-w-none">
+
+        {/* ── MOBILE layout (single column) ── */}
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={{ show: { transition: { staggerChildren: 0.07 } } }}
+          className="lg:hidden space-y-4 pb-4"
+        >
+          {/* Header */}
+          <motion.div variants={fadeUp}>
             <div className="flex items-center gap-2 mb-1">
               <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: BENTLEY_GOLD }} />
               <span className="text-xs font-bold uppercase tracking-widest" style={{ color: BENTLEY_GOLD }}>ORCA</span>
             </div>
             <h1 className="text-2xl font-bold leading-tight" style={{ color: theme.text }}>{greeting}</h1>
             <p className="text-sm mt-0.5" style={{ color: theme.subtext }}>{line}</p>
-          </div>
-          <Link href="/bentley">
-            <motion.div
-              whileTap={{ scale: 0.93 }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold"
-              style={{ background: `${BENTLEY_GOLD}18`, border: `1px solid ${BENTLEY_GOLD}40`, color: BENTLEY_GOLD }}
-            >
-              <MessageSquare size={13} />
-              Bentley
+          </motion.div>
+          <motion.div variants={fadeUp}><QuickStatsRow /></motion.div>
+          <motion.div variants={fadeUp}>
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar size={14} style={{ color: BENTLEY_INDIGO }} />
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Command Calendar</span>
+            </div>
+            <DashboardCalendar bills={bills} gigs={gigs} priorities={allPriorities} selectedDate={selectedDate} onDateSelect={setSelectedDate} month={calMonth} year={calYear} onMonthChange={handleMonthChange} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <div className="flex items-center gap-2 mb-2">
+              <Target size={14} style={{ color: BENTLEY_INDIGO }} />
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>{selectedDate === todayStr ? "Today's Plan" : 'Day View'}</span>
+            </div>
+            <DayDetail date={selectedDate} bills={bills} gigs={gigs} priorities={selectedPriorities} onTogglePriority={handleTogglePriority} onAddPriority={handleAddPriority} onDeletePriority={handleDeletePriority} />
+          </motion.div>
+          <motion.div variants={fadeUp}><FitnessBar /></motion.div>
+        </motion.div>
+
+        {/* ── DESKTOP layout (two columns) ── */}
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={{ show: { transition: { staggerChildren: 0.06 } } }}
+          className="hidden lg:block pb-8"
+        >
+          {/* Desktop header */}
+          <motion.div variants={fadeUp} className="mb-6">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: BENTLEY_GOLD }} />
+              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: BENTLEY_GOLD }}>ORCA</span>
+            </div>
+            <h1 className="text-3xl font-bold leading-tight" style={{ color: theme.text }}>{greeting}</h1>
+            <p className="text-sm mt-1" style={{ color: theme.subtext }}>{line}</p>
+          </motion.div>
+
+          {/* Stats row — full width */}
+          <motion.div variants={fadeUp} className="mb-6"><QuickStatsRow /></motion.div>
+
+          {/* Two-column grid */}
+          <div className="grid grid-cols-[1fr_340px] gap-6 items-start">
+
+            {/* Left column */}
+            <motion.div variants={fadeUp} className="space-y-5">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar size={14} style={{ color: BENTLEY_INDIGO }} />
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Command Calendar</span>
+                </div>
+                <DashboardCalendar bills={bills} gigs={gigs} priorities={allPriorities} selectedDate={selectedDate} onDateSelect={setSelectedDate} month={calMonth} year={calYear} onMonthChange={handleMonthChange} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Target size={14} style={{ color: BENTLEY_INDIGO }} />
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>{selectedDate === todayStr ? "Today's Plan" : 'Day View'}</span>
+                </div>
+                <DayDetail date={selectedDate} bills={bills} gigs={gigs} priorities={selectedPriorities} onTogglePriority={handleTogglePriority} onAddPriority={handleAddPriority} onDeletePriority={handleDeletePriority} />
+              </div>
             </motion.div>
-          </Link>
-        </motion.div>
 
-        {/* Quick stats row */}
-        <motion.div variants={fadeUp} className="grid grid-cols-3 gap-2">
-          <Link href="/bill-boss">
-            <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>Bills Due</p>
-              <p className="font-bold text-base" style={{ color: BENTLEY_RED }}>{fmt(totalDue)}</p>
-            </div>
-          </Link>
-          <Link href="/smart-stack">
-            <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>Income</p>
-              <p className="font-bold text-base" style={{ color: BENTLEY_GREEN }}>
-                {(lyftNetIncome + djEarnedIncome + bizzplugEarnedIncome) > 0
-                  ? fmt(lyftNetIncome + djEarnedIncome + bizzplugEarnedIncome)
-                  : checkingBalance > 0 ? fmt(checkingBalance) : '—'}
-              </p>
-            </div>
-          </Link>
-          <Link href="/dj">
-            <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-xs mb-0.5" style={{ color: theme.subtext }}>DJ Gigs</p>
-              <p className="font-bold text-base" style={{ color: '#EC4899' }}>{upcomingGigs.length}</p>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Calendar */}
-        <motion.div variants={fadeUp}>
-          <div className="flex items-center gap-2 mb-2">
-            <Calendar size={14} style={{ color: BENTLEY_INDIGO }} />
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Command Calendar</span>
+            {/* Right column */}
+            <motion.div variants={fadeUp} className="space-y-4">
+              <FitnessBar />
+              <UpcomingGigsList />
+            </motion.div>
           </div>
-          <DashboardCalendar
-            bills={bills}
-            gigs={gigs}
-            priorities={allPriorities}
-            selectedDate={selectedDate}
-            onDateSelect={setSelectedDate}
-            month={calMonth}
-            year={calYear}
-            onMonthChange={handleMonthChange}
-          />
         </motion.div>
 
-        {/* Day Detail */}
-        <motion.div variants={fadeUp}>
-          <div className="flex items-center gap-2 mb-2">
-            <Target size={14} style={{ color: BENTLEY_INDIGO }} />
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>
-              {selectedDate === todayStr ? "Today's Plan" : 'Day View'}
-            </span>
-          </div>
-          <DayDetail
-            date={selectedDate}
-            bills={bills}
-            gigs={gigs}
-            priorities={selectedPriorities}
-            onTogglePriority={handleTogglePriority}
-            onAddPriority={handleAddPriority}
-            onDeletePriority={handleDeletePriority}
-          />
-        </motion.div>
-
-        {/* Bentley Day Plan */}
-        <motion.div variants={fadeUp}>
-          <BentleyDayPlan
-            date={selectedDate}
-            priorities={selectedPriorities}
-            bills={bills}
-            groceryItems={groceryItems}
-          />
-        </motion.div>
-
-        {/* Fitness quick bar */}
-        <motion.div variants={fadeUp}>
-          <Link href="/fitness">
-            <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Flame size={14} style={{ color: BENTLEY_GREEN }} />
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Fitness Today</span>
-                </div>
-                <div className="flex items-center gap-3 text-xs font-semibold" style={{ color: theme.subtext }}>
-                  <span><Scale size={11} className="inline mr-1" style={{ color: BENTLEY_GREEN }} />{currentWeight} lbs</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 mb-1.5">
-                <span className="text-xs" style={{ color: theme.subtext }}>Calories</span>
-                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${caloriesPct}%`, backgroundColor: caloriesPct > 80 ? BENTLEY_GREEN : caloriesPct > 40 ? BENTLEY_GOLD : BENTLEY_RED }} />
-                </div>
-                <span className="text-xs font-bold tabular-nums" style={{ color: theme.text }}>{todayCalories}/{3200}</span>
-              </div>
-            </div>
-          </Link>
-        </motion.div>
-      </motion.div>
+      </div>
     </div>
   )
 }

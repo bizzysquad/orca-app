@@ -227,15 +227,30 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
   const userIdRef = useRef<string | null>(null)
 
   const SYNC_KEYS = useMemo(() => [
+    // Financial / bills
     'orca-bills',
     'orca-user-settings',
     'orca-savings-accounts',
     'orca-payment-entries',
     'orca-paycheck-history',
+    // Income sources
+    'orca-lyft-sessions',
+    'orca-bizzplug-clients',
+    // DJ
+    'orca-dj-gigs',
+    'orca-dj-profile',
+    'orca-dj-activity',
+    // Fitness & food
+    'orca-weight-logs',
+    'orca-meal-logs',
+    'orca-grocery',
+    // Tasks & notes
     'orca-tasks',
     'orca-notes',
+    // Groups & social
     'orca-stack-circle-groups',
     'orca-roommates',
+    // UI preferences
     'orca-dashboard-order',
     'orca-dashboard-pinned',
     'orca-theme-id',
@@ -305,20 +320,29 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
         if (profile?.local_data && typeof profile.local_data === 'object') {
           const cloud = profile.local_data as Record<string, any>
           let hydrated = 0
+          let hasLocalOnly = false
           for (const key of SYNC_KEYS) {
             if (cloud[key] !== undefined) {
+              // Cloud has this key — overwrite local to ensure cross-device consistency
               const val = typeof cloud[key] === 'string' ? cloud[key] : JSON.stringify(cloud[key])
-              // Always overwrite local with cloud data to ensure cross-device consistency
               localStorage.setItem(key, val)
               hydrated++
+            } else if (localStorage.getItem(key) !== null) {
+              // Local has data the cloud doesn't (e.g. DJ gigs entered on mobile before sync was set up)
+              // Queue a push so cloud stays complete for all devices
+              hasLocalOnly = true
             }
           }
           console.log(`[ORCA Sync] Hydrated ${hydrated} keys from cloud`)
+          if (hasLocalOnly) {
+            console.log('[ORCA Sync] Local has keys not yet in cloud — pushing to sync')
+            debouncedSync()
+          }
           // Signal that cloud data has been hydrated — components can re-read
           window.dispatchEvent(new Event('orca-sync-ready'))
         } else {
           console.log('[ORCA Sync] No cloud data found — pushing local data to cloud')
-          // First time: push local state to cloud for other devices
+          // First time on any device: push local state to cloud for other devices
           syncToCloud()
         }
       } catch (err) {

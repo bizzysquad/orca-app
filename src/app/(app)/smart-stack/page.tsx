@@ -286,6 +286,12 @@ export default function SmartStackPage() {
 
   // ── Income source data from localStorage ──
   const [lyftSessions, setLyftSessions] = useState<{id:string;date:string;earnings:number;trips:number;miles?:number;gasExpense?:number}[]>([])
+  const [lyftFormExpanded, setLyftFormExpanded] = useState(false)
+  const [lyftAddDate, setLyftAddDate] = useState('')
+  const [lyftAddEarnings, setLyftAddEarnings] = useState('')
+  const [lyftAddTrips, setLyftAddTrips] = useState('')
+  const [lyftAddMiles, setLyftAddMiles] = useState('')
+  const [lyftAddGas, setLyftAddGas] = useState('')
   const [djGigs, setDjGigs] = useState<{id:string;date:string;clientName?:string;eventType?:string;contractAmount?:number;fee?:number;depositPaid?:boolean;depositAmount?:number;partialPayments?:{amount:number}[];status:string}[]>([])
   const [bizzplugClients, setBizzplugClients] = useState<{id:string;quote:number;paid:number;status:string}[]>([])
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
@@ -566,6 +572,29 @@ export default function SmartStackPage() {
     const totalSavings = savingsAccounts.reduce((sum, a) => sum + (a.amount || 0), 0);
     return { totalIncome, totalSavings };
   }, [totalIncome, savingsAccounts]);
+
+  const addLyftSession = () => {
+    const earnings = parseFloat(lyftAddEarnings)
+    const trips = parseInt(lyftAddTrips) || 0
+    if (!earnings || !lyftAddDate) return
+    const newSession = {
+      id: Date.now().toString(),
+      date: lyftAddDate,
+      earnings,
+      trips,
+      ...(lyftAddMiles ? { miles: parseFloat(lyftAddMiles) } : {}),
+      ...(lyftAddGas ? { gasExpense: parseFloat(lyftAddGas) } : {}),
+    }
+    const updated = [...lyftSessions, newSession]
+    setLyftSessions(updated)
+    try { localStorage.setItem('orca-lyft-sessions', JSON.stringify(updated)) } catch {}
+    setLyftAddDate('')
+    setLyftAddEarnings('')
+    setLyftAddTrips('')
+    setLyftAddMiles('')
+    setLyftAddGas('')
+    setLyftFormExpanded(false)
+  }
 
   const renderCheckProjectionWithCalendar = () => {
     const period = effectivePeriod;
@@ -963,6 +992,96 @@ export default function SmartStackPage() {
               ))}
             </div>
 
+            {/* Log Session Form */}
+            <div className="mb-5">
+              {!lyftFormExpanded ? (
+                <button
+                  onClick={() => { setLyftFormExpanded(true); setLyftAddDate(new Date().toISOString().split('T')[0]); }}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  style={{ background: '#22D3EE18', color: '#22D3EE', border: '1px dashed #22D3EE50' }}
+                >
+                  <Plus className="w-4 h-4" /> Log This Week
+                </button>
+              ) : (
+                <div className="rounded-xl p-3 space-y-3" style={{ background: '#22D3EE10', border: '1px solid #22D3EE40' }}>
+                  <p className="text-xs font-bold" style={{ color: '#22D3EE' }}>Log Weekly Session</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Date</label>
+                      <input
+                        type="date"
+                        value={lyftAddDate}
+                        onChange={e => setLyftAddDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Earnings ($)</label>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={lyftAddEarnings}
+                        onChange={e => setLyftAddEarnings(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Trips</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={lyftAddTrips}
+                        onChange={e => setLyftAddTrips(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Gas Expense ($)</label>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={lyftAddGas}
+                        onChange={e => setLyftAddGas(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Miles (optional)</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={lyftAddMiles}
+                        onChange={e => setLyftAddMiles(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setLyftFormExpanded(false)}
+                      className="flex-1 py-2 rounded-xl text-xs font-semibold"
+                      style={{ backgroundColor: theme.card, color: theme.textM, border: `1px solid ${theme.border}` }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={addLyftSession}
+                      disabled={!lyftAddEarnings || !lyftAddDate}
+                      className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40"
+                      style={{ backgroundColor: '#22D3EE', color: '#fff' }}
+                    >
+                      Save Session
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Recent Sessions</p>
               {lyftSessions.length === 0 ? (
@@ -1006,16 +1125,15 @@ export default function SmartStackPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="grid grid-cols-3 gap-3 mb-5">
               {[
                 { label: 'Total Earned', value: fmt(djEarned), color: '#10B981' },
                 { label: 'Booked Value', value: fmt(djBooked), color: '#F43F5E' },
                 { label: 'Upcoming', value: String(djUpcoming), color: theme.text },
-                { label: 'BizzyPlug Paid', value: fmt(bizzplugEarned), color: '#F59E0B' },
               ].map(({ label, value, color }) => (
-                <div key={label} className="rounded-xl p-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                  <p className="text-xs font-semibold mb-1" style={{ color: theme.textM }}>{label}</p>
-                  <p className="text-xl font-black" style={{ color }}>{value}</p>
+                <div key={label} className="rounded-xl p-3 overflow-hidden" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                  <p className="text-xs font-semibold mb-1 truncate" style={{ color: theme.textM }}>{label}</p>
+                  <p className="text-sm font-black truncate" style={{ color }}>{value}</p>
                 </div>
               ))}
             </div>

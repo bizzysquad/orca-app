@@ -4,8 +4,8 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Sparkles, DollarSign, Briefcase, Activity,
-  X, CreditCard, Star, Mic2, Palette, ChevronDown, ChevronRight, Building2, Shield,
+  LayoutDashboard, DollarSign, Briefcase, Activity,
+  X, CreditCard, Star, Mic2, Palette, ChevronDown, ChevronRight, Building2,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '@/context/ThemeContext'
@@ -31,7 +31,6 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', name: 'Home', icon: LayoutDashboard, href: '/dashboard', accent: BENTLEY_INDIGO },
-  { id: 'bentley', name: 'Bentley', icon: Sparkles, href: '/bentley', accent: BENTLEY_GOLD },
   {
     id: 'finances', name: 'Finances', icon: DollarSign, href: '/bill-boss', accent: '#10B981',
     children: [
@@ -42,8 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: 'work', name: 'Work', icon: Briefcase, href: '/work', accent: '#F59E0B',
     children: [
-      { id: 'dj', name: 'DJ Gig Manager', href: '/dj', icon: Mic2 },
-      { id: 'dj-admin', name: 'DJ Admin', href: '/dj-admin', icon: Shield },
+      { id: 'dj', name: 'DJ Maskoff', href: '/dj', icon: Mic2 },
       { id: 'bizzplug', name: 'BizzyPlug', href: '/bizzplug', icon: Palette },
     ],
   },
@@ -64,7 +62,7 @@ export default function SideSidebar({ open, onClose, userName }: SideSidebarProp
   const isParentActive = (item: NavItem): boolean => {
     if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     if (item.id === 'finances') return pathname.startsWith('/bill-boss') || pathname.startsWith('/smart-stack')
-    if (item.id === 'work') return pathname.startsWith('/work') || pathname.startsWith('/dj') || pathname.startsWith('/bizzplug') || pathname.startsWith('/dj-admin')
+    if (item.id === 'work') return pathname.startsWith('/work') || pathname.startsWith('/dj') || pathname.startsWith('/bizzplug')
     if (item.id === 'life') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery')
     return pathname.startsWith(item.href)
   }
@@ -159,20 +157,7 @@ export default function SideSidebar({ open, onClose, userName }: SideSidebarProp
                           color: active ? accent : theme.textM,
                         }}
                       >
-                        {item.id === 'bentley' ? (
-                          <div
-                            className="p-1.5 rounded-full shrink-0"
-                            style={{
-                              background: active
-                                ? `linear-gradient(135deg, ${BENTLEY_GOLD}, #D97706)`
-                                : `${BENTLEY_GOLD}20`,
-                            }}
-                          >
-                            <Icon size={14} style={{ color: active ? '#fff' : BENTLEY_GOLD }} />
-                          </div>
-                        ) : (
-                          <Icon size={19} strokeWidth={active ? 2.2 : 1.5} className="shrink-0" />
-                        )}
+                        <Icon size={19} strokeWidth={active ? 2.2 : 1.5} className="shrink-0" />
                         <span className="font-semibold text-sm leading-none">{item.name}</span>
                         {active && !hasChildren && (
                           <div
@@ -249,7 +234,7 @@ export default function SideSidebar({ open, onClose, userName }: SideSidebarProp
             {/* Footer */}
             <div className="px-5 py-4 border-t shrink-0" style={{ borderColor: theme.border }}>
               <p className="text-[11px] text-center" style={{ color: theme.textM }}>
-                ORCA · Powered by Bentley AI
+                ORCA
               </p>
             </div>
           </motion.div>

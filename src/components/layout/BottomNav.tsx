@@ -1,15 +1,14 @@
 'use client'
 
-import React, { useState } from 'react'
+import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Sparkles, DollarSign, Mic2, Activity,
+  LayoutDashboard, DollarSign, Mic2, Activity,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useTheme } from '@/context/ThemeContext'
 
-const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
 
 interface NavItem {
@@ -22,7 +21,6 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', name: 'Home', icon: LayoutDashboard, href: '/dashboard', accent: BENTLEY_INDIGO },
-  { id: 'bentley', name: 'Bentley', icon: Sparkles, href: '/bentley', accent: BENTLEY_GOLD },
   { id: 'money', name: 'Money', icon: DollarSign, href: '/bill-boss', accent: '#10B981' },
   { id: 'dj', name: 'DJ', icon: Mic2, href: '/dj', accent: '#F43F5E' },
   { id: 'life', name: 'Life', icon: Activity, href: '/fitness', accent: '#EC4899' },
@@ -35,7 +33,7 @@ const BottomNav = React.forwardRef<HTMLDivElement, {}>((_, ref) => {
   const isActive = (item: NavItem) => {
     if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     if (item.href === '/bill-boss') return pathname.startsWith('/bill-boss') || pathname.startsWith('/smart-stack')
-    if (item.href === '/dj') return pathname.startsWith('/dj') || pathname.startsWith('/business')
+    if (item.href === '/dj') return pathname === '/dj' || pathname.startsWith('/dj/')
     if (item.href === '/fitness') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery') || pathname.startsWith('/music')
     return pathname.startsWith(item.href)
   }
@@ -43,7 +41,7 @@ const BottomNav = React.forwardRef<HTMLDivElement, {}>((_, ref) => {
   return (
     <div
       ref={ref}
-      className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto w-full md:left-1/2 md:-translate-x-1/2"
+      className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto w-full md:left-1/2 md:-translate-x-1/2 lg:hidden"
       style={{
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
         background: `${theme.nav}f0`,
@@ -73,41 +71,12 @@ const BottomNav = React.forwardRef<HTMLDivElement, {}>((_, ref) => {
                 />
               )}
 
-              {/* Bentley gets a special glow treatment */}
-              {item.id === 'bentley' && (
-                <div
-                  className="absolute inset-0 rounded-xl pointer-events-none"
-                  style={{
-                    background: active
-                      ? `radial-gradient(circle at center, ${BENTLEY_GOLD}20 0%, transparent 70%)`
-                      : 'none',
-                  }}
-                />
-              )}
-
               <div className="relative z-10">
-                {item.id === 'bentley' ? (
-                  <div
-                    className="p-1.5 rounded-full"
-                    style={{
-                      background: active
-                        ? `linear-gradient(135deg, ${BENTLEY_GOLD}, #D97706)`
-                        : `${BENTLEY_GOLD}20`,
-                    }}
-                  >
-                    <Icon
-                      size={17}
-                      style={{ color: active ? '#fff' : BENTLEY_GOLD }}
-                      strokeWidth={active ? 2 : 1.5}
-                    />
-                  </div>
-                ) : (
-                  <Icon
-                    size={22}
-                    style={{ color: active ? accent : theme.subtext }}
-                    strokeWidth={active ? 2 : 1.5}
-                  />
-                )}
+                <Icon
+                  size={22}
+                  style={{ color: active ? accent : theme.subtext }}
+                  strokeWidth={active ? 2 : 1.5}
+                />
               </div>
 
               <span
@@ -118,7 +87,7 @@ const BottomNav = React.forwardRef<HTMLDivElement, {}>((_, ref) => {
               </span>
 
               {/* Active dot */}
-              {active && item.id !== 'bentley' && (
+              {active && (
                 <motion.div
                   layoutId={`dot-${item.id}`}
                   className="absolute bottom-0.5 w-1 h-1 rounded-full"

@@ -837,7 +837,7 @@ export default function FitnessPage() {
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.06 } } }}
-        className="px-4 pt-4 space-y-5 max-w-lg mx-auto">
+        className="px-4 pt-4 space-y-5 max-w-lg mx-auto lg:max-w-3xl">
 
         {/* TODAY TAB */}
         {activeTab === 'today' && (

@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic2, Plus, Sparkles, Calendar, DollarSign,
   Check, Clock, MapPin, Phone, Mail, Trash2, ChevronRight,
   Edit3, X, Users, FileText, ChevronDown, ChevronUp,
   AlertCircle, Star, TrendingUp, CheckCircle, AlertTriangle,
+  Send, Copy,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import type { DJGig, GigStatus, GigType, DJPartialPayment } from '@/lib/types'
@@ -44,6 +45,42 @@ const DEFAULT_GEAR = [
   'Invoice ready',
 ]
 
+interface EmailTemplate {
+  id: string
+  name: string
+  subject: string
+  body: string
+  type: 'blast' | 'invoice' | 'confirmation' | 'followup' | 'custom'
+  createdAt: string
+}
+
+const DEFAULT_TEMPLATES: EmailTemplate[] = [
+  {
+    id: 'tpl-confirm',
+    name: 'Booking Confirmation',
+    subject: 'Your Booking is Confirmed – {eventType} on {date}',
+    body: 'Hi {clientName},\n\nGreat news — your booking has been confirmed!\n\nEvent: {eventType}\nDate: {date}\nVenue: {venue}\n\nContract Amount: {contractAmount}\nDeposit Due: {depositAmount}\n\nPlease reach out if you have any questions. I look forward to making your event unforgettable!\n\nBest,\n[Your Name]',
+    type: 'confirmation',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'tpl-invoice',
+    name: 'Invoice',
+    subject: 'Invoice – DJ Services – {eventType} on {date}',
+    body: 'Hi {clientName},\n\nThank you for having me at your event! Please find your invoice details below.\n\n──────────────────────\nINVOICE\n──────────────────────\nEvent: {eventType}\nDate: {date}\nVenue: {venue}\n\nContract Total:  {contractAmount}\nDeposit Paid:    {depositAmount}\nBalance Due:     {balanceDue}\n──────────────────────\n\nPayment is due within 7 days. Please contact me if you have any questions.\n\nThank you,\n[Your Name]',
+    type: 'invoice',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'tpl-followup',
+    name: 'Follow-up',
+    subject: 'Following Up – DJ Services for Your {eventType}',
+    body: 'Hi {clientName},\n\nI wanted to follow up regarding DJ services for your upcoming {eventType}.\n\nI would love to help make your event memorable. Please let me know if you have any questions or would like to move forward with a booking.\n\nLooking forward to hearing from you!\n\nBest,\n[Your Name]',
+    type: 'followup',
+    createdAt: new Date().toISOString(),
+  },
+]
+
 function gid() { return Math.random().toString(36).slice(2, 10) }
 
 function to12Hour(time: string): string {
@@ -65,7 +102,7 @@ function BLANK_GIG(): Partial<DJGig> {
     endTime: '11:00 PM',
     venue: '',
     eventAddress: '',
-    status: 'inquiry' as GigStatus,
+    status: 'confirmed' as GigStatus,
     contractAmount: 0,
     fee: 0,
     depositAmount: 0,
@@ -96,6 +133,9 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
   const [showAddPayment, setShowAddPayment] = useState(false)
   const [payAmount, setPayAmount] = useState('')
   const [payNote, setPayNote] = useState('')
+  const [editingPartialId, setEditingPartialId] = useState<string | null>(null)
+  const [editingPartialAmount, setEditingPartialAmount] = useState('')
+  const [editingPartialNote, setEditingPartialNote] = useState('')
 
   const contract = gig.contractAmount || gig.fee || 0
   const remaining = calcRemaining(gig)
@@ -123,26 +163,46 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
     onUpdate(updated)
   }
 
+  const startEditPartial = (p: DJPartialPayment) => {
+    setEditingPartialId(p.id)
+    setEditingPartialAmount(String(p.amount))
+    setEditingPartialNote(p.note || '')
+  }
+
+  const saveEditPartial = () => {
+    if (!editingPartialId) return
+    const amt = parseFloat(editingPartialAmount)
+    if (!amt || amt <= 0) return
+    const updated = {
+      ...gig,
+      partialPayments: (gig.partialPayments || []).map(p =>
+        p.id === editingPartialId ? { ...p, amount: amt, note: editingPartialNote || undefined } : p
+      ),
+    }
+    onUpdate(updated)
+    setEditingPartialId(null)
+  }
+
   return (
     <div className="space-y-3">
       {/* Balance header */}
       <div className="rounded-xl p-4 space-y-2" style={{ background: `${BENTLEY_RED}10`, border: `1px solid ${BENTLEY_RED}25` }}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Balance Remaining</span>
-          <span className="text-2xl font-black" style={{ color: remaining <= 0 ? BENTLEY_GREEN : BENTLEY_RED }}>{fmt(remaining)}</span>
+          <span className="text-xl font-black" style={{ color: remaining <= 0 ? BENTLEY_GREEN : BENTLEY_RED }}>{fmt(remaining)}</span>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center mt-2">
-          <div>
+          <div className="overflow-hidden">
             <p className="text-[10px] font-semibold" style={{ color: theme.subtext }}>Contract</p>
-            <p className="text-sm font-bold" style={{ color: theme.text }}>{fmt(contract)}</p>
+            <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{fmt(contract)}</p>
           </div>
-          <div>
+          <div className="overflow-hidden">
             <p className="text-[10px] font-semibold" style={{ color: theme.subtext }}>Paid</p>
-            <p className="text-sm font-bold" style={{ color: BENTLEY_GREEN }}>{fmt(totalPaid)}</p>
+            <p className="text-sm font-bold truncate" style={{ color: BENTLEY_GREEN }}>{fmt(totalPaid)}</p>
           </div>
-          <div>
+          <div className="overflow-hidden">
             <p className="text-[10px] font-semibold" style={{ color: theme.subtext }}>Due</p>
-            <p className="text-sm font-bold" style={{ color: remaining > 0 ? BENTLEY_RED : BENTLEY_GREEN }}>{remaining > 0 ? fmt(remaining) : 'PAID'}</p>
+            <p className="text-sm font-bold truncate" style={{ color: remaining > 0 ? BENTLEY_RED : BENTLEY_GREEN }}>{remaining > 0 ? fmt(remaining) : 'PAID'}</p>
           </div>
         </div>
         {/* Progress bar */}
@@ -153,13 +213,13 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
 
       {/* Deposit row */}
       <div className="flex items-center justify-between px-3 py-2.5 rounded-xl" style={{ background: theme.bg, border: `1px solid ${theme.border}` }}>
-        <div>
+        <div className="min-w-0 flex-1 mr-3">
           <p className="text-sm font-semibold" style={{ color: theme.text }}>Deposit</p>
           <p className="text-xs" style={{ color: theme.subtext }}>{fmt(gig.depositAmount || 0)}</p>
         </div>
         <button
           onClick={toggleDeposit}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold shrink-0"
           style={{ background: gig.depositPaid ? `${BENTLEY_GREEN}18` : `${BENTLEY_GOLD}18`, color: gig.depositPaid ? BENTLEY_GREEN : BENTLEY_GOLD }}
         >
           {gig.depositPaid ? <><Check size={11} /> RECEIVED</> : 'PENDING'}
@@ -171,16 +231,52 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
         <div className="space-y-1.5">
           <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Partial Payments</p>
           {(gig.partialPayments || []).map(p => (
-            <div key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: `${BENTLEY_INDIGO}10`, border: `1px solid ${BENTLEY_INDIGO}20` }}>
-              <Check size={11} style={{ color: BENTLEY_INDIGO }} />
-              <div className="flex-1">
-                <p className="text-xs font-semibold" style={{ color: theme.text }}>{fmt(p.amount)}</p>
-                {p.note && <p className="text-[10px]" style={{ color: theme.subtext }}>{p.note}</p>}
+            <div key={p.id}>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: `${BENTLEY_INDIGO}10`, border: `1px solid ${BENTLEY_INDIGO}20` }}>
+                <Check size={11} style={{ color: BENTLEY_INDIGO }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold" style={{ color: theme.text }}>{fmt(p.amount)}</p>
+                  {p.note && <p className="text-[10px]" style={{ color: theme.subtext }}>{p.note}</p>}
+                </div>
+                <p className="text-[10px] shrink-0" style={{ color: theme.subtext }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                <button
+                  onClick={() => editingPartialId === p.id ? setEditingPartialId(null) : startEditPartial(p)}
+                  className="p-1 rounded"
+                  style={{ color: BENTLEY_INDIGO }}
+                >
+                  <Edit3 size={10} />
+                </button>
+                <button onClick={() => removePartial(p.id)} className="p-1 rounded" style={{ color: BENTLEY_RED }}>
+                  <X size={10} />
+                </button>
               </div>
-              <p className="text-[10px]" style={{ color: theme.subtext }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-              <button onClick={() => removePartial(p.id)} className="p-1 rounded" style={{ color: BENTLEY_RED }}>
-                <X size={10} />
-              </button>
+              {editingPartialId === p.id && (
+                <div className="mt-1 p-2.5 rounded-xl space-y-2" style={{ background: `${BENTLEY_INDIGO}08`, border: `1px solid ${BENTLEY_INDIGO}30` }}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BENTLEY_INDIGO }}>Edit Payment</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      value={editingPartialAmount}
+                      onChange={e => setEditingPartialAmount(e.target.value)}
+                      placeholder="Amount $"
+                      className="px-3 py-2 rounded-xl border text-sm"
+                      style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
+                    />
+                    <input
+                      type="text"
+                      value={editingPartialNote}
+                      onChange={e => setEditingPartialNote(e.target.value)}
+                      placeholder="Note (optional)"
+                      className="px-3 py-2 rounded-xl border text-sm"
+                      style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingPartialId(null)} className="flex-1 py-1.5 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
+                    <button onClick={saveEditPartial} className="flex-1 py-1.5 rounded-xl text-xs font-semibold" style={{ background: BENTLEY_INDIGO, color: '#fff' }}>Save</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -306,7 +402,9 @@ function GigEditForm({ gig, onSave, onCancel }: {
         <div>
           <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Status</label>
           <select className={inputCls} style={inputStyle} value={form.status} onChange={e => f({ status: e.target.value as GigStatus })}>
-            {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            <option value="confirmed">Confirmed</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </div>
       </div>
@@ -353,6 +451,26 @@ function GigEditForm({ gig, onSave, onCancel }: {
         />
       </div>
 
+      {/* Payment section edit */}
+      <div className="space-y-2 pt-1" style={{ borderTop: `1px solid ${theme.border}` }}>
+        <p className="text-[10px] font-bold uppercase tracking-wider pt-2" style={{ color: theme.subtext }}>Payment Details</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Deposit Amount $</label>
+            <input className={inputCls} style={inputStyle} type="number" value={form.depositAmount || ''} onChange={e => f({ depositAmount: Number(e.target.value) })} placeholder="0" />
+          </div>
+          <div className="flex items-end pb-0.5">
+            <button
+              onClick={() => f({ depositPaid: !form.depositPaid })}
+              className="w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+              style={{ background: form.depositPaid ? `${BENTLEY_GREEN}18` : `${BENTLEY_GOLD}18`, color: form.depositPaid ? BENTLEY_GREEN : BENTLEY_GOLD, border: `1px solid ${form.depositPaid ? BENTLEY_GREEN : BENTLEY_GOLD}40` }}
+            >
+              {form.depositPaid ? <><Check size={11} /> Deposit Received</> : 'Mark Deposit Received'}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="flex gap-3">
         <button onClick={onCancel} className="flex-1 py-3 rounded-xl text-sm font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
         <button onClick={() => onSave(form)} className="flex-1 py-3 rounded-xl text-sm font-semibold" style={{ background: DJ_PINK, color: '#fff' }}>Save Changes</button>
@@ -370,7 +488,7 @@ function GigCard({ gig, onUpdate, onDelete }: {
   const { theme } = useTheme()
   const [tab, setTab] = useState<'info' | 'payments' | 'gear' | 'edit'>('info')
   const [expanded, setExpanded] = useState(false)
-  const status = STATUS_CONFIG[gig.status]
+  const status = STATUS_CONFIG[gig.status] || STATUS_CONFIG.confirmed
   const today = new Date().toISOString().slice(0, 10)
   const daysUntil = Math.ceil((new Date(gig.date + 'T00:00:00').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
   const isUpcoming = gig.date >= today && gig.status !== 'cancelled' && gig.status !== 'completed'
@@ -383,6 +501,10 @@ function GigCard({ gig, onUpdate, onDelete }: {
     onUpdate(updated)
   }
 
+  const eventTypeLabel = gig.eventType
+    ? gig.eventType.charAt(0).toUpperCase() + gig.eventType.slice(1)
+    : ''
+
   return (
     <motion.div
       variants={fadeUp}
@@ -391,18 +513,22 @@ function GigCard({ gig, onUpdate, onDelete }: {
     >
       {/* Header row */}
       <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
-        <div className="p-2 rounded-xl shrink-0" style={{ background: gig.isLead ? `${BENTLEY_GOLD}18` : `${DJ_PINK}18` }}>
-          {gig.isLead ? <Star size={15} style={{ color: BENTLEY_GOLD }} /> : <Mic2 size={15} style={{ color: DJ_PINK }} />}
+        <div className="p-2 rounded-xl shrink-0" style={{ background: `${DJ_PINK}18` }}>
+          <Mic2 size={15} style={{ color: DJ_PINK }} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-bold text-sm truncate" style={{ color: theme.text }}>{gig.clientName}</p>
-            {gig.isLead && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${BENTLEY_GOLD}20`, color: BENTLEY_GOLD }}>LEAD</span>}
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-bold text-sm" style={{ color: theme.text }}>{gig.clientName}</p>
+            {eventTypeLabel && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: `${DJ_PINK}12`, color: DJ_PINK }}>
+                {eventTypeLabel}
+              </span>
+            )}
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ background: `${status.color}18`, color: status.color }}>
               {status.label}
             </span>
           </div>
-          <div className="flex items-center gap-3 mt-0.5 text-xs" style={{ color: theme.subtext }}>
+          <div className="flex items-center gap-3 mt-0.5 text-xs flex-wrap" style={{ color: theme.subtext }}>
             <span className="flex items-center gap-1">
               <Calendar size={10} />
               {new Date(gig.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -477,7 +603,7 @@ function GigCard({ gig, onUpdate, onDelete }: {
 
                     {/* Status buttons */}
                     <div className="flex gap-2 flex-wrap pt-1">
-                      {(['inquiry', 'pending', 'confirmed', 'completed', 'cancelled'] as GigStatus[]).map(s => (
+                      {(['confirmed', 'completed', 'cancelled'] as GigStatus[]).map(s => (
                         <button
                           key={s}
                           onClick={() => onUpdate({ ...gig, status: s })}
@@ -597,6 +723,418 @@ function CRMPanel({ gigs }: { gigs: DJGig[] }) {
   )
 }
 
+// ── Email & Invoice Panel ──
+function EmailPanel({ gigs }: { gigs: DJGig[] }) {
+  const { theme } = useTheme()
+
+  const [templates, setTemplates] = useState<EmailTemplate[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_TEMPLATES
+    try {
+      const saved = localStorage.getItem('orca-dj-email-templates')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_TEMPLATES
+  })
+
+  const [emailSubTab, setEmailSubTab] = useState<'templates' | 'compose'>('templates')
+  const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null)
+  const [showNewTemplate, setShowNewTemplate] = useState(false)
+  const [newTplName, setNewTplName] = useState('')
+  const [newTplSubject, setNewTplSubject] = useState('')
+  const [newTplBody, setNewTplBody] = useState('')
+  const [newTplType, setNewTplType] = useState<EmailTemplate['type']>('custom')
+
+  const [selectedGigId, setSelectedGigId] = useState('')
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [composeTo, setComposeTo] = useState('')
+  const [composeSubject, setComposeSubject] = useState('')
+  const [composeBody, setComposeBody] = useState('')
+  const [sendStatus, setSendStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  const saveTemplates = (updated: EmailTemplate[]) => {
+    setTemplates(updated)
+    try { localStorage.setItem('orca-dj-email-templates', JSON.stringify(updated)) } catch {}
+  }
+
+  const addTemplate = () => {
+    if (!newTplName.trim()) return
+    const t: EmailTemplate = {
+      id: gid(),
+      name: newTplName.trim(),
+      subject: newTplSubject.trim(),
+      body: newTplBody.trim(),
+      type: newTplType,
+      createdAt: new Date().toISOString(),
+    }
+    saveTemplates([...templates, t])
+    setNewTplName('')
+    setNewTplSubject('')
+    setNewTplBody('')
+    setNewTplType('custom')
+    setShowNewTemplate(false)
+  }
+
+  const duplicateTemplate = (t: EmailTemplate) => {
+    const copy: EmailTemplate = { ...t, id: gid(), name: `${t.name} (Copy)`, createdAt: new Date().toISOString() }
+    saveTemplates([...templates, copy])
+  }
+
+  const deleteTemplate = (id: string) => {
+    saveTemplates(templates.filter(t => t.id !== id))
+  }
+
+  const saveEditTemplate = () => {
+    if (!editingTemplate) return
+    saveTemplates(templates.map(t => t.id === editingTemplate.id ? editingTemplate : t))
+    setEditingTemplate(null)
+  }
+
+  const applyTemplate = (templateId: string, gigId: string) => {
+    const template = templates.find(t => t.id === templateId)
+    const gig = gigs.find(g => g.id === gigId)
+    if (!template) return
+
+    const replacements: Record<string, string> = {
+      clientName: gig?.clientName || '',
+      eventType: gig?.eventType ? gig.eventType.charAt(0).toUpperCase() + gig.eventType.slice(1) : '',
+      date: gig?.date ? new Date(gig.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '',
+      venue: gig?.venue || '',
+      contractAmount: fmt(gig?.contractAmount || gig?.fee || 0),
+      depositAmount: fmt(gig?.depositAmount || 0),
+      balanceDue: fmt(gig ? calcRemaining(gig) : 0),
+    }
+
+    let subject = template.subject
+    let body = template.body
+    Object.entries(replacements).forEach(([key, val]) => {
+      subject = subject.replace(new RegExp(`\\{${key}\\}`, 'g'), val)
+      body = body.replace(new RegExp(`\\{${key}\\}`, 'g'), val)
+    })
+
+    setComposeSubject(subject)
+    setComposeBody(body)
+    if (gig?.clientEmail) setComposeTo(gig.clientEmail)
+  }
+
+  const sendEmail = async () => {
+    if (!composeTo.trim() || !composeSubject.trim()) return
+    setSendStatus('sending')
+    try {
+      const res = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: composeTo,
+          subject: composeSubject,
+          text: composeBody,
+          html: composeBody.replace(/\n/g, '<br/>'),
+        }),
+      })
+      setSendStatus(res.ok ? 'sent' : 'error')
+      if (res.ok) setTimeout(() => setSendStatus('idle'), 4000)
+    } catch {
+      setSendStatus('error')
+    }
+  }
+
+  const inputCls = "w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+  const inputStyle = { background: theme.card, borderColor: theme.border, color: theme.text }
+
+  const TYPE_LABELS: Record<EmailTemplate['type'], string> = {
+    blast: 'Blast',
+    invoice: 'Invoice',
+    confirmation: 'Confirmation',
+    followup: 'Follow-up',
+    custom: 'Custom',
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-1 p-1 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+        {(['templates', 'compose'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setEmailSubTab(t)}
+            className="flex-1 py-2 rounded-lg text-xs font-bold capitalize transition-all"
+            style={{ background: emailSubTab === t ? DJ_PINK : 'transparent', color: emailSubTab === t ? '#fff' : theme.subtext }}
+          >
+            {t === 'templates' ? 'Templates' : 'Compose & Send'}
+          </button>
+        ))}
+      </div>
+
+      {/* TEMPLATES TAB */}
+      {emailSubTab === 'templates' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Email Templates</p>
+            <button
+              onClick={() => setShowNewTemplate(!showNewTemplate)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold"
+              style={{ background: `${DJ_PINK}18`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}
+            >
+              <Plus size={11} /> New Template
+            </button>
+          </div>
+
+          {/* New Template form */}
+          {showNewTemplate && (
+            <div className="rounded-xl p-3 space-y-2" style={{ background: `${DJ_PINK}08`, border: `1px solid ${DJ_PINK}30` }}>
+              <p className="text-xs font-bold" style={{ color: DJ_PINK }}>New Template</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Name</label>
+                  <input className={inputCls} style={inputStyle} placeholder="Template name" value={newTplName} onChange={e => setNewTplName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Type</label>
+                  <select className={inputCls} style={inputStyle} value={newTplType} onChange={e => setNewTplType(e.target.value as EmailTemplate['type'])}>
+                    {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Subject</label>
+                <input className={inputCls} style={inputStyle} placeholder="Email subject (use {clientName}, {date}, etc.)" value={newTplSubject} onChange={e => setNewTplSubject(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Body</label>
+                <textarea
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
+                  style={inputStyle}
+                  rows={5}
+                  placeholder="Email body — use {clientName}, {date}, {venue}, {contractAmount}, {depositAmount}, {balanceDue}, {eventType}"
+                  value={newTplBody}
+                  onChange={e => setNewTplBody(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowNewTemplate(false)} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
+                <button onClick={addTemplate} disabled={!newTplName.trim()} className="flex-1 py-2 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: DJ_PINK, color: '#fff' }}>Save Template</button>
+              </div>
+            </div>
+          )}
+
+          {/* Template list */}
+          {templates.length === 0 ? (
+            <div className="rounded-xl p-6 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+              <Mail size={24} style={{ color: theme.subtext, margin: '0 auto 8px' }} />
+              <p className="text-sm" style={{ color: theme.subtext }}>No templates yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {templates.map(t => (
+                <div key={t.id}>
+                  <div className="rounded-xl p-3" style={{ background: theme.card, border: `1px solid ${editingTemplate?.id === t.id ? DJ_PINK : theme.border}` }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-sm" style={{ color: theme.text }}>{t.name}</p>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${DJ_PINK}18`, color: DJ_PINK }}>{TYPE_LABELS[t.type]}</span>
+                        </div>
+                        <p className="text-xs mt-0.5 truncate" style={{ color: theme.subtext }}>{t.subject}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => setEditingTemplate(editingTemplate?.id === t.id ? null : { ...t })}
+                          className="p-1.5 rounded-lg"
+                          style={{ color: BENTLEY_INDIGO, background: `${BENTLEY_INDIGO}15` }}
+                          title="Edit"
+                        >
+                          <Edit3 size={11} />
+                        </button>
+                        <button
+                          onClick={() => duplicateTemplate(t)}
+                          className="p-1.5 rounded-lg"
+                          style={{ color: BENTLEY_GOLD, background: `${BENTLEY_GOLD}15` }}
+                          title="Duplicate"
+                        >
+                          <Copy size={11} />
+                        </button>
+                        <button
+                          onClick={() => deleteTemplate(t.id)}
+                          className="p-1.5 rounded-lg"
+                          style={{ color: BENTLEY_RED, background: `${BENTLEY_RED}15` }}
+                          title="Delete"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Inline editor */}
+                  {editingTemplate?.id === t.id && (
+                    <div className="mt-1 rounded-xl p-3 space-y-2" style={{ background: `${BENTLEY_INDIGO}08`, border: `1px solid ${BENTLEY_INDIGO}30` }}>
+                      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BENTLEY_INDIGO }}>Editing Template</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Name</label>
+                          <input className={inputCls} style={inputStyle} value={editingTemplate.name} onChange={e => setEditingTemplate({ ...editingTemplate, name: e.target.value })} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Type</label>
+                          <select className={inputCls} style={inputStyle} value={editingTemplate.type} onChange={e => setEditingTemplate({ ...editingTemplate, type: e.target.value as EmailTemplate['type'] })}>
+                            {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Subject</label>
+                        <input className={inputCls} style={inputStyle} value={editingTemplate.subject} onChange={e => setEditingTemplate({ ...editingTemplate, subject: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Body</label>
+                        <textarea
+                          className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
+                          style={inputStyle}
+                          rows={6}
+                          value={editingTemplate.body}
+                          onChange={e => setEditingTemplate({ ...editingTemplate, body: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditingTemplate(null)} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
+                        <button onClick={saveEditTemplate} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: BENTLEY_INDIGO, color: '#fff' }}>Update Template</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="rounded-xl p-3 mt-2" style={{ background: `${BENTLEY_GOLD}10`, border: `1px solid ${BENTLEY_GOLD}30` }}>
+            <p className="text-[10px] font-bold" style={{ color: BENTLEY_GOLD }}>Template Variables</p>
+            <p className="text-[10px] mt-1" style={{ color: theme.subtext }}>
+              Use these in your templates: <span style={{ color: BENTLEY_GOLD }}>{'{clientName}'} {'{date}'} {'{eventType}'} {'{venue}'} {'{contractAmount}'} {'{depositAmount}'} {'{balanceDue}'}</span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* COMPOSE TAB */}
+      {emailSubTab === 'compose' && (
+        <div className="space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Compose & Send</p>
+
+          {/* Gig + Template picker */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Select Gig</label>
+              <select
+                className={inputCls}
+                style={inputStyle}
+                value={selectedGigId}
+                onChange={e => {
+                  setSelectedGigId(e.target.value)
+                  if (selectedTemplateId && e.target.value) applyTemplate(selectedTemplateId, e.target.value)
+                  else if (e.target.value) {
+                    const gig = gigs.find(g => g.id === e.target.value)
+                    if (gig?.clientEmail) setComposeTo(gig.clientEmail)
+                  }
+                }}
+              >
+                <option value="">— Select gig —</option>
+                {[...gigs].sort((a, b) => b.date.localeCompare(a.date)).map(g => (
+                  <option key={g.id} value={g.id}>
+                    {g.clientName} · {g.date ? new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Apply Template</label>
+              <select
+                className={inputCls}
+                style={inputStyle}
+                value={selectedTemplateId}
+                onChange={e => {
+                  setSelectedTemplateId(e.target.value)
+                  if (e.target.value) applyTemplate(e.target.value, selectedGigId)
+                }}
+              >
+                <option value="">— Select template —</option>
+                {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* To field */}
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>To (email address)</label>
+            <input
+              className={inputCls}
+              style={inputStyle}
+              type="email"
+              placeholder="recipient@email.com (separate multiple with commas)"
+              value={composeTo}
+              onChange={e => setComposeTo(e.target.value)}
+            />
+          </div>
+
+          {/* Subject */}
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Subject</label>
+            <input
+              className={inputCls}
+              style={inputStyle}
+              placeholder="Email subject"
+              value={composeSubject}
+              onChange={e => setComposeSubject(e.target.value)}
+            />
+          </div>
+
+          {/* Body */}
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Message</label>
+            <textarea
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
+              style={inputStyle}
+              rows={8}
+              placeholder="Type your message here..."
+              value={composeBody}
+              onChange={e => setComposeBody(e.target.value)}
+            />
+          </div>
+
+          {/* Send */}
+          <button
+            onClick={sendEmail}
+            disabled={!composeTo.trim() || !composeSubject.trim() || sendStatus === 'sending'}
+            className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            style={{
+              background: sendStatus === 'sent' ? BENTLEY_GREEN : sendStatus === 'error' ? BENTLEY_RED : DJ_PINK,
+              color: '#fff',
+            }}
+          >
+            <Send size={14} />
+            {sendStatus === 'sending' ? 'Sending…' : sendStatus === 'sent' ? '✓ Sent!' : sendStatus === 'error' ? 'Failed — Retry' : 'Send Email'}
+          </button>
+
+          {sendStatus === 'error' && (
+            <p className="text-xs text-center" style={{ color: BENTLEY_RED }}>
+              Send failed. Check that your Gmail credentials are configured in environment variables.
+            </p>
+          )}
+
+          {/* Quick clear */}
+          {(composeSubject || composeBody || composeTo) && (
+            <button
+              onClick={() => { setComposeTo(''); setComposeSubject(''); setComposeBody(''); setSelectedGigId(''); setSelectedTemplateId(''); setSendStatus('idle'); }}
+              className="w-full py-2 rounded-xl text-xs font-semibold"
+              style={{ background: theme.card, color: theme.subtext, border: `1px solid ${theme.border}` }}
+            >
+              Clear Composer
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Add Gig Modal ──
 function AddGigModal({ onAdd, onClose }: { onAdd: (gig: DJGig) => void; onClose: () => void }) {
   const { theme } = useTheme()
@@ -620,7 +1158,7 @@ function AddGigModal({ onAdd, onClose }: { onAdd: (gig: DJGig) => void; onClose:
       endTime: form.endTime || '23:00',
       venue: form.venue || '',
       eventAddress: form.eventAddress,
-      status: form.status || 'inquiry',
+      status: form.status || 'confirmed',
       contractAmount: contract,
       fee: contract,
       depositAmount: form.depositAmount || 0,
@@ -645,7 +1183,7 @@ function AddGigModal({ onAdd, onClose }: { onAdd: (gig: DJGig) => void; onClose:
         initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }}
         className="w-full max-w-lg rounded-2xl p-6 space-y-3 max-h-[90vh] overflow-y-auto"
         style={{ background: theme.surface || theme.card, border: `1px solid ${theme.border}` }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold" style={{ color: theme.text }}>New Gig</h3>
@@ -675,10 +1213,20 @@ function AddGigModal({ onAdd, onClose }: { onAdd: (gig: DJGig) => void; onClose:
           </div>
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Status</label>
-            <select className={inputCls} style={inputStyle} value={form.status || 'inquiry'} onChange={e => f({ status: e.target.value as GigStatus })}>
-              {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            <select className={inputCls} style={inputStyle} value={form.status || 'confirmed'} onChange={e => f({ status: e.target.value as GigStatus })}>
+              <option value="confirmed">Confirmed</option>
+              <option value="completed">Completed</option>
             </select>
           </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Event Type</label>
+          <select className={inputCls} style={inputStyle} value={form.eventType || 'private'} onChange={e => f({ eventType: e.target.value as GigType })}>
+            {(['wedding','birthday','corporate','nightclub','bar','festival','private','other'] as GigType[]).map(t => (
+              <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+            ))}
+          </select>
         </div>
 
         <div>
@@ -739,8 +1287,8 @@ export default function DJPage() {
   const { theme } = useTheme()
   const [gigs, setGigs] = useState<DJGig[]>([])
   const [showAdd, setShowAdd] = useState(false)
-  const [filterStatus, setFilterStatus] = useState<GigStatus | 'all' | 'leads'>('all')
-  const [activeSection, setActiveSection] = useState<'gigs' | 'crm'>('gigs')
+  const [filterStatus, setFilterStatus] = useState<GigStatus | 'all'>('all')
+  const [activeSection, setActiveSection] = useState<'gigs' | 'crm' | 'email'>('gigs')
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [conflicts, setConflicts] = useState<{ date: string; clientName: string }[]>([])
 
@@ -756,7 +1304,6 @@ export default function DJPage() {
           partialPayments: g.partialPayments || [],
         }))
         setGigs(migrated)
-        // Sync on load to recover from any missed mutations
         autoSyncGigs(migrated)
       }
     } catch {}
@@ -780,7 +1327,6 @@ export default function DJPage() {
           if (data.conflicts && data.conflicts.length > 0) {
             setConflicts(data.conflicts)
           }
-          // Log activity
           try {
             const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
             log.unshift({ at: new Date().toISOString(), action: 'sync', synced: data.synced })
@@ -801,7 +1347,6 @@ export default function DJPage() {
     setGigs(next)
     save(next)
     setShowAdd(false)
-    // Log create
     try {
       const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
       log.unshift({ at: new Date().toISOString(), action: 'created', gigId: gig.id, client: gig.clientName, date: gig.date })
@@ -814,7 +1359,6 @@ export default function DJPage() {
     const next = gigs.map(g => g.id === updated.id ? updated : g)
     setGigs(next)
     save(next)
-    // Log status change
     if (prev && prev.status !== updated.status) {
       try {
         const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
@@ -829,7 +1373,6 @@ export default function DJPage() {
     const next = gigs.filter(g => g.id !== id)
     setGigs(next)
     save(next)
-    // Log delete
     if (gig) {
       try {
         const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
@@ -842,18 +1385,16 @@ export default function DJPage() {
   const today = new Date().toISOString().slice(0, 10)
 
   const filtered = useMemo(() => {
-    let list = gigs
-    if (filterStatus === 'leads') list = gigs.filter(g => g.isLead || g.status === 'inquiry')
-    else if (filterStatus !== 'all') list = gigs.filter(g => g.status === filterStatus)
-    return list.sort((a, b) => a.date.localeCompare(b.date))
+    const list = filterStatus === 'all' ? gigs : gigs.filter(g => g.status === filterStatus)
+    return [...list].sort((a, b) => a.date.localeCompare(b.date))
   }, [gigs, filterStatus])
 
   const stats = useMemo(() => {
     const upcoming = gigs.filter(g => g.date >= today && g.status === 'confirmed')
     const totalEarned = gigs.filter(g => g.status === 'completed').reduce((s, g) => s + calcTotalPaid(g), 0)
-    const pendingRevenue = upcoming.reduce((s, g) => s + (g.contractAmount || g.fee), 0)
-    const leads = gigs.filter(g => g.isLead || g.status === 'inquiry').length
-    return { upcoming: upcoming.length, totalEarned, pendingRevenue, leads, nextGig: upcoming.sort((a, b) => a.date.localeCompare(b.date))[0] }
+    const bookedValue = upcoming.reduce((s, g) => s + (g.contractAmount || g.fee || 0), 0)
+    const balanceDue = gigs.filter(g => g.status !== 'cancelled').reduce((s, g) => s + calcRemaining(g), 0)
+    return { upcoming: upcoming.length, totalEarned, bookedValue, balanceDue, nextGig: upcoming.sort((a, b) => a.date.localeCompare(b.date))[0] }
   }, [gigs, today])
 
   const bentleyAlert = useMemo(() => {
@@ -873,7 +1414,7 @@ export default function DJPage() {
         <div>
           <h1 className="text-lg font-bold" style={{ color: theme.text }}>DJ Gig Manager</h1>
           <div className="flex items-center gap-2">
-            <p className="text-xs" style={{ color: theme.subtext }}>{gigs.length} gig{gigs.length !== 1 ? 's' : ''} · {stats.leads} lead{stats.leads !== 1 ? 's' : ''}</p>
+            <p className="text-xs" style={{ color: theme.subtext }}>{gigs.length} gig{gigs.length !== 1 ? 's' : ''}</p>
             {syncStatus === 'syncing' && <span className="text-[10px] font-bold animate-pulse" style={{ color: BENTLEY_GOLD }}>Syncing…</span>}
             {syncStatus === 'synced' && conflicts.length === 0 && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_GREEN }}><CheckCircle size={9} /> Synced</span>}
             {(syncStatus === 'error') && <span className="text-[10px] font-bold" style={{ color: BENTLEY_RED }}>Sync error</span>}
@@ -929,7 +1470,7 @@ export default function DJPage() {
             className="mx-4 mt-2 rounded-xl p-3 flex items-start gap-2"
             style={{ background: `${BENTLEY_RED}15`, border: `1px solid ${BENTLEY_RED}30` }}
           >
-            <AlertTriangle size={14} style={{ color: BENTLEY_RED, shrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" style={{ color: BENTLEY_RED }} />
             <div>
               <p className="text-xs font-bold" style={{ color: BENTLEY_RED }}>Double-booking conflict detected</p>
               <p className="text-[11px] mt-0.5" style={{ color: theme.subtext }}>
@@ -945,24 +1486,24 @@ export default function DJPage() {
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.05 } } }}
-        className="px-4 pt-4 space-y-5 max-w-lg mx-auto"
+        className="px-4 pt-4 space-y-5 max-w-lg mx-auto lg:max-w-3xl"
       >
         {/* Stats */}
         <motion.div variants={fadeUp} className="grid grid-cols-4 gap-2">
-          <div className="rounded-xl p-2.5 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+          <div className="rounded-xl p-2.5 text-center overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
             <div className="text-lg font-bold" style={{ color: DJ_PINK }}>{stats.upcoming}</div>
             <div className="text-[9px]" style={{ color: theme.subtext }}>Upcoming</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <div className="text-lg font-bold" style={{ color: BENTLEY_GOLD }}>{stats.leads}</div>
-            <div className="text-[9px]" style={{ color: theme.subtext }}>Leads</div>
+          <div className="rounded-xl p-2.5 text-center overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+            <div className="text-lg font-bold" style={{ color: BENTLEY_GOLD }}>{gigs.length}</div>
+            <div className="text-[9px]" style={{ color: theme.subtext }}>Total</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <div className="text-lg font-bold leading-tight" style={{ color: BENTLEY_INDIGO }}>{fmt(stats.pendingRevenue)}</div>
-            <div className="text-[9px]" style={{ color: theme.subtext }}>Pending</div>
+          <div className="rounded-xl p-2.5 text-center overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+            <div className="text-xs font-black leading-tight truncate" style={{ color: BENTLEY_INDIGO }}>{fmt(stats.bookedValue)}</div>
+            <div className="text-[9px]" style={{ color: theme.subtext }}>Booked</div>
           </div>
-          <div className="rounded-xl p-2.5 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <div className="text-lg font-bold leading-tight" style={{ color: BENTLEY_GREEN }}>{fmt(stats.totalEarned)}</div>
+          <div className="rounded-xl p-2.5 text-center overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+            <div className="text-xs font-black leading-tight truncate" style={{ color: BENTLEY_GREEN }}>{fmt(stats.totalEarned)}</div>
             <div className="text-[9px]" style={{ color: theme.subtext }}>Earned</div>
           </div>
         </motion.div>
@@ -984,10 +1525,14 @@ export default function DJPage() {
 
         {/* Section Tabs */}
         <motion.div variants={fadeUp} className="flex gap-1 p-1 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-          {([['gigs', 'Gigs', Mic2], ['crm', 'CRM / Clients', Users]] as const).map(([s, label, Icon]) => (
+          {([
+            ['gigs', 'Gigs', Mic2],
+            ['crm', 'Clients', Users],
+            ['email', 'Email', Mail],
+          ] as const).map(([s, label, Icon]) => (
             <button
               key={s}
-              onClick={() => setActiveSection(s as 'gigs' | 'crm')}
+              onClick={() => setActiveSection(s as 'gigs' | 'crm' | 'email')}
               className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all"
               style={{
                 background: activeSection === s ? DJ_PINK : 'transparent',
@@ -1003,10 +1548,10 @@ export default function DJPage() {
           <>
             {/* Filter */}
             <motion.div variants={fadeUp} className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {(['all', 'leads', 'inquiry', 'pending', 'confirmed', 'completed'] as const).map(s => (
+              {(['all', 'confirmed', 'completed'] as const).map(s => (
                 <button
                   key={s}
-                  onClick={() => setFilterStatus(s)}
+                  onClick={() => setFilterStatus(s as GigStatus | 'all')}
                   className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
                   style={{
                     background: filterStatus === s ? DJ_PINK : theme.card,
@@ -1014,7 +1559,7 @@ export default function DJPage() {
                     border: `1px solid ${filterStatus === s ? DJ_PINK : theme.border}`,
                   }}
                 >
-                  {s === 'all' ? 'All' : s === 'leads' ? 'Leads' : STATUS_CONFIG[s as GigStatus].label}
+                  {s === 'all' ? 'All' : STATUS_CONFIG[s as GigStatus].label}
                 </button>
               ))}
             </motion.div>
@@ -1045,6 +1590,12 @@ export default function DJPage() {
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Client Database</span>
             </div>
             <CRMPanel gigs={gigs} />
+          </motion.div>
+        )}
+
+        {activeSection === 'email' && (
+          <motion.div variants={fadeUp}>
+            <EmailPanel gigs={gigs} />
           </motion.div>
         )}
       </motion.div>
