@@ -240,6 +240,7 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     'orca-dj-gigs',
     'orca-dj-profile',
     'orca-dj-activity',
+    'orca-dj-email-templates',
     // Fitness & food
     'orca-weight-logs',
     'orca-meal-logs',
@@ -335,8 +336,8 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
           }
           console.log(`[ORCA Sync] Hydrated ${hydrated} keys from cloud`)
           if (hasLocalOnly) {
-            console.log('[ORCA Sync] Local has keys not yet in cloud — pushing to sync')
-            debouncedSync()
+            console.log('[ORCA Sync] Local has keys not yet in cloud — pushing immediately')
+            syncToCloud()
           }
           // Signal that cloud data has been hydrated — components can re-read
           window.dispatchEvent(new Event('orca-sync-ready'))

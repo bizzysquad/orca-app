@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Mic2, Plus, Sparkles, Calendar, DollarSign,
+  Mic2, Plus, Calendar, DollarSign,
   Check, Clock, MapPin, Phone, Mail, Trash2, ChevronRight,
   Edit3, X, Users, FileText, ChevronDown, ChevronUp,
   AlertCircle, Star, TrendingUp, CheckCircle, AlertTriangle,
-  Send, Copy,
+  Send, Copy, Loader2, CheckCircle2, XCircle, Ban, MessageSquare, RefreshCw,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import type { DJGig, GigStatus, GigType, DJPartialPayment } from '@/lib/types'
@@ -52,6 +52,36 @@ interface EmailTemplate {
   body: string
   type: 'blast' | 'invoice' | 'confirmation' | 'followup' | 'custom'
   createdAt: string
+}
+
+interface BookingRequest {
+  id: string
+  client_name: string
+  client_email: string
+  client_phone?: string
+  event_type: string
+  date: string
+  city: string
+  location?: string
+  start_time?: string
+  end_time?: string
+  guest_count?: number
+  mc_needed?: boolean
+  special_requests?: string
+  budget_range?: string
+  status: 'new' | 'reviewed' | 'quoted' | 'booked' | 'declined' | 'dj_blocked'
+  created_at: string
+}
+
+const REQUEST_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  new:      { bg: '#451A0325', text: '#F97316' },
+  reviewed: { bg: '#1E3A5F25', text: '#60A5FA' },
+  quoted:   { bg: '#2E106525', text: '#A78BFA' },
+  booked:   { bg: '#052E1625', text: '#4ADE80' },
+  declined: { bg: '#450A0A25', text: '#F87171' },
+}
+const REQUEST_STATUS_LABELS: Record<string, string> = {
+  new: 'New', reviewed: 'Reviewed', quoted: 'Quoted', booked: 'Booked', declined: 'Declined',
 }
 
 const DEFAULT_TEMPLATES: EmailTemplate[] = [
@@ -1288,9 +1318,24 @@ export default function DJPage() {
   const [gigs, setGigs] = useState<DJGig[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [filterStatus, setFilterStatus] = useState<GigStatus | 'all'>('all')
-  const [activeSection, setActiveSection] = useState<'gigs' | 'crm' | 'email'>('gigs')
+  const [activeSection, setActiveSection] = useState<'gigs' | 'requests' | 'crm' | 'email'>('gigs')
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [conflicts, setConflicts] = useState<{ date: string; clientName: string }[]>([])
+
+  // Booking requests (from public website)
+  const [requests, setRequests] = useState<BookingRequest[]>([])
+  const [loadingRequests, setLoadingRequests] = useState(false)
+  const [selectedRequest, setSelectedRequest] = useState<BookingRequest | null>(null)
+  const [requestFilter, setRequestFilter] = useState<string>('all')
+  const [generatingReply, setGeneratingReply] = useState(false)
+  const [generatedReply, setGeneratedReply] = useState('')
+  const [replySubject, setReplySubject] = useState('')
+  const [sendingReply, setSendingReply] = useState(false)
+  const [replyError, setReplyError] = useState('')
+  const [replySent, setReplySent] = useState('')
+  const [blockedDate, setBlockedDate] = useState('')
+  const [blockingDate, setBlockingDate] = useState(false)
+  const [blockSuccess, setBlockSuccess] = useState('')
 
   useEffect(() => {
     try {
@@ -1338,7 +1383,10 @@ export default function DJPage() {
   }, [])
 
   const save = (g: DJGig[]) => {
-    try { localStorage.setItem('orca-dj-gigs', JSON.stringify(g)) } catch {}
+    try {
+      localStorage.setItem('orca-dj-gigs', JSON.stringify(g))
+      window.dispatchEvent(new Event('orca-local-write'))
+    } catch {}
     autoSyncGigs(g)
   }
 
@@ -1382,6 +1430,96 @@ export default function DJPage() {
     }
   }
 
+  // Load booking requests when switching to requests tab
+  const loadRequests = useCallback(async () => {
+    setLoadingRequests(true)
+    try {
+      const res = await fetch('/api/dj/bookings')
+      if (res.ok) {
+        const data = await res.json()
+        setRequests((data.bookings || data || []).filter((r: BookingRequest) => r.status !== 'dj_blocked'))
+      }
+    } catch {}
+    setLoadingRequests(false)
+  }, [])
+
+  useEffect(() => {
+    if (activeSection === 'requests' && requests.length === 0) loadRequests()
+  }, [activeSection, loadRequests, requests.length])
+
+  const generateReply = async (type: 'inquiry' | 'decline') => {
+    if (!selectedRequest) return
+    setGeneratingReply(true)
+    setReplyError('')
+    try {
+      const res = await fetch('/api/dj/generate-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking: selectedRequest, type }),
+      })
+      if (!res.ok) throw new Error('Generation failed')
+      const data = await res.json()
+      setGeneratedReply(data.reply || '')
+      setReplySubject(data.subject || '')
+    } catch (e: unknown) {
+      setReplyError(e instanceof Error ? e.message : 'Failed to generate reply')
+    }
+    setGeneratingReply(false)
+  }
+
+  const sendReply = async () => {
+    if (!selectedRequest || !generatedReply) return
+    setSendingReply(true)
+    setReplyError('')
+    try {
+      const res = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: selectedRequest.client_email, subject: replySubject, body: generatedReply }),
+      })
+      if (!res.ok) throw new Error('Send failed')
+      await fetch('/api/dj/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedRequest.id, status: 'reviewed' }),
+      })
+      setReplySent(`Reply sent to ${selectedRequest.client_email}`)
+      setRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, status: 'reviewed' as const } : r))
+      setTimeout(() => setReplySent(''), 4000)
+    } catch (e: unknown) {
+      setReplyError(e instanceof Error ? e.message : 'Send failed')
+    }
+    setSendingReply(false)
+  }
+
+  const updateRequestStatus = async (id: string, status: BookingRequest['status']) => {
+    try {
+      await fetch('/api/dj/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      })
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r))
+      if (selectedRequest?.id === id) setSelectedRequest(prev => prev ? { ...prev, status } : prev)
+    } catch {}
+  }
+
+  const blockDate = async () => {
+    if (!blockedDate) return
+    setBlockingDate(true)
+    try {
+      await fetch('/api/dj/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks: [{ date: blockedDate, reason: 'Manual block' }] }),
+      })
+      setBlockSuccess(`${new Date(blockedDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} blocked.`)
+      setBlockedDate('')
+      setTimeout(() => setBlockSuccess(''), 4000)
+    } catch {}
+    setBlockingDate(false)
+  }
+
   const today = new Date().toISOString().slice(0, 10)
 
   const filtered = useMemo(() => {
@@ -1397,7 +1535,7 @@ export default function DJPage() {
     return { upcoming: upcoming.length, totalEarned, bookedValue, balanceDue, nextGig: upcoming.sort((a, b) => a.date.localeCompare(b.date))[0] }
   }, [gigs, today])
 
-  const bentleyAlert = useMemo(() => {
+  const upcomingAlert = useMemo(() => {
     if (!stats.nextGig) return null
     const days = Math.ceil((new Date(stats.nextGig.date + 'T00:00:00').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
     if (days <= 7) return `Gig in ${days} day${days === 1 ? '' : 's'} — ${stats.nextGig.clientName} at ${stats.nextGig.venue || 'TBD'}. Confirm invoice, playlist, and gear.`
@@ -1412,7 +1550,7 @@ export default function DJPage() {
         style={{ background: `${theme.bg}f0`, backdropFilter: 'blur(12px)', borderBottom: `1px solid ${theme.border}` }}
       >
         <div>
-          <h1 className="text-lg font-bold" style={{ color: theme.text }}>DJ Gig Manager</h1>
+          <h1 className="text-lg font-bold" style={{ color: theme.text }}>DJ Maskoff</h1>
           <div className="flex items-center gap-2">
             <p className="text-xs" style={{ color: theme.subtext }}>{gigs.length} gig{gigs.length !== 1 ? 's' : ''}</p>
             {syncStatus === 'syncing' && <span className="text-[10px] font-bold animate-pulse" style={{ color: BENTLEY_GOLD }}>Syncing…</span>}
@@ -1474,7 +1612,7 @@ export default function DJPage() {
             <div>
               <p className="text-xs font-bold" style={{ color: BENTLEY_RED }}>Double-booking conflict detected</p>
               <p className="text-[11px] mt-0.5" style={{ color: theme.subtext }}>
-                {conflicts.map(c => c.date).join(', ')} already has a client booking request. Review in DJ Admin.
+                {conflicts.map(c => c.date).join(', ')} already has a client booking request. Review in Requests tab.
               </p>
             </div>
             <button onClick={() => setConflicts([])} className="ml-auto p-0.5" style={{ color: theme.subtext }}><X size={12} /></button>
@@ -1508,38 +1646,42 @@ export default function DJPage() {
           </div>
         </motion.div>
 
-        {/* Bentley Alert */}
-        {bentleyAlert && (
+        {/* Upcoming gig alert */}
+        {upcomingAlert && (
           <motion.div
             variants={fadeUp}
-            className="rounded-2xl p-4"
-            style={{ background: `linear-gradient(135deg, #0F1A35, #141B2D)`, border: `1px solid ${DJ_PINK}30` }}
+            className="rounded-2xl p-4 flex items-start gap-3"
+            style={{ background: `${DJ_PINK}12`, border: `1px solid ${DJ_PINK}30` }}
           >
-            <div className="flex items-center gap-2 mb-1.5">
-              <Sparkles size={13} style={{ color: BENTLEY_GOLD }} />
-              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: BENTLEY_GOLD }}>Bentley Alert</span>
-            </div>
-            <p className="text-sm leading-snug" style={{ color: '#CBD5E1' }}>{bentleyAlert}</p>
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" style={{ color: DJ_PINK }} />
+            <p className="text-sm leading-snug flex-1" style={{ color: theme.text }}>{upcomingAlert}</p>
           </motion.div>
         )}
 
         {/* Section Tabs */}
-        <motion.div variants={fadeUp} className="flex gap-1 p-1 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+        <motion.div variants={fadeUp} className="flex gap-1 p-1 rounded-xl overflow-x-auto" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
           {([
             ['gigs', 'Gigs', Mic2],
+            ['requests', 'Requests', MessageSquare],
             ['crm', 'Clients', Users],
             ['email', 'Email', Mail],
           ] as const).map(([s, label, Icon]) => (
             <button
               key={s}
-              onClick={() => setActiveSection(s as 'gigs' | 'crm' | 'email')}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all"
+              onClick={() => setActiveSection(s as typeof activeSection)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
               style={{
                 background: activeSection === s ? DJ_PINK : 'transparent',
                 color: activeSection === s ? '#fff' : theme.subtext,
+                minWidth: 60,
               }}
             >
               <Icon size={12} /> {label}
+              {s === 'requests' && requests.filter(r => r.status === 'new').length > 0 && (
+                <span className="ml-0.5 px-1 py-0 rounded-full text-[9px] font-black" style={{ background: DJ_PINK, color: '#fff', opacity: activeSection === 'requests' ? 0.7 : 1 }}>
+                  {requests.filter(r => r.status === 'new').length}
+                </span>
+              )}
             </button>
           ))}
         </motion.div>
@@ -1596,6 +1738,228 @@ export default function DJPage() {
         {activeSection === 'email' && (
           <motion.div variants={fadeUp}>
             <EmailPanel gigs={gigs} />
+          </motion.div>
+        )}
+
+        {activeSection === 'requests' && (
+          <motion.div variants={fadeUp} className="space-y-4">
+            {/* Filter row */}
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {(['all', 'new', 'reviewed', 'quoted', 'booked', 'declined'] as const).map(s => {
+                const count = s !== 'all' ? requests.filter(r => r.status === s).length : requests.length
+                const colors = REQUEST_STATUS_COLORS[s]
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setRequestFilter(s)}
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0"
+                    style={{
+                      background: requestFilter === s ? (colors?.bg || `${DJ_PINK}20`) : theme.card,
+                      color: requestFilter === s ? (colors?.text || DJ_PINK) : theme.subtext,
+                      border: `1px solid ${requestFilter === s ? (colors?.text || DJ_PINK) + '60' : theme.border}`,
+                    }}
+                  >
+                    {s === 'all' ? 'All' : REQUEST_STATUS_LABELS[s]} ({count})
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Reload + block date row */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadRequests}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
+                style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}
+              >
+                <RefreshCw size={11} /> Refresh
+              </button>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <input
+                  type="date"
+                  value={blockedDate}
+                  onChange={e => setBlockedDate(e.target.value)}
+                  className="px-2 py-1.5 rounded-xl border text-xs"
+                  style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
+                />
+                <button
+                  onClick={blockDate}
+                  disabled={!blockedDate || blockingDate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-40"
+                  style={{ background: `${BENTLEY_RED}15`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}
+                >
+                  <Ban size={11} /> Block Date
+                </button>
+              </div>
+            </div>
+            {blockSuccess && <p className="text-xs font-semibold" style={{ color: BENTLEY_GREEN }}>{blockSuccess}</p>}
+
+            {/* Loading state */}
+            {loadingRequests && (
+              <div className="flex items-center justify-center py-12 gap-2" style={{ color: theme.subtext }}>
+                <Loader2 size={18} className="animate-spin" />
+                <span className="text-sm">Loading requests…</span>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!loadingRequests && requests.length === 0 && (
+              <div className="rounded-2xl p-10 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <MessageSquare size={32} style={{ color: theme.subtext, margin: '0 auto 12px' }} />
+                <p className="text-sm font-semibold" style={{ color: theme.text }}>No booking requests yet</p>
+                <p className="text-xs mt-1" style={{ color: theme.subtext }}>Requests submitted on your website will appear here.</p>
+              </div>
+            )}
+
+            {/* Request cards */}
+            {!loadingRequests && (requestFilter === 'all' ? requests : requests.filter(r => r.status === requestFilter)).map(r => {
+              const isExpanded = selectedRequest?.id === r.id
+              const colors = REQUEST_STATUS_COLORS[r.status] || REQUEST_STATUS_COLORS['reviewed']
+              return (
+                <div key={r.id} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  {/* Collapsed header */}
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                    onClick={() => {
+                      if (isExpanded) {
+                        setSelectedRequest(null)
+                      } else {
+                        setSelectedRequest(r)
+                        setGeneratedReply('')
+                        setReplySubject('')
+                        setReplyError('')
+                        setReplySent('')
+                      }
+                    }}
+                  >
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0" style={{ background: colors.bg, color: colors.text }}>
+                      {REQUEST_STATUS_LABELS[r.status] || r.status}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{r.client_name}</p>
+                      <p className="text-xs truncate" style={{ color: theme.subtext }}>{r.event_type} · {r.date} · {r.city}</p>
+                    </div>
+                    {isExpanded ? <ChevronUp size={14} style={{ color: theme.subtext, shrink: 0 }} /> : <ChevronDown size={14} style={{ color: theme.subtext }} />}
+                  </button>
+
+                  {/* Expanded panel */}
+                  {isExpanded && (
+                    <div className="border-t px-4 pb-4 pt-3 space-y-4" style={{ borderColor: theme.border }}>
+                      {/* Details grid */}
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                        {[
+                          ['Email', r.client_email],
+                          ['Phone', r.client_phone || '—'],
+                          ['Date', r.date],
+                          ['City', r.city],
+                          ['Venue', r.location || '—'],
+                          ['Start', r.start_time || '—'],
+                          ['End', r.end_time || '—'],
+                          ['Guests', r.guest_count ? String(r.guest_count) : '—'],
+                          ['MC', r.mc_needed ? 'Yes' : 'No'],
+                          ['Budget', r.budget_range || '—'],
+                        ].map(([label, val]) => (
+                          <div key={label}>
+                            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>{label}</p>
+                            <p className="text-sm" style={{ color: theme.text }}>{val}</p>
+                          </div>
+                        ))}
+                        {r.special_requests && (
+                          <div className="col-span-2">
+                            <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.subtext }}>Special Requests</p>
+                            <p className="text-xs px-3 py-2 rounded-xl" style={{ color: theme.text, background: theme.bg }}>{r.special_requests}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Generate reply */}
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>AI Reply</p>
+                        <div className="flex gap-2 mb-3">
+                          <button
+                            onClick={() => generateReply('inquiry')}
+                            disabled={generatingReply}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-40"
+                            style={{ background: `${BENTLEY_INDIGO}18`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}
+                          >
+                            {generatingReply ? <Loader2 size={11} className="animate-spin" /> : <Edit3 size={11} />} Draft Inquiry
+                          </button>
+                          <button
+                            onClick={() => generateReply('decline')}
+                            disabled={generatingReply}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-40"
+                            style={{ background: `${BENTLEY_RED}18`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}
+                          >
+                            {generatingReply ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />} Draft Decline
+                          </button>
+                        </div>
+                        {replyError && <p className="text-xs mb-2" style={{ color: BENTLEY_RED }}>{replyError}</p>}
+                        {generatedReply && (
+                          <div className="space-y-2">
+                            <input
+                              value={replySubject}
+                              onChange={e => setReplySubject(e.target.value)}
+                              placeholder="Subject"
+                              className="w-full px-3 py-2 rounded-xl border text-sm"
+                              style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}
+                            />
+                            <textarea
+                              value={generatedReply}
+                              onChange={e => setGeneratedReply(e.target.value)}
+                              rows={7}
+                              className="w-full px-3 py-2.5 rounded-xl border text-sm resize-none"
+                              style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}
+                            />
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                onClick={sendReply}
+                                disabled={sendingReply}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-40"
+                                style={{ background: BENTLEY_GREEN, color: '#fff' }}
+                              >
+                                {sendingReply ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />} Send to {r.client_email}
+                              </button>
+                              <button
+                                onClick={() => navigator.clipboard.writeText(generatedReply)}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
+                                style={{ background: theme.card, color: theme.subtext, border: `1px solid ${theme.border}` }}
+                              >
+                                <Copy size={11} /> Copy
+                              </button>
+                              {replySent && <span className="text-xs flex items-center gap-1" style={{ color: BENTLEY_GREEN }}><CheckCircle2 size={11} /> {replySent}</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Status update */}
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>Update Status</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {(['new', 'reviewed', 'quoted', 'booked', 'declined'] as const).map(s => {
+                            const sc = REQUEST_STATUS_COLORS[s]
+                            return (
+                              <button
+                                key={s}
+                                onClick={() => updateRequestStatus(r.id, s)}
+                                className="px-3 py-1.5 rounded-full text-[11px] font-bold"
+                                style={{
+                                  background: r.status === s ? sc.bg : theme.bg,
+                                  color: r.status === s ? sc.text : theme.subtext,
+                                  border: `1px solid ${r.status === s ? sc.text + '60' : theme.border}`,
+                                }}
+                              >
+                                {REQUEST_STATUS_LABELS[s]}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </motion.div>
         )}
       </motion.div>
