@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ArrowRight, CheckCircle2, Loader2, Mail, MapPin, Calendar,
-  Users, Mic2, Music2, Star, Phone, Instagram, Clock, DollarSign,
+  Users, Mic2, Music2, Star, Phone, Instagram, Clock,
   PartyPopper, Building2, Heart, Coffee, Globe, Sparkles,
-  Shield, Headphones, ChevronRight, MessageSquareQuote, Send,
+  Shield, Headphones, ChevronRight, ChevronLeft, MessageSquareQuote, Send,
   Info,
 } from 'lucide-react'
 
@@ -24,8 +24,6 @@ const C = {
   greenBg: '#F0FDF4',
   red: '#B91C1C',
   redBg: '#FFF1F2',
-  blueAccent: '#2563EB',
-  blueLight: '#EFF6FF',
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -37,11 +35,10 @@ interface BookingForm {
   client_phone: string
   event_type: string
   date: string
-  event_time: string
   location: string
   guest_count: string
-  budget_range: string
-  custom_budget: string
+  start_time: string
+  end_time: string
   song_requests: string
   special_requests: string
 }
@@ -72,26 +69,52 @@ const EVENT_TYPES = [
   'School Dance', 'Special Occasion',
 ]
 
-const BUDGET_RANGES = [
-  'Under $500', '$500 - $750', '$750 - $1,000',
-  '$1,000 - $1,500', '$1,500 - $2,000', '$2,000+',
-  'Flexible / Open to Discuss',
-]
-
 const BLANK_FORM = (): BookingForm => ({
   client_name: '',
   client_email: '',
   client_phone: '',
   event_type: '',
   date: '',
-  event_time: '',
   location: '',
   guest_count: '',
-  budget_range: '',
-  custom_budget: '',
+  start_time: '',
+  end_time: '',
   song_requests: '',
   special_requests: '',
 })
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════════════════════════════════ */
+function calcTotalHours(start: string, end: string): string {
+  if (!start || !end) return ''
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  let startMin = sh * 60 + sm
+  let endMin = eh * 60 + em
+  if (endMin <= startMin) endMin += 24 * 60 // next day
+  const diff = endMin - startMin
+  const hours = Math.floor(diff / 60)
+  const mins = diff % 60
+  if (mins === 0) return `${hours} hr${hours !== 1 ? 's' : ''}`
+  return `${hours} hr${hours !== 1 ? 's' : ''} ${mins} min`
+}
+
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate()
+}
+
+function getFirstDayOfWeek(year: number, month: number): number {
+  return new Date(year, month, 1).getDay()
+}
+
+function pad2(n: number): string {
+  return n < 10 ? '0' + n : '' + n
+}
+
+function formatDateStr(year: number, month: number, day: number): string {
+  return `${year}-${pad2(month + 1)}-${pad2(day)}`
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Shared Styles
@@ -148,11 +171,18 @@ export default function MaskOffDJPage() {
   // Mobile nav toggle
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
+  // Calendar state
+  const now = new Date()
+  const [calYear, setCalYear] = useState(now.getFullYear())
+  const [calMonth, setCalMonth] = useState(now.getMonth())
+  const [selectedDate, setSelectedDate] = useState<string>('')
+
+  const bookingRef = useRef<HTMLDivElement>(null)
+
   const today = new Date().toISOString().split('T')[0]
 
   // ── Data fetching ──────────────────────────────────────────────────────
   useEffect(() => {
-    // Fetch booked dates
     const fetchAvailability = async () => {
       try {
         const [availRes, schedRes] = await Promise.all([
@@ -175,7 +205,6 @@ export default function MaskOffDJPage() {
       } catch {}
     }
 
-    // Fetch upcoming gigs
     const fetchGigs = async () => {
       try {
         const res = await fetch('/api/dj/schedule')
@@ -195,7 +224,6 @@ export default function MaskOffDJPage() {
       } catch {}
     }
 
-    // Fetch testimonials
     const fetchTestimonials = async () => {
       try {
         const res = await fetch('/api/dj/testimonials')
@@ -214,6 +242,41 @@ export default function MaskOffDJPage() {
 
   const isDateBooked = (dateStr: string) => bookedDates.includes(dateStr)
 
+  const isDatePast = (dateStr: string) => dateStr < today
+
+  // ── Calendar navigation ────────────────────────────────────────────────
+  const prevMonth = () => {
+    if (calMonth === 0) {
+      setCalMonth(11)
+      setCalYear(calYear - 1)
+    } else {
+      setCalMonth(calMonth - 1)
+    }
+  }
+
+  const nextMonth = () => {
+    if (calMonth === 11) {
+      setCalMonth(0)
+      setCalYear(calYear + 1)
+    } else {
+      setCalMonth(calMonth + 1)
+    }
+  }
+
+  const handleCalendarDateClick = (dateStr: string) => {
+    if (isDateBooked(dateStr) || isDatePast(dateStr)) return
+    setSelectedDate(dateStr)
+    setF({ date: dateStr })
+    setFormError('')
+    // Scroll to booking form
+    setTimeout(() => {
+      bookingRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
+  }
+
+  // ── Total hours calc ───────────────────────────────────────────────────
+  const totalHours = calcTotalHours(form.start_time, form.end_time)
+
   // ── Submit booking ─────────────────────────────────────────────────────
   const handleSubmitBooking = async () => {
     if (!form.client_name || !form.client_email || !form.event_type || !form.date) {
@@ -224,14 +287,20 @@ export default function MaskOffDJPage() {
     setSubmitting(true)
     setSubmitError('')
     try {
+      const payload = {
+        ...form,
+        event_time: form.start_time,
+        total_hours: totalHours,
+      }
       const res = await fetch('/api/booking-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) throw new Error('Submission failed. Please try again.')
       setSubmitSuccess(true)
       setForm(BLANK_FORM())
+      setSelectedDate('')
     } catch (e: any) {
       setSubmitError(e.message)
     }
@@ -265,6 +334,18 @@ export default function MaskOffDJPage() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // ── Build calendar grid ────────────────────────────────────────────────
+  const daysInMonth = getDaysInMonth(calYear, calMonth)
+  const firstDay = getFirstDayOfWeek(calYear, calMonth)
+  const monthName = new Date(calYear, calMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+  const calendarCells: (number | null)[] = []
+  for (let i = 0; i < firstDay; i++) calendarCells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) calendarCells.push(d)
+  // fill remaining to complete the last row
+  while (calendarCells.length % 7 !== 0) calendarCells.push(null)
+
   /* ═════════════════════════════════════════════════════════════════════════
      RENDER
      ═════════════════════════════════════════════════════════════════════════ */
@@ -275,7 +356,7 @@ export default function MaskOffDJPage() {
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     }}>
 
-      {/* ── NAV BAR (sticky) ──────────────────────────────────────────────── */}
+      {/* ── 1. STICKY NAV BAR ──────────────────────────────────────────────── */}
       <nav style={{
         position: 'sticky',
         top: 0,
@@ -296,7 +377,7 @@ export default function MaskOffDJPage() {
           {/* Logo */}
           <div
             style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-            onClick={() => scrollTo('hero')}
+            onClick={() => scrollTo('poster')}
           >
             <span style={{
               fontWeight: 900,
@@ -315,7 +396,8 @@ export default function MaskOffDJPage() {
             gap: 28,
           }}>
             {[
-              { label: 'Home', id: 'hero' },
+              { label: 'Schedule', id: 'poster' },
+              { label: 'Calendar', id: 'calendar' },
               { label: 'Services', id: 'services' },
               { label: 'About', id: 'about' },
               { label: 'Testimonials', id: 'testimonials' },
@@ -388,7 +470,7 @@ export default function MaskOffDJPage() {
             gap: 16,
             boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
           }}>
-            {['Home:hero', 'Services:services', 'About:about', 'Testimonials:testimonials', 'Contact:footer'].map(item => {
+            {['Schedule:poster', 'Calendar:calendar', 'Services:services', 'About:about', 'Testimonials:testimonials', 'Contact:footer'].map(item => {
               const [label, id] = item.split(':')
               return (
                 <a
@@ -421,181 +503,342 @@ export default function MaskOffDJPage() {
         )}
       </nav>
 
-      {/* ── HERO SECTION ──────────────────────────────────────────────────── */}
-      <section id="hero" style={{
-        background: `linear-gradient(135deg, ${C.navy} 0%, #1E293B 50%, #0F172A 100%)`,
-        padding: '80px 24px 100px',
-        position: 'relative',
-        overflow: 'hidden',
+      {/* ── 2. POSTER BOARD (Upcoming Gigs) ────────────────────────────────── */}
+      <section id="poster" style={{
+        backgroundColor: C.navy,
+        padding: '80px 24px',
       }}>
-        {/* Subtle texture overlay */}
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(circle at 70% 50%, rgba(180,83,9,0.08) 0%, transparent 60%)',
-          pointerEvents: 'none',
-        }} />
-
-        <div style={{
-          maxWidth: 1200,
-          margin: '0 auto',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 60,
-          flexWrap: 'wrap' as const,
-          position: 'relative',
-          zIndex: 1,
-        }}>
-          {/* Left content */}
-          <div style={{ flex: '1 1 500px', minWidth: 300 }}>
-            <h1 style={{
-              fontSize: 52,
-              fontWeight: 900,
-              color: C.white,
-              lineHeight: 1.1,
-              margin: '0 0 24px',
-              letterSpacing: '-0.02em',
-            }}>
-              Book DJ Maskoff for Your Next Event
-            </h1>
-
-            <p style={{
-              fontSize: 18,
-              color: '#94A3B8',
-              lineHeight: 1.7,
-              margin: '0 0 32px',
-              maxWidth: 540,
-            }}>
-              Professional DJ services for private events, corporate functions,
-              celebrations, lounges, and upscale gatherings.
-            </p>
-
-            {/* Badge pills */}
-            <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 10 }}>
-              {[
-                'Experienced & Reliable',
-                'Reads the Room. Every Time.',
-                'The Right Music. The Right Vibe.',
-              ].map(badge => (
-                <span key={badge} style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '8px 16px',
-                  borderRadius: 100,
-                  backgroundColor: 'rgba(180, 83, 9, 0.15)',
-                  border: `1px solid rgba(180, 83, 9, 0.3)`,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: C.goldLight,
-                }}>
-                  <Star size={12} style={{ color: C.gold }} />
-                  {badge}
-                </span>
-              ))}
-            </div>
-
-            <div style={{ marginTop: 40, display: 'flex', gap: 14, flexWrap: 'wrap' as const }}>
-              <button
-                onClick={() => scrollTo('booking')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '16px 32px',
-                  borderRadius: 10,
-                  backgroundColor: C.gold,
-                  color: C.white,
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 16,
-                  fontWeight: 700,
-                }}
-              >
-                Book Now <ArrowRight size={18} />
-              </button>
-              <button
-                onClick={() => scrollTo('services')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  padding: '16px 32px',
-                  borderRadius: 10,
-                  backgroundColor: 'transparent',
-                  color: C.white,
-                  border: `2px solid rgba(255,255,255,0.2)`,
-                  cursor: 'pointer',
-                  fontSize: 16,
-                  fontWeight: 700,
-                }}
-              >
-                View Services
-              </button>
-            </div>
-          </div>
-
-          {/* Right side - DJ photo placeholder */}
+        <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
           <div style={{
-            flex: '0 1 380px',
-            minWidth: 280,
-            display: 'flex',
-            justifyContent: 'center',
+            display: 'inline-block',
+            fontSize: 11,
+            fontWeight: 700,
+            color: C.gold,
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase' as const,
+            marginBottom: 12,
           }}>
-            <div style={{
-              width: 340,
-              height: 400,
-              borderRadius: 20,
-              background: `linear-gradient(145deg, rgba(180,83,9,0.2) 0%, rgba(37,99,235,0.1) 100%)`,
-              border: `2px solid rgba(180, 83, 9, 0.25)`,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 20,
-              position: 'relative',
-              overflow: 'hidden',
-            }}>
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                background: 'radial-gradient(circle at 50% 80%, rgba(180,83,9,0.15) 0%, transparent 50%)',
-              }} />
-              <div style={{
-                width: 100,
-                height: 100,
-                borderRadius: '50%',
-                backgroundColor: 'rgba(180, 83, 9, 0.2)',
-                border: `2px solid ${C.gold}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative',
-                zIndex: 1,
-              }}>
-                <Mic2 size={44} color={C.gold} />
-              </div>
-              <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: C.white, letterSpacing: '-0.01em' }}>MASK OFF</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: C.gold, letterSpacing: '0.1em' }}>DA DJ</div>
-              </div>
-              <div style={{
-                position: 'relative',
-                zIndex: 1,
-                display: 'flex',
-                gap: 16,
-                marginTop: 8,
-              }}>
-                <Music2 size={20} color="rgba(148,163,184,0.5)" />
-                <Headphones size={20} color="rgba(148,163,184,0.5)" />
-                <Sparkles size={20} color="rgba(148,163,184,0.5)" />
-              </div>
-            </div>
+            Upcoming Events
           </div>
+
+          <h2 style={{
+            fontSize: 44,
+            fontWeight: 900,
+            color: C.white,
+            lineHeight: 1.1,
+            margin: '0 0 6px',
+            letterSpacing: '-0.02em',
+          }}>
+            MASK OFF DA DJ
+          </h2>
+          <p style={{
+            fontSize: 20,
+            color: C.gold,
+            fontWeight: 700,
+            margin: '0 0 48px',
+            letterSpacing: '0.12em',
+          }}>
+            LIVE DATES
+          </p>
+
+          {upcomingGigs.length > 0 ? (
+            <div style={{ borderTop: '1px solid #334155' }}>
+              {upcomingGigs.map((g, i) => {
+                const d = new Date(g.date + 'T00:00:00')
+                const month = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+                const day = d.getDate()
+                const weekday = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+                return (
+                  <div key={i} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 24,
+                    padding: '22px 0',
+                    borderBottom: '1px solid #334155',
+                  }}>
+                    <div style={{ textAlign: 'center', minWidth: 70 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: '0.08em' }}>{month}</div>
+                      <div style={{ fontSize: 34, fontWeight: 900, color: C.white, lineHeight: 1 }}>{day}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>{weekday}</div>
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: C.white }}>
+                        {g.eventType || 'Private Event'}
+                      </div>
+                      {(g.venue || g.city) && (
+                        <div style={{
+                          fontSize: 13,
+                          color: '#94A3B8',
+                          marginTop: 3,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5,
+                        }}>
+                          <MapPin size={12} />
+                          {[g.venue, g.city].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{
+                      padding: '5px 14px',
+                      borderRadius: 100,
+                      border: `1px solid ${C.gold}`,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: C.gold,
+                      letterSpacing: '0.06em',
+                    }}>
+                      BOOKED
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p style={{ color: '#94A3B8', fontSize: 15, margin: '0 0 20px' }}>
+              No upcoming dates listed right now. Check back soon or submit a booking request!
+            </p>
+          )}
+
+          <button
+            onClick={() => scrollTo('booking')}
+            style={{
+              marginTop: 44,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '16px 36px',
+              borderRadius: 10,
+              backgroundColor: C.gold,
+              color: C.white,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 16,
+              fontWeight: 800,
+            }}
+          >
+            Check My Availability <ArrowRight size={18} />
+          </button>
         </div>
       </section>
 
-      {/* ── BOOKING REQUEST FORM ──────────────────────────────────────────── */}
-      <section id="booking" style={{
+      {/* ── 3. FULL MONTH CALENDAR ─────────────────────────────────────────── */}
+      <section id="calendar" style={{
+        ...sectionPadding,
+        backgroundColor: C.white,
+      }}>
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 40 }}>
+            <h2 style={{ fontSize: 36, fontWeight: 800, color: C.navy, margin: '0 0 12px' }}>
+              Availability Calendar
+            </h2>
+            <p style={{ fontSize: 16, color: C.muted, margin: 0 }}>
+              Click an available date to start your booking request.
+            </p>
+          </div>
+
+          {/* Month Navigation */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 24,
+            maxWidth: 600,
+            margin: '0 auto 24px',
+          }}>
+            <button
+              onClick={prevMonth}
+              style={{
+                background: 'none',
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                color: C.text,
+              }}
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <span style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: C.navy,
+            }}>
+              {monthName}
+            </span>
+            <button
+              onClick={nextMonth}
+              style={{
+                background: 'none',
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                color: C.text,
+              }}
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+
+          {/* Legend */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 24,
+            marginBottom: 20,
+            flexWrap: 'wrap' as const,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.muted }}>
+              <div style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: C.white, border: `1px solid ${C.border}` }} />
+              Available
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.muted }}>
+              <div style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: C.redBg, border: `1px solid ${C.red}` }} />
+              Booked
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.muted }}>
+              <div style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: C.goldLight, border: `1px solid ${C.gold}` }} />
+              Selected
+            </div>
+          </div>
+
+          {/* Calendar Grid */}
+          <div style={{
+            maxWidth: 600,
+            margin: '0 auto',
+            backgroundColor: C.bg,
+            border: `1px solid ${C.border}`,
+            borderRadius: 14,
+            padding: 20,
+          }}>
+            {/* Day headers */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, 1fr)',
+              gap: 4,
+              marginBottom: 8,
+            }}>
+              {dayLabels.map(dl => (
+                <div key={dl} style={{
+                  textAlign: 'center',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: C.muted,
+                  padding: '8px 0',
+                }}>
+                  {dl}
+                </div>
+              ))}
+            </div>
+
+            {/* Date cells */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, 1fr)',
+              gap: 4,
+            }}>
+              {calendarCells.map((day, idx) => {
+                if (day === null) {
+                  return <div key={`empty-${idx}`} style={{ padding: '12px 0' }} />
+                }
+
+                const dateStr = formatDateStr(calYear, calMonth, day)
+                const booked = isDateBooked(dateStr)
+                const past = isDatePast(dateStr)
+                const isSelected = selectedDate === dateStr
+                const isToday = dateStr === today
+                const disabled = booked || past
+
+                let bgColor = C.white
+                let textColor = C.text
+                let borderColor = 'transparent'
+                let cursor: string = 'pointer'
+
+                if (isSelected) {
+                  bgColor = C.goldLight
+                  borderColor = C.gold
+                  textColor = C.navy
+                } else if (booked) {
+                  bgColor = C.redBg
+                  borderColor = C.red
+                  textColor = C.red
+                  cursor = 'not-allowed'
+                } else if (past) {
+                  bgColor = '#F1F5F9'
+                  textColor = '#CBD5E1'
+                  cursor = 'default'
+                } else if (isToday) {
+                  borderColor = C.navy
+                }
+
+                return (
+                  <div
+                    key={dateStr}
+                    onClick={() => !disabled && handleCalendarDateClick(dateStr)}
+                    style={{
+                      textAlign: 'center',
+                      padding: '10px 0',
+                      borderRadius: 8,
+                      backgroundColor: bgColor,
+                      color: textColor,
+                      border: `2px solid ${borderColor}`,
+                      cursor,
+                      fontSize: 14,
+                      fontWeight: isToday || isSelected ? 700 : 500,
+                      transition: 'all 0.15s',
+                      position: 'relative',
+                    }}
+                  >
+                    {day}
+                    {booked && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: 3,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: 4,
+                        height: 4,
+                        borderRadius: '50%',
+                        backgroundColor: C.red,
+                      }} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Selected date indicator */}
+          {selectedDate && (
+            <div style={{
+              textAlign: 'center',
+              marginTop: 20,
+              fontSize: 15,
+              color: C.green,
+              fontWeight: 600,
+            }}>
+              <Calendar size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
+              Selected: {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              {' — '}
+              <a
+                href="#booking"
+                onClick={(e) => { e.preventDefault(); scrollTo('booking') }}
+                style={{ color: C.gold, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+              >
+                Fill out booking form below
+              </a>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── 4. BOOKING REQUEST FORM ──────────────────────────────────────────── */}
+      <section id="booking" ref={bookingRef} style={{
         ...sectionPadding,
         backgroundColor: C.bg,
       }}>
@@ -642,7 +885,7 @@ export default function MaskOffDJPage() {
               <a
                 href="mailto:maskoffdadj@gmail.com"
                 style={{
-                  color: C.blueAccent,
+                  color: C.gold,
                   fontWeight: 700,
                   fontSize: 15,
                   textDecoration: 'none',
@@ -721,51 +964,13 @@ export default function MaskOffDJPage() {
                 </div>
               </div>
 
-              {/* Row 2: Event Date, Event Time, Event Location */}
+              {/* Row 2: Location, Event Type, Guest Count */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                 gap: 20,
                 marginBottom: 20,
               }}>
-                <div>
-                  <label style={labelStyle}>
-                    <Calendar size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-                    Event Date <span style={{ color: C.red }}>*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={form.date}
-                    onChange={e => {
-                      const val = e.target.value
-                      if (isDateBooked(val)) {
-                        setFormError('That date is already booked. Please choose another date.')
-                        return
-                      }
-                      setFormError('')
-                      setF({ date: val })
-                    }}
-                    min={today}
-                    style={inputBase}
-                  />
-                  {form.date && isDateBooked(form.date) && (
-                    <div style={{ fontSize: 12, color: C.red, marginTop: 4, fontWeight: 600 }}>
-                      This date is unavailable.
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label style={labelStyle}>
-                    <Clock size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-                    Event Time
-                  </label>
-                  <input
-                    type="time"
-                    value={form.event_time}
-                    onChange={e => setF({ event_time: e.target.value })}
-                    style={inputBase}
-                  />
-                </div>
                 <div>
                   <label style={labelStyle}>
                     <MapPin size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
@@ -779,15 +984,6 @@ export default function MaskOffDJPage() {
                     style={inputBase}
                   />
                 </div>
-              </div>
-
-              {/* Row 3: Event Type, Guest Count, Budget Range */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: 20,
-                marginBottom: 20,
-              }}>
                 <div>
                   <label style={labelStyle}>Event Type <span style={{ color: C.red }}>*</span></label>
                   <div style={{ position: 'relative' }}>
@@ -823,42 +1019,85 @@ export default function MaskOffDJPage() {
                     style={inputBase}
                   />
                 </div>
-                <div>
-                  <label style={labelStyle}>Budget Range</label>
-                  <div style={{ position: 'relative' }}>
-                    <select
-                      value={form.budget_range}
-                      onChange={e => setF({ budget_range: e.target.value })}
-                      style={{ ...inputBase, appearance: 'none' as any, paddingRight: 36 }}
-                    >
-                      <option value="">Select budget range...</option>
-                      {BUDGET_RANGES.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                    <ChevronRight size={14} style={{
-                      position: 'absolute',
-                      right: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%) rotate(90deg)',
-                      color: C.muted,
-                      pointerEvents: 'none',
-                    }} />
-                  </div>
-                </div>
               </div>
 
-              {/* Custom Budget */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={labelStyle}>
-                  <DollarSign size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-                  Custom Budget (exact amount)
-                </label>
-                <input
-                  type="text"
-                  value={form.custom_budget}
-                  onChange={e => setF({ custom_budget: e.target.value })}
-                  placeholder="$ e.g. 1200"
-                  style={{ ...inputBase, maxWidth: 300 }}
-                />
+              {/* Row 3: Date, Start Time, End Time, Total Hours */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: 20,
+                marginBottom: 20,
+              }}>
+                <div>
+                  <label style={labelStyle}>
+                    <Calendar size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                    Event Date <span style={{ color: C.red }}>*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={e => {
+                      const val = e.target.value
+                      if (isDateBooked(val)) {
+                        setFormError('That date is already booked. Please choose another date.')
+                        return
+                      }
+                      setFormError('')
+                      setSelectedDate(val)
+                      setF({ date: val })
+                    }}
+                    min={today}
+                    style={{
+                      ...inputBase,
+                      backgroundColor: form.date ? C.goldLight : C.white,
+                      borderColor: form.date ? C.gold : C.border,
+                    }}
+                  />
+                  {form.date && isDateBooked(form.date) && (
+                    <div style={{ fontSize: 12, color: C.red, marginTop: 4, fontWeight: 600 }}>
+                      This date is unavailable.
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label style={labelStyle}>
+                    <Clock size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={form.start_time}
+                    onChange={e => setF({ start_time: e.target.value })}
+                    style={inputBase}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>
+                    <Clock size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    value={form.end_time}
+                    onChange={e => setF({ end_time: e.target.value })}
+                    style={inputBase}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Total Hours</label>
+                  <div style={{
+                    ...inputBase,
+                    backgroundColor: '#F1F5F9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    minHeight: 44,
+                    color: totalHours ? C.navy : C.muted,
+                    fontWeight: totalHours ? 700 : 400,
+                    cursor: 'default',
+                  }}>
+                    {totalHours || 'Auto-calculated'}
+                  </div>
+                </div>
               </div>
 
               {/* Song Requests */}
@@ -973,7 +1212,7 @@ export default function MaskOffDJPage() {
         </div>
       </section>
 
-      {/* ── SERVICES SECTION ──────────────────────────────────────────────── */}
+      {/* ── 5. SERVICES SECTION ──────────────────────────────────────────────── */}
       <section id="services" style={{
         ...sectionPadding,
         backgroundColor: C.white,
@@ -1056,7 +1295,7 @@ export default function MaskOffDJPage() {
         </div>
       </section>
 
-      {/* ── ABOUT SECTION ─────────────────────────────────────────────────── */}
+      {/* ── 6. ABOUT SECTION ─────────────────────────────────────────────────── */}
       <section id="about" style={{
         ...sectionPadding,
         backgroundColor: C.bg,
@@ -1146,7 +1385,7 @@ export default function MaskOffDJPage() {
         </div>
       </section>
 
-      {/* ── TESTIMONIALS SECTION ──────────────────────────────────────────── */}
+      {/* ── 7. TESTIMONIALS SECTION ──────────────────────────────────────────── */}
       <section id="testimonials" style={{
         ...sectionPadding,
         backgroundColor: C.white,
@@ -1372,126 +1611,7 @@ export default function MaskOffDJPage() {
         </div>
       </section>
 
-      {/* ── TOUR / GIG POSTER BOARD SECTION ───────────────────────────────── */}
-      <section id="tour" style={{
-        backgroundColor: C.navy,
-        padding: '80px 24px',
-      }}>
-        <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
-          <div style={{
-            display: 'inline-block',
-            fontSize: 11,
-            fontWeight: 700,
-            color: C.gold,
-            letterSpacing: '0.15em',
-            textTransform: 'uppercase' as const,
-            marginBottom: 12,
-          }}>
-            Upcoming Events
-          </div>
-
-          <h2 style={{
-            fontSize: 44,
-            fontWeight: 900,
-            color: C.white,
-            lineHeight: 1.1,
-            margin: '0 0 6px',
-            letterSpacing: '-0.02em',
-          }}>
-            MASK OFF DA DJ
-          </h2>
-          <p style={{
-            fontSize: 20,
-            color: C.gold,
-            fontWeight: 700,
-            margin: '0 0 48px',
-            letterSpacing: '0.12em',
-          }}>
-            LIVE DATES
-          </p>
-
-          {upcomingGigs.length > 0 ? (
-            <div style={{ borderTop: '1px solid #334155' }}>
-              {upcomingGigs.map((g, i) => {
-                const d = new Date(g.date + 'T00:00:00')
-                const month = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
-                const day = d.getDate()
-                const weekday = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
-                return (
-                  <div key={i} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 24,
-                    padding: '22px 0',
-                    borderBottom: '1px solid #334155',
-                  }}>
-                    <div style={{ textAlign: 'center', minWidth: 70 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: '0.08em' }}>{month}</div>
-                      <div style={{ fontSize: 34, fontWeight: 900, color: C.white, lineHeight: 1 }}>{day}</div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>{weekday}</div>
-                    </div>
-                    <div style={{ flex: 1, textAlign: 'left' }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: C.white }}>
-                        {g.eventType || 'Private Event'}
-                      </div>
-                      {(g.venue || g.city) && (
-                        <div style={{
-                          fontSize: 13,
-                          color: '#94A3B8',
-                          marginTop: 3,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 5,
-                        }}>
-                          <MapPin size={12} />
-                          {[g.venue, g.city].filter(Boolean).join(' · ')}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{
-                      padding: '5px 14px',
-                      borderRadius: 100,
-                      border: `1px solid ${C.gold}`,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: C.gold,
-                      letterSpacing: '0.06em',
-                    }}>
-                      BOOKED
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <p style={{ color: '#94A3B8', fontSize: 15, margin: '0 0 20px' }}>
-              No upcoming dates listed right now. Check back soon or submit a booking request!
-            </p>
-          )}
-
-          <button
-            onClick={() => scrollTo('booking')}
-            style={{
-              marginTop: 44,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '16px 36px',
-              borderRadius: 10,
-              backgroundColor: C.gold,
-              color: C.white,
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 16,
-              fontWeight: 800,
-            }}
-          >
-            Check My Availability <ArrowRight size={18} />
-          </button>
-        </div>
-      </section>
-
-      {/* ── FOOTER ────────────────────────────────────────────────────────── */}
+      {/* ── 8. FOOTER ────────────────────────────────────────────────────────── */}
       <footer id="footer" style={{
         backgroundColor: '#020617',
         padding: '56px 24px 32px',
@@ -1637,24 +1757,14 @@ export default function MaskOffDJPage() {
           }
         }
 
-        /* Responsive hero text */
-        @media (max-width: 640px) {
-          #hero h1 {
-            font-size: 36px !important;
-          }
-          #hero p {
-            font-size: 16px !important;
-          }
-        }
-
         /* Hover effects */
         a:hover {
           opacity: 0.85;
         }
 
         input:focus, select:focus, textarea:focus {
-          border-color: ${C.blueAccent} !important;
-          box-shadow: 0 0 0 3px ${C.blueAccent}22;
+          border-color: ${C.gold} !important;
+          box-shadow: 0 0 0 3px ${C.gold}22;
         }
 
         button:hover {

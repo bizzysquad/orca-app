@@ -1838,19 +1838,7 @@ export default function DJPage() {
                     style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}>
                     <RefreshCw size={11} /> Refresh
                   </button>
-                  <div className="flex gap-2 ml-auto overflow-x-auto">
-                    {(['new', 'quoted', 'booked', 'declined'] as const).map(s => (
-                      <button key={s} onClick={() => setRequestFilter(s === requestFilter ? 'all' : s)}
-                        className="px-2.5 py-1 rounded-full text-[10px] font-bold"
-                        style={{
-                          background: requestFilter === s ? (REQUEST_STATUS_COLORS[s]?.bg || theme.card) : theme.card,
-                          color: requestFilter === s ? (REQUEST_STATUS_COLORS[s]?.text || theme.subtext) : theme.subtext,
-                          border: `1px solid ${theme.border}`,
-                        }}>
-                        {REQUEST_STATUS_LABELS[s]} ({requests.filter(r => r.status === s).length})
-                      </button>
-                    ))}
-                  </div>
+                  <span className="text-xs ml-auto" style={{ color: theme.subtext }}>{requests.length} total</span>
                 </div>
 
                 {loadingRequests && <div className="flex items-center justify-center py-8 gap-2" style={{ color: theme.subtext }}><Loader2 size={16} className="animate-spin" /> Loading…</div>}
@@ -1863,7 +1851,7 @@ export default function DJPage() {
                   </div>
                 )}
 
-                {!loadingRequests && (requestFilter === 'all' ? requests : requests.filter(r => r.status === requestFilter)).map(r => {
+                {!loadingRequests && requests.map(r => {
                   const isExpanded = selectedRequest?.id === r.id
                   const colors = REQUEST_STATUS_COLORS[r.status] || REQUEST_STATUS_COLORS['reviewed']
                   return (
@@ -1958,85 +1946,140 @@ export default function DJPage() {
 
             {/* ── PHOTOS SUB-TAB ── */}
             {websiteSubTab === 'photos' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Website Photos</p>
-                <p className="text-[11px]" style={{ color: theme.subtext }}>Add image URLs to display on your public website. Photos appear in the hero and about sections.</p>
+                <p className="text-[11px]" style={{ color: theme.subtext }}>Upload photos for your public website. Hero photo appears in the main banner, About photo appears in the bio section.</p>
 
-                <div className="flex gap-2">
-                  <input value={newPhotoUrl} onChange={e => setNewPhotoUrl(e.target.value)} placeholder="Paste image URL…" className="flex-1 px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                  <button onClick={() => {
-                    if (!newPhotoUrl.trim()) return
-                    const next = [...websitePhotos, newPhotoUrl.trim()]
-                    setWebsitePhotos(next)
-                    localStorage.setItem('orca-dj-website-photos', JSON.stringify(next))
-                    window.dispatchEvent(new Event('orca-local-write'))
-                    setNewPhotoUrl('')
-                  }} className="px-4 py-2 rounded-xl text-xs font-bold" style={{ background: DJ_PINK, color: '#fff' }}>Add</button>
-                </div>
-
-                {websitePhotos.length === 0 && (
-                  <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                    <p className="text-sm" style={{ color: theme.subtext }}>No photos added yet. Paste an image URL above to get started.</p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2">
-                  {websitePhotos.map((url, i) => (
-                    <div key={i} className="relative rounded-xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                      <img src={url} alt={`Photo ${i + 1}`} className="w-full h-32 object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                      <div className="p-2 flex items-center justify-between">
-                        <p className="text-[10px] truncate flex-1" style={{ color: theme.subtext }}>{url.slice(0, 40)}…</p>
-                        <button onClick={() => {
-                          const next = websitePhotos.filter((_, j) => j !== i)
-                          setWebsitePhotos(next)
-                          localStorage.setItem('orca-dj-website-photos', JSON.stringify(next))
-                          window.dispatchEvent(new Event('orca-local-write'))
-                        }} className="p-1 rounded" style={{ color: BENTLEY_RED }}><X size={12} /></button>
+                {(['hero', 'about'] as const).map(slot => {
+                  const photo = websitePhotos.find((p: any) => typeof p === 'object' && p.slot === slot)
+                  const photoUrl = typeof photo === 'object' ? (photo as any).url : null
+                  return (
+                    <div key={slot} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                      <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${theme.border}` }}>
+                        <p className="text-sm font-bold capitalize" style={{ color: theme.text }}>{slot} Photo</p>
+                        {photoUrl && (
+                          <button onClick={async () => {
+                            await fetch('/api/dj/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot }) })
+                            setWebsitePhotos((prev: any[]) => prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot)))
+                          }} className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ color: BENTLEY_RED, background: `${BENTLEY_RED}12` }}>Remove</button>
+                        )}
+                      </div>
+                      {photoUrl ? (
+                        <img src={photoUrl} alt={`${slot} photo`} className="w-full h-40 object-cover" />
+                      ) : (
+                        <div className="h-40 flex items-center justify-center" style={{ background: theme.bg }}>
+                          <p className="text-xs" style={{ color: theme.subtext }}>No {slot} photo uploaded</p>
+                        </div>
+                      )}
+                      <div className="p-3">
+                        <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer" style={{ background: `${DJ_PINK}15`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}>
+                          <Plus size={12} /> {photoUrl ? 'Replace' : 'Upload'} Photo
+                          <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            const fd = new FormData()
+                            fd.append('file', file)
+                            fd.append('slot', slot)
+                            try {
+                              const res = await fetch('/api/dj/photos', { method: 'POST', body: fd })
+                              const data = await res.json()
+                              if (data.ok && data.url) {
+                                setWebsitePhotos((prev: any[]) => {
+                                  const filtered = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
+                                  return [...filtered, { slot, url: data.url }]
+                                })
+                              }
+                            } catch {}
+                          }} />
+                        </label>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
             )}
 
             {/* ── GIGS SUB-TAB ── */}
-            {websiteSubTab === 'gigs' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Synced Gigs</p>
-                  <div className="flex gap-2">
-                    <input type="date" value={blockedDate} onChange={e => setBlockedDate(e.target.value)} className="px-2 py-1.5 rounded-xl border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
+            {websiteSubTab === 'gigs' && (() => {
+              const gigDates = new Set(gigs.filter(g => g.status === 'confirmed' || g.status === 'pending').map(g => g.date))
+              const now = new Date()
+              const [gCalMonth, setGCalMonth] = useState(now.getMonth())
+              const [gCalYear, setGCalYear] = useState(now.getFullYear())
+              const daysInMonth = new Date(gCalYear, gCalMonth + 1, 0).getDate()
+              const firstDay = new Date(gCalYear, gCalMonth, 1).getDay()
+              const monthName = new Date(gCalYear, gCalMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+              const todayStr = now.toISOString().slice(0, 10)
+
+              return (
+                <div className="space-y-3">
+                  {/* Calendar preview */}
+                  <div className="rounded-2xl p-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <button onClick={() => { if (gCalMonth === 0) { setGCalMonth(11); setGCalYear(y => y - 1) } else setGCalMonth(m => m - 1) }} className="p-1.5 rounded-lg" style={{ color: theme.subtext }}><ChevronDown size={14} className="rotate-90" /></button>
+                      <p className="text-sm font-bold" style={{ color: theme.text }}>{monthName}</p>
+                      <button onClick={() => { if (gCalMonth === 11) { setGCalMonth(0); setGCalYear(y => y + 1) } else setGCalMonth(m => m + 1) }} className="p-1.5 rounded-lg" style={{ color: theme.subtext }}><ChevronUp size={14} className="rotate-90" /></button>
+                    </div>
+                    <div className="grid grid-cols-7 mb-1">
+                      {['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="text-center text-[10px] font-bold py-1" style={{ color: theme.subtext }}>{d}</div>)}
+                    </div>
+                    <div className="grid grid-cols-7 gap-0.5">
+                      {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+                      {Array.from({ length: daysInMonth }).map((_, i) => {
+                        const d = i + 1
+                        const dateStr = `${gCalYear}-${String(gCalMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                        const isBooked = gigDates.has(dateStr)
+                        const isToday = dateStr === todayStr
+                        return (
+                          <div key={d} className="flex flex-col items-center justify-center py-1.5 rounded-lg" style={{
+                            background: isBooked ? `${DJ_PINK}18` : isToday ? `${BENTLEY_GOLD}15` : 'transparent',
+                            border: isToday ? `1px solid ${BENTLEY_GOLD}60` : isBooked ? `1px solid ${DJ_PINK}40` : '1px solid transparent',
+                          }}>
+                            <span className="text-xs font-bold" style={{ color: isBooked ? DJ_PINK : theme.text }}>{d}</span>
+                            {isBooked && <div className="w-1 h-1 rounded-full mt-0.5" style={{ background: DJ_PINK }} />}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="flex gap-4 mt-3 pt-2 border-t" style={{ borderColor: `${theme.border}60` }}>
+                      <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full" style={{ background: DJ_PINK }} /><span className="text-[10px]" style={{ color: theme.subtext }}>Booked</span></div>
+                      <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full" style={{ background: BENTLEY_GOLD }} /><span className="text-[10px]" style={{ color: theme.subtext }}>Today</span></div>
+                    </div>
+                  </div>
+
+                  {/* Block date */}
+                  <div className="flex items-center gap-2">
+                    <input type="date" value={blockedDate} onChange={e => setBlockedDate(e.target.value)} className="flex-1 px-2 py-1.5 rounded-xl border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
                     <button onClick={blockDate} disabled={!blockedDate || blockingDate} className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: `${BENTLEY_RED}15`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}>
-                      <Ban size={11} /> Block
+                      <Ban size={11} /> Block Date
                     </button>
                   </div>
+                  {blockSuccess && <p className="text-xs font-semibold" style={{ color: BENTLEY_GREEN }}>{blockSuccess}</p>}
+
+                  {/* Gig list */}
+                  <p className="text-xs font-bold uppercase tracking-wider pt-2" style={{ color: theme.subtext }}>All Gigs (auto-synced to website)</p>
+                  {gigs.filter(g => g.status !== 'cancelled').length === 0 && (
+                    <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                      <p className="text-sm" style={{ color: theme.subtext }}>No gigs yet. Add one in the Gigs tab.</p>
+                    </div>
+                  )}
+                  {gigs.filter(g => g.status !== 'cancelled').sort((a, b) => a.date.localeCompare(b.date)).map(g => (
+                    <div key={g.id} className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                      <div className="text-center" style={{ minWidth: 44 }}>
+                        <p className="text-[10px] font-bold uppercase" style={{ color: DJ_PINK }}>{new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</p>
+                        <p className="text-lg font-black leading-none" style={{ color: theme.text }}>{new Date(g.date + 'T00:00:00').getDate()}</p>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{g.clientName || g.venue || 'Gig'}</p>
+                        <p className="text-xs truncate" style={{ color: theme.subtext }}>{g.venue || ''} {g.eventAddress ? `· ${g.eventAddress}` : ''}</p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0" style={{ background: g.status === 'confirmed' ? `${BENTLEY_GREEN}18` : g.status === 'completed' ? `${BENTLEY_INDIGO}18` : `${BENTLEY_GOLD}18`, color: g.status === 'confirmed' ? BENTLEY_GREEN : g.status === 'completed' ? BENTLEY_INDIGO : BENTLEY_GOLD }}>
+                        {g.status}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                {blockSuccess && <p className="text-xs font-semibold" style={{ color: BENTLEY_GREEN }}>{blockSuccess}</p>}
-                <p className="text-[11px]" style={{ color: theme.subtext }}>These gigs auto-sync to your public calendar, poster board, and availability. Add gigs in the Gigs tab — they appear here automatically.</p>
-
-                {gigs.filter(g => g.status !== 'cancelled').length === 0 && (
-                  <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                    <p className="text-sm" style={{ color: theme.subtext }}>No gigs yet. Add one in the Gigs tab.</p>
-                  </div>
-                )}
-
-                {gigs.filter(g => g.status !== 'cancelled').sort((a, b) => a.date.localeCompare(b.date)).map(g => (
-                  <div key={g.id} className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                    <div className="text-center" style={{ minWidth: 44 }}>
-                      <p className="text-[10px] font-bold uppercase" style={{ color: DJ_PINK }}>{new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</p>
-                      <p className="text-lg font-black leading-none" style={{ color: theme.text }}>{new Date(g.date + 'T00:00:00').getDate()}</p>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{g.clientName || g.venue || 'Gig'}</p>
-                      <p className="text-xs truncate" style={{ color: theme.subtext }}>{g.venue || ''} {g.eventAddress ? `· ${g.eventAddress}` : ''}</p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0" style={{ background: g.status === 'confirmed' ? `${BENTLEY_GREEN}18` : g.status === 'completed' ? `${BENTLEY_INDIGO}18` : `${BENTLEY_GOLD}18`, color: g.status === 'confirmed' ? BENTLEY_GREEN : g.status === 'completed' ? BENTLEY_INDIGO : BENTLEY_GOLD }}>
-                      {g.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+              )
+            })()}
           </motion.div>
         )}
       </motion.div>
