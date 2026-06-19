@@ -105,7 +105,24 @@ export default function MaskOffDJPage() {
   const [loadingAvail, setLoadingAvail] = useState(false)
   const [formError, setFormError] = useState('')
 
+  const [upcomingGigs, setUpcomingGigs] = useState<{ date: string; venue: string; city: string; eventType: string }[]>([])
+
   const today = new Date().toISOString().split('T')[0]
+
+  useEffect(() => {
+    fetch('/api/dj/schedule')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return
+        const gigs = (d.gigs || [])
+          .filter((g: any) => g.status === 'confirmed' && g.date >= today)
+          .sort((a: any, b: any) => a.date.localeCompare(b.date))
+          .slice(0, 12)
+          .map((g: any) => ({ date: g.date, venue: g.venue || '', city: g.city || '', eventType: g.eventType || g.event_type || '' }))
+        setUpcomingGigs(gigs)
+      })
+      .catch(() => {})
+  }, [today])
 
   const fetchAvailability = useCallback(async () => {
     setLoadingAvail(true)
@@ -391,9 +408,93 @@ export default function MaskOffDJPage() {
         </div>
       </div>
 
+      {/* Poster Board — Tour Dates */}
+      {upcomingGigs.length > 0 && (
+        <div style={{ backgroundColor: C.navy, padding: '72px 24px' }}>
+          <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center' }}>
+            <div style={{
+              display: 'inline-block',
+              fontSize: 11, fontWeight: 700,
+              color: C.gold, letterSpacing: '0.15em',
+              textTransform: 'uppercase' as const,
+              marginBottom: 12,
+            }}>
+              ★ Upcoming Events ★
+            </div>
+
+            <h2 style={{
+              fontSize: 42, fontWeight: 900, color: C.white,
+              lineHeight: 1.1, margin: '0 0 8px',
+              letterSpacing: '-0.02em',
+            }}>
+              MASK OFF DA DJ
+            </h2>
+            <p style={{ fontSize: 18, color: C.gold, fontWeight: 700, margin: '0 0 40px', letterSpacing: '0.1em' }}>
+              LIVE DATES
+            </p>
+
+            <div style={{ borderTop: `1px solid #334155`, paddingTop: 0 }}>
+              {upcomingGigs.map((g, i) => {
+                const d = new Date(g.date + 'T00:00:00')
+                const month = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+                const day = d.getDate()
+                const weekday = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+                return (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 20,
+                    padding: '20px 0',
+                    borderBottom: `1px solid #334155`,
+                  }}>
+                    <div style={{ textAlign: 'center', minWidth: 64 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: '0.08em' }}>{month}</div>
+                      <div style={{ fontSize: 32, fontWeight: 900, color: C.white, lineHeight: 1 }}>{day}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>{weekday}</div>
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: C.white }}>
+                        {g.eventType || 'Private Event'}
+                      </div>
+                      {(g.venue || g.city) && (
+                        <div style={{ fontSize: 13, color: '#94A3B8', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <MapPin size={12} />
+                          {[g.venue, g.city].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{
+                      padding: '4px 12px', borderRadius: 100,
+                      border: `1px solid ${C.gold}`,
+                      fontSize: 11, fontWeight: 700, color: C.gold,
+                      letterSpacing: '0.06em',
+                    }}>
+                      BOOKED
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <button
+              onClick={() => setStep('calendar')}
+              style={{
+                marginTop: 40,
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '14px 32px', borderRadius: 10,
+                backgroundColor: C.gold, color: C.navy,
+                border: 'none', cursor: 'pointer',
+                fontSize: 16, fontWeight: 800,
+              }}
+            >
+              Check My Availability <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <div style={{
-        backgroundColor: C.navy, padding: '48px 24px',
+        backgroundColor: upcomingGigs.length > 0 ? '#020617' : C.navy,
+        padding: '48px 24px',
         textAlign: 'center',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 }}>

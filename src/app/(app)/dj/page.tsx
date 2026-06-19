@@ -10,8 +10,10 @@ import {
   Send, Copy, Loader2, CheckCircle2, XCircle, Ban, MessageSquare, RefreshCw,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
+import { useOrcaData } from '@/context/OrcaDataContext'
 import type { DJGig, GigStatus, GigType, DJPartialPayment } from '@/lib/types'
 import { fmt } from '@/lib/utils'
+import { fullSync, syncDjCalendar, setLocalSynced, type SyncStatus as EngineSyncStatus } from '@/lib/syncEngine'
 
 const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
@@ -1315,11 +1317,13 @@ function AddGigModal({ onAdd, onClose }: { onAdd: (gig: DJGig) => void; onClose:
 // ── Main Page ──
 export default function DJPage() {
   const { theme } = useTheme()
+  const { syncState, forceSync } = useOrcaData()
   const [gigs, setGigs] = useState<DJGig[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [filterStatus, setFilterStatus] = useState<GigStatus | 'all'>('all')
   const [activeSection, setActiveSection] = useState<'gigs' | 'requests' | 'crm' | 'email'>('gigs')
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
+  const [syncDetail, setSyncDetail] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<{ date: string; clientName: string }[]>([])
 
   // Booking requests (from public website)
@@ -1337,50 +1341,96 @@ export default function DJPage() {
   const [blockingDate, setBlockingDate] = useState(false)
   const [blockSuccess, setBlockSuccess] = useState('')
 
+  // Load gigs: localStorage first, then listen for cloud sync to merge
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('orca-dj-gigs')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        const migrated = parsed.map((g: any) => ({
-          ...g,
-          contractAmount: g.contractAmount || g.fee || 0,
-          depositAmount: g.depositAmount || 0,
-          partialPayments: g.partialPayments || [],
-        }))
-        setGigs(migrated)
-        autoSyncGigs(migrated)
-      }
-    } catch {}
+    function loadGigsFromLocal() {
+      try {
+        const saved = localStorage.getItem('orca-dj-gigs')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          const migrated = parsed.map((g: any) => ({
+            ...g,
+            contractAmount: g.contractAmount || g.fee || 0,
+            depositAmount: g.depositAmount || 0,
+            partialPayments: g.partialPayments || [],
+          }))
+          setGigs(migrated)
+          autoSyncGigs(migrated)
+        }
+      } catch {}
+    }
+
+    loadGigsFromLocal()
+
+    // Re-read after cloud sync completes (syncEngine merges cloud + local)
+    const handleSyncReady = () => loadGigsFromLocal()
+    window.addEventListener('orca-sync-ready', handleSyncReady)
+    return () => window.removeEventListener('orca-sync-ready', handleSyncReady)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const autoSyncGigs = useCallback((gigList: DJGig[]) => {
     setSyncStatus('syncing')
+    setSyncDetail(null)
     setConflicts([])
-    fetch('/api/dj/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gigs: gigList }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          setSyncStatus('error')
-        } else {
-          setSyncStatus('synced')
-          if (data.conflicts && data.conflicts.length > 0) {
-            setConflicts(data.conflicts)
-          }
-          try {
-            const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
-            log.unshift({ at: new Date().toISOString(), action: 'sync', synced: data.synced })
-            localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
-          } catch {}
+
+    // Sync to both: cloud data (profiles.local_data) and calendar (booking_requests)
+    Promise.all([
+      // 1. Push gigs to localStorage + cloud data sync
+      (async () => {
+        try {
+          setLocalSynced('orca-dj-gigs', JSON.stringify(gigList))
+        } catch {}
+      })(),
+      // 2. Sync to booking_requests for calendar blocking
+      syncDjCalendar(gigList),
+    ]).then(([, calResult]) => {
+      if (!calResult.ok) {
+        setSyncStatus('error')
+        setSyncDetail(calResult.error || 'Calendar sync failed')
+      } else {
+        setSyncStatus('synced')
+        setSyncDetail(null)
+        if (calResult.conflicts.length > 0) {
+          setConflicts(calResult.conflicts)
         }
-      })
-      .catch(() => setSyncStatus('error'))
+        try {
+          const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
+          log.unshift({ at: new Date().toISOString(), action: 'sync', synced: gigList.length })
+          localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+        } catch {}
+      }
+    }).catch(() => {
+      setSyncStatus('error')
+      setSyncDetail('Network error — check your connection')
+    })
   }, [])
+
+  const handleForceSync = useCallback(async () => {
+    setSyncStatus('syncing')
+    setSyncDetail('Full cloud sync…')
+    const result = await forceSync()
+    if (result.ok) {
+      // Re-read gigs from localStorage (now merged with cloud)
+      try {
+        const saved = localStorage.getItem('orca-dj-gigs')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          setGigs(parsed)
+          // Also sync to calendar
+          autoSyncGigs(parsed)
+        }
+        setSyncStatus('synced')
+        setSyncDetail('Cloud sync complete')
+      } catch {
+        setSyncStatus('synced')
+        setSyncDetail(null)
+      }
+    } else {
+      setSyncStatus('error')
+      setSyncDetail(result.error || 'Sync failed')
+    }
+  }, [forceSync, autoSyncGigs])
 
   const save = (g: DJGig[]) => {
     try {
@@ -1555,19 +1605,25 @@ export default function DJPage() {
             <p className="text-xs" style={{ color: theme.subtext }}>{gigs.length} gig{gigs.length !== 1 ? 's' : ''}</p>
             {syncStatus === 'syncing' && <span className="text-[10px] font-bold animate-pulse" style={{ color: BENTLEY_GOLD }}>Syncing…</span>}
             {syncStatus === 'synced' && conflicts.length === 0 && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_GREEN }}><CheckCircle size={9} /> Synced</span>}
-            {(syncStatus === 'error') && <span className="text-[10px] font-bold" style={{ color: BENTLEY_RED }}>Sync error</span>}
+            {syncStatus === 'error' && (
+              <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_RED }} title={syncDetail || syncState.lastError || 'Unknown error'}>
+                <AlertCircle size={9} /> {syncDetail ? syncDetail.slice(0, 40) : 'Sync error'}
+              </span>
+            )}
+            {!navigator.onLine && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_GOLD }}><AlertTriangle size={9} /> Offline</span>}
             {conflicts.length > 0 && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_RED }}><AlertTriangle size={9} /> Conflict</span>}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <motion.button
             whileTap={{ scale: 0.94 }}
-            onClick={() => autoSyncGigs(gigs)}
+            onClick={handleForceSync}
+            disabled={syncStatus === 'syncing'}
             className="px-2 py-2 rounded-xl text-xs font-semibold flex items-center gap-1"
-            title="Force sync now"
-            style={{ background: `${BENTLEY_GREEN}15`, color: BENTLEY_GREEN, border: `1px solid ${BENTLEY_GREEN}30` }}
+            title="Full cloud sync — pull + push all data"
+            style={{ background: `${BENTLEY_GREEN}15`, color: BENTLEY_GREEN, border: `1px solid ${BENTLEY_GREEN}30`, opacity: syncStatus === 'syncing' ? 0.5 : 1 }}
           >
-            <CheckCircle size={12} /> Sync
+            <RefreshCw size={12} className={syncStatus === 'syncing' ? 'animate-spin' : ''} /> Sync Now
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.94 }}
@@ -1612,7 +1668,7 @@ export default function DJPage() {
             <div>
               <p className="text-xs font-bold" style={{ color: BENTLEY_RED }}>Double-booking conflict detected</p>
               <p className="text-[11px] mt-0.5" style={{ color: theme.subtext }}>
-                {conflicts.map(c => c.date).join(', ')} already has a client booking request. Review in Requests tab.
+                {conflicts.map(c => c.date).join(', ')} already has a client booking request. Review in Website tab.
               </p>
             </div>
             <button onClick={() => setConflicts([])} className="ml-auto p-0.5" style={{ color: theme.subtext }}><X size={12} /></button>
@@ -1662,7 +1718,7 @@ export default function DJPage() {
         <motion.div variants={fadeUp} className="flex gap-1 p-1 rounded-xl overflow-x-auto" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
           {([
             ['gigs', 'Gigs', Mic2],
-            ['requests', 'Requests', MessageSquare],
+            ['requests', 'Website', MessageSquare],
             ['crm', 'Clients', Users],
             ['email', 'Email', Mail],
           ] as const).map(([s, label, Icon]) => (
@@ -1807,7 +1863,10 @@ export default function DJPage() {
               <div className="rounded-2xl p-10 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
                 <MessageSquare size={32} style={{ color: theme.subtext, margin: '0 auto 12px' }} />
                 <p className="text-sm font-semibold" style={{ color: theme.text }}>No booking requests yet</p>
-                <p className="text-xs mt-1" style={{ color: theme.subtext }}>Requests submitted on your website will appear here.</p>
+                <p className="text-xs mt-1" style={{ color: theme.subtext }}>Requests from orcafin.app/maskoffdadj will appear here.</p>
+                <a href="/maskoffdadj" target="_blank" className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-xl text-xs font-bold" style={{ background: `${DJ_PINK}18`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}>
+                  View Public Website
+                </a>
               </div>
             )}
 

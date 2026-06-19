@@ -9,7 +9,6 @@ import {
 } from 'lucide-react'
 import SettingsSheet from './SettingsSheet'
 import SideSidebar from './SideSidebar'
-import BottomNav from './BottomNav'
 import { useTheme } from '@/context/ThemeContext'
 import { QuickActions } from '@/components/QuickActions'
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -190,9 +189,6 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
         <main className="flex-1 overflow-x-hidden" style={{ backgroundColor: theme.bg }}>
           {children}
         </main>
-
-        {/* Bottom Nav — mobile only (lg:hidden lives inside BottomNav itself) */}
-        <BottomNav />
       </div>
 
       {/* Mobile SideSidebar overlay */}
