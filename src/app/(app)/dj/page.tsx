@@ -1342,8 +1342,10 @@ export default function DJPage() {
   const [blockSuccess, setBlockSuccess] = useState('')
   const [websiteSubTab, setWebsiteSubTab] = useState<'quotes' | 'photos' | 'gigs'>('quotes')
   const [testimonials, setTestimonials] = useState<any[]>([])
-  const [websitePhotos, setWebsitePhotos] = useState<string[]>([])
+  const [websitePhotos, setWebsitePhotos] = useState<any[]>([])
   const [newPhotoUrl, setNewPhotoUrl] = useState('')
+  const [gCalMonth, setGCalMonth] = useState(new Date().getMonth())
+  const [gCalYear, setGCalYear] = useState(new Date().getFullYear())
 
   // Load gigs: localStorage first, then listen for cloud sync to merge
   useEffect(() => {
@@ -1503,10 +1505,17 @@ export default function DJPage() {
       fetch('/api/dj/testimonials').then(r => r.ok ? r.json() : null).then(d => {
         if (d?.all) setTestimonials(d.all)
       }).catch(() => {})
-      try {
-        const saved = localStorage.getItem('orca-dj-website-photos')
-        if (saved) setWebsitePhotos(JSON.parse(saved))
-      } catch {}
+      fetch('/api/dj/photos').then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.photos) {
+          setWebsitePhotos(d.photos)
+          try { localStorage.setItem('orca-dj-website-photos', JSON.stringify(d.photos)) } catch {}
+        }
+      }).catch(() => {
+        try {
+          const saved = localStorage.getItem('orca-dj-website-photos')
+          if (saved) setWebsitePhotos(JSON.parse(saved))
+        } catch {}
+      })
     }
   }, [activeSection, loadRequests, requests.length])
 
@@ -1960,7 +1969,11 @@ export default function DJPage() {
                         {photoUrl && (
                           <button onClick={async () => {
                             await fetch('/api/dj/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot }) })
-                            setWebsitePhotos((prev: any[]) => prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot)))
+                            setWebsitePhotos((prev: any[]) => {
+                              const updated = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
+                              try { localStorage.setItem('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
+                              return updated
+                            })
                           }} className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ color: BENTLEY_RED, background: `${BENTLEY_RED}12` }}>Remove</button>
                         )}
                       </div>
@@ -1986,7 +1999,9 @@ export default function DJPage() {
                               if (data.ok && data.url) {
                                 setWebsitePhotos((prev: any[]) => {
                                   const filtered = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
-                                  return [...filtered, { slot, url: data.url }]
+                                  const updated = [...filtered, { slot, url: data.url, uploadedAt: new Date().toISOString() }]
+                                  try { localStorage.setItem('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
+                                  return updated
                                 })
                               }
                             } catch {}
@@ -2002,13 +2017,10 @@ export default function DJPage() {
             {/* ── GIGS SUB-TAB ── */}
             {websiteSubTab === 'gigs' && (() => {
               const gigDates = new Set(gigs.filter(g => g.status === 'confirmed' || g.status === 'pending').map(g => g.date))
-              const now = new Date()
-              const [gCalMonth, setGCalMonth] = useState(now.getMonth())
-              const [gCalYear, setGCalYear] = useState(now.getFullYear())
               const daysInMonth = new Date(gCalYear, gCalMonth + 1, 0).getDate()
               const firstDay = new Date(gCalYear, gCalMonth, 1).getDay()
               const monthName = new Date(gCalYear, gCalMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-              const todayStr = now.toISOString().slice(0, 10)
+              const todayStr = new Date().toISOString().slice(0, 10)
 
               return (
                 <div className="space-y-3">

@@ -192,12 +192,12 @@ export default function MaskOffDJPage() {
         const blocked: string[] = []
         if (availRes.ok) {
           const data = await availRes.json()
-          blocked.push(...(data.booked || []), ...(data.blocked || []))
+          blocked.push(...(data.bookedDates || data.booked || data.blocked || []))
         }
         if (schedRes.ok) {
           const sd = await schedRes.json()
           const gigDates = (sd.gigs || [])
-            .filter((g: any) => ['confirmed', 'dj_blocked'].includes(g.status))
+            .filter((g: any) => ['confirmed', 'booked', 'dj_blocked'].includes(g.status))
             .map((g: any) => g.date)
           blocked.push(...gigDates)
         }

@@ -11,7 +11,7 @@ export async function GET() {
     // Client-submitted bookings (quoted or confirmed)
     const { data: clientEvents } = await supabase
       .from('booking_requests')
-      .select('id, date, event_type, city, start_time, end_time, status')
+      .select('id, date, event_type, city, location, start_time, end_time, status')
       .in('status', ['booked', 'quoted'])
       .gte('date', today)
       .order('date', { ascending: true })
@@ -27,7 +27,7 @@ export async function GET() {
       .order('date', { ascending: true })
       .limit(20)
 
-    // Normalize DJ gig entries — expose them as 'booked' on the public schedule
+    // Normalize DJ gig entries for the public schedule
     // Parse gigStatus from notes to filter out completed gigs (they already happened)
     const normalizedGigs = (gigEvents || [])
       .filter((e: any) => {
@@ -38,26 +38,42 @@ export async function GET() {
           return true
         }
       })
-      .map((e: any) => ({
-        id: e.id,
-        date: e.date,
-        event_type: e.event_type,
-        city: e.city,
-        start_time: e.start_time,
-        end_time: e.end_time,
-        status: 'booked',
-      }))
+      .map((e: any) => {
+        let venue = e.city || ''
+        let clientName = ''
+        try {
+          const parsed = JSON.parse(e.notes || '{}')
+          clientName = parsed.clientName || ''
+        } catch {}
+        return {
+          id: e.id,
+          date: e.date,
+          event_type: e.event_type,
+          venue,
+          city: e.city,
+          start_time: e.start_time,
+          end_time: e.end_time,
+          status: 'confirmed',
+        }
+      })
+
+    // Normalize client bookings to include venue from location field
+    const normalizedClient = (clientEvents || []).map((e: any) => ({
+      ...e,
+      venue: e.location || e.city || '',
+      status: 'confirmed',
+    }))
 
     // Merge and sort by date, deduplicate by date (prefer client events)
-    const clientDates = new Set((clientEvents || []).map((e: any) => e.date))
+    const clientDates = new Set(normalizedClient.map((e: any) => e.date))
     const dedupedGigs = normalizedGigs.filter((e: any) => !clientDates.has(e.date))
 
-    const allEvents = [...(clientEvents || []), ...dedupedGigs]
+    const allGigs = [...normalizedClient, ...dedupedGigs]
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 30)
 
-    return NextResponse.json({ events: allEvents })
+    return NextResponse.json({ gigs: allGigs })
   } catch {
-    return NextResponse.json({ events: [] })
+    return NextResponse.json({ gigs: [] })
   }
 }
