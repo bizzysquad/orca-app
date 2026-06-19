@@ -1340,6 +1340,10 @@ export default function DJPage() {
   const [blockedDate, setBlockedDate] = useState('')
   const [blockingDate, setBlockingDate] = useState(false)
   const [blockSuccess, setBlockSuccess] = useState('')
+  const [websiteSubTab, setWebsiteSubTab] = useState<'quotes' | 'photos' | 'gigs'>('quotes')
+  const [testimonials, setTestimonials] = useState<any[]>([])
+  const [websitePhotos, setWebsitePhotos] = useState<string[]>([])
+  const [newPhotoUrl, setNewPhotoUrl] = useState('')
 
   // Load gigs: localStorage first, then listen for cloud sync to merge
   useEffect(() => {
@@ -1495,6 +1499,15 @@ export default function DJPage() {
 
   useEffect(() => {
     if (activeSection === 'requests' && requests.length === 0) loadRequests()
+    if (activeSection === 'requests') {
+      fetch('/api/dj/testimonials').then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.all) setTestimonials(d.all)
+      }).catch(() => {})
+      try {
+        const saved = localStorage.getItem('orca-dj-website-photos')
+        if (saved) setWebsitePhotos(JSON.parse(saved))
+      } catch {}
+    }
   }, [activeSection, loadRequests, requests.length])
 
   const generateReply = async (type: 'inquiry' | 'decline') => {
@@ -1799,226 +1812,231 @@ export default function DJPage() {
 
         {activeSection === 'requests' && (
           <motion.div variants={fadeUp} className="space-y-4">
-            {/* Filter row */}
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {(['all', 'new', 'reviewed', 'quoted', 'booked', 'declined'] as const).map(s => {
-                const count = s !== 'all' ? requests.filter(r => r.status === s).length : requests.length
-                const colors = REQUEST_STATUS_COLORS[s]
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setRequestFilter(s)}
-                    className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0"
-                    style={{
-                      background: requestFilter === s ? (colors?.bg || `${DJ_PINK}20`) : theme.card,
-                      color: requestFilter === s ? (colors?.text || DJ_PINK) : theme.subtext,
-                      border: `1px solid ${requestFilter === s ? (colors?.text || DJ_PINK) + '60' : theme.border}`,
-                    }}
-                  >
-                    {s === 'all' ? 'All' : REQUEST_STATUS_LABELS[s]} ({count})
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Reload + block date row */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadRequests}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-                style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}
-              >
-                <RefreshCw size={11} /> Refresh
-              </button>
-              <div className="flex items-center gap-1.5 ml-auto">
-                <input
-                  type="date"
-                  value={blockedDate}
-                  onChange={e => setBlockedDate(e.target.value)}
-                  className="px-2 py-1.5 rounded-xl border text-xs"
-                  style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
-                />
-                <button
-                  onClick={blockDate}
-                  disabled={!blockedDate || blockingDate}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-40"
-                  style={{ background: `${BENTLEY_RED}15`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}
-                >
-                  <Ban size={11} /> Block Date
+            {/* Sub-tabs: Quotes / Photos / Gigs */}
+            <div className="flex gap-1 p-1 rounded-xl" style={{ background: theme.bg, border: `1px solid ${theme.border}` }}>
+              {([['quotes', 'Quotes'], ['photos', 'Photos'], ['gigs', 'Gigs']] as const).map(([id, label]) => (
+                <button key={id} onClick={() => setWebsiteSubTab(id as any)}
+                  className="flex-1 py-2 rounded-lg text-xs font-bold transition-all"
+                  style={{ background: websiteSubTab === id ? BENTLEY_INDIGO : 'transparent', color: websiteSubTab === id ? '#fff' : theme.subtext }}>
+                  {label}
+                  {id === 'quotes' && requests.filter(r => r.status === 'new').length > 0 && (
+                    <span className="ml-1 px-1.5 rounded-full text-[9px]" style={{ background: DJ_PINK, color: '#fff' }}>{requests.filter(r => r.status === 'new').length}</span>
+                  )}
                 </button>
-              </div>
+              ))}
             </div>
-            {blockSuccess && <p className="text-xs font-semibold" style={{ color: BENTLEY_GREEN }}>{blockSuccess}</p>}
 
-            {/* Loading state */}
-            {loadingRequests && (
-              <div className="flex items-center justify-center py-12 gap-2" style={{ color: theme.subtext }}>
-                <Loader2 size={18} className="animate-spin" />
-                <span className="text-sm">Loading requests…</span>
-              </div>
-            )}
+            <a href="/maskoffdadj" target="_blank" className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: DJ_PINK }}>
+              View Public Website <ChevronRight size={12} />
+            </a>
 
-            {/* Empty state */}
-            {!loadingRequests && requests.length === 0 && (
-              <div className="rounded-2xl p-10 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <MessageSquare size={32} style={{ color: theme.subtext, margin: '0 auto 12px' }} />
-                <p className="text-sm font-semibold" style={{ color: theme.text }}>No booking requests yet</p>
-                <p className="text-xs mt-1" style={{ color: theme.subtext }}>Requests from orcafin.app/maskoffdadj will appear here.</p>
-                <a href="/maskoffdadj" target="_blank" className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-xl text-xs font-bold" style={{ background: `${DJ_PINK}18`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}>
-                  View Public Website
-                </a>
-              </div>
-            )}
-
-            {/* Request cards */}
-            {!loadingRequests && (requestFilter === 'all' ? requests : requests.filter(r => r.status === requestFilter)).map(r => {
-              const isExpanded = selectedRequest?.id === r.id
-              const colors = REQUEST_STATUS_COLORS[r.status] || REQUEST_STATUS_COLORS['reviewed']
-              return (
-                <div key={r.id} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                  {/* Collapsed header */}
-                  <button
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left"
-                    onClick={() => {
-                      if (isExpanded) {
-                        setSelectedRequest(null)
-                      } else {
-                        setSelectedRequest(r)
-                        setGeneratedReply('')
-                        setReplySubject('')
-                        setReplyError('')
-                        setReplySent('')
-                      }
-                    }}
-                  >
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0" style={{ background: colors.bg, color: colors.text }}>
-                      {REQUEST_STATUS_LABELS[r.status] || r.status}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{r.client_name}</p>
-                      <p className="text-xs truncate" style={{ color: theme.subtext }}>{r.event_type} · {r.date} · {r.city}</p>
-                    </div>
-                    {isExpanded ? <ChevronUp size={14} style={{ color: theme.subtext, shrink: 0 }} /> : <ChevronDown size={14} style={{ color: theme.subtext }} />}
+            {/* ── QUOTES SUB-TAB ── */}
+            {websiteSubTab === 'quotes' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={loadRequests} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
+                    style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}>
+                    <RefreshCw size={11} /> Refresh
                   </button>
+                  <div className="flex gap-2 ml-auto overflow-x-auto">
+                    {(['new', 'quoted', 'booked', 'declined'] as const).map(s => (
+                      <button key={s} onClick={() => setRequestFilter(s === requestFilter ? 'all' : s)}
+                        className="px-2.5 py-1 rounded-full text-[10px] font-bold"
+                        style={{
+                          background: requestFilter === s ? (REQUEST_STATUS_COLORS[s]?.bg || theme.card) : theme.card,
+                          color: requestFilter === s ? (REQUEST_STATUS_COLORS[s]?.text || theme.subtext) : theme.subtext,
+                          border: `1px solid ${theme.border}`,
+                        }}>
+                        {REQUEST_STATUS_LABELS[s]} ({requests.filter(r => r.status === s).length})
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                  {/* Expanded panel */}
-                  {isExpanded && (
-                    <div className="border-t px-4 pb-4 pt-3 space-y-4" style={{ borderColor: theme.border }}>
-                      {/* Details grid */}
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                        {[
-                          ['Email', r.client_email],
-                          ['Phone', r.client_phone || '—'],
-                          ['Date', r.date],
-                          ['City', r.city],
-                          ['Venue', r.location || '—'],
-                          ['Start', r.start_time || '—'],
-                          ['End', r.end_time || '—'],
-                          ['Guests', r.guest_count ? String(r.guest_count) : '—'],
-                          ['MC', r.mc_needed ? 'Yes' : 'No'],
-                          ['Budget', r.budget_range || '—'],
-                        ].map(([label, val]) => (
-                          <div key={label}>
-                            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>{label}</p>
-                            <p className="text-sm" style={{ color: theme.text }}>{val}</p>
-                          </div>
-                        ))}
-                        {r.special_requests && (
-                          <div className="col-span-2">
-                            <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.subtext }}>Special Requests</p>
-                            <p className="text-xs px-3 py-2 rounded-xl" style={{ color: theme.text, background: theme.bg }}>{r.special_requests}</p>
-                          </div>
-                        )}
-                      </div>
+                {loadingRequests && <div className="flex items-center justify-center py-8 gap-2" style={{ color: theme.subtext }}><Loader2 size={16} className="animate-spin" /> Loading…</div>}
 
-                      {/* Generate reply */}
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>AI Reply</p>
-                        <div className="flex gap-2 mb-3">
-                          <button
-                            onClick={() => generateReply('inquiry')}
-                            disabled={generatingReply}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-40"
-                            style={{ background: `${BENTLEY_INDIGO}18`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}
-                          >
-                            {generatingReply ? <Loader2 size={11} className="animate-spin" /> : <Edit3 size={11} />} Draft Inquiry
-                          </button>
-                          <button
-                            onClick={() => generateReply('decline')}
-                            disabled={generatingReply}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-40"
-                            style={{ background: `${BENTLEY_RED}18`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}
-                          >
-                            {generatingReply ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />} Draft Decline
-                          </button>
+                {!loadingRequests && requests.length === 0 && (
+                  <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                    <MessageSquare size={28} style={{ color: theme.subtext, margin: '0 auto 8px' }} />
+                    <p className="text-sm font-semibold" style={{ color: theme.text }}>No quote requests yet</p>
+                    <p className="text-xs mt-1" style={{ color: theme.subtext }}>Customer requests from your website appear here.</p>
+                  </div>
+                )}
+
+                {!loadingRequests && (requestFilter === 'all' ? requests : requests.filter(r => r.status === requestFilter)).map(r => {
+                  const isExpanded = selectedRequest?.id === r.id
+                  const colors = REQUEST_STATUS_COLORS[r.status] || REQUEST_STATUS_COLORS['reviewed']
+                  return (
+                    <div key={r.id} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                      <button className="w-full flex items-center gap-3 px-4 py-3 text-left" onClick={() => {
+                        if (isExpanded) { setSelectedRequest(null) } else { setSelectedRequest(r); setGeneratedReply(''); setReplySubject(''); setReplyError(''); setReplySent('') }
+                      }}>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0" style={{ background: colors.bg, color: colors.text }}>{REQUEST_STATUS_LABELS[r.status] || r.status}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{r.client_name}</p>
+                          <p className="text-xs truncate" style={{ color: theme.subtext }}>{r.event_type} · {r.date} · {r.city}</p>
                         </div>
-                        {replyError && <p className="text-xs mb-2" style={{ color: BENTLEY_RED }}>{replyError}</p>}
-                        {generatedReply && (
-                          <div className="space-y-2">
-                            <input
-                              value={replySubject}
-                              onChange={e => setReplySubject(e.target.value)}
-                              placeholder="Subject"
-                              className="w-full px-3 py-2 rounded-xl border text-sm"
-                              style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}
-                            />
-                            <textarea
-                              value={generatedReply}
-                              onChange={e => setGeneratedReply(e.target.value)}
-                              rows={7}
-                              className="w-full px-3 py-2.5 rounded-xl border text-sm resize-none"
-                              style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}
-                            />
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <button
-                                onClick={sendReply}
-                                disabled={sendingReply}
-                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-40"
-                                style={{ background: BENTLEY_GREEN, color: '#fff' }}
-                              >
-                                {sendingReply ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />} Send to {r.client_email}
+                        {isExpanded ? <ChevronUp size={14} style={{ color: theme.subtext }} /> : <ChevronDown size={14} style={{ color: theme.subtext }} />}
+                      </button>
+                      {isExpanded && (
+                        <div className="border-t px-4 pb-4 pt-3 space-y-4" style={{ borderColor: theme.border }}>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                            {[['Email', r.client_email], ['Phone', r.client_phone || '—'], ['Date', r.date], ['City', r.city], ['Venue', r.location || '—'], ['Guests', r.guest_count ? String(r.guest_count) : '—'], ['Budget', r.budget_range || '—'], ['MC', r.mc_needed ? 'Yes' : 'No']].map(([label, val]) => (
+                              <div key={label}><p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>{label}</p><p className="text-sm" style={{ color: theme.text }}>{val}</p></div>
+                            ))}
+                            {r.special_requests && <div className="col-span-2"><p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.subtext }}>Special Requests</p><p className="text-xs px-3 py-2 rounded-xl" style={{ color: theme.text, background: theme.bg }}>{r.special_requests}</p></div>}
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>AI Reply</p>
+                            <div className="flex gap-2 mb-3">
+                              <button onClick={() => generateReply('inquiry')} disabled={generatingReply} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: `${BENTLEY_INDIGO}18`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}>
+                                {generatingReply ? <Loader2 size={11} className="animate-spin" /> : <Edit3 size={11} />} Draft Inquiry
                               </button>
-                              <button
-                                onClick={() => navigator.clipboard.writeText(generatedReply)}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
-                                style={{ background: theme.card, color: theme.subtext, border: `1px solid ${theme.border}` }}
-                              >
-                                <Copy size={11} /> Copy
+                              <button onClick={() => generateReply('decline')} disabled={generatingReply} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: `${BENTLEY_RED}18`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}>
+                                {generatingReply ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />} Draft Decline
                               </button>
-                              {replySent && <span className="text-xs flex items-center gap-1" style={{ color: BENTLEY_GREEN }}><CheckCircle2 size={11} /> {replySent}</span>}
+                            </div>
+                            {replyError && <p className="text-xs mb-2" style={{ color: BENTLEY_RED }}>{replyError}</p>}
+                            {generatedReply && (
+                              <div className="space-y-2">
+                                <input value={replySubject} onChange={e => setReplySubject(e.target.value)} placeholder="Subject" className="w-full px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                                <textarea value={generatedReply} onChange={e => setGeneratedReply(e.target.value)} rows={5} className="w-full px-3 py-2 rounded-xl border text-sm resize-none" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button onClick={sendReply} disabled={sendingReply} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-40" style={{ background: BENTLEY_GREEN, color: '#fff' }}>
+                                    {sendingReply ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />} Send
+                                  </button>
+                                  <button onClick={() => navigator.clipboard.writeText(generatedReply)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext, border: `1px solid ${theme.border}` }}>
+                                    <Copy size={11} /> Copy
+                                  </button>
+                                  {replySent && <span className="text-xs flex items-center gap-1" style={{ color: BENTLEY_GREEN }}><CheckCircle2 size={11} /> {replySent}</span>}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>Update Status</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {(['new', 'quoted', 'booked', 'declined'] as const).map(s => {
+                                const sc = REQUEST_STATUS_COLORS[s]
+                                return <button key={s} onClick={() => updateRequestStatus(r.id, s)} className="px-3 py-1.5 rounded-full text-[11px] font-bold" style={{ background: r.status === s ? sc.bg : theme.bg, color: r.status === s ? sc.text : theme.subtext, border: `1px solid ${r.status === s ? sc.text + '60' : theme.border}` }}>{REQUEST_STATUS_LABELS[s]}</button>
+                              })}
                             </div>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
 
-                      {/* Status update */}
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>Update Status</p>
-                        <div className="flex gap-2 flex-wrap">
-                          {(['new', 'reviewed', 'quoted', 'booked', 'declined'] as const).map(s => {
-                            const sc = REQUEST_STATUS_COLORS[s]
-                            return (
-                              <button
-                                key={s}
-                                onClick={() => updateRequestStatus(r.id, s)}
-                                className="px-3 py-1.5 rounded-full text-[11px] font-bold"
-                                style={{
-                                  background: r.status === s ? sc.bg : theme.bg,
-                                  color: r.status === s ? sc.text : theme.subtext,
-                                  border: `1px solid ${r.status === s ? sc.text + '60' : theme.border}`,
-                                }}
-                              >
-                                {REQUEST_STATUS_LABELS[s]}
-                              </button>
-                            )
-                          })}
+                {/* Testimonials Management */}
+                {testimonials.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>Customer Testimonials</p>
+                    {testimonials.map((t: any) => (
+                      <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1.5" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold truncate" style={{ color: theme.text }}>{t.name} — {t.event_type}</p>
+                          <p className="text-[11px] truncate" style={{ color: theme.subtext }}>{t.review}</p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          {t.status !== 'approved' && (
+                            <button onClick={() => { fetch('/api/dj/testimonials', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.id, status: 'approved' }) }).then(() => setTestimonials(prev => prev.map(x => x.id === t.id ? { ...x, status: 'approved' } : x))) }}
+                              className="px-2 py-1 rounded-lg text-[10px] font-bold" style={{ background: `${BENTLEY_GREEN}18`, color: BENTLEY_GREEN }}>Approve</button>
+                          )}
+                          {t.status === 'approved' && <span className="text-[10px] font-bold" style={{ color: BENTLEY_GREEN }}>✓ Live</span>}
+                          {t.status !== 'rejected' && (
+                            <button onClick={() => { fetch('/api/dj/testimonials', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.id, status: 'rejected' }) }).then(() => setTestimonials(prev => prev.map(x => x.id === t.id ? { ...x, status: 'rejected' } : x))) }}
+                              className="px-2 py-1 rounded-lg text-[10px] font-bold" style={{ background: `${BENTLEY_RED}18`, color: BENTLEY_RED }}>Reject</button>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── PHOTOS SUB-TAB ── */}
+            {websiteSubTab === 'photos' && (
+              <div className="space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Website Photos</p>
+                <p className="text-[11px]" style={{ color: theme.subtext }}>Add image URLs to display on your public website. Photos appear in the hero and about sections.</p>
+
+                <div className="flex gap-2">
+                  <input value={newPhotoUrl} onChange={e => setNewPhotoUrl(e.target.value)} placeholder="Paste image URL…" className="flex-1 px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                  <button onClick={() => {
+                    if (!newPhotoUrl.trim()) return
+                    const next = [...websitePhotos, newPhotoUrl.trim()]
+                    setWebsitePhotos(next)
+                    localStorage.setItem('orca-dj-website-photos', JSON.stringify(next))
+                    window.dispatchEvent(new Event('orca-local-write'))
+                    setNewPhotoUrl('')
+                  }} className="px-4 py-2 rounded-xl text-xs font-bold" style={{ background: DJ_PINK, color: '#fff' }}>Add</button>
                 </div>
-              )
-            })}
+
+                {websitePhotos.length === 0 && (
+                  <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                    <p className="text-sm" style={{ color: theme.subtext }}>No photos added yet. Paste an image URL above to get started.</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  {websitePhotos.map((url, i) => (
+                    <div key={i} className="relative rounded-xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                      <img src={url} alt={`Photo ${i + 1}`} className="w-full h-32 object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                      <div className="p-2 flex items-center justify-between">
+                        <p className="text-[10px] truncate flex-1" style={{ color: theme.subtext }}>{url.slice(0, 40)}…</p>
+                        <button onClick={() => {
+                          const next = websitePhotos.filter((_, j) => j !== i)
+                          setWebsitePhotos(next)
+                          localStorage.setItem('orca-dj-website-photos', JSON.stringify(next))
+                          window.dispatchEvent(new Event('orca-local-write'))
+                        }} className="p-1 rounded" style={{ color: BENTLEY_RED }}><X size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── GIGS SUB-TAB ── */}
+            {websiteSubTab === 'gigs' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Synced Gigs</p>
+                  <div className="flex gap-2">
+                    <input type="date" value={blockedDate} onChange={e => setBlockedDate(e.target.value)} className="px-2 py-1.5 rounded-xl border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
+                    <button onClick={blockDate} disabled={!blockedDate || blockingDate} className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: `${BENTLEY_RED}15`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}>
+                      <Ban size={11} /> Block
+                    </button>
+                  </div>
+                </div>
+                {blockSuccess && <p className="text-xs font-semibold" style={{ color: BENTLEY_GREEN }}>{blockSuccess}</p>}
+                <p className="text-[11px]" style={{ color: theme.subtext }}>These gigs auto-sync to your public calendar, poster board, and availability. Add gigs in the Gigs tab — they appear here automatically.</p>
+
+                {gigs.filter(g => g.status !== 'cancelled').length === 0 && (
+                  <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                    <p className="text-sm" style={{ color: theme.subtext }}>No gigs yet. Add one in the Gigs tab.</p>
+                  </div>
+                )}
+
+                {gigs.filter(g => g.status !== 'cancelled').sort((a, b) => a.date.localeCompare(b.date)).map(g => (
+                  <div key={g.id} className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                    <div className="text-center" style={{ minWidth: 44 }}>
+                      <p className="text-[10px] font-bold uppercase" style={{ color: DJ_PINK }}>{new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</p>
+                      <p className="text-lg font-black leading-none" style={{ color: theme.text }}>{new Date(g.date + 'T00:00:00').getDate()}</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{g.clientName || g.venue || 'Gig'}</p>
+                      <p className="text-xs truncate" style={{ color: theme.subtext }}>{g.venue || ''} {g.eventAddress ? `· ${g.eventAddress}` : ''}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0" style={{ background: g.status === 'confirmed' ? `${BENTLEY_GREEN}18` : g.status === 'completed' ? `${BENTLEY_INDIGO}18` : `${BENTLEY_GOLD}18`, color: g.status === 'confirmed' ? BENTLEY_GREEN : g.status === 'completed' ? BENTLEY_INDIGO : BENTLEY_GOLD }}>
+                      {g.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </motion.div>

@@ -4,6 +4,15 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { createBrowserClient } from '@supabase/ssr'
 import type { OrcaData } from '@/lib/types'
 import { getNewUserData } from '@/lib/demo-data'
+import {
+  fullSync,
+  pushToCloud,
+  debouncedSync,
+  subscribeSyncState,
+  SYNC_KEYS,
+  type SyncState,
+  type SyncStatus,
+} from '@/lib/syncEngine'
 
 interface OrcaDataContextType {
   data: OrcaData
@@ -13,6 +22,8 @@ interface OrcaDataContextType {
   refresh: () => Promise<void>
   save: (data: OrcaData) => Promise<void>
   syncToCloud: () => Promise<void>
+  syncState: SyncState
+  forceSync: () => Promise<{ ok: boolean; error?: string }>
 }
 
 const OrcaDataContext = createContext<OrcaDataContextType | null>(null)
@@ -23,18 +34,31 @@ export function useOrcaData() {
   return ctx
 }
 
-// Empty data for initial state before load
 const EMPTY_DATA: OrcaData = getNewUserData('', '')
 
 export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<OrcaData>(EMPTY_DATA)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [syncState, setSyncState] = useState<SyncState>({
+    status: 'idle',
+    lastSyncTime: null,
+    lastError: null,
+    localGigCount: 0,
+    cloudGigCount: 0,
+    userId: null,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  })
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   ), [])
+
+  // Subscribe to sync engine state
+  useEffect(() => {
+    return subscribeSyncState(setSyncState)
+  }, [])
 
   const loadData = useCallback(async () => {
     try {
@@ -43,15 +67,26 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
 
       const { data: authData } = await supabase.auth.getUser()
       if (!authData?.user?.id) {
+        // Try session refresh for PWA/standalone mode
+        const { data: refreshed } = await supabase.auth.refreshSession()
+        if (!refreshed?.user?.id) {
+          setData(EMPTY_DATA)
+          setLoading(false)
+          return
+        }
+      }
+
+      const user = authData?.user || (await supabase.auth.getUser()).data?.user
+      if (!user?.id) {
         setData(EMPTY_DATA)
         setLoading(false)
         return
       }
 
-      const userId = authData.user.id
-      const userEmail = authData.user.email || ''
-      const userName = authData.user.user_metadata?.full_name
-        || authData.user.user_metadata?.display_name
+      const userId = user.id
+      const userEmail = user.email || ''
+      const userName = user.user_metadata?.full_name
+        || user.user_metadata?.display_name
         || userEmail.split('@')[0]
         || ''
 
@@ -77,7 +112,6 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
       ])
 
       if (!profile) {
-        // New user - use blank data with their name/email
         setData(getNewUserData(userName, userEmail))
         setLoading(false)
         return
@@ -216,150 +250,43 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
   }, [supabase])
 
   const save = useCallback(async (newData: OrcaData) => {
-    // Import and call the server action
     const { saveUserData } = await import('@/lib/supabase/data')
     await saveUserData(newData)
     setData(newData)
   }, [])
 
-  // ── Cross-device localStorage sync ──
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const userIdRef = useRef<string | null>(null)
-
-  const SYNC_KEYS = useMemo(() => [
-    // Financial / bills
-    'orca-bills',
-    'orca-user-settings',
-    'orca-savings-accounts',
-    'orca-payment-entries',
-    'orca-paycheck-history',
-    // Income sources
-    'orca-lyft-sessions',
-    'orca-bizzplug-clients',
-    // DJ
-    'orca-dj-gigs',
-    'orca-dj-profile',
-    'orca-dj-activity',
-    'orca-dj-email-templates',
-    // Fitness & food
-    'orca-weight-logs',
-    'orca-meal-logs',
-    'orca-grocery',
-    // Tasks & notes
-    'orca-tasks',
-    'orca-notes',
-    // Groups & social
-    'orca-stack-circle-groups',
-    'orca-roommates',
-    // UI preferences
-    'orca-dashboard-order',
-    'orca-dashboard-pinned',
-    'orca-theme-id',
-    'orca-admin-nav',
-    'orca-admin-settings',
-    'orca-feature-flags',
-    'orca-module-configs',
-    'orca-layout-style',
-    'orca-button-placements',
-    'orca-default-theme',
-  ], [])
-
-  // Push current localStorage to Supabase profiles.local_data
+  // ── Cross-device sync via syncEngine ──
   const syncToCloud = useCallback(async () => {
-    const uid = userIdRef.current
-    if (!uid) return
-    const localData: Record<string, any> = {}
-    let keyCount = 0
-    for (const key of SYNC_KEYS) {
-      try {
-        const val = localStorage.getItem(key)
-        if (val !== null) {
-          try { localData[key] = JSON.parse(val) } catch { localData[key] = val }
-          keyCount++
-        }
-      } catch {}
-    }
-    try {
-      const { error } = await supabase.from('profiles').update({ local_data: localData }).eq('id', uid)
-      if (error) {
-        console.warn('[ORCA Sync] Cloud push failed:', error.message)
-      } else {
-        console.log(`[ORCA Sync] Pushed ${keyCount} keys to cloud`)
-      }
-    } catch (err) {
-      console.warn('[ORCA Sync] Cloud sync error:', err)
-    }
-  }, [supabase, SYNC_KEYS])
+    await pushToCloud()
+  }, [])
 
-  // Debounced auto-sync: call after any localStorage write
-  const debouncedSync = useCallback(() => {
-    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
-    syncTimeoutRef.current = setTimeout(() => { syncToCloud() }, 2000)
-  }, [syncToCloud])
+  const forceSync = useCallback(async () => {
+    const result = await fullSync()
+    if (result.ok) {
+      await loadData()
+    }
+    return result
+  }, [loadData])
 
-  // On initial load: pull cloud local_data and hydrate localStorage (always overwrite for cross-device sync)
+  // On initial load: run full bidirectional sync
   useEffect(() => {
-    async function hydrateFromCloud() {
-      try {
-        const { data: authData } = await supabase.auth.getUser()
-        if (!authData?.user?.id) return
-        userIdRef.current = authData.user.id
-
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('local_data')
-          .eq('id', authData.user.id)
-          .single()
-
-        if (profileError) {
-          console.warn('[ORCA Sync] Could not fetch cloud data:', profileError.message)
-          // Still push local data to cloud so other devices can pick it up
-          debouncedSync()
-          return
-        }
-
-        if (profile?.local_data && typeof profile.local_data === 'object') {
-          const cloud = profile.local_data as Record<string, any>
-          let hydrated = 0
-          let hasLocalOnly = false
-          for (const key of SYNC_KEYS) {
-            if (cloud[key] !== undefined) {
-              // Cloud has this key — overwrite local to ensure cross-device consistency
-              const val = typeof cloud[key] === 'string' ? cloud[key] : JSON.stringify(cloud[key])
-              localStorage.setItem(key, val)
-              hydrated++
-            } else if (localStorage.getItem(key) !== null) {
-              // Local has data the cloud doesn't (e.g. DJ gigs entered on mobile before sync was set up)
-              // Queue a push so cloud stays complete for all devices
-              hasLocalOnly = true
-            }
-          }
-          console.log(`[ORCA Sync] Hydrated ${hydrated} keys from cloud`)
-          if (hasLocalOnly) {
-            console.log('[ORCA Sync] Local has keys not yet in cloud — pushing immediately')
-            syncToCloud()
-          }
-          // Signal that cloud data has been hydrated — components can re-read
-          window.dispatchEvent(new Event('orca-sync-ready'))
-        } else {
-          console.log('[ORCA Sync] No cloud data found — pushing local data to cloud')
-          // First time on any device: push local state to cloud for other devices
-          syncToCloud()
-        }
-      } catch (err) {
-        console.warn('[ORCA Sync] Hydration error (local_data column may not exist):', err)
-        // Push local to cloud anyway in case column now exists
-        debouncedSync()
+    async function initialSync() {
+      const result = await fullSync()
+      if (result.ok) {
+        console.log('[ORCA] Initial sync complete')
+      } else {
+        console.warn('[ORCA] Initial sync issue:', result.error)
+        // Even if sync fails, still push local data if we have any
+        await pushToCloud()
       }
     }
-    hydrateFromCloud()
-    return () => { if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current) }
-  }, [supabase, SYNC_KEYS, syncToCloud, debouncedSync])
+    initialSync()
+  }, [])
 
-  // Listen for localStorage writes (cross-tab and programmatic) to auto-sync
+  // Listen for localStorage writes to auto-sync
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key && SYNC_KEYS.includes(e.key)) debouncedSync()
+      if (e.key && SYNC_KEYS.includes(e.key as any)) debouncedSync()
     }
     const handleCustom = () => debouncedSync()
     window.addEventListener('storage', handleStorage)
@@ -368,24 +295,38 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('storage', handleStorage)
       window.removeEventListener('orca-local-write', handleCustom)
     }
-  }, [debouncedSync, SYNC_KEYS])
+  }, [])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
-  // Re-load data after cloud hydration to pick up synced localStorage values
+  // Re-load data after cloud hydration
   useEffect(() => {
     const handleSyncReady = () => {
-      console.log('[ORCA Sync] Cloud hydration complete — reloading data context')
+      console.log('[ORCA] Sync complete — reloading data context')
       loadData()
     }
     window.addEventListener('orca-sync-ready', handleSyncReady)
     return () => window.removeEventListener('orca-sync-ready', handleSyncReady)
   }, [loadData])
 
+  // Listen for online/offline changes
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[ORCA] Back online — syncing')
+      fullSync()
+    }
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [])
+
   return (
-    <OrcaDataContext.Provider value={{ data, setData, loading, error, refresh: loadData, save, syncToCloud }}>
+    <OrcaDataContext.Provider value={{
+      data, setData, loading, error,
+      refresh: loadData, save, syncToCloud,
+      syncState, forceSync,
+    }}>
       {children}
     </OrcaDataContext.Provider>
   )

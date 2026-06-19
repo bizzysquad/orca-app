@@ -1,0 +1,26 @@
+{
+  "name": "ORCA — Organize Resources Control Assets",
+  "short_name": "ORCA",
+  "description": "Personal AI operating system. Manage money, DJ gigs, fitness, and life.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0A0F1C",
+  "theme_color": "#EAF3FF",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo-sm.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "scope": "/",
+  "prefer_related_applications": false
+}

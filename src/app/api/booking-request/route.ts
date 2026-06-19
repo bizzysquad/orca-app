@@ -69,29 +69,42 @@ export async function POST(req: NextRequest) {
       date, startTime, endTime, eventType, customEventType,
       guestCount, location, city, mcNeeded, specialRequests,
       name, email, phone,
+      custom_budget, song_requests, budget_range,
+      client_name, client_email, client_phone, event_type,
+      start_time, end_time, guest_count, mc_needed, special_requests,
     } = body
 
-    if (!name || !email || !date) {
+    const resolvedName = name || client_name
+    const resolvedEmail = email || client_email
+    const resolvedDate = date
+
+    if (!resolvedName || !resolvedEmail || !resolvedDate) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const resolvedEventType = customEventType || eventType || 'Other'
+    const resolvedEventType = customEventType || eventType || event_type || 'Other'
+    const resolvedSpecial = [
+      specialRequests || special_requests || '',
+      custom_budget ? `Budget: $${custom_budget}` : '',
+      song_requests ? `Song Requests: ${song_requests}` : '',
+    ].filter(Boolean).join('\n')
+
     const supabase = await createClient()
 
-    // Store in booking_requests table
     const { error } = await supabase.from('booking_requests').insert({
-      date,
-      start_time: startTime,
-      end_time: endTime,
+      date: resolvedDate,
+      start_time: startTime || start_time,
+      end_time: endTime || end_time,
       event_type: resolvedEventType,
-      guest_count: guestCount ? parseInt(guestCount) : null,
+      guest_count: (guestCount || guest_count) ? parseInt(String(guestCount || guest_count)) : null,
       location,
       city,
-      mc_needed: mcNeeded === 'Yes',
-      special_requests: specialRequests,
-      client_name: name,
-      client_email: email,
-      client_phone: phone,
+      mc_needed: mcNeeded === 'Yes' || mc_needed === true,
+      special_requests: resolvedSpecial,
+      budget_range: budget_range || '',
+      client_name: resolvedName,
+      client_email: resolvedEmail,
+      client_phone: phone || client_phone,
       status: 'new',
       created_at: new Date().toISOString(),
     })
