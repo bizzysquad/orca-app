@@ -327,6 +327,43 @@ export default function DashboardPage() {
   const [djEarnedIncome, setDjEarnedIncome] = useState(0)
   const [bizzplugEarnedIncome, setBizzplugEarnedIncome] = useState(0)
 
+  // Re-read all localStorage data when cloud sync merges new data
+  useEffect(() => {
+    const handleSyncReady = () => {
+      try {
+        const saved = localStorage.getItem('orca-dj-gigs')
+        if (saved) setGigs(JSON.parse(saved))
+      } catch {}
+      try {
+        const ls = localStorage.getItem('orca-lyft-sessions')
+        if (ls) {
+          const sessions = JSON.parse(ls)
+          setLyftNetIncome(sessions.reduce((s: number, x: any) => s + (x.earnings || 0) - (x.gasExpense || 0), 0))
+        }
+      } catch {}
+      try {
+        const djData = localStorage.getItem('orca-dj-gigs')
+        if (djData) {
+          const djList = JSON.parse(djData)
+          setDjEarnedIncome(djList.reduce((s: number, gig: any) => {
+            const dep = gig.depositPaid ? (gig.depositAmount || 0) : 0
+            const parts = (gig.partialPayments || []).reduce((sp: number, p: any) => sp + p.amount, 0)
+            return s + dep + parts
+          }, 0))
+        }
+      } catch {}
+      try {
+        const biz = localStorage.getItem('orca-bizzplug-clients')
+        if (biz) {
+          const clients = JSON.parse(biz)
+          setBizzplugEarnedIncome(clients.reduce((s: number, c: any) => s + (c.paid || 0), 0))
+        }
+      } catch {}
+    }
+    window.addEventListener('orca-sync-ready', handleSyncReady)
+    return () => window.removeEventListener('orca-sync-ready', handleSyncReady)
+  }, [])
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem('orca-dj-gigs')
@@ -585,7 +622,7 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold leading-tight" style={{ color: theme.text }}>{greeting}</h1>
             <p className="text-sm mt-0.5" style={{ color: theme.subtext }}>{line}</p>
           </motion.div>
-          <motion.div variants={fadeUp}><QuickStatsRow /></motion.div>
+                    <motion.div variants={fadeUp}><QuickStatsRow /></motion.div>
           <motion.div variants={fadeUp}>
             <div className="flex items-center gap-2 mb-2">
               <Calendar size={14} style={{ color: BENTLEY_INDIGO }} />
