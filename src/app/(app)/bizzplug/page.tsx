@@ -138,6 +138,8 @@ export default function BizzyPlugPage() {
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ id: string; url: string; title: string; category: string }[]>([])
   const [uploadingPortfolio, setUploadingPortfolio] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
+  const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [newPhotoTitle, setNewPhotoTitle] = useState('')
   const [newPhotoCategory, setNewPhotoCategory] = useState('album-covers')
 
@@ -145,17 +147,41 @@ export default function BizzyPlugPage() {
     try { const res = await fetch('/api/bizzyplug/photos'); if (res.ok) { const d = await res.json(); setPortfolioPhotos(d.photos || []) } } catch {}
   }, [])
 
-  const uploadPortfolioPhoto = async (file: File) => {
+  const uploadPortfolioPhotos = async (files: File[]) => {
     setUploadingPortfolio(true)
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('title', newPhotoTitle || file.name.replace(/\.[^.]+$/, ''))
-      fd.append('category', newPhotoCategory)
-      const res = await fetch('/api/bizzyplug/photos', { method: 'POST', body: fd })
-      if (res.ok) { await loadPortfolio(); setNewPhotoTitle('') }
-    } catch {}
+    setUploadStatus(null)
+    setUploadProgress({ current: 0, total: files.length })
+    let succeeded = 0
+    let failed = 0
+
+    for (let i = 0; i < files.length; i++) {
+      setUploadProgress({ current: i + 1, total: files.length })
+      const file = files[i]
+      const title = newPhotoTitle
+        ? (files.length > 1 ? `${newPhotoTitle} ${i + 1}` : newPhotoTitle)
+        : file.name.replace(/\.[^.]+$/, '')
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('title', title)
+        fd.append('category', newPhotoCategory)
+        const res = await fetch('/api/bizzyplug/photos', { method: 'POST', body: fd })
+        if (res.ok) succeeded++
+        else failed++
+      } catch { failed++ }
+    }
+
+    await loadPortfolio()
+    setNewPhotoTitle('')
     setUploadingPortfolio(false)
+    setUploadProgress({ current: 0, total: 0 })
+
+    if (failed === 0) {
+      setUploadStatus({ type: 'success', message: `${succeeded} photo${succeeded !== 1 ? 's' : ''} uploaded` })
+    } else {
+      setUploadStatus({ type: 'error', message: `${succeeded} uploaded, ${failed} failed` })
+    }
+    setTimeout(() => setUploadStatus(null), 3000)
   }
 
   const deletePortfolioPhoto = async (id: string) => {
@@ -586,7 +612,7 @@ export default function BizzyPlugPage() {
               )}
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
-                  <input className={inputCls} style={inputStyle} placeholder="Photo title" value={newPhotoTitle} onChange={e => setNewPhotoTitle(e.target.value)} />
+                  <input className={inputCls} style={inputStyle} placeholder="Photo title (optional)" value={newPhotoTitle} onChange={e => setNewPhotoTitle(e.target.value)} />
                   <select className={inputCls} style={inputStyle} value={newPhotoCategory} onChange={e => setNewPhotoCategory(e.target.value)}>
                     <option value="album-covers">Album Covers</option>
                     <option value="logos">Logos</option>
@@ -595,10 +621,23 @@ export default function BizzyPlugPage() {
                     <option value="other">Other</option>
                   </select>
                 </div>
-                <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer" style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40` }}>
-                  {uploadingPortfolio ? <><RefreshCw size={14} className="animate-spin" /> Uploading...</> : <><Plus size={14} /> Upload Photo</>}
-                  <input type="file" accept="image/*" className="hidden" disabled={uploadingPortfolio} onChange={e => { const f = e.target.files?.[0]; if (f) uploadPortfolioPhoto(f); e.target.value = '' }} />
+                <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer" style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40`, opacity: uploadingPortfolio ? 0.6 : 1 }}>
+                  {uploadingPortfolio
+                    ? <><RefreshCw size={14} className="animate-spin" /> Uploading {uploadProgress.current} of {uploadProgress.total}...</>
+                    : <><Plus size={14} /> Upload Photos</>}
+                  <input type="file" accept="image/*" multiple className="hidden" disabled={uploadingPortfolio} onChange={e => { const files = e.target.files; if (files && files.length > 0) uploadPortfolioPhotos(Array.from(files)); e.target.value = '' }} />
                 </label>
+                {uploadingPortfolio && uploadProgress.total > 1 && (
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%`, backgroundColor: BIZ_PURPLE }} />
+                  </div>
+                )}
+                {uploadStatus && (
+                  <p className="text-xs font-bold text-center py-1" style={{ color: uploadStatus.type === 'success' ? '#10B981' : '#EF4444' }}>
+                    {uploadStatus.type === 'success' ? <CheckCircle size={12} className="inline mr-1" /> : null}
+                    {uploadStatus.message}
+                  </p>
+                )}
               </div>
             </div>
 
