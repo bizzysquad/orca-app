@@ -461,12 +461,28 @@ function GigEditForm({ gig, onSave, onCancel }: {
         </div>
         <div>
           <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Event Type</label>
-          <select className={inputCls} style={inputStyle} value={form.eventType} onChange={e => f({ eventType: e.target.value as GigType })}>
+          <select className={inputCls} style={inputStyle} value={form.customEventType !== undefined ? '__custom__' : form.eventType} onChange={e => {
+            const val = e.target.value
+            if (val === '__custom__') {
+              f({ eventType: 'other', customEventType: form.customEventType || '' })
+            } else {
+              f({ eventType: val as GigType, customEventType: undefined })
+            }
+          }}>
             {(['wedding','birthday','corporate','nightclub','bar','festival','private','other'] as GigType[]).map(t => (
               <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
             ))}
+            <option value="__custom__">Custom...</option>
           </select>
+          {form.customEventType !== undefined && (
+            <input className={inputCls} style={{ ...inputStyle, marginTop: 6 }} placeholder="Enter custom event name" value={form.customEventType || ''} onChange={e => f({ customEventType: e.target.value })} />
+          )}
         </div>
+      </div>
+
+      <div>
+        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Ticket Link (optional)</label>
+        <input className={inputCls} style={inputStyle} placeholder="https://tickets.example.com" value={form.ticketLink || ''} onChange={e => f({ ticketLink: e.target.value })} />
       </div>
 
       <div>

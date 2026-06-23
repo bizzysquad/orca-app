@@ -648,7 +648,7 @@ export default function MaskOffDJPage() {
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>{weekday}</div>
                     </div>
                     <div style={{ flex: 1, textAlign: 'left' }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: C.white }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: C.white, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>
                         {g.eventType || 'Private Event'}
                       </div>
                       {(g.startTime || g.endTime) && (
