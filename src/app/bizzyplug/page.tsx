@@ -146,7 +146,13 @@ export default function BizzyPlugPublicPage() {
           <div style={{ flex: '1 1 500px', minWidth: 300 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 16 }}>PREMIUM DESIGN. REAL IMPACT.</div>
             <h1 style={{ fontSize: 'clamp(32px, 5vw, 52px)', fontWeight: 900, lineHeight: 1.08, margin: '0 0 20px', letterSpacing: '-0.02em' }}>
-              Tired Of The AI Covers,<br />Lets Get You Something<br /><span style={{ color: C.purple }}>Authentic</span>
+              {siteSettings.heroHeadline ? (
+                <>{siteSettings.heroHeadline.split(/\b(Authentic|authentic)\b/).map((part: string, i: number) =>
+                  /authentic/i.test(part) ? <span key={i} style={{ color: C.purple }}>{part}</span> : part
+                )}</>
+              ) : (
+                <>Tired Of The AI Covers,<br />Lets Get You Something<br /><span style={{ color: C.purple }}>Authentic</span></>
+              )}
             </h1>
             <p style={{ fontSize: 16, color: C.muted, lineHeight: 1.7, margin: '0 0 32px', maxWidth: 480 }}>
               {siteSettings.bio || 'Stand out with custom album covers, logos, flyers, and websites designed to elevate artists, entrepreneurs, brands, and nightlife & event experiences.'}
@@ -240,9 +246,9 @@ export default function BizzyPlugPublicPage() {
             {/* About section */}
             <div id="about" style={{ flex: '1 1 380px', minWidth: 300 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>ABOUT BIZZYPLUG</div>
-              <h2 style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.15, margin: '0 0 16px' }}>Creativity. Culture.<br />Branding That Hits.</h2>
+              <h2 style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.15, margin: '0 0 16px' }}>{siteSettings.aboutHeadline || 'Creativity. Culture.\nBranding That Hits.'}</h2>
               <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.7, margin: '0 0 24px' }}>
-                Bizzyplug is more than a design studio — we're your creative partner. We blend urban culture, modern aesthetics, and strategic thinking to build powerful visual identities that connect, inspire, and drive real results.
+                {siteSettings.aboutText || 'Bizzyplug is more than a design studio — we\'re your creative partner. We blend urban culture, modern aesthetics, and strategic thinking to build powerful visual identities that connect, inspire, and drive real results.'}
               </p>
               {['Urban Inspired, Globally Respected', 'Creative Excellence', 'Professional & Reliable'].map((t, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -375,9 +381,9 @@ export default function BizzyPlugPublicPage() {
             </div>
             <div>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Connect</p>
-              <a href="https://instagram.com/bizzyplug" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.mutedLight, fontSize: 12, textDecoration: 'none', padding: '3px 0' }}><Instagram size={13} /> Instagram</a>
+              <a href={siteSettings.instagramUrl || 'https://instagram.com/bizzyplug'} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.mutedLight, fontSize: 12, textDecoration: 'none', padding: '3px 0' }}><Instagram size={13} /> Instagram</a>
               <a href="https://behance.net/bizzyplug" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.mutedLight, fontSize: 12, textDecoration: 'none', padding: '3px 0' }}><Globe size={13} /> Behance</a>
-              <a href="mailto:buzyplug@gmail.com" style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.mutedLight, fontSize: 12, textDecoration: 'none', padding: '3px 0' }}><Mail size={13} /> Email</a>
+              <a href={`mailto:${siteSettings.contactEmail || 'buzyplug@gmail.com'}`} style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.mutedLight, fontSize: 12, textDecoration: 'none', padding: '3px 0' }}><Mail size={13} /> Email</a>
             </div>
           </div>
           <div style={{ width: 48, height: 48, borderRadius: 10, backgroundColor: C.bgCard, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

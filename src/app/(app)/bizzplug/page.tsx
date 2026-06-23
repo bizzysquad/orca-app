@@ -507,14 +507,37 @@ export default function BizzyPlugPage() {
               </a>
             </div>
 
-            <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <label className="text-[10px] font-bold uppercase tracking-wider block mb-2" style={{ color: theme.textM }}>Page Description</label>
-              <textarea rows={3} value={siteSettings.bio || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, bio: e.target.value }))}
-                className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} placeholder="Describe your services..." />
+            {/* Hero Section */}
+            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Hero Section</p>
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Headline</label>
+                <input className={inputCls} style={inputStyle} value={siteSettings.heroHeadline || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, heroHeadline: e.target.value }))} placeholder="Tired Of The AI Covers, Lets Get You Something Authentic" />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Description</label>
+                <textarea rows={3} value={siteSettings.bio || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, bio: e.target.value }))}
+                  className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} placeholder="Stand out with custom album covers, logos, flyers..." />
+              </div>
             </div>
 
+            {/* About Section */}
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Payment Links</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>About Section</p>
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>About Headline</label>
+                <input className={inputCls} style={inputStyle} value={siteSettings.aboutHeadline || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, aboutHeadline: e.target.value }))} placeholder="Creativity. Culture. Branding That Hits." />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>About Text</label>
+                <textarea rows={3} value={siteSettings.aboutText || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, aboutText: e.target.value }))}
+                  className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} placeholder="Bizzyplug is more than a design studio..." />
+              </div>
+            </div>
+
+            {/* Payment Links */}
+            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Payment Links</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Cash App</label>
@@ -531,8 +554,24 @@ export default function BizzyPlugPage() {
               </div>
             </div>
 
+            {/* Social Links */}
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Services & Pricing</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Social Links</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Instagram URL</label>
+                  <input className={inputCls} style={inputStyle} value={siteSettings.instagramUrl || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, instagramUrl: e.target.value }))} placeholder="https://instagram.com/bizzyplug" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Contact Email</label>
+                  <input className={inputCls} style={inputStyle} value={siteSettings.contactEmail || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, contactEmail: e.target.value }))} placeholder="buzyplug@gmail.com" />
+                </div>
+              </div>
+            </div>
+
+            {/* Services & Pricing */}
+            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Services & Pricing</p>
               <div className="space-y-2">
                 {services.map((s, i) => (
                   <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
