@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Menu, Settings2, LayoutDashboard, CreditCard,
   TrendingUp, Mic2, Activity, Briefcase, CheckSquare,
+  RefreshCw, Check, AlertCircle,
 } from 'lucide-react'
 import SettingsSheet from './SettingsSheet'
 import SideSidebar from './SideSidebar'
@@ -35,11 +36,24 @@ interface AppShellProps {
 
 export default function AppShell({ children, userName = 'User' }: AppShellProps) {
   const { theme } = useTheme()
-  const { data } = useOrcaData()
+  const { data, forceSync, syncState } = useOrcaData()
   const pathname = usePathname()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userEmail, setUserEmail] = useState<string | undefined>()
+  const [syncIcon, setSyncIcon] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle')
+
+  const handleSync = useCallback(async () => {
+    setSyncIcon('syncing')
+    const result = await forceSync()
+    if (result.ok) {
+      setSyncIcon('done')
+      setTimeout(() => setSyncIcon('idle'), 2000)
+    } else {
+      setSyncIcon('error')
+      setTimeout(() => setSyncIcon('idle'), 3000)
+    }
+  }, [forceSync])
 
   useEffect(() => {
     try {
@@ -175,6 +189,22 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
             </span>
           </div>
 
+          <button
+            onClick={handleSync}
+            disabled={syncIcon === 'syncing'}
+            className="p-2 rounded-xl transition-opacity hover:opacity-70"
+            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+            aria-label="Sync data"
+            title={syncIcon === 'error' ? (syncState.lastError || 'Sync failed') : 'Sync all data'}
+          >
+            {syncIcon === 'done' ? (
+              <Check size={16} style={{ color: '#10B981' }} />
+            ) : syncIcon === 'error' ? (
+              <AlertCircle size={16} style={{ color: '#F59E0B' }} />
+            ) : (
+              <RefreshCw size={16} className={syncIcon === 'syncing' ? 'animate-spin' : ''} style={{ color: syncIcon === 'syncing' ? theme.accent : theme.subtext }} />
+            )}
+          </button>
           <button
             onClick={() => setSettingsOpen(true)}
             className="p-2 rounded-xl transition-opacity hover:opacity-70"

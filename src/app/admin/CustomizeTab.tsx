@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Save, CheckCircle, X, Upload, GripVertical, Edit3, ChevronUp, ChevronDown, Eye } from 'lucide-react'
 import { ThemeConfig, NavItem, GOLD, BG_DARK, BG_CARD, BORDER_COLOR, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED } from './types'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 interface Props {
   activeSubTab: string | null
@@ -60,7 +61,7 @@ export default function CustomizeTab(props: Props) {
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string
       setCustomLogo(dataUrl)
-      localStorage.setItem('orca-custom-logo', dataUrl)
+      setLocalSynced('orca-custom-logo', dataUrl)
       window.dispatchEvent(new CustomEvent('orca-logo-updated', { detail: { logo: dataUrl } }))
     }
     reader.readAsDataURL(file)

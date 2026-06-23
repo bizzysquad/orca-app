@@ -321,6 +321,20 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('online', handleOnline)
   }, [])
 
+  // Detect auth session loss (critical for PWA on iPhone)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        console.warn('[ORCA] Auth session lost — sync will fail until re-login')
+      }
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('[ORCA] Auth token refreshed — pushing data')
+        pushToCloud()
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [supabase])
+
   // Re-sync when the user returns to the app (tab focus or PWA resume).
   // This ensures that changes made on mobile appear on desktop when the
   // user switches back, and vice versa.

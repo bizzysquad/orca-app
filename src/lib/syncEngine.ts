@@ -120,6 +120,25 @@ function updateState(patch: Partial<SyncState>) {
   notifyListeners()
 }
 
+// ── Per-key timestamps for cross-device merge ──
+const TIMESTAMPS_KEY = '_orca-sync-timestamps'
+
+export function getSyncTimestamps(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(TIMESTAMPS_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return {}
+}
+
+export function setSyncTimestamp(key: string) {
+  try {
+    const ts = getSyncTimestamps()
+    ts[key] = new Date().toISOString()
+    localStorage.setItem(TIMESTAMPS_KEY, JSON.stringify(ts))
+  } catch {}
+}
+
 function collectLocalData(): Record<string, any> {
   const result: Record<string, any> = {}
   for (const key of SYNC_KEYS) {
@@ -130,6 +149,8 @@ function collectLocalData(): Record<string, any> {
       }
     } catch {}
   }
+  // Include timestamps so the cloud knows when each key was last modified
+  result[TIMESTAMPS_KEY] = getSyncTimestamps()
   return result
 }
 
@@ -141,33 +162,46 @@ function countLocalGigs(): number {
   return 0
 }
 
-// Merge strategy: LOCAL WINS for all data.
-// When a user deletes a gig on mobile, the local array no longer contains it.
-// The old merge-by-ID approach would resurrect deleted items from the cloud copy.
-// Instead, local state is always treated as the most recent truth — if the user
-// has ANY local data for a key, that entire value replaces the cloud version.
-// Cloud data only fills in keys that are completely absent locally (e.g. first
-// load on a new device).
+// Timestamp-based merge: for each key, the version with the NEWER timestamp wins.
+// This allows Device A's changes to reach Device B even when Device B has stale
+// local data. If timestamps are missing or equal, local wins (backwards compatible).
 function mergeData(
   cloud: Record<string, any>,
   local: Record<string, any>
-): Record<string, any> {
+): { merged: Record<string, any>; mergedTimestamps: Record<string, string> } {
   const merged: Record<string, any> = {}
+  const cloudTs: Record<string, string> = cloud[TIMESTAMPS_KEY] || {}
+  const localTs: Record<string, string> = local[TIMESTAMPS_KEY] || getSyncTimestamps()
+  const mergedTimestamps: Record<string, string> = {}
 
   for (const key of SYNC_KEYS) {
     const cloudVal = cloud[key]
     const localVal = local[key]
+    const ct = cloudTs[key] || ''
+    const lt = localTs[key] || ''
 
-    if (localVal !== undefined) {
-      // Local exists → local wins (preserves deletions, edits, everything)
-      merged[key] = localVal
-    } else if (cloudVal !== undefined) {
-      // No local data for this key → hydrate from cloud (new device scenario)
+    if (localVal === undefined && cloudVal === undefined) continue
+
+    if (localVal === undefined) {
+      // Only cloud has data → take cloud
       merged[key] = cloudVal
+      if (ct) mergedTimestamps[key] = ct
+    } else if (cloudVal === undefined) {
+      // Only local has data → keep local
+      merged[key] = localVal
+      if (lt) mergedTimestamps[key] = lt
+    } else if (ct > lt) {
+      // Cloud is newer → take cloud version
+      merged[key] = cloudVal
+      mergedTimestamps[key] = ct
+    } else {
+      // Local is newer or equal → keep local
+      merged[key] = localVal
+      mergedTimestamps[key] = lt || ct
     }
   }
 
-  return merged
+  return { merged, mergedTimestamps }
 }
 
 // Get authenticated user ID, refreshing session if needed
@@ -229,7 +263,7 @@ export async function pushToCloud(retries = 2): Promise<{ ok: boolean; error?: s
   return { ok: false, error: 'Max retries exceeded' }
 }
 
-// Pull cloud data and merge with local
+// Pull cloud data and merge with local using timestamp-based resolution
 export async function pullFromCloud(): Promise<{ ok: boolean; hydrated: number; error?: string }> {
   const userId = await getAuthUserId()
   if (!userId) return { ok: false, hydrated: 0, error: 'Not authenticated' }
@@ -253,7 +287,7 @@ export async function pullFromCloud(): Promise<{ ok: boolean; hydrated: number; 
 
     const cloud = profile.local_data as Record<string, any>
     const local = collectLocalData()
-    const merged = mergeData(cloud, local)
+    const { merged, mergedTimestamps } = mergeData(cloud, local)
 
     let hydrated = 0
     for (const key of SYNC_KEYS) {
@@ -263,6 +297,9 @@ export async function pullFromCloud(): Promise<{ ok: boolean; hydrated: number; 
         hydrated++
       }
     }
+
+    // Persist the winning timestamps so future merges are accurate
+    try { localStorage.setItem(TIMESTAMPS_KEY, JSON.stringify(mergedTimestamps)) } catch {}
 
     // Count cloud gigs
     const cloudGigs = Array.isArray(cloud['orca-dj-gigs']) ? cloud['orca-dj-gigs'].length : 0
@@ -336,10 +373,11 @@ export function debouncedSync(delayMs = 2000) {
   _syncTimeout = setTimeout(() => { pushToCloud() }, delayMs)
 }
 
-// Write to localStorage and trigger sync
+// Write to localStorage, record timestamp, and trigger sync
 export function setLocalSynced(key: string, value: string) {
   try {
     localStorage.setItem(key, value)
+    setSyncTimestamp(key)
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('orca-local-write', { detail: { key } }))
     }

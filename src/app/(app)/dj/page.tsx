@@ -713,7 +713,7 @@ function CRMPanel({ gigs, quotes, onBookAgain }: { gigs: DJGig[]; quotes: Bookin
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>({})
 
-  const saveDb = (db: any[]) => { setClientDb(db); try { localStorage.setItem('orca-dj-client-db', JSON.stringify(db)) } catch {} }
+  const saveDb = (db: any[]) => { setClientDb(db); try { setLocalSynced('orca-dj-client-db', JSON.stringify(db)) } catch {} }
 
   // Auto-import clients from gigs/quotes into the DB
   useMemo(() => {
@@ -930,7 +930,7 @@ function EmailPanel({ gigs }: { gigs: DJGig[] }) {
 
   const saveTemplates = (updated: EmailTemplate[]) => {
     setTemplates(updated)
-    try { localStorage.setItem('orca-dj-email-templates', JSON.stringify(updated)) } catch {}
+    try { setLocalSynced('orca-dj-email-templates', JSON.stringify(updated)) } catch {}
   }
 
   const addTemplate = () => {
@@ -1575,15 +1575,15 @@ export default function DJPage() {
       posterSubtitle: sitePosterSubtitle, posterTitle: sitePosterTitle, posterTagline: sitePosterTagline,
     }
     try {
-      localStorage.setItem('orca-dj-site-bio', siteBio)
-      localStorage.setItem('orca-dj-site-services', siteServices)
-      localStorage.setItem('orca-dj-site-instagram', siteInstagram)
-      localStorage.setItem('orca-dj-site-tiktok', siteTiktok)
-      localStorage.setItem('orca-dj-site-phone', sitePhone)
-      localStorage.setItem('orca-dj-site-testimonials', JSON.stringify(siteTestimonials))
-      localStorage.setItem('orca-dj-site-poster-subtitle', sitePosterSubtitle)
-      localStorage.setItem('orca-dj-site-poster-title', sitePosterTitle)
-      localStorage.setItem('orca-dj-site-poster-tagline', sitePosterTagline)
+      setLocalSynced('orca-dj-site-bio', siteBio)
+      setLocalSynced('orca-dj-site-services', siteServices)
+      setLocalSynced('orca-dj-site-instagram', siteInstagram)
+      setLocalSynced('orca-dj-site-tiktok', siteTiktok)
+      setLocalSynced('orca-dj-site-phone', sitePhone)
+      setLocalSynced('orca-dj-site-testimonials', JSON.stringify(siteTestimonials))
+      setLocalSynced('orca-dj-site-poster-subtitle', sitePosterSubtitle)
+      setLocalSynced('orca-dj-site-poster-title', sitePosterTitle)
+      setLocalSynced('orca-dj-site-poster-tagline', sitePosterTagline)
     } catch {}
     try {
       await fetch('/api/dj/site-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) })
@@ -1653,7 +1653,7 @@ export default function DJPage() {
         try {
           const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
           log.unshift({ at: new Date().toISOString(), action: 'sync', synced: gigList.length })
-          localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+          setLocalSynced('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
         } catch {}
       }
     }).catch(() => {
@@ -1703,8 +1703,7 @@ export default function DJPage() {
 
   const save = (g: DJGig[]) => {
     try {
-      localStorage.setItem('orca-dj-gigs', JSON.stringify(g))
-      window.dispatchEvent(new CustomEvent('orca-local-write', { detail: { key: 'orca-dj-gigs' } }))
+      setLocalSynced('orca-dj-gigs', JSON.stringify(g))
     } catch {}
     autoSyncGigs(g)
   }
@@ -1717,7 +1716,7 @@ export default function DJPage() {
     try {
       const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
       log.unshift({ at: new Date().toISOString(), action: 'created', gigId: gig.id, client: gig.clientName, date: gig.date })
-      localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+      setLocalSynced('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
     } catch {}
   }
 
@@ -1730,7 +1729,7 @@ export default function DJPage() {
       try {
         const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
         log.unshift({ at: new Date().toISOString(), action: 'status_changed', gigId: updated.id, client: updated.clientName, from: prev.status, to: updated.status })
-        localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+        setLocalSynced('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
       } catch {}
     }
   }
@@ -1750,7 +1749,7 @@ export default function DJPage() {
       } else {
         history.push({ name: gig.clientName, email: gig.clientEmail || '', phone: gig.clientPhone || '', events: [event] })
       }
-      localStorage.setItem('orca-dj-client-history', JSON.stringify(history))
+      setLocalSynced('orca-dj-client-history', JSON.stringify(history))
     } catch {}
   }
 
@@ -1764,7 +1763,7 @@ export default function DJPage() {
       try {
         const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
         log.unshift({ at: new Date().toISOString(), action: 'deleted', gigId: id, client: gig.clientName, date: gig.date })
-        localStorage.setItem('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+        setLocalSynced('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
       } catch {}
       syncDjCalendar(next)
     }
@@ -1794,7 +1793,7 @@ export default function DJPage() {
       fetch('/api/dj/photos').then(r => r.ok ? r.json() : null).then(d => {
         if (d?.photos) {
           setWebsitePhotos(d.photos)
-          try { localStorage.setItem('orca-dj-website-photos', JSON.stringify(d.photos)) } catch {}
+          try { setLocalSynced('orca-dj-website-photos', JSON.stringify(d.photos)) } catch {}
         }
       }).catch(() => {
         try {
@@ -2355,7 +2354,7 @@ export default function DJPage() {
                           await fetch('/api/dj/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot }) })
                           setWebsitePhotos((prev: any[]) => {
                             const updated = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
-                            try { localStorage.setItem('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
+                            try { setLocalSynced('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
                             return updated
                           })
                         }} className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ color: BENTLEY_RED, background: `${BENTLEY_RED}12` }}>Remove</button>
@@ -2385,7 +2384,7 @@ export default function DJPage() {
                               setWebsitePhotos((prev: any[]) => {
                                 const filtered = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
                                 const updated = [...filtered, { slot, url: data.url, uploadedAt: new Date().toISOString() }]
-                                try { localStorage.setItem('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
+                                try { setLocalSynced('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
                                 return updated
                               })
                             } else {

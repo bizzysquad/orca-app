@@ -238,7 +238,7 @@ export default function BusinessPage() {
         setBusinesses(JSON.parse(saved))
       } else {
         setBusinesses(DEFAULT_BUSINESSES)
-        localStorage.setItem('orca-businesses', JSON.stringify(DEFAULT_BUSINESSES))
+        setLocalSynced('orca-businesses', JSON.stringify(DEFAULT_BUSINESSES))
       }
     } catch {
       setBusinesses(DEFAULT_BUSINESSES)

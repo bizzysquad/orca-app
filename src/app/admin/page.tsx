@@ -57,6 +57,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 // Color constants (fallbacks only — component uses theme-aware values)
 const GOLD_FALLBACK = '#d4a843'
@@ -221,13 +222,13 @@ export default function AdminPage() {
 
   const setAdminThemeId = (id: string) => {
     setAdminThemeIdState(id)
-    try { localStorage.setItem('orca-admin-panel-theme', id) } catch {}
+    try { setLocalSynced('orca-admin-panel-theme', id) } catch {}
   }
 
   const toggleAdminDarkMode = () => {
     setAdminDarkMode(prev => {
       const next = !prev
-      try { localStorage.setItem('orca-admin-dark-mode', String(next)) } catch {}
+      try { setLocalSynced('orca-admin-dark-mode', String(next)) } catch {}
       return next
     })
   }
@@ -426,7 +427,7 @@ export default function AdminPage() {
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string
       setCustomLogo(dataUrl)
-      localStorage.setItem('orca-custom-logo', dataUrl)
+      setLocalSynced('orca-custom-logo', dataUrl)
       // Dispatch event so other components can pick up the change
       window.dispatchEvent(new CustomEvent('orca-logo-updated', { detail: { logo: dataUrl } }))
     }
@@ -551,7 +552,7 @@ export default function AdminPage() {
             }
           })
           if (changed) {
-            localStorage.setItem('orca-admin-nav', JSON.stringify(merged))
+            setLocalSynced('orca-admin-nav', JSON.stringify(merged))
           }
           return merged
         }
@@ -564,9 +565,7 @@ export default function AdminPage() {
   // Persist nav changes to localStorage and broadcast to all components in real time
   useEffect(() => {
     try {
-      localStorage.setItem('orca-admin-nav', JSON.stringify(navItems))
-      // Dispatch both events for immediate same-tab sync + cloud sync
-      window.dispatchEvent(new CustomEvent('orca-local-write', { detail: { key: 'orca-admin-nav' } }))
+      setLocalSynced('orca-admin-nav', JSON.stringify(navItems))
       window.dispatchEvent(new CustomEvent('orca-nav-updated', { detail: { navItems } }))
     } catch {}
   }, [navItems])
@@ -864,16 +863,13 @@ export default function AdminPage() {
       window.dispatchEvent(new CustomEvent('orca-admin-settings-updated', { detail: settings }))
       // If default user theme changed, broadcast it
       if (settings.defaultUserTheme) {
-        localStorage.setItem('orca-default-theme', settings.defaultUserTheme)
+        setLocalSynced('orca-default-theme', settings.defaultUserTheme)
         window.dispatchEvent(new CustomEvent('orca-default-theme-updated', { detail: { themeId: settings.defaultUserTheme } }))
       }
-      // Persist layout and button placement settings
-      localStorage.setItem('orca-layout-style', settings.layoutStyle)
-      localStorage.setItem('orca-button-placements', JSON.stringify(settings.buttonPlacements))
-      // Persist feature flags for live app components
-      localStorage.setItem('orca-feature-flags', JSON.stringify(settings.featureFlags))
-      // Persist module configs for live app
-      localStorage.setItem('orca-module-configs', JSON.stringify(settings.moduleConfigs))
+      setLocalSynced('orca-layout-style', settings.layoutStyle)
+      setLocalSynced('orca-button-placements', JSON.stringify(settings.buttonPlacements))
+      setLocalSynced('orca-feature-flags', JSON.stringify(settings.featureFlags))
+      setLocalSynced('orca-module-configs', JSON.stringify(settings.moduleConfigs))
     } catch (err) {
       console.error('Failed to persist admin settings:', err)
     }

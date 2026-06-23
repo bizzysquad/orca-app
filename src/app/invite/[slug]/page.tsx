@@ -55,8 +55,8 @@ function joinGroupByCode(code: string, slug: string, userName: string): { succes
           },
         ],
       }
-      localStorage.setItem('orca-stack-circle-groups', JSON.stringify(groups))
-      window.dispatchEvent(new CustomEvent('orca-local-write', { detail: { key: 'orca-stack-circle-groups' } }))
+      const { setLocalSynced } = await import('@/lib/syncLocal')
+      setLocalSynced('orca-stack-circle-groups', JSON.stringify(groups))
     }
 
     return { success: true, groupName: group.customName || group.name }

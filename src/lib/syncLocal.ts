@@ -2,14 +2,15 @@
  * Write to localStorage and dispatch event for cloud sync.
  * Use this instead of raw localStorage.setItem() for user data keys.
  *
- * Triggers both the custom event (for OrcaDataContext) and a debounced
- * cloud push (via syncEngine) so changes reach Supabase within seconds.
+ * Records a per-key modification timestamp so the cross-device merge
+ * can determine which version is newer (cloud vs local).
  */
-import { debouncedSync } from '@/lib/syncEngine'
+import { debouncedSync, setSyncTimestamp } from '@/lib/syncEngine'
 
 export function setLocalSynced(key: string, value: string) {
   try {
     localStorage.setItem(key, value)
+    setSyncTimestamp(key)
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('orca-local-write', { detail: { key } }))
     }
