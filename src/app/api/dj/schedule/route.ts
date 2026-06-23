@@ -39,16 +39,24 @@ export async function GET() {
       })
       .map((e: any) => {
         let clientName = ''
-        try { clientName = JSON.parse(e.message || '{}').clientName || '' } catch {}
+        let customEventType = ''
+        let ticketLink = ''
+        try {
+          const parsed = JSON.parse(e.message || '{}')
+          clientName = parsed.clientName || ''
+          customEventType = parsed.customEventType || ''
+          ticketLink = parsed.ticketLink || ''
+        } catch {}
         return {
           id: e.id,
           date: e.event_date,
-          event_type: e.event_type,
+          eventType: customEventType || e.event_type,
           venue: e.venue || '',
           city: e.venue || '',
           clientName,
-          start_time: e.event_start_time,
-          end_time: e.event_end_time,
+          startTime: e.event_start_time,
+          endTime: e.event_end_time,
+          ticketLink,
           status: 'confirmed',
         }
       })

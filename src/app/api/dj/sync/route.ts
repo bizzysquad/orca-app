@@ -46,11 +46,11 @@ export async function POST(req: NextRequest) {
         status: 'confirmed',
         name: '__DJ_GIG__',
         email: g.clientEmail || 'dj@maskoffdadj.com',
-        event_type: g.eventType || 'private',
+        event_type: g.customEventType || g.eventType || 'private',
         event_start_time: g.startTime || null,
         event_end_time: g.endTime || null,
         venue: g.venue || null,
-        message: JSON.stringify({ id: g.id, clientName: g.clientName, gigStatus: g.status }),
+        message: JSON.stringify({ id: g.id, clientName: g.clientName, gigStatus: g.status, customEventType: g.customEventType || '', ticketLink: g.ticketLink || '' }),
         created_at: new Date().toISOString(),
       }))
 

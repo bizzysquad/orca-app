@@ -251,7 +251,7 @@ export default function MaskOffDJPage() {
             eventType: g.customEventType || g.eventType || g.event_type || '',
             startTime: g.startTime || g.start_time || '',
             endTime: g.endTime || g.end_time || '',
-            ticketLink: g.ticketLink || '',
+            ticketLink: g.ticketLink || g.ticket_link || '',
           }))
         setUpcomingGigs(gigs)
       } catch {}
