@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { fmt } from '@/lib/utils'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 const BIZ_GOLD = '#F59E0B'
 
@@ -76,7 +77,7 @@ export default function BizzyPlugPage() {
 
   const persist = (updated: BizClient[]) => {
     setClients(updated)
-    try { localStorage.setItem('orca-bizzplug-clients', JSON.stringify(updated)) } catch {}
+    try { setLocalSynced('orca-bizzplug-clients', JSON.stringify(updated)) } catch {}
   }
 
   const handleSave = () => {

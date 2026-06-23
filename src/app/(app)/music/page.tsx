@@ -10,6 +10,7 @@ import {
 import Link from 'next/link'
 import { useTheme } from '@/context/ThemeContext'
 import type { Song, SongStatus } from '@/lib/types'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
@@ -161,7 +162,7 @@ export default function MusicPage() {
   }, [])
 
   const save = (s: Song[]) => {
-    try { localStorage.setItem('orca-songs', JSON.stringify(s)) } catch {}
+    try { setLocalSynced('orca-songs', JSON.stringify(s)) } catch {}
   }
 
   const addSong = () => {

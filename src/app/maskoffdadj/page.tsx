@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import {
-  ArrowRight, CheckCircle2, Loader2, Mail, MapPin, Calendar,
-  Users, Mic2, Music2, Star, Phone, Instagram, Clock,
+  ArrowRight, CheckCircle2, Loader2, Mail, MapPin, Calendar, Check,
+  Users, Mic2, Music2, Star, Phone, Instagram, Clock, DollarSign,
   PartyPopper, Building2, Heart, Coffee, Globe, Sparkles,
   Shield, Headphones, ChevronRight, ChevronLeft, MessageSquareQuote, Send,
   Info,
@@ -39,6 +39,7 @@ interface BookingForm {
   guest_count: string
   start_time: string
   end_time: string
+  custom_budget: string
   song_requests: string
   special_requests: string
 }
@@ -79,6 +80,7 @@ const BLANK_FORM = (): BookingForm => ({
   guest_count: '',
   start_time: '',
   end_time: '',
+  custom_budget: '',
   song_requests: '',
   special_requests: '',
 })
@@ -156,6 +158,21 @@ export default function MaskOffDJPage() {
   const [submitError, setSubmitError] = useState('')
   const [formError, setFormError] = useState('')
 
+  // Booking step (1=calendar, 2=form, 3=review)
+  const [bookingStep, setBookingStep] = useState(1)
+  // Time selectors (hour 1-12, period AM/PM)
+  const [startHour, setStartHour] = useState('')
+  const [startPeriod, setStartPeriod] = useState('PM')
+  const [endHour, setEndHour] = useState('')
+  const [endPeriod, setEndPeriod] = useState('PM')
+
+  // Website settings from cloud
+  const [siteSettings, setSiteSettings] = useState<any>({})
+
+  // Website photos
+  const [heroPhoto, setHeroPhoto] = useState<string | null>(null)
+  const [aboutPhoto, setAboutPhoto] = useState<string | null>(null)
+
   // Availability
   const [bookedDates, setBookedDates] = useState<string[]>([])
 
@@ -186,8 +203,8 @@ export default function MaskOffDJPage() {
     const fetchAvailability = async () => {
       try {
         const [availRes, schedRes] = await Promise.all([
-          fetch('/api/dj-availability'),
-          fetch('/api/dj/schedule'),
+          fetch('/api/dj-availability', { cache: 'no-store' }),
+          fetch('/api/dj/schedule', { cache: 'no-store' }),
         ])
         const blocked: string[] = []
         if (availRes.ok) {
@@ -207,7 +224,7 @@ export default function MaskOffDJPage() {
 
     const fetchGigs = async () => {
       try {
-        const res = await fetch('/api/dj/schedule')
+        const res = await fetch('/api/dj/schedule', { cache: 'no-store' })
         if (!res.ok) return
         const d = await res.json()
         const gigs = (d.gigs || [])
@@ -226,19 +243,51 @@ export default function MaskOffDJPage() {
 
     const fetchTestimonials = async () => {
       try {
-        const res = await fetch('/api/dj/testimonials')
+        const res = await fetch('/api/dj/testimonials', { cache: 'no-store' })
         if (!res.ok) return
         const data = await res.json()
         setTestimonials(data.testimonials || data || [])
       } catch {}
     }
 
+    const fetchPhotos = async () => {
+      try {
+        const res = await fetch('/api/dj/photos', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        const photos = data.photos || []
+        const hero = photos.find((p: any) => p.slot === 'hero')
+        const about = photos.find((p: any) => p.slot === 'about')
+        if (hero?.url) setHeroPhoto(hero.url)
+        if (about?.url) setAboutPhoto(about.url)
+      } catch {}
+    }
+
+    const fetchSiteSettings = async () => {
+      try {
+        const res = await fetch('/api/dj/site-settings', { cache: 'no-store' })
+        if (res.ok) { const d = await res.json(); if (d.settings) setSiteSettings(d.settings) }
+      } catch {}
+    }
+
     fetchAvailability()
     fetchGigs()
     fetchTestimonials()
+    fetchPhotos()
+    fetchSiteSettings()
   }, [today])
 
   const setF = (patch: Partial<BookingForm>) => setForm(p => ({ ...p, ...patch }))
+
+  const toTime24 = (hour: string, period: string) => {
+    if (!hour) return ''
+    let h = parseInt(hour)
+    if (period === 'PM' && h !== 12) h += 12
+    if (period === 'AM' && h === 12) h = 0
+    return `${String(h).padStart(2, '0')}:00`
+  }
+  const updateStartTime = (h: string, p: string) => { setStartHour(h); setStartPeriod(p); setF({ start_time: toTime24(h, p) }) }
+  const updateEndTime = (h: string, p: string) => { setEndHour(h); setEndPeriod(p); setF({ end_time: toTime24(h, p) }) }
 
   const isDateBooked = (dateStr: string) => bookedDates.includes(dateStr)
 
@@ -268,7 +317,7 @@ export default function MaskOffDJPage() {
     setSelectedDate(dateStr)
     setF({ date: dateStr })
     setFormError('')
-    // Scroll to booking form
+    setBookingStep(2)
     setTimeout(() => {
       bookingRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, 100)
@@ -396,8 +445,8 @@ export default function MaskOffDJPage() {
             gap: 28,
           }}>
             {[
-              { label: 'Schedule', id: 'poster' },
-              { label: 'Calendar', id: 'calendar' },
+              { label: 'Book Now', id: 'booking' },
+              { label: 'Upcoming Bookings', id: 'poster' },
               { label: 'Services', id: 'services' },
               { label: 'About', id: 'about' },
               { label: 'Testimonials', id: 'testimonials' },
@@ -470,7 +519,7 @@ export default function MaskOffDJPage() {
             gap: 16,
             boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
           }}>
-            {['Schedule:poster', 'Calendar:calendar', 'Services:services', 'About:about', 'Testimonials:testimonials', 'Contact:footer'].map(item => {
+            {['Book Now:booking', 'Upcoming Bookings:poster', 'Services:services', 'About:about', 'Testimonials:testimonials', 'Contact:footer'].map(item => {
               const [label, id] = item.split(':')
               return (
                 <a
@@ -503,12 +552,33 @@ export default function MaskOffDJPage() {
         )}
       </nav>
 
-      {/* ── 2. POSTER BOARD (Upcoming Gigs) ────────────────────────────────── */}
+      {/* Booking section pulled to top via flex order */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ order: 1 }}>
+      {/* ── POSTER BOARD (Upcoming Gigs) — appears first ────────────────── */}
       <section id="poster" style={{
         backgroundColor: C.navy,
         padding: '80px 24px',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
-        <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
+        {heroPhoto && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: `url(${heroPhoto})`,
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            opacity: 0.18,
+          }} />
+        )}
+        <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center', position: 'relative' }}>
+          {heroPhoto && (
+            <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'center' }}>
+              <img src={heroPhoto} alt="DJ Maskoff" style={{
+                width: 160, height: 160, borderRadius: '50%', objectFit: 'cover',
+                border: `4px solid ${C.gold}`, display: 'block',
+              }} />
+            </div>
+          )}
           <div style={{
             display: 'inline-block',
             fontSize: 11,
@@ -518,10 +588,10 @@ export default function MaskOffDJPage() {
             textTransform: 'uppercase' as const,
             marginBottom: 12,
           }}>
-            Upcoming Events
+            {siteSettings.posterSubtitle || 'Upcoming Events'}
           </div>
 
-          <h2 style={{
+          <h1 style={{
             fontSize: 44,
             fontWeight: 900,
             color: C.white,
@@ -529,8 +599,8 @@ export default function MaskOffDJPage() {
             margin: '0 0 6px',
             letterSpacing: '-0.02em',
           }}>
-            MASK OFF DA DJ
-          </h2>
+            {siteSettings.posterTitle || 'MASK OFF DA DJ'}
+          </h1>
           <p style={{
             fontSize: 20,
             color: C.gold,
@@ -538,7 +608,7 @@ export default function MaskOffDJPage() {
             margin: '0 0 48px',
             letterSpacing: '0.12em',
           }}>
-            LIVE DATES
+            {siteSettings.posterTagline || 'UPCOMING BOOKINGS'}
           </p>
 
           {upcomingGigs.length > 0 ? (
@@ -601,7 +671,7 @@ export default function MaskOffDJPage() {
           )}
 
           <button
-            onClick={() => scrollTo('booking')}
+            onClick={() => scrollTo('calendar')}
             style={{
               marginTop: 44,
               display: 'inline-flex',
@@ -622,8 +692,13 @@ export default function MaskOffDJPage() {
         </div>
       </section>
 
-      {/* ── 3. FULL MONTH CALENDAR ─────────────────────────────────────────── */}
-      <section id="calendar" style={{
+      {/* Calendar section removed — integrated into booking Step 1 */}
+
+      {/* Placeholder to preserve scroll target */}
+      <div id="calendar" />
+
+      {false && (
+      <section style={{
         ...sectionPadding,
         backgroundColor: C.white,
       }}>
@@ -822,35 +897,60 @@ export default function MaskOffDJPage() {
               color: C.green,
               fontWeight: 600,
             }}>
-              <Calendar size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-              Selected: {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-              {' — '}
-              <a
-                href="#booking"
-                onClick={(e) => { e.preventDefault(); scrollTo('booking') }}
-                style={{ color: C.gold, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
-              >
-                Fill out booking form below
-              </a>
+              <CheckCircle2 size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
+              {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              {' — Scroll down to continue booking'}
             </div>
           )}
         </div>
       </section>
+      )}
 
-      {/* ── 4. BOOKING REQUEST FORM ──────────────────────────────────────────── */}
+      </div>{/* end poster order-1 wrapper */}
+
+      <div style={{ order: 2 }}>
+      {/* ── BOOKING REQUEST — Step-by-Step (order 2 = after poster) ── */}
       <section id="booking" ref={bookingRef} style={{
         ...sectionPadding,
         backgroundColor: C.bg,
       }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <h2 style={{ fontSize: 36, fontWeight: 800, color: C.navy, margin: '0 0 12px' }}>
               Request a Booking
             </h2>
             <p style={{ fontSize: 16, color: C.muted, margin: 0 }}>
-              Fill out the form below and we will get back to you within 24-48 hours.
+              Follow the steps below to request your date.
             </p>
           </div>
+
+          {/* Step indicator */}
+          {!submitSuccess && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 32 }}>
+              {[
+                { n: 1, label: 'Select Date' },
+                { n: 2, label: 'Your Details' },
+                { n: 3, label: 'Review & Submit' },
+              ].map(({ n, label }, i) => (
+                <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => { if (n === 1 || (n === 2 && selectedDate) || (n === 3 && selectedDate && form.client_name && form.client_email && form.event_type)) setBookingStep(n) }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '6px 14px', borderRadius: 100,
+                      border: `2px solid ${bookingStep >= n ? C.navy : C.border}`,
+                      background: bookingStep === n ? C.navy : bookingStep > n ? C.goldLight : C.white,
+                      color: bookingStep === n ? C.white : bookingStep > n ? C.gold : C.muted,
+                      fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                    }}
+                  >
+                    {bookingStep > n ? <Check size={14} /> : n} {label}
+                  </button>
+                  {i < 2 && <div style={{ width: 24, height: 2, background: bookingStep > n ? C.gold : C.border }} />}
+                </div>
+              ))}
+            </div>
+          )}
 
           {submitSuccess ? (
             /* Success message */
@@ -917,7 +1017,6 @@ export default function MaskOffDJPage() {
               </div>
             </div>
           ) : (
-            /* The form */
             <div style={{
               backgroundColor: C.white,
               border: `1px solid ${C.border}`,
@@ -925,6 +1024,91 @@ export default function MaskOffDJPage() {
               padding: '36px 32px',
               boxShadow: '0 4px 24px rgba(0,0,0,0.04)',
             }}>
+
+              {/* ── STEP 1: Select a date (integrated calendar) ── */}
+              {bookingStep === 1 && (
+                <div>
+                  <h3 style={{ fontSize: 20, fontWeight: 700, color: C.navy, margin: '0 0 6px', textAlign: 'center' }}>
+                    <Calendar size={20} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
+                    Check Availability
+                  </h3>
+                  <p style={{ fontSize: 14, color: C.muted, margin: '0 0 24px', textAlign: 'center' }}>
+                    Select an available date to get started.
+                  </p>
+
+                  {/* Inline calendar */}
+                  <div style={{ maxWidth: 600, margin: '0 auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                      <button onClick={prevMonth} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', padding: '6px 10px', color: C.text }}><ChevronLeft size={18} /></button>
+                      <span style={{ fontSize: 17, fontWeight: 700, color: C.navy }}>{monthName}</span>
+                      <button onClick={nextMonth} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', padding: '6px 10px', color: C.text }}><ChevronRight size={18} /></button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
+                      {dayLabels.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: C.muted, padding: '4px 0' }}>{d}</div>)}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+                      {calendarCells.map((day, i) => {
+                        if (day === null) return <div key={`e${i}`} />
+                        const dateStr = formatDateStr(calYear, calMonth, day)
+                        const booked = isDateBooked(dateStr)
+                        const past = isDatePast(dateStr)
+                        const selected = dateStr === selectedDate
+                        const isToday = dateStr === today
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => handleCalendarDateClick(dateStr)}
+                            disabled={booked || past}
+                            style={{
+                              padding: '10px 0', borderRadius: 8, border: 'none', cursor: booked || past ? 'default' : 'pointer', textAlign: 'center',
+                              fontSize: 14, fontWeight: 600, transition: 'all 0.15s',
+                              backgroundColor: selected ? C.navy : booked ? '#FEE2E2' : isToday ? C.goldLight : 'transparent',
+                              color: selected ? C.white : booked ? C.red : past ? '#CBD5E1' : isToday ? C.gold : C.text,
+                              opacity: past && !isToday ? 0.4 : 1,
+                            }}
+                          >
+                            {day}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* Legend */}
+                    <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: C.navy }} /><span style={{ fontSize: 11, color: C.muted }}>Selected</span></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: '#FCA5A5' }} /><span style={{ fontSize: 11, color: C.muted }}>Booked</span></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: C.gold }} /><span style={{ fontSize: 11, color: C.muted }}>Today</span></div>
+                    </div>
+                  </div>
+
+                  {/* Selected date + continue */}
+                  <div style={{ textAlign: 'center', marginTop: 24 }}>
+                    {selectedDate && (
+                      <p style={{ fontSize: 15, color: C.green, fontWeight: 600, marginBottom: 16 }}>
+                        <CheckCircle2 size={15} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
+                        {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    )}
+                    {formError && <p style={{ color: C.red, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{formError}</p>}
+                    <button
+                      onClick={() => { if (!selectedDate) { setFormError('Please select a date first.'); return } setFormError(''); setBookingStep(2) }}
+                      style={{ padding: '14px 40px', borderRadius: 10, backgroundColor: selectedDate ? C.navy : C.border, color: C.white, border: 'none', cursor: selectedDate ? 'pointer' : 'default', fontSize: 15, fontWeight: 700 }}
+                    >
+                      Continue <ArrowRight size={16} style={{ display: 'inline', marginLeft: 6, verticalAlign: 'middle' }} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STEP 2: Fill out details ── */}
+              {bookingStep === 2 && (
+                <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: C.navy, margin: 0 }}>Your Details</h3>
+                <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>
+                  <CheckCircle2 size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
               {/* Row 1: Name, Email, Phone */}
               <div style={{
                 display: 'grid',
@@ -1021,6 +1205,18 @@ export default function MaskOffDJPage() {
                 </div>
               </div>
 
+              {/* Budget */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={labelStyle}>Your Budget</label>
+                <input
+                  type="text"
+                  value={form.custom_budget}
+                  onChange={e => setF({ custom_budget: e.target.value })}
+                  placeholder="e.g. $500, $300-$500, Flexible"
+                  style={inputBase}
+                />
+              </div>
+
               {/* Row 3: Date, Start Time, End Time, Total Hours */}
               <div style={{
                 display: 'grid',
@@ -1064,24 +1260,32 @@ export default function MaskOffDJPage() {
                     <Clock size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
                     Start Time
                   </label>
-                  <input
-                    type="time"
-                    value={form.start_time}
-                    onChange={e => setF({ start_time: e.target.value })}
-                    style={inputBase}
-                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select value={startHour} onChange={e => updateStartTime(e.target.value, startPeriod)} style={{ ...inputBase, flex: 1 }}>
+                      <option value="">Hour</option>
+                      {[1,2,3,4,5,6,7,8,9,10,11,12].map(h => <option key={h} value={String(h)}>{h}</option>)}
+                    </select>
+                    <select value={startPeriod} onChange={e => updateStartTime(startHour, e.target.value)} style={{ ...inputBase, flex: 1 }}>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label style={labelStyle}>
                     <Clock size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
                     End Time
                   </label>
-                  <input
-                    type="time"
-                    value={form.end_time}
-                    onChange={e => setF({ end_time: e.target.value })}
-                    style={inputBase}
-                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select value={endHour} onChange={e => updateEndTime(e.target.value, endPeriod)} style={{ ...inputBase, flex: 1 }}>
+                      <option value="">Hour</option>
+                      {[1,2,3,4,5,6,7,8,9,10,11,12].map(h => <option key={h} value={String(h)}>{h}</option>)}
+                    </select>
+                    <select value={endPeriod} onChange={e => updateEndTime(endHour, e.target.value)} style={{ ...inputBase, flex: 1 }}>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label style={labelStyle}>Total Hours</label>
@@ -1127,90 +1331,88 @@ export default function MaskOffDJPage() {
                 />
               </div>
 
-              {/* Deposit & Policy notice */}
-              <div style={{
-                display: 'flex',
-                gap: 14,
-                padding: '18px 20px',
-                borderRadius: 12,
-                backgroundColor: C.goldLight,
-                border: `1px solid ${C.gold}33`,
-                marginBottom: 24,
-              }}>
-                <Info size={22} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />
-                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.7 }}>
-                  <strong style={{ color: C.gold }}>Deposit &amp; Cancellation Policy:</strong>{' '}
-                  A 25% non-refundable deposit is required to lock in your date. Cancellations made
-                  less than 14 days before the event forfeit the deposit. Rescheduling is available
-                  up to 7 days before the event for a $50 rescheduling fee.
-                </div>
+              {/* Navigation buttons */}
+              {formError && <p style={{ color: C.red, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{formError}</p>}
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button onClick={() => setBookingStep(1)} style={{ flex: 1, padding: '14px', borderRadius: 10, backgroundColor: C.white, color: C.muted, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+                  <ChevronLeft size={14} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} /> Back
+                </button>
+                <button
+                  onClick={() => {
+                    if (!form.client_name || !form.client_email || !form.event_type) { setFormError('Please fill in Name, Email, and Event Type.'); return }
+                    setFormError(''); setBookingStep(3)
+                  }}
+                  style={{ flex: 2, padding: '14px', borderRadius: 10, backgroundColor: C.navy, color: C.white, border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 700 }}
+                >
+                  Review & Submit <ArrowRight size={16} style={{ display: 'inline', marginLeft: 6, verticalAlign: 'middle' }} />
+                </button>
               </div>
-
-              {/* Errors */}
-              {formError && (
-                <div style={{
-                  marginBottom: 16,
-                  padding: '12px 16px',
-                  borderRadius: 8,
-                  backgroundColor: C.redBg,
-                  color: C.red,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  border: `1px solid ${C.red}`,
-                }}>
-                  {formError}
-                </div>
-              )}
-              {submitError && (
-                <div style={{
-                  marginBottom: 16,
-                  padding: '12px 16px',
-                  borderRadius: 8,
-                  backgroundColor: C.redBg,
-                  color: C.red,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  border: `1px solid ${C.red}`,
-                }}>
-                  {submitError}
                 </div>
               )}
 
-              {/* Submit */}
-              <button
-                onClick={handleSubmitBooking}
-                disabled={submitting}
-                style={{
-                  width: '100%',
-                  padding: '16px',
-                  borderRadius: 10,
-                  backgroundColor: C.navy,
-                  color: C.white,
-                  border: 'none',
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  opacity: submitting ? 0.7 : 1,
-                  transition: 'opacity 0.2s',
-                }}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                    Submitting...
-                  </>
-                ) : (
-                  <>Submit Booking Request <ArrowRight size={18} /></>
-                )}
-              </button>
+              {/* ── STEP 3: Review & Submit ── */}
+              {bookingStep === 3 && (
+                <div>
+                  <h3 style={{ fontSize: 20, fontWeight: 700, color: C.navy, margin: '0 0 20px' }}>Review Your Request</h3>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', marginBottom: 24 }}>
+                    {[
+                      ['Date', selectedDate ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : ''],
+                      ['Name', form.client_name],
+                      ['Email', form.client_email],
+                      ['Phone', form.client_phone || '—'],
+                      ['Event Type', form.event_type],
+                      ['Location', form.location || '—'],
+                      ['Time', form.start_time && form.end_time ? `${form.start_time} – ${form.end_time}` : form.start_time || '—'],
+                      ['Budget', form.custom_budget || '—'],
+                      ['Guest Count', form.guest_count || '—'],
+                    ].map(([label, val]) => (
+                      <div key={label}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 2px' }}>{label}</p>
+                        <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>{val}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(form.song_requests || form.special_requests) && (
+                    <div style={{ marginBottom: 20, padding: '12px 16px', borderRadius: 10, background: '#F1F5F9', border: `1px solid ${C.border}` }}>
+                      {form.song_requests && <p style={{ fontSize: 13, color: C.text, margin: '0 0 4px' }}><strong>Songs:</strong> {form.song_requests}</p>}
+                      {form.special_requests && <p style={{ fontSize: 13, color: C.text, margin: 0 }}><strong>Notes:</strong> {form.special_requests}</p>}
+                    </div>
+                  )}
+
+                  {/* Policy */}
+                  <div style={{ display: 'flex', gap: 14, padding: '16px 18px', borderRadius: 12, backgroundColor: C.goldLight, border: `1px solid ${C.gold}33`, marginBottom: 24 }}>
+                    <Info size={20} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <div style={{ fontSize: 12, color: C.text, lineHeight: 1.7 }}>
+                      <strong style={{ color: C.gold }}>Deposit &amp; Cancellation Policy:</strong>{' '}
+                      A 25% non-refundable deposit is required to lock in your date. Cancellations less than 14 days before the event forfeit the deposit.
+                    </div>
+                  </div>
+
+                  {submitError && <p style={{ color: C.red, fontSize: 13, fontWeight: 600, marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: C.redBg }}>{submitError}</p>}
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <button onClick={() => setBookingStep(2)} style={{ flex: 1, padding: '14px', borderRadius: 10, backgroundColor: C.white, color: C.muted, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+                      <ChevronLeft size={14} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} /> Edit
+                    </button>
+                    <button
+                      onClick={handleSubmitBooking}
+                      disabled={submitting}
+                      style={{ flex: 2, padding: '16px', borderRadius: 10, backgroundColor: C.navy, color: C.white, border: 'none', cursor: submitting ? 'not-allowed' : 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: submitting ? 0.7 : 1 }}
+                    >
+                      {submitting ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</> : <>Submit Request <ArrowRight size={18} /></>}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       </section>
+
+      </div>{/* end booking order-1 wrapper */}
+      </div>{/* end flex column container */}
 
       {/* ── 5. SERVICES SECTION ──────────────────────────────────────────────── */}
       <section id="services" style={{
@@ -1308,27 +1510,38 @@ export default function MaskOffDJPage() {
           gap: 48,
           flexWrap: 'wrap' as const,
         }}>
-          {/* Left: Avatar placeholder */}
+          {/* Left: Avatar / About Photo */}
           <div style={{
             flex: '0 0 220px',
             display: 'flex',
             justifyContent: 'center',
           }}>
-            <div style={{
-              width: 200,
-              height: 200,
-              borderRadius: '50%',
-              background: `linear-gradient(135deg, ${C.navy} 0%, #334155 100%)`,
-              border: `4px solid ${C.gold}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'column',
-              gap: 8,
-            }}>
-              <Mic2 size={48} color={C.gold} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.1em' }}>DJ MASKOFF</span>
-            </div>
+            {(aboutPhoto || heroPhoto) ? (
+              <img src={aboutPhoto || heroPhoto!} alt="DJ Maskoff" style={{
+                width: 200,
+                height: 200,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: `4px solid ${C.gold}`,
+                display: 'block',
+              }} />
+            ) : (
+              <div style={{
+                width: 200,
+                height: 200,
+                borderRadius: '50%',
+                background: `linear-gradient(135deg, ${C.navy} 0%, #334155 100%)`,
+                border: `4px solid ${C.gold}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column',
+                gap: 8,
+              }}>
+                <Mic2 size={48} color={C.gold} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.1em' }}>DJ MASKOFF</span>
+              </div>
+            )}
           </div>
 
           {/* Middle: Bio */}
@@ -1336,14 +1549,8 @@ export default function MaskOffDJPage() {
             <h2 style={{ fontSize: 36, fontWeight: 800, color: C.navy, margin: '0 0 20px' }}>
               About DJ Maskoff
             </h2>
-            <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.8, margin: 0 }}>
-              DJ Maskoff brings years of professional experience to every event. Known for reading
-              the room and crafting the perfect vibe, he seamlessly blends genres to keep the energy
-              high and the dance floor packed. Whether it is a wedding reception, a corporate gala,
-              a lounge brunch, or a private party, DJ Maskoff delivers a polished, high-quality
-              experience that keeps guests talking long after the last song. Based in the
-              Durham / Raleigh area and available for travel, he is committed to making every
-              event feel unique, personal, and unforgettable.
+            <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>
+              {siteSettings.bio || `DJ Maskoff brings years of professional experience to every event across the Raleigh, Durham, Cary, and Morrisville area. Known for reading the room and crafting the perfect vibe, he seamlessly blends genres to keep the energy high and the dance floor packed.\n\nWhether it is a wedding reception in Durham, a corporate gala in Raleigh, a lounge brunch in Cary, or a private party in Morrisville, DJ Maskoff delivers a polished, high-quality experience that keeps guests talking long after the last song.\n\nBased in the Triangle and available for events throughout North Carolina and beyond, he is committed to making every event feel unique, personal, and unforgettable.`}
             </p>
           </div>
 
@@ -1516,14 +1723,17 @@ export default function MaskOffDJPage() {
             </button>
           </div>
 
-          {/* Testimonial cards */}
-          {testimonials.length > 0 && (
+          {/* Testimonial cards — merge customer reviews + site settings fallback */}
+          {(() => {
+            const fallback = (siteSettings.testimonials || []).filter((t: any) => t.name && t.quote).map((t: any, i: number) => ({ id: `fb-${i}`, name: t.name, event_type: t.event, rating: 5, review: t.quote }))
+            const allTestimonials = [...testimonials, ...fallback].slice(0, 9)
+            return allTestimonials.length > 0 ? (
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
               gap: 24,
             }}>
-              {testimonials.slice(0, 6).map((t, i) => (
+              {allTestimonials.map((t, i) => (
                 <div key={t.id || i} style={{
                   backgroundColor: C.bg,
                   border: `1px solid ${C.border}`,
@@ -1561,53 +1771,8 @@ export default function MaskOffDJPage() {
                 </div>
               ))}
             </div>
-          )}
-
-          {/* Fallback if no testimonials loaded */}
-          {testimonials.length === 0 && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-              gap: 24,
-            }}>
-              {[
-                { name: 'Jessica M.', event: 'Wedding Reception', rating: 5, quote: 'DJ Maskoff made our wedding reception absolutely incredible. He read the room perfectly and kept everyone dancing all night. Could not have asked for a better DJ.' },
-                { name: 'Marcus T.', event: 'Corporate Event', rating: 5, quote: 'We hired DJ Maskoff for our company holiday party and he was phenomenal. Professional, punctual, and the music selection was spot on for our crowd.' },
-                { name: 'Aaliyah R.', event: 'Birthday Party', rating: 5, quote: 'Best birthday party ever! DJ Maskoff brought the energy from start to finish. Everyone was asking who the DJ was. Will definitely book again.' },
-              ].map((t, i) => (
-                <div key={i} style={{
-                  backgroundColor: C.bg,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 14,
-                  padding: 24,
-                }}>
-                  <div style={{ display: 'flex', gap: 3, marginBottom: 14 }}>
-                    {[1, 2, 3, 4, 5].map(n => (
-                      <Star
-                        key={n}
-                        size={16}
-                        color={C.gold}
-                        fill={n <= t.rating ? C.gold : 'none'}
-                      />
-                    ))}
-                  </div>
-                  <p style={{
-                    fontSize: 14,
-                    color: C.text,
-                    lineHeight: 1.7,
-                    margin: '0 0 16px',
-                    fontStyle: 'italic',
-                  }}>
-                    &ldquo;{t.quote}&rdquo;
-                  </p>
-                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{t.name}</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{t.event}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          ) : null
+          })()}
         </div>
       </section>
 
@@ -1641,50 +1806,21 @@ export default function MaskOffDJPage() {
               <Mail size={16} color={C.gold} />
               maskoffdadj@gmail.com
             </a>
-            <span style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              color: '#94A3B8',
-              fontSize: 14,
-              fontWeight: 600,
-            }}>
-              <Phone size={16} color={C.gold} />
-              Contact via email
-            </span>
-            <a
-              href="https://instagram.com/djmaskoff"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                color: '#94A3B8',
-                textDecoration: 'none',
-                fontSize: 14,
-                fontWeight: 600,
-              }}
-            >
+            {(siteSettings.phone || '') && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94A3B8', fontSize: 14, fontWeight: 600 }}>
+                <Phone size={16} color={C.gold} />
+                {siteSettings.phone}
+              </span>
+            )}
+            <a href={`https://instagram.com/${(siteSettings.instagram || '@maskoffdadj').replace('@', '')}`} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94A3B8', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
               <Instagram size={16} color={C.gold} />
-              @djmaskoff
+              {siteSettings.instagram || '@maskoffdadj'}
             </a>
-            <a
-              href="https://tiktok.com/@djmaskoff"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                color: '#94A3B8',
-                textDecoration: 'none',
-                fontSize: 14,
-                fontWeight: 600,
-              }}
-            >
+            <a href={`https://tiktok.com/${(siteSettings.tiktok || '@maskoffdadj').replace('@', '@')}`} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94A3B8', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
               <Music2 size={16} color={C.gold} />
-              TikTok @djmaskoff
+              TikTok {siteSettings.tiktok || '@maskoffdadj'}
             </a>
           </div>
 

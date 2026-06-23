@@ -11,6 +11,7 @@ import {
 import { useTheme } from '@/context/ThemeContext'
 import type { Theme } from '@/context/ThemeContext'
 import type { WeightLog } from '@/lib/types'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
@@ -126,7 +127,7 @@ function WorkoutPlanSection({ theme, streak, onStreakUpdate }: {
   }, [])
 
   const savePlan = (p: FitnessPlan | null) => {
-    try { localStorage.setItem('orca-fitness-plan', JSON.stringify(p)) } catch {}
+    try { setLocalSynced('orca-fitness-plan', JSON.stringify(p)) } catch {}
     setPlan(p)
   }
 
@@ -494,7 +495,7 @@ function NutritionGamePlanSection({ theme, streak, onNutritionCheckIn }: {
   }, [])
 
   const saveGrocery = (items: GroceryFoodItem[]) => {
-    try { localStorage.setItem('orca-grocery', JSON.stringify(items)) } catch {}
+    try { setLocalSynced('orca-grocery', JSON.stringify(items)) } catch {}
     setGroceryItems(items)
   }
 
@@ -562,7 +563,7 @@ Be direct, specific, results-focused. Base suggestions on available groceries.`
       const data = await res.json()
       const plan: string = data.response || data.message || ''
       setGamePlan(plan)
-      try { localStorage.setItem('orca-nutrition-plan', plan) } catch {}
+      try { setLocalSynced('orca-nutrition-plan', plan) } catch {}
     } catch {
       setGamePlan('Error connecting to Bentley. Check your API configuration.')
     } finally {
@@ -572,7 +573,7 @@ Be direct, specific, results-focused. Base suggestions on available groceries.`
 
   const handleCheckIn = () => {
     setCheckedInToday(true)
-    try { localStorage.setItem('orca-nutrition-checkin', TODAY) } catch {}
+    try { setLocalSynced('orca-nutrition-checkin', TODAY) } catch {}
     onNutritionCheckIn()
   }
 
@@ -759,7 +760,7 @@ export default function FitnessPage() {
   }, [activeTab])
 
   const saveStreak = (s: FitnessStreak) => {
-    try { localStorage.setItem('orca-fitness-streak', JSON.stringify(s)) } catch {}
+    try { setLocalSynced('orca-fitness-streak', JSON.stringify(s)) } catch {}
     setStreak(s)
   }
 
@@ -779,7 +780,7 @@ export default function FitnessPage() {
     const entry: WeightLog = { id: gid(), date: TODAY, weight: Number(newWeight) }
     const next = [entry, ...weightLogs.filter(w => w.date !== TODAY)]
     setWeightLogs(next)
-    try { localStorage.setItem('orca-weight-logs', JSON.stringify(next)) } catch {}
+    try { setLocalSynced('orca-weight-logs', JSON.stringify(next)) } catch {}
     setNewWeight('')
     setShowWeightModal(false)
   }

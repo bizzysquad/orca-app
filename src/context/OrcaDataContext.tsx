@@ -321,6 +321,28 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('online', handleOnline)
   }, [])
 
+  // Re-sync when the user returns to the app (tab focus or PWA resume).
+  // This ensures that changes made on mobile appear on desktop when the
+  // user switches back, and vice versa.
+  useEffect(() => {
+    let lastSyncTime = Date.now()
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const elapsed = Date.now() - lastSyncTime
+        // Only sync if at least 5 seconds since the last sync to avoid spam
+        if (elapsed > 5000) {
+          lastSyncTime = Date.now()
+          console.log('[ORCA] App became visible — pulling latest data')
+          fullSync().then(result => {
+            if (result.ok) loadData()
+          })
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [loadData])
+
   return (
     <OrcaDataContext.Provider value={{
       data, setData, loading, error,

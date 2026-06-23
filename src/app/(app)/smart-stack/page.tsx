@@ -282,7 +282,7 @@ export default function SmartStackPage() {
     return [];
   });
   const [newAccountName, setNewAccountName] = useState('');
-  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj' | 'calculator'>('lyft');
+  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj'>('lyft');
 
   // ── Income source data from localStorage ──
   const [lyftSessions, setLyftSessions] = useState<{id:string;date:string;earnings:number;trips:number;miles?:number;gasExpense?:number}[]>([])
@@ -575,19 +575,16 @@ export default function SmartStackPage() {
 
   const addLyftSession = () => {
     const earnings = parseFloat(lyftAddEarnings)
-    const trips = parseInt(lyftAddTrips) || 0
     if (!earnings || !lyftAddDate) return
     const newSession = {
       id: Date.now().toString(),
       date: lyftAddDate,
       earnings,
-      trips,
-      ...(lyftAddMiles ? { miles: parseFloat(lyftAddMiles) } : {}),
-      ...(lyftAddGas ? { gasExpense: parseFloat(lyftAddGas) } : {}),
+      trips: 0,
     }
     const updated = [...lyftSessions, newSession]
     setLyftSessions(updated)
-    try { localStorage.setItem('orca-lyft-sessions', JSON.stringify(updated)) } catch {}
+    try { setLocalSynced('orca-lyft-sessions', JSON.stringify(updated)) } catch {}
     setLyftAddDate('')
     setLyftAddEarnings('')
     setLyftAddTrips('')
@@ -948,7 +945,7 @@ export default function SmartStackPage() {
           {[
             { key: 'lyft', label: 'Lyft Metrics', icon: Car },
             { key: 'dj', label: 'DJ Gig Manager', icon: Mic2 },
-            { key: 'calculator', label: 'Projection Calculator', icon: Calculator },
+            // Projection calculator removed
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -973,23 +970,16 @@ export default function SmartStackPage() {
                 <Car className="w-5 h-5" style={{ color: '#22D3EE' }} />
               </div>
               <div>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Lyft Metrics</h2>
-                <p className="text-xs" style={{ color: theme.textM }}>{lyftSessions.length} sessions logged · {lyftTrips} total trips</p>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Lyft Earnings</h2>
+                <p className="text-xs" style={{ color: theme.textM }}>{lyftSessions.length} week{lyftSessions.length !== 1 ? 's' : ''} logged</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              {[
-                { label: 'Gross Earnings', value: fmt(lyftGross), color: '#22D3EE' },
-                { label: 'Net (After Gas)', value: fmt(lyftNet), color: '#10B981' },
-                { label: 'Total Trips', value: String(lyftTrips), color: theme.text },
-                { label: 'Gas Spent', value: fmt(lyftGas), color: '#EF4444' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="rounded-xl p-3" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                  <p className="text-xs font-semibold mb-1" style={{ color: theme.textM }}>{label}</p>
-                  <p className="text-xl font-black" style={{ color }}>{value}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 gap-3 mb-5">
+              <div className="rounded-xl p-4" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: theme.textM }}>Total Earnings</p>
+                <p className="text-2xl font-black" style={{ color: '#10B981' }}>{fmt(lyftGross)}</p>
+              </div>
             </div>
 
             {/* Log Session Form */}
@@ -1004,10 +994,10 @@ export default function SmartStackPage() {
                 </button>
               ) : (
                 <div className="rounded-xl p-3 space-y-3" style={{ background: '#22D3EE10', border: '1px solid #22D3EE40' }}>
-                  <p className="text-xs font-bold" style={{ color: '#22D3EE' }}>Log Weekly Session</p>
+                  <p className="text-xs font-bold" style={{ color: '#22D3EE' }}>Log Weekly Earnings</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Date</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Week Ending</label>
                       <input
                         type="date"
                         value={lyftAddDate}
@@ -1017,45 +1007,12 @@ export default function SmartStackPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Earnings ($)</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Total Earned ($)</label>
                       <input
                         type="number"
                         placeholder="0.00"
                         value={lyftAddEarnings}
                         onChange={e => setLyftAddEarnings(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Trips</label>
-                      <input
-                        type="number"
-                        placeholder="0"
-                        value={lyftAddTrips}
-                        onChange={e => setLyftAddTrips(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Gas Expense ($)</label>
-                      <input
-                        type="number"
-                        placeholder="0.00"
-                        value={lyftAddGas}
-                        onChange={e => setLyftAddGas(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Miles (optional)</label>
-                      <input
-                        type="number"
-                        placeholder="0"
-                        value={lyftAddMiles}
-                        onChange={e => setLyftAddMiles(e.target.value)}
                         className="w-full px-3 py-2 rounded-xl text-sm outline-none"
                         style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
                       />
@@ -1075,7 +1032,7 @@ export default function SmartStackPage() {
                       className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40"
                       style={{ backgroundColor: '#22D3EE', color: '#fff' }}
                     >
-                      Save Session
+                      Save
                     </button>
                   </div>
                 </div>
@@ -1083,27 +1040,19 @@ export default function SmartStackPage() {
             </div>
 
             <div>
-              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Recent Sessions</p>
+              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Recent Weeks</p>
               {lyftSessions.length === 0 ? (
                 <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
-                  No sessions yet — log your first Lyft shift
+                  No weeks logged yet
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {[...lyftSessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map((sess) => (
+                  {[...lyftSessions].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6).map((sess) => (
                     <div key={sess.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
-                          {new Date(sess.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                        </p>
-                        <p className="text-xs" style={{ color: theme.textM }}>{sess.trips || 0} trips{sess.miles ? ` · ${sess.miles} mi` : ''}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-black" style={{ color: '#10B981' }}>+{fmt(sess.earnings)}</p>
-                        {(sess.gasExpense || 0) > 0 && (
-                          <p className="text-xs" style={{ color: '#EF4444' }}>-{fmt(sess.gasExpense || 0)} gas</p>
-                        )}
-                      </div>
+                      <p className="text-xs font-semibold" style={{ color: theme.text }}>
+                        Week of {new Date(sess.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                      <p className="text-sm font-black" style={{ color: '#10B981' }}>+{fmt(sess.earnings)}</p>
                     </div>
                   ))}
                 </div>
@@ -1164,16 +1113,11 @@ export default function SmartStackPage() {
               )}
             </div>
 
-            <div className="flex gap-2 mt-4">
-              <a href="/dj" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
+            <div className="mt-4">
+              <a href="/dj" className="flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
                 style={{ backgroundColor: '#F43F5E', color: '#fff' }}>
                 <Mic2 className="w-4 h-4" />
                 DJ Gig Manager
-              </a>
-              <a href="/bizzplug" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
-                style={{ backgroundColor: '#F59E0B', color: '#fff' }}>
-                <Palette className="w-4 h-4" />
-                BizzyPlug
               </a>
             </div>
           </motion.div>
@@ -1415,7 +1359,7 @@ export default function SmartStackPage() {
           </motion.div>
         )}
 
-        {projectionMode === 'calculator' && <ProjectionCalculator theme={theme} />}
+        {/* Projection calculator removed */}
       </motion.div>
     );
   };

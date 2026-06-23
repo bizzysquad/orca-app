@@ -4,26 +4,51 @@ import { createBrowserClient } from '@supabase/ssr'
 
 // All localStorage keys that should be synced to Supabase profiles.local_data
 export const SYNC_KEYS = [
+  // Financial
   'orca-bills',
   'orca-user-settings',
   'orca-savings-accounts',
   'orca-payment-entries',
   'orca-paycheck-history',
+  'orca-credit-cards',
+  // Income sources
   'orca-lyft-sessions',
   'orca-bizzplug-clients',
+  // DJ
   'orca-dj-gigs',
   'orca-dj-profile',
   'orca-dj-activity',
   'orca-dj-email-templates',
   'orca-dj-website-photos',
   'orca-dj-testimonials',
+  'orca-dj-client-db',
+  'orca-dj-client-history',
+  'orca-dj-site-bio',
+  'orca-dj-site-services',
+  'orca-dj-site-instagram',
+  'orca-dj-site-tiktok',
+  'orca-dj-site-phone',
+  'orca-dj-site-poster-subtitle',
+  'orca-dj-site-poster-title',
+  'orca-dj-site-poster-tagline',
+  'orca-dj-site-testimonials',
+  // Fitness
   'orca-weight-logs',
   'orca-meal-logs',
+  'orca-fitness-plan',
+  'orca-fitness-streak',
+  'orca-nutrition-plan',
+  'orca-nutrition-checkin',
+  // Productivity
   'orca-grocery',
   'orca-tasks',
   'orca-notes',
+  'orca-songs',
+  'orca-businesses',
+  // Groups
   'orca-stack-circle-groups',
   'orca-roommates',
+  // UI preferences
   'orca-dashboard-order',
   'orca-dashboard-pinned',
   'orca-theme-id',
@@ -34,6 +59,9 @@ export const SYNC_KEYS = [
   'orca-layout-style',
   'orca-button-placements',
   'orca-default-theme',
+  // Splitter
+  'orca-splitter-savings',
+  'orca-splitter-spending',
 ] as const
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
@@ -113,50 +141,30 @@ function countLocalGigs(): number {
   return 0
 }
 
-// Smart merge: for array keys, merge by ID to avoid duplicates.
-// For non-array keys, cloud wins (more recent device wins).
+// Merge strategy: LOCAL WINS for all data.
+// When a user deletes a gig on mobile, the local array no longer contains it.
+// The old merge-by-ID approach would resurrect deleted items from the cloud copy.
+// Instead, local state is always treated as the most recent truth — if the user
+// has ANY local data for a key, that entire value replaces the cloud version.
+// Cloud data only fills in keys that are completely absent locally (e.g. first
+// load on a new device).
 function mergeData(
   cloud: Record<string, any>,
   local: Record<string, any>
 ): Record<string, any> {
-  const merged: Record<string, any> = { ...cloud }
+  const merged: Record<string, any> = {}
 
   for (const key of SYNC_KEYS) {
     const cloudVal = cloud[key]
     const localVal = local[key]
 
-    if (localVal === undefined) continue
-    if (cloudVal === undefined) {
+    if (localVal !== undefined) {
+      // Local exists → local wins (preserves deletions, edits, everything)
       merged[key] = localVal
-      continue
+    } else if (cloudVal !== undefined) {
+      // No local data for this key → hydrate from cloud (new device scenario)
+      merged[key] = cloudVal
     }
-
-    // Array merge by ID (for gigs, bills, sessions, etc.)
-    if (Array.isArray(cloudVal) && Array.isArray(localVal)) {
-      const byId = new Map<string, any>()
-      // Cloud first, then local overwrites (local has newer edits)
-      for (const item of cloudVal) {
-        const id = item?.id || JSON.stringify(item)
-        byId.set(id, item)
-      }
-      for (const item of localVal) {
-        const id = item?.id || JSON.stringify(item)
-        byId.set(id, item)
-      }
-      merged[key] = Array.from(byId.values())
-      continue
-    }
-
-    // For objects, shallow merge (local overrides cloud fields)
-    if (typeof cloudVal === 'object' && cloudVal !== null &&
-        typeof localVal === 'object' && localVal !== null &&
-        !Array.isArray(cloudVal)) {
-      merged[key] = { ...cloudVal, ...localVal }
-      continue
-    }
-
-    // Scalar: local wins (user just edited it)
-    merged[key] = localVal
   }
 
   return merged

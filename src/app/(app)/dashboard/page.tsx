@@ -99,6 +99,18 @@ function DashboardCalendar({
       }
     })
 
+    // Credit card payments
+    try {
+      const cards = JSON.parse(localStorage.getItem('orca-credit-cards') || '[]')
+      cards.forEach((c: any) => {
+        (c.payments || []).forEach((p: any) => {
+          if (p.date === dateStr && !p.paid) {
+            events.push({ label: `${c.name}: $${p.amount}`, type: 'bill', color: '#8B5CF6' })
+          }
+        })
+      })
+    } catch {}
+
     const dayPriorities = priorities[dateStr] || []
     const incomplete = dayPriorities.filter(p => !p.completed).length
     if (incomplete > 0) events.push({ label: `${incomplete} task${incomplete > 1 ? 's' : ''}`, type: 'task', color: BENTLEY_INDIGO })
@@ -317,47 +329,56 @@ export default function DashboardPage() {
 
   // DJ gigs
   const [gigs, setGigs] = useState<any[]>([])
+  // New quote requests
+  const [newQuoteCount, setNewQuoteCount] = useState(0)
+  const [newTestimonialCount, setNewTestimonialCount] = useState(0)
   // Fitness
   const [todayCalories, setTodayCalories] = useState(0)
   const [currentWeight, setCurrentWeight] = useState(159)
   // Checking balance
   const [checkingBalance, setCheckingBalance] = useState(0)
-  // Income source totals (synced with Smart Stack)
-  const [lyftNetIncome, setLyftNetIncome] = useState(0)
-  const [djEarnedIncome, setDjEarnedIncome] = useState(0)
-  const [bizzplugEarnedIncome, setBizzplugEarnedIncome] = useState(0)
+  // Raw income source data (synced with Smart Stack)
+  const [lyftSessions, setLyftSessions] = useState<any[]>([])
+  const [djGigsList, setDjGigsList] = useState<any[]>([])
+  const [bizzplugClientsList, setBizzplugClientsList] = useState<any[]>([])
+
+  // Month-aware income totals — recalculate when calMonth/calYear changes
+  const lyftNetIncome = useMemo(() => {
+    const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`
+    return lyftSessions
+      .filter((s: any) => s.date?.startsWith(key))
+      .reduce((sum: number, s: any) => sum + (s.earnings || 0) - (s.gasExpense || 0), 0)
+  }, [lyftSessions, calMonth, calYear])
+
+  const djEarnedIncome = useMemo(() => {
+    const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`
+    return djGigsList
+      .filter((g: any) => g.date?.startsWith(key))
+      .reduce((sum: number, gig: any) => {
+        const dep = gig.depositPaid ? (gig.depositAmount || 0) : 0
+        const parts = (gig.partialPayments || []).reduce((sp: number, p: any) => sp + p.amount, 0)
+        return sum + dep + parts
+      }, 0)
+  }, [djGigsList, calMonth, calYear])
+
+  const bizzplugEarnedIncome = useMemo(() => {
+    return bizzplugClientsList.reduce((sum: number, c: any) => sum + (c.paid || 0), 0)
+  }, [bizzplugClientsList])
 
   // Re-read all localStorage data when cloud sync merges new data
   useEffect(() => {
     const handleSyncReady = () => {
       try {
         const saved = localStorage.getItem('orca-dj-gigs')
-        if (saved) setGigs(JSON.parse(saved))
+        if (saved) { const parsed = JSON.parse(saved); setGigs(parsed); setDjGigsList(parsed) }
       } catch {}
       try {
         const ls = localStorage.getItem('orca-lyft-sessions')
-        if (ls) {
-          const sessions = JSON.parse(ls)
-          setLyftNetIncome(sessions.reduce((s: number, x: any) => s + (x.earnings || 0) - (x.gasExpense || 0), 0))
-        }
-      } catch {}
-      try {
-        const djData = localStorage.getItem('orca-dj-gigs')
-        if (djData) {
-          const djList = JSON.parse(djData)
-          setDjEarnedIncome(djList.reduce((s: number, gig: any) => {
-            const dep = gig.depositPaid ? (gig.depositAmount || 0) : 0
-            const parts = (gig.partialPayments || []).reduce((sp: number, p: any) => sp + p.amount, 0)
-            return s + dep + parts
-          }, 0))
-        }
+        if (ls) setLyftSessions(JSON.parse(ls))
       } catch {}
       try {
         const biz = localStorage.getItem('orca-bizzplug-clients')
-        if (biz) {
-          const clients = JSON.parse(biz)
-          setBizzplugEarnedIncome(clients.reduce((s: number, c: any) => s + (c.paid || 0), 0))
-        }
+        if (biz) setBizzplugClientsList(JSON.parse(biz))
       } catch {}
     }
     window.addEventListener('orca-sync-ready', handleSyncReady)
@@ -367,7 +388,7 @@ export default function DashboardPage() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem('orca-dj-gigs')
-      if (saved) setGigs(JSON.parse(saved))
+      if (saved) { const parsed = JSON.parse(saved); setGigs(parsed); setDjGigsList(parsed) }
     } catch {}
     try {
       const wl = localStorage.getItem('orca-weight-logs')
@@ -387,35 +408,37 @@ export default function DashboardPage() {
       const s = localStorage.getItem('orca-user-settings')
       if (s) { const p = JSON.parse(s); if (p.checkingBalance > 0) setCheckingBalance(p.checkingBalance) }
     } catch {}
-    // Load income source data (Lyft, DJ, BizzyPlug)
+    // Load income source raw data (Lyft, DJ, BizzyPlug)
     try {
       const ls = localStorage.getItem('orca-lyft-sessions')
-      if (ls) {
-        const sessions = JSON.parse(ls)
-        const net = sessions.reduce((s: number, x: any) => s + (x.earnings || 0) - (x.gasExpense || 0), 0)
-        setLyftNetIncome(net)
-      }
+      if (ls) setLyftSessions(JSON.parse(ls))
     } catch {}
     try {
       const djData = localStorage.getItem('orca-dj-gigs')
-      if (djData) {
-        const djList = JSON.parse(djData)
-        const earned = djList.reduce((s: number, gig: any) => {
-          const dep = gig.depositPaid ? (gig.depositAmount || 0) : 0
-          const parts = (gig.partialPayments || []).reduce((sp: number, p: any) => sp + p.amount, 0)
-          return s + dep + parts
-        }, 0)
-        setDjEarnedIncome(earned)
-      }
+      if (djData) setDjGigsList(JSON.parse(djData))
     } catch {}
     try {
       const biz = localStorage.getItem('orca-bizzplug-clients')
-      if (biz) {
-        const clients = JSON.parse(biz)
-        const paid = clients.reduce((s: number, c: any) => s + (c.paid || 0), 0)
-        setBizzplugEarnedIncome(paid)
-      }
+      if (biz) setBizzplugClientsList(JSON.parse(biz))
     } catch {}
+    // Check for new quote requests
+    fetch('/api/dj/bookings').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.bookings) {
+        const newCount = d.bookings.filter((b: any) => b.status === 'pending' && b.client_name !== '__DJ_GIG__' && b.client_name !== '__DJ_BLOCK__').length
+        setNewQuoteCount(newCount)
+      }
+    }).catch(() => {})
+    // Check for new testimonials
+    fetch('/api/dj/testimonials').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.all) {
+        const recent = d.all.filter((t: any) => {
+          if (!t.created_at) return false
+          const age = Date.now() - new Date(t.created_at).getTime()
+          return age < 7 * 24 * 60 * 60 * 1000
+        }).length
+        setNewTestimonialCount(recent)
+      }
+    }).catch(() => {})
     // Load all priority dates — scan last 6 months and next 6 months
     const loadPriorities: Record<string, DailyPriority['items']> = {}
     const now = new Date()
@@ -530,6 +553,39 @@ export default function DashboardPage() {
 
   // ── Shared widget renderers ───────────────────────────────────────────────
 
+  const QuoteAlert = () => (newQuoteCount === 0 && newTestimonialCount === 0) ? null : (
+    <div className="space-y-2">
+      {newQuoteCount > 0 && (
+        <Link href="/dj">
+          <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: '#EC489915', border: '1px solid #EC489930' }}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#EC489925' }}>
+              <Mic2 size={16} style={{ color: '#EC4899' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold" style={{ color: theme.text }}>{newQuoteCount} New Quote{newQuoteCount !== 1 ? 's' : ''}</p>
+              <p className="text-xs" style={{ color: theme.subtext }}>Tap to review in DJ Gig Manager</p>
+            </div>
+            <ChevronRight size={16} style={{ color: '#EC4899' }} />
+          </div>
+        </Link>
+      )}
+      {newTestimonialCount > 0 && (
+        <Link href="/dj">
+          <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: `${BENTLEY_GOLD}12`, border: `1px solid ${BENTLEY_GOLD}30` }}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${BENTLEY_GOLD}20` }}>
+              <Flame size={16} style={{ color: BENTLEY_GOLD }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold" style={{ color: theme.text }}>{newTestimonialCount} New Review{newTestimonialCount !== 1 ? 's' : ''}</p>
+              <p className="text-xs" style={{ color: theme.subtext }}>View in Website tab</p>
+            </div>
+            <ChevronRight size={16} style={{ color: BENTLEY_GOLD }} />
+          </div>
+        </Link>
+      )}
+    </div>
+  )
+
   const QuickStatsRow = () => (
     <div className="grid grid-cols-3 gap-2">
       <Link href="/bill-boss">
@@ -580,6 +636,114 @@ export default function DashboardPage() {
     </Link>
   )
 
+  const MonthlyIncome = () => {
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    const currentMonth = new Date().getMonth()
+    const currentYear = new Date().getFullYear()
+    const [selectedMonthIdx, setSelectedMonthIdx] = useState<number | null>(null)
+
+    const monthlyData = useMemo(() => {
+      const months: { month: string; monthNum: number; year: number; lyft: number; dj: number; bizzplug: number; total: number }[] = []
+      for (let i = 5; i >= 0; i--) {
+        let m = currentMonth - i
+        let y = currentYear
+        if (m < 0) { m += 12; y-- }
+        const key = `${y}-${String(m + 1).padStart(2, '0')}`
+        let lyft = 0
+        let dj = 0
+        let bizzplug = 0
+        try {
+          const ls = JSON.parse(localStorage.getItem('orca-lyft-sessions') || '[]')
+          ls.forEach((s: any) => { if (s.date?.startsWith(key)) lyft += (s.earnings || 0) })
+        } catch {}
+        try {
+          const gs = JSON.parse(localStorage.getItem('orca-dj-gigs') || '[]')
+          gs.forEach((g: any) => {
+            if (g.date?.startsWith(key)) {
+              const dep = g.depositPaid ? (g.depositAmount || 0) : 0
+              const parts = (g.partialPayments || []).reduce((s: number, p: any) => s + p.amount, 0)
+              dj += dep + parts
+            }
+          })
+        } catch {}
+        try {
+          const bc = JSON.parse(localStorage.getItem('orca-bizzplug-clients') || '[]')
+          bc.forEach((c: any) => { if (c.paidDate?.startsWith(key)) bizzplug += (c.paid || 0) })
+        } catch {}
+        months.push({ month: monthNames[m], monthNum: m, year: y, lyft, dj, bizzplug, total: lyft + dj + bizzplug })
+      }
+      return months
+    }, [currentMonth, currentYear])
+
+    const maxTotal = Math.max(...monthlyData.map(m => m.total), 1)
+    const selected = selectedMonthIdx !== null ? monthlyData[selectedMonthIdx] : null
+
+    return (
+      <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+        <div className="flex items-center gap-2 mb-3">
+          <DollarSign size={14} style={{ color: BENTLEY_GREEN }} />
+          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Monthly Income</span>
+          <span className="text-[9px] ml-auto" style={{ color: theme.subtext }}>Tap a month</span>
+        </div>
+        <div className="flex items-end gap-2" style={{ height: 100 }}>
+          {monthlyData.map((m, i) => {
+            const isSelected = selectedMonthIdx === i
+            const isCurrent = i === monthlyData.length - 1
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedMonthIdx(isSelected ? null : i)}
+                className="flex-1 flex flex-col items-center gap-1 transition-all"
+                style={{ opacity: selectedMonthIdx !== null && !isSelected ? 0.4 : 1 }}
+              >
+                <span className="text-[9px] font-bold tabular-nums" style={{ color: m.total > 0 ? BENTLEY_GREEN : theme.subtext }}>{m.total > 0 ? `$${Math.round(m.total)}` : ''}</span>
+                <div
+                  className="w-full rounded-t-lg transition-all"
+                  style={{
+                    height: `${Math.max((m.total / maxTotal) * 70, 4)}px`,
+                    background: isSelected ? BENTLEY_GREEN : isCurrent ? BENTLEY_GREEN : `${BENTLEY_GREEN}50`,
+                    boxShadow: isSelected ? `0 0 8px ${BENTLEY_GREEN}60` : 'none',
+                  }}
+                />
+                <span className="text-[10px] font-semibold" style={{ color: isSelected || isCurrent ? theme.text : theme.subtext }}>{m.month}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Selected month detail */}
+        {selected ? (
+          <div className="mt-3 pt-2 border-t space-y-2" style={{ borderColor: `${theme.border}60` }}>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold" style={{ color: theme.text }}>{selected.month} {selected.year} Earnings</p>
+              <p className="text-sm font-bold" style={{ color: BENTLEY_GREEN }}>{fmt(selected.total)}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl p-2 text-center" style={{ backgroundColor: `#22D3EE10` }}>
+                <p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>Lyft</p>
+                <p className="text-sm font-bold" style={{ color: '#22D3EE' }}>{fmt(selected.lyft)}</p>
+              </div>
+              <div className="rounded-xl p-2 text-center" style={{ backgroundColor: `#EC489910` }}>
+                <p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>DJ</p>
+                <p className="text-sm font-bold" style={{ color: '#EC4899' }}>{fmt(selected.dj)}</p>
+              </div>
+              <div className="rounded-xl p-2 text-center" style={{ backgroundColor: `${BENTLEY_GOLD}10` }}>
+                <p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>BizzyPlug</p>
+                <p className="text-sm font-bold" style={{ color: BENTLEY_GOLD }}>{fmt(selected.bizzplug)}</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-4 mt-3 pt-2 border-t" style={{ borderColor: `${theme.border}60` }}>
+            <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>This Month</p><p className="text-sm font-bold" style={{ color: BENTLEY_GREEN }}>{fmt(monthlyData[monthlyData.length - 1]?.total || 0)}</p></div>
+            <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>Lyft</p><p className="text-sm font-bold" style={{ color: '#22D3EE' }}>{fmt(monthlyData[monthlyData.length - 1]?.lyft || 0)}</p></div>
+            <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>DJ</p><p className="text-sm font-bold" style={{ color: '#EC4899' }}>{fmt(monthlyData[monthlyData.length - 1]?.dj || 0)}</p></div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const UpcomingGigsList = () => upcomingGigs.length === 0 ? null : (
     <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
       <div className="flex items-center gap-2 mb-3">
@@ -623,6 +787,7 @@ export default function DashboardPage() {
             <p className="text-sm mt-0.5" style={{ color: theme.subtext }}>{line}</p>
           </motion.div>
                     <motion.div variants={fadeUp}><QuickStatsRow /></motion.div>
+          <motion.div variants={fadeUp}><QuoteAlert /></motion.div>
           <motion.div variants={fadeUp}>
             <div className="flex items-center gap-2 mb-2">
               <Calendar size={14} style={{ color: BENTLEY_INDIGO }} />
@@ -638,6 +803,7 @@ export default function DashboardPage() {
             <DayDetail date={selectedDate} bills={bills} gigs={gigs} priorities={selectedPriorities} onTogglePriority={handleTogglePriority} onAddPriority={handleAddPriority} onDeletePriority={handleDeletePriority} />
           </motion.div>
           <motion.div variants={fadeUp}><FitnessBar /></motion.div>
+          <motion.div variants={fadeUp}><MonthlyIncome /></motion.div>
         </motion.div>
 
         {/* ── DESKTOP layout (two columns) ── */}
@@ -659,6 +825,7 @@ export default function DashboardPage() {
 
           {/* Stats row — full width */}
           <motion.div variants={fadeUp} className="mb-6"><QuickStatsRow /></motion.div>
+          {newQuoteCount > 0 && <motion.div variants={fadeUp} className="mb-6"><QuoteAlert /></motion.div>}
 
           {/* Two-column grid */}
           <div className="grid grid-cols-[1fr_340px] gap-6 items-start">
@@ -684,6 +851,7 @@ export default function DashboardPage() {
             {/* Right column */}
             <motion.div variants={fadeUp} className="space-y-4">
               <FitnessBar />
+              <MonthlyIncome />
               <UpcomingGigsList />
             </motion.div>
           </div>

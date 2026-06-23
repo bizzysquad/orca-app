@@ -1,11 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic()
+const PAYPAL_LINK = 'https://www.paypal.com/ncp/payment/SZLRNV23PWKNN'
+const PAYPAL_RATE = 0.0349
+const PAYPAL_FIXED = 0.49
+
+function formatTime12h(t: string): string {
+  if (!t) return ''
+  const [h, m] = t.split(':').map(Number)
+  if (isNaN(h)) return t
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour = h % 12 || 12
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`
+}
+
+function calcPayPalFee(amount: number): { fee: number; total: number } {
+  const fee = Math.round((amount * PAYPAL_RATE + PAYPAL_FIXED) * 100) / 100
+  return { fee, total: Math.round((amount + fee) * 100) / 100 }
+}
+
+function fmt(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { booking, type = 'inquiry' } = await req.json()
+    const { booking, type = 'inquiry', quoteAmount, depositAmount } = await req.json()
     if (!booking) return NextResponse.json({ error: 'No booking provided' }, { status: 400 })
 
     const dateFormatted = booking.date
@@ -14,45 +33,107 @@ export async function POST(req: NextRequest) {
         })
       : 'TBD'
 
-    const systemPrompt = `You are "Mask Off Da DJ", a professional DJ responding to booking inquiries.
-Write in first person. Be professional, warm, and enthusiastic. Keep it concise — 2 to 3 paragraphs.
-Do not include subject lines or greetings like "Dear" — just the email body starting with "Hi [Name]," or similar.`
+    const timeRange = booking.start_time && booking.end_time
+      ? `${formatTime12h(booking.start_time)} - ${formatTime12h(booking.end_time)}`
+      : booking.start_time ? formatTime12h(booking.start_time) : 'TBD'
 
-    const userPrompt = type === 'decline'
-      ? `Write a polite professional decline for this booking request:
-Client: ${booking.client_name}
-Event: ${booking.event_type} on ${dateFormatted} in ${booking.city}
-Apologize that you're unavailable for that date, wish them well, and encourage them to reach out for future dates. Sign off as "Mask Off Da DJ".`
-      : `Write a professional reply to this DJ booking inquiry:
-Client: ${booking.client_name}
-Event Type: ${booking.event_type}
-Date: ${dateFormatted}
-City: ${booking.city}
-Start/End: ${booking.start_time || 'TBD'} – ${booking.end_time || 'TBD'}
-Guests: ${booking.guest_count || 'TBD'}
-Venue: ${booking.location || 'TBD'}
-MC Services: ${booking.mc_needed ? 'Yes' : 'No'}
-Special Requests: ${booking.special_requests || 'None'}
+    let replyText = ''
+    let subject = ''
 
-The reply should:
-1. Thank ${booking.client_name} by name for reaching out
-2. Express genuine excitement about their ${booking.event_type}
-3. Confirm you received their request for ${dateFormatted} in ${booking.city}
-4. Let them know you're available and would love to discuss packages and pricing
-5. Invite them to reply, call, or text to move forward
-6. Sign off warmly as "Mask Off Da DJ" with email: maskoffdadj@gmail.com`
+    if (type === 'decline') {
+      subject = `Re: DJ Services - ${booking.event_type} on ${dateFormatted}`
+      replyText = [
+        `Hi ${booking.client_name},`,
+        '',
+        `Thank you so much for reaching out about your ${booking.event_type} on ${dateFormatted}. I really appreciate you considering me for your event.`,
+        '',
+        `Unfortunately, I am not available on that date. I am sorry I will not be able to be there - it sounds like it is going to be an amazing time.`,
+        '',
+        `Please do not hesitate to reach out for any future events. I would love the opportunity to work with you down the road.`,
+        '',
+        'Wishing you the best,',
+        'Mask Off Da DJ',
+        'maskoffdadj@gmail.com',
+      ].join('\n')
+    } else if (type === 'invoice') {
+      const amount = Number(quoteAmount) || 0
+      const deposit = Number(depositAmount) || Math.round(amount * 0.25)
+      const balance = amount - deposit
+      const depositPayPal = calcPayPalFee(deposit)
+      const balancePayPal = calcPayPalFee(balance)
+      const depositDue = new Date()
+      depositDue.setDate(depositDue.getDate() + 7)
+      const depositDueStr = depositDue.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 600,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    })
-
-    const replyText = message.content[0].type === 'text' ? message.content[0].text : ''
-    const subject = type === 'decline'
-      ? `Re: DJ Services – ${booking.event_type} on ${dateFormatted}`
-      : `Re: DJ Booking Inquiry – ${booking.event_type} · ${dateFormatted}`
+      subject = `DJ Services Quote - ${booking.event_type} on ${dateFormatted}`
+      replyText = [
+        `Hi ${booking.client_name},`,
+        '',
+        `Thank you for your booking request! I am excited about your upcoming ${booking.event_type} and would love to be a part of it.`,
+        '',
+        'Here are the details and pricing for your event:',
+        '',
+        '---------------------------------------',
+        '  BOOKING DETAILS',
+        '---------------------------------------',
+        `  Event:      ${booking.event_type}`,
+        `  Date:       ${dateFormatted}`,
+        `  Time:       ${timeRange}`,
+        `  Location:   ${booking.location || booking.city || 'TBD'}`,
+        '---------------------------------------',
+        '',
+        '---------------------------------------',
+        '  PAYMENT BREAKDOWN',
+        '---------------------------------------',
+        `  Total:              $${fmt(amount)}`,
+        `  Deposit (25%):      $${fmt(deposit)}`,
+        `  Balance Due:        $${fmt(balance)}`,
+        '---------------------------------------',
+        '',
+        `  Deposit Due By:     ${depositDueStr}`,
+        `  Balance Due:        Day of event`,
+        '',
+        '---------------------------------------',
+        '  PAYPAL PAYMENT INFO',
+        '---------------------------------------',
+        `  If paying deposit via PayPal:`,
+        `    Deposit:          $${fmt(deposit)}`,
+        `    PayPal Fee:       $${fmt(depositPayPal.fee)}`,
+        `    Total to Send:    $${fmt(depositPayPal.total)}`,
+        '',
+        `  If paying balance via PayPal:`,
+        `    Balance:          $${fmt(balance)}`,
+        `    PayPal Fee:       $${fmt(balancePayPal.fee)}`,
+        `    Total to Send:    $${fmt(balancePayPal.total)}`,
+        '---------------------------------------',
+        '',
+        `  Pay Here: ${PAYPAL_LINK}`,
+        '',
+        'A 25% non-refundable deposit is required to lock in your date. The remaining balance is due the day of the event.',
+        '',
+        'If you have any questions or would like to discuss further, feel free to reply to this email or text me anytime.',
+        '',
+        'Looking forward to making your event unforgettable!',
+        '',
+        'Mask Off Da DJ',
+        'maskoffdadj@gmail.com',
+      ].join('\n')
+    } else {
+      subject = `Re: DJ Booking Inquiry - ${booking.event_type} on ${dateFormatted}`
+      replyText = [
+        `Hi ${booking.client_name},`,
+        '',
+        `Thank you for reaching out about your ${booking.event_type} on ${dateFormatted}! I am excited about the opportunity and would love to help make your event unforgettable.`,
+        '',
+        `I have received your request and that date is currently available. I would love to discuss packages and pricing that fit your needs.`,
+        '',
+        'Feel free to reply to this email, or you can reach me directly at maskoffdadj@gmail.com.',
+        '',
+        'Best,',
+        'Mask Off Da DJ',
+        'maskoffdadj@gmail.com',
+      ].join('\n')
+    }
 
     return NextResponse.json({ reply: replyText, subject })
   } catch (err: any) {

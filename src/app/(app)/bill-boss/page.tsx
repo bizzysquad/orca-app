@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Edit3, Home, Car, CreditCard, Heart, Utensils, BookOpen, Zap } from 'lucide-react'
+import { Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Edit3, Home, Car, CreditCard, Heart, Utensils, BookOpen, Zap, Plus } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, gid } from '@/lib/utils'
 import { getRecurringBillDates } from '@/lib/income-engine'
@@ -372,6 +372,72 @@ export default function BillBossPage() {
   const [paymentTargetDate, setPaymentTargetDate] = useState<string | null>(null)
   // Index for cycling through upcoming bills in the hero card
   const [nextDueIndex, setNextDueIndex] = useState(0)
+
+  // Credit card debt payoff
+  interface CreditCardDebt {
+    id: string
+    name: string
+    balance: number
+    apr: number
+    minPayment: number
+    monthlyPayment: number
+    payments: { date: string; amount: number; remaining: number; paid: boolean }[]
+  }
+  const [creditCards, setCreditCards] = useState<CreditCardDebt[]>(() => { try { return JSON.parse(localStorage.getItem('orca-credit-cards') || '[]') } catch { return [] } })
+  const [showAddCard, setShowAddCard] = useState(false)
+  const [cardForm, setCardForm] = useState({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '' })
+
+  const saveCreditCards = (cards: CreditCardDebt[]) => {
+    setCreditCards(cards)
+    try { setLocalSynced('orca-credit-cards', JSON.stringify(cards)) } catch {}
+  }
+
+  const addCreditCard = () => {
+    const balance = parseFloat(cardForm.balance) || 0
+    const monthly = parseFloat(cardForm.monthlyPayment) || parseFloat(cardForm.minPayment) || 50
+    const apr = parseFloat(cardForm.apr) || 0
+    if (!cardForm.name || balance <= 0) return
+
+    // Generate payment schedule
+    const payments: CreditCardDebt['payments'] = []
+    let remaining = balance
+    const today = new Date()
+    let payDate = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+    const monthlyRate = apr / 100 / 12
+    while (remaining > 0 && payments.length < 120) {
+      const interest = remaining * monthlyRate
+      const payAmount = Math.min(monthly, remaining + interest)
+      remaining = Math.max(0, remaining + interest - payAmount)
+      payments.push({
+        date: payDate.toISOString().slice(0, 10),
+        amount: Math.round(payAmount * 100) / 100,
+        remaining: Math.round(remaining * 100) / 100,
+        paid: false,
+      })
+      payDate = new Date(payDate.getFullYear(), payDate.getMonth() + 1, 1)
+    }
+
+    const card: CreditCardDebt = {
+      id: Date.now().toString(),
+      name: cardForm.name,
+      balance,
+      apr,
+      minPayment: parseFloat(cardForm.minPayment) || 0,
+      monthlyPayment: monthly,
+      payments,
+    }
+    saveCreditCards([...creditCards, card])
+    setCardForm({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '' })
+    setShowAddCard(false)
+  }
+
+  const markCardPayment = (cardId: string, paymentIdx: number) => {
+    saveCreditCards(creditCards.map(c => c.id === cardId ? { ...c, payments: c.payments.map((p, i) => i === paymentIdx ? { ...p, paid: true } : p) } : c))
+  }
+
+  const deleteCard = (cardId: string) => {
+    saveCreditCards(creditCards.filter(c => c.id !== cardId))
+  }
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -1162,7 +1228,7 @@ export default function BillBossPage() {
           transition={{ delay: 0.15 }}
         >
           <BillCalendar
-            bills={bills}
+            bills={[...bills, ...creditCards.flatMap(c => c.payments.filter(p => !p.paid).map(p => ({ id: `cc-${c.id}-${p.date}`, name: `${c.name} Payment`, amount: p.amount, cat: 'Debt', due: p.date, freq: '', recurrence: 'one-time' as const, alloc: [], status: 'unpaid' })))]}
             month={calMonth}
             year={calYear}
             onMonthChange={handleMonthChange}
@@ -1177,6 +1243,115 @@ export default function BillBossPage() {
             </span>
             <span className="text-lg font-bold" style={{ color: theme.gold }}>{fmt(monthlyBillTotal)}</span>
           </div>
+        </motion.div>
+
+        {/* ── CREDIT CARD DEBT PAYOFF ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          className="space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CreditCard size={16} style={{ color: theme.accent }} />
+              <h2 className="text-sm font-bold" style={{ color: theme.text }}>Credit Card Payoff</h2>
+            </div>
+            {!showAddCard && (
+              <button onClick={() => setShowAddCard(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold" style={{ background: `${theme.accent}15`, color: theme.accent, border: `1px solid ${theme.accent}30` }}>
+                <Plus size={11} /> Add Card
+              </button>
+            )}
+          </div>
+
+          {showAddCard && (
+            <div className="rounded-xl p-4 space-y-3" style={{ background: `${theme.accent}08`, border: `1px solid ${theme.accent}25` }}>
+              <p className="text-xs font-bold" style={{ color: theme.accent }}>Add Credit Card Debt</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={cardForm.name} onChange={e => setCardForm({ ...cardForm, name: e.target.value })} placeholder="Card name *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <input type="number" value={cardForm.balance} onChange={e => setCardForm({ ...cardForm, balance: e.target.value })} placeholder="Total balance *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <input type="number" value={cardForm.apr} onChange={e => setCardForm({ ...cardForm, apr: e.target.value })} placeholder="APR % (e.g. 24.99)" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <input type="number" value={cardForm.monthlyPayment} onChange={e => setCardForm({ ...cardForm, monthlyPayment: e.target.value })} placeholder="Monthly payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowAddCard(false)} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.textM }}>Cancel</button>
+                <button onClick={addCreditCard} disabled={!cardForm.name || !cardForm.balance} className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40" style={{ background: theme.accent, color: '#fff' }}>Create Plan</button>
+              </div>
+            </div>
+          )}
+
+          {creditCards.length === 0 && !showAddCard && (
+            <div className="rounded-2xl p-5 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+              <CreditCard size={24} className="mx-auto mb-2" style={{ color: theme.textM, opacity: 0.5 }} />
+              <p className="text-sm" style={{ color: theme.textM }}>No credit cards tracked yet</p>
+              <p className="text-xs mt-1" style={{ color: theme.textS }}>Add a card to start your payoff plan</p>
+            </div>
+          )}
+
+          {creditCards.map(card => {
+            const nextPayment = card.payments.find(p => !p.paid)
+            const paidCount = card.payments.filter(p => p.paid).length
+            const totalPaid = card.payments.filter(p => p.paid).reduce((s, p) => s + p.amount, 0)
+            const currentBalance = nextPayment ? nextPayment.remaining + nextPayment.amount : 0
+            const progressPct = card.balance > 0 ? Math.min(100, (totalPaid / card.balance) * 100) : 0
+
+            return (
+              <div key={card.id} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: theme.text }}>{card.name}</p>
+                      <p className="text-xs" style={{ color: theme.textM }}>
+                        {card.apr}% APR · ${card.monthlyPayment}/mo · {card.payments.length - paidCount} payments left
+                      </p>
+                    </div>
+                    <button onClick={() => deleteCard(card.id)} className="p-1.5 rounded-lg" style={{ color: theme.textS }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span style={{ color: theme.textM }}>Paid: ${fmt(totalPaid)}</span>
+                      <span className="font-bold" style={{ color: currentBalance > 0 ? '#EF4444' : '#10B981' }}>Remaining: ${fmt(currentBalance)}</span>
+                    </div>
+                    <div className="h-2.5 rounded-full overflow-hidden" style={{ background: theme.border }}>
+                      <div className="h-full rounded-full transition-all" style={{ width: `${progressPct}%`, background: progressPct >= 100 ? '#10B981' : theme.accent }} />
+                    </div>
+                  </div>
+
+                  {/* Next payment */}
+                  {nextPayment && (
+                    <div className="flex items-center justify-between px-3 py-2.5 rounded-xl" style={{ background: theme.bg }}>
+                      <div>
+                        <p className="text-xs font-semibold" style={{ color: theme.text }}>Next: {new Date(nextPayment.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                        <p className="text-[10px]" style={{ color: theme.textM }}>After payment: ${fmt(nextPayment.remaining)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold" style={{ color: theme.accent }}>${fmt(nextPayment.amount)}</span>
+                        <button onClick={() => markCardPayment(card.id, card.payments.indexOf(nextPayment))} className="px-3 py-1.5 rounded-lg text-[10px] font-bold" style={{ background: `${theme.accent}18`, color: theme.accent }}>
+                          Paid
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Upcoming schedule (next 3) */}
+                  <div className="space-y-1">
+                    <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: theme.textS }}>Schedule</p>
+                    {card.payments.filter(p => !p.paid).slice(0, 4).map((p, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs px-2 py-1 rounded-lg" style={{ background: i === 0 ? `${theme.accent}08` : 'transparent' }}>
+                        <span style={{ color: theme.text }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        <span style={{ color: theme.textM }}>${fmt(p.amount)}</span>
+                        <span className="font-semibold" style={{ color: theme.textS }}>${fmt(p.remaining)} left</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </motion.div>
 
         {/* List / Compact Toggle */}
@@ -1272,7 +1447,13 @@ export default function BillBossPage() {
                       />
                       <div>
                         <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>Due Date</label>
-                        <CalendarPicker value={formData.due} onChange={(date) => setFormData({ ...formData, due: date })} placeholder="Due Date" theme={theme} />
+                        <input
+                          type="date"
+                          value={formData.due}
+                          onChange={(e) => setFormData({ ...formData, due: e.target.value })}
+                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+                          className="w-full px-5 py-3 border rounded-xl focus:outline-none font-medium"
+                        />
                       </div>
                     </div>
                     <select

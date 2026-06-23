@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { useTheme } from '@/context/ThemeContext'
 import type { Business, BusinessTask, BusinessType } from '@/lib/types'
 import { fmt } from '@/lib/utils'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
@@ -245,7 +246,7 @@ export default function BusinessPage() {
   }, [])
 
   const save = (b: Business[]) => {
-    try { localStorage.setItem('orca-businesses', JSON.stringify(b)) } catch {}
+    try { setLocalSynced('orca-businesses', JSON.stringify(b)) } catch {}
   }
 
   const addTask = (bizId: string, title: string, priority: BusinessTask['priority']) => {
@@ -328,7 +329,7 @@ export default function BusinessPage() {
     }
     const next = [...lyftSessions, session]
     setLyftSessions(next)
-    try { localStorage.setItem('orca-lyft-sessions', JSON.stringify(next)) } catch {}
+    try { setLocalSynced('orca-lyft-sessions', JSON.stringify(next)) } catch {}
 
     // Also update Lyft business revenue
     const totalThisMonth = next

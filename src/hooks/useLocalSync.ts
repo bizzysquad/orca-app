@@ -5,22 +5,9 @@ import { createBrowserClient } from '@supabase/ssr'
 
 /**
  * Keys that should be synced to Supabase for cross-device consistency.
- * These are all the localStorage keys the app uses for real user data
- * (excluding UI preferences like dashboard order and theme).
+ * This list mirrors SYNC_KEYS in syncEngine.ts — keep them in sync.
  */
-const SYNC_KEYS = [
-  'orca-bills',
-  'orca-user-settings',
-  'orca-savings-accounts',
-  'orca-payment-entries',
-  'orca-paycheck-history',
-  'orca-tasks',
-  'orca-notes',
-  'orca-stack-circle-groups',
-  'orca-roommates',
-  'orca-splitter-savings',
-  'orca-splitter-spending',
-] as const
+import { SYNC_KEYS } from '@/lib/syncEngine'
 
 /**
  * Collects all sync-able localStorage data into a single object.

@@ -9,6 +9,7 @@ import {
 import Link from 'next/link'
 import { useTheme } from '@/context/ThemeContext'
 import type { GroceryItem, GroceryCategory } from '@/lib/types'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
@@ -84,7 +85,7 @@ export default function GroceryPage() {
   }, [])
 
   const save = (i: GroceryItem[]) => {
-    try { localStorage.setItem('orca-grocery', JSON.stringify(i)) } catch {}
+    try { setLocalSynced('orca-grocery', JSON.stringify(i)) } catch {}
   }
 
   const addItem = (suggestion?: typeof BENTLEY_SUGGESTIONS[0]) => {

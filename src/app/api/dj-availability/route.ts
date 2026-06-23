@@ -1,53 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
-// GET — public endpoint the website calendar reads to show blocked dates
+export const dynamic = 'force-dynamic'
+
+function getAdmin() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
+
+// DB columns: id, name, email, phone, event_date, event_start_time, event_end_time,
+// venue, location, event_type, message, status, created_at
+// Allowed status values: pending, confirmed, declined
+
 export async function GET() {
   try {
-    const supabase = await createClient()
-
-    // Read booked dates from booking_requests:
-    // 1. Any public quote/booking submitted via the website (new/reviewed/quoted/booked)
-    // 2. DJ-side manual blocks (status = 'dj_blocked') synced from the private app
+    const supabase = getAdmin()
     const { data } = await supabase
       .from('booking_requests')
-      .select('date')
-      .in('status', ['new', 'reviewed', 'quoted', 'booked', 'dj_blocked'])
-      .not('date', 'is', null)
+      .select('event_date')
+      .in('status', ['pending', 'confirmed'])
+      .not('event_date', 'is', null)
 
-    const bookedDates: string[] = [...new Set((data || []).map((r: { date: string }) => r.date))]
-
+    const bookedDates: string[] = [...new Set((data || []).map((r: any) => r.event_date))]
     return NextResponse.json({ bookedDates })
   } catch {
     return NextResponse.json({ bookedDates: [] })
   }
 }
 
-// POST — private endpoint called by the DJ Gig Manager to sync confirmed gig dates
-// Clears old DJ-side blocks then inserts current confirmed/pending gig dates
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { dates } = await req.json() as { dates: string[] }
+    const supabase = getAdmin()
+    const body = await req.json()
 
-    // Delete only manual blocks — preserve __DJ_GIG__ entries (managed by DJ Gig Manager auto-sync)
-    await supabase
-      .from('booking_requests')
-      .delete()
-      .eq('status', 'dj_blocked')
-      .eq('client_name', '__DJ_BLOCK__')
+    if (body.add) {
+      const { error } = await supabase.from('booking_requests').insert({
+        event_date: body.add,
+        status: 'confirmed',
+        name: '__DJ_BLOCK__',
+        email: 'noreply@maskoffdadj.com',
+        event_type: 'Blocked',
+        created_at: new Date().toISOString(),
+      })
+      if (error) throw error
+      return NextResponse.json({ success: true, synced: 1 })
+    }
 
-    // Insert new blocks for each confirmed/pending gig date
+    const { dates } = body as { dates: string[] }
+    await supabase.from('booking_requests').delete().eq('name', '__DJ_BLOCK__')
+
     if (dates && dates.length > 0) {
       const rows = dates.map((date: string) => ({
-        date,
-        status: 'dj_blocked',
-        client_name: '__DJ_BLOCK__',
-        client_email: 'noreply@maskoffdadj.com',
+        event_date: date,
+        status: 'confirmed',
+        name: '__DJ_BLOCK__',
+        email: 'noreply@maskoffdadj.com',
         event_type: 'Private',
         created_at: new Date().toISOString(),
       }))
-
       await supabase.from('booking_requests').insert(rows)
     }
 

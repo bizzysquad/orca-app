@@ -1,20 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
 
 const BUCKET = 'dj-photos'
 const LS_KEY = 'orca-dj-website-photos'
 
-async function ensureBucket(supabase: any) {
-  const { data: buckets } = await supabase.storage.listBuckets()
+function getAdminClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
+
+async function ensureBucket(admin: any) {
+  const { data: buckets } = await admin.storage.listBuckets()
   const exists = (buckets || []).some((b: any) => b.name === BUCKET)
   if (!exists) {
-    await supabase.storage.createBucket(BUCKET, { public: true, fileSizeLimit: 5242880 })
+    await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: 5242880 })
   }
 }
 
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = getAdminClient()
     const { data: profiles } = await supabase
       .from('profiles')
       .select('local_data')
@@ -30,8 +40,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    await ensureBucket(supabase)
+    const admin = getAdminClient()
+    await ensureBucket(admin)
 
     const formData = await req.formData()
     const file = formData.get('file') as File | null
@@ -47,7 +57,7 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = new Uint8Array(arrayBuffer)
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await admin.storage
       .from(BUCKET)
       .upload(fileName, buffer, {
         contentType: file.type,
@@ -58,14 +68,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 })
     }
 
-    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName)
+    const { data: urlData } = admin.storage.from(BUCKET).getPublicUrl(fileName)
     const publicUrl = urlData?.publicUrl
 
     if (!publicUrl) {
       return NextResponse.json({ error: 'Failed to get public URL' }, { status: 500 })
     }
 
-    const { data: profiles } = await supabase
+    const { data: profiles } = await admin
       .from('profiles')
       .select('id, local_data')
       .limit(1)
@@ -84,7 +94,7 @@ export async function POST(req: NextRequest) {
         photos.push({ slot: 'extra', url: publicUrl, uploadedAt: new Date().toISOString() })
       }
 
-      await supabase
+      await admin
         .from('profiles')
         .update({ local_data: { ...localData, [LS_KEY]: photos } })
         .eq('id', profile.id)

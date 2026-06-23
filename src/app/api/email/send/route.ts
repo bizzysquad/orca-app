@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import nodemailer from 'nodemailer'
 
 function createTransport() {
@@ -14,10 +13,6 @@ function createTransport() {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
     if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
       return NextResponse.json(
         { error: 'Email not configured. Add GMAIL_USER and GMAIL_APP_PASSWORD to environment variables.' },
@@ -26,20 +21,22 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { to, subject, html, text, replyTo } = body
+    const { to, subject, html, text, body: bodyText, replyTo } = body
 
-    if (!to || !subject || (!html && !text)) {
+    const content = html || text || bodyText
+    if (!to || !subject || !content) {
       return NextResponse.json({ error: 'Missing required fields: to, subject, html or text' }, { status: 400 })
     }
 
+    const isHtml = content.includes('<') && content.includes('>')
     const transporter = createTransport()
 
     const info = await transporter.sendMail({
       from: `"Mask Off Da DJ" <${process.env.GMAIL_USER}>`,
       to,
       subject,
-      html: html || `<p>${text}</p>`,
-      text: text || html?.replace(/<[^>]+>/g, ''),
+      html: isHtml ? content : `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.7;font-size:15px;color:#1E293B;">${content}</div>`,
+      text: isHtml ? content.replace(/<[^>]+>/g, '') : content,
       replyTo: replyTo || process.env.GMAIL_USER,
     })
 

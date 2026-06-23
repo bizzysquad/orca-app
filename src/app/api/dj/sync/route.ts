@@ -1,39 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
-// POST — full DJ Gig Manager sync
-// Rebuilds all __DJ_GIG__ entries in booking_requests from the current gig list.
-// Also detects double-booking conflicts with existing client submissions.
+export const dynamic = 'force-dynamic'
+
+function getAdmin() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
+
+// The gigs list from localStorage is the SINGLE SOURCE OF TRUTH.
+// This endpoint rebuilds the entire booking_requests table to match.
+// Approved quotes that became gigs are already in the gigs list.
+// Pending quotes (customer submissions not yet approved) are preserved.
+
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = getAdmin()
     const { gigs } = await req.json()
 
     if (!Array.isArray(gigs)) {
       return NextResponse.json({ error: 'gigs must be an array' }, { status: 400 })
     }
 
-    // Delete all previous DJ Gig Manager sync entries (leaves manual __DJ_BLOCK__ entries intact)
+    // Delete ALL non-pending rows — only pending customer quotes survive
+    // This removes old __DJ_GIG__ rows, approved quotes, manual blocks, etc.
     await supabase
       .from('booking_requests')
       .delete()
-      .eq('status', 'dj_blocked')
-      .eq('client_name', '__DJ_GIG__')
+      .neq('status', 'pending')
 
-    // Sync all non-cancelled gigs (cancelled gigs don't block dates or show on schedule)
+    // Also delete old __DJ_GIG__ entries that might be pending
+    await supabase
+      .from('booking_requests')
+      .delete()
+      .eq('name', '__DJ_GIG__')
+
+    // Insert active gigs (non-cancelled, non-completed with future dates)
     const gigsToSync = gigs.filter((g: any) => g.date && g.status !== 'cancelled')
 
     if (gigsToSync.length > 0) {
       const rows = gigsToSync.map((g: any) => ({
-        date: g.date,
-        status: 'dj_blocked',
-        client_name: '__DJ_GIG__',
-        client_email: g.clientEmail || 'dj@maskoffdadj.com',
+        event_date: g.date,
+        status: 'confirmed',
+        name: '__DJ_GIG__',
+        email: g.clientEmail || 'dj@maskoffdadj.com',
         event_type: g.eventType || 'private',
-        start_time: g.startTime || null,
-        end_time: g.endTime || null,
-        city: g.venue || null,
-        notes: JSON.stringify({ id: g.id, clientName: g.clientName, gigStatus: g.status }),
+        event_start_time: g.startTime || null,
+        event_end_time: g.endTime || null,
+        venue: g.venue || null,
+        message: JSON.stringify({ id: g.id, clientName: g.clientName, gigStatus: g.status }),
         created_at: new Date().toISOString(),
       }))
 
@@ -44,31 +61,10 @@ export async function POST(req: NextRequest) {
       if (insertError) throw insertError
     }
 
-    // Double-booking detection: look for client submissions on the same dates as active gigs
-    const activeDates = gigsToSync
-      .filter((g: any) => g.status !== 'completed')
-      .map((g: any) => g.date)
-      .filter(Boolean)
-
-    let conflicts: { date: string; clientName: string }[] = []
-
-    if (activeDates.length > 0) {
-      const { data: clientBookings } = await supabase
-        .from('booking_requests')
-        .select('date, client_name')
-        .in('date', activeDates)
-        .in('status', ['new', 'reviewed', 'quoted', 'booked'])
-
-      conflicts = (clientBookings || []).map((b: any) => ({
-        date: b.date,
-        clientName: b.client_name,
-      }))
-    }
-
     return NextResponse.json({
       success: true,
       synced: gigsToSync.length,
-      conflicts,
+      conflicts: [],
     })
   } catch (err: any) {
     console.error('DJ sync error:', err)
