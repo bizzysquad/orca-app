@@ -14,7 +14,6 @@ import { useTheme } from '@/context/ThemeContext'
 import { QuickActions } from '@/components/QuickActions'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { createBrowserClient } from '@supabase/ssr'
-import { useEffect } from 'react'
 
 const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'

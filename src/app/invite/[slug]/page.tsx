@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 // ── Helper: same slug logic as Stack Circle page ────────────────────────────
 function toSlug(name: string): string {
@@ -55,7 +56,6 @@ function joinGroupByCode(code: string, slug: string, userName: string): { succes
           },
         ],
       }
-      const { setLocalSynced } = await import('@/lib/syncLocal')
       setLocalSynced('orca-stack-circle-groups', JSON.stringify(groups))
     }
 
