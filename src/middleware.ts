@@ -18,7 +18,8 @@ export async function middleware(request: NextRequest) {
   // Public pages — always accessible without auth
   const isPublicPage =
     pathname.startsWith('/auth/') ||
-    pathname.startsWith('/maskoffdadj')
+    pathname.startsWith('/maskoffdadj') ||
+    pathname.startsWith('/bizzyplug')
   if (isPublicPage) {
     return NextResponse.next()
   }
