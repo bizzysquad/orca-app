@@ -23,6 +23,7 @@ export const SYNC_KEYS = [
   'orca-dj-testimonials',
   'orca-dj-client-db',
   'orca-dj-client-history',
+  'orca-dj-deleted-clients',
   'orca-dj-site-bio',
   'orca-dj-site-services',
   'orca-dj-site-instagram',

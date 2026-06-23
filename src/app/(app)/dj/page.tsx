@@ -709,13 +709,15 @@ function CRMPanel({ gigs, quotes, onBookAgain }: { gigs: DJGig[]; quotes: Bookin
   const { theme } = useTheme()
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
   const [clientDb, setClientDb] = useState<any[]>(() => { try { return JSON.parse(localStorage.getItem('orca-dj-client-db') || '[]') } catch { return [] } })
+  const [deletedKeys, setDeletedKeys] = useState<Set<string>>(() => { try { const raw = localStorage.getItem('orca-dj-deleted-clients'); return raw ? new Set(JSON.parse(raw)) : new Set() } catch { return new Set() } })
   const [showAddClient, setShowAddClient] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>({})
 
   const saveDb = (db: any[]) => { setClientDb(db); try { setLocalSynced('orca-dj-client-db', JSON.stringify(db)) } catch {} }
+  const saveDeletedKeys = (keys: Set<string>) => { setDeletedKeys(keys); try { setLocalSynced('orca-dj-deleted-clients', JSON.stringify([...keys])) } catch {} }
 
-  // Auto-import clients from gigs/quotes into the DB
+  // Auto-import clients from gigs/quotes into the DB (skip deleted ones)
   useMemo(() => {
     let updated = false
     const db = [...clientDb]
@@ -724,7 +726,7 @@ function CRMPanel({ gigs, quotes, onBookAgain }: { gigs: DJGig[]; quotes: Bookin
     gigs.forEach(g => {
       if (!g.clientName) return
       const key = (g.clientEmail || g.clientName).toLowerCase()
-      if (!existingKeys.has(key)) {
+      if (!existingKeys.has(key) && !deletedKeys.has(key)) {
         db.push({ id: gid(), name: g.clientName, email: g.clientEmail || '', phone: g.clientPhone || '', venue: g.venue || '', address: g.eventAddress || '', rate: g.contractAmount || g.fee || 0, deposit: g.depositAmount || 0, eventType: g.eventType || '' })
         existingKeys.add(key)
         updated = true
@@ -733,19 +735,18 @@ function CRMPanel({ gigs, quotes, onBookAgain }: { gigs: DJGig[]; quotes: Bookin
     quotes.forEach(q => {
       if (!q.client_name || q.client_name.startsWith('__')) return
       const key = (q.client_email || q.client_name).toLowerCase()
-      if (!existingKeys.has(key)) {
+      if (!existingKeys.has(key) && !deletedKeys.has(key)) {
         db.push({ id: gid(), name: q.client_name, email: q.client_email || '', phone: q.client_phone || '' })
         existingKeys.add(key)
         updated = true
       }
     })
-    // From history
     try {
       const history = JSON.parse(localStorage.getItem('orca-dj-client-history') || '[]')
       history.forEach((h: any) => {
         if (!h.name) return
         const key = (h.email || h.name).toLowerCase()
-        if (!existingKeys.has(key)) {
+        if (!existingKeys.has(key) && !deletedKeys.has(key)) {
           db.push({ id: gid(), name: h.name, email: h.email || '', phone: h.phone || '' })
           existingKeys.add(key)
           updated = true
@@ -779,6 +780,13 @@ function CRMPanel({ gigs, quotes, onBookAgain }: { gigs: DJGig[]; quotes: Bookin
   }
 
   const deleteClient = (id: string) => {
+    const client = clientDb.find(c => c.id === id)
+    if (client) {
+      const key = (client.email || client.name).toLowerCase()
+      const next = new Set(deletedKeys)
+      next.add(key)
+      saveDeletedKeys(next)
+    }
     saveDb(clientDb.filter(c => c.id !== id))
     setExpandedClient(null)
   }
@@ -1436,11 +1444,22 @@ function AddGigModal({ onAdd, onClose, prefill }: { onAdd: (gig: DJGig) => void;
           </div>
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Event Type</label>
-            <select className={inputCls} style={inputStyle} value={form.eventType || 'private'} onChange={e => f({ eventType: e.target.value as GigType })}>
+            <select className={inputCls} style={inputStyle} value={form.eventType || 'private'} onChange={e => {
+              const val = e.target.value
+              if (val === '__custom__') {
+                f({ eventType: 'other', customEventType: '' })
+              } else {
+                f({ eventType: val as GigType, customEventType: undefined })
+              }
+            }}>
               {(['wedding','birthday','corporate','nightclub','bar','festival','private','other'] as GigType[]).map(t => (
                 <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
               ))}
+              <option value="__custom__">Custom...</option>
             </select>
+            {(form.eventType === 'other' && form.customEventType !== undefined) && (
+              <input className={inputCls} style={{ ...inputStyle, marginTop: 6 }} placeholder="Enter custom event name" value={form.customEventType || ''} onChange={e => f({ customEventType: e.target.value })} />
+            )}
           </div>
         </div>
 
@@ -1453,6 +1472,11 @@ function AddGigModal({ onAdd, onClose, prefill }: { onAdd: (gig: DJGig) => void;
             <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Address</label>
             <input className={inputCls} style={inputStyle} placeholder="Full address" value={form.eventAddress || ''} onChange={e => f({ eventAddress: e.target.value })} />
           </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Ticket Link (optional)</label>
+          <input className={inputCls} style={inputStyle} placeholder="https://tickets.example.com" value={form.ticketLink || ''} onChange={e => f({ ticketLink: e.target.value })} />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -1520,7 +1544,7 @@ export default function DJPage() {
   const [gigs, setGigs] = useState<DJGig[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [rebookClient, setRebookClient] = useState<Partial<DJGig> | null>(null)
-  const [filterStatus, setFilterStatus] = useState<GigStatus | 'all'>('all')
+  const [filterStatus, setFilterStatus] = useState<GigStatus | 'all'>('confirmed')
   const [activeSection, setActiveSection] = useState<'gigs' | 'quotes' | 'requests' | 'crm' | 'email'>('gigs')
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [syncDetail, setSyncDetail] = useState<string | null>(null)

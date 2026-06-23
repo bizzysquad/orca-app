@@ -58,6 +58,19 @@ interface Gig {
   venue: string
   city: string
   eventType: string
+  customEventType?: string
+  startTime?: string
+  endTime?: string
+  ticketLink?: string
+}
+
+function to12Hour(time: string): string {
+  if (!time) return ''
+  const [h, m] = time.split(':').map(Number)
+  if (isNaN(h)) return time
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour = h % 12 || 12
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -235,7 +248,10 @@ export default function MaskOffDJPage() {
             date: g.date,
             venue: g.venue || '',
             city: g.city || '',
-            eventType: g.eventType || g.event_type || '',
+            eventType: g.customEventType || g.eventType || g.event_type || '',
+            startTime: g.startTime || g.start_time || '',
+            endTime: g.endTime || g.end_time || '',
+            ticketLink: g.ticketLink || '',
           }))
         setUpcomingGigs(gigs)
       } catch {}
@@ -635,6 +651,18 @@ export default function MaskOffDJPage() {
                       <div style={{ fontSize: 16, fontWeight: 700, color: C.white }}>
                         {g.eventType || 'Private Event'}
                       </div>
+                      {(g.startTime || g.endTime) && (
+                        <div style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: C.gold,
+                          marginTop: 4,
+                          textTransform: 'uppercase' as const,
+                          letterSpacing: '0.05em',
+                        }}>
+                          {to12Hour(g.startTime || '')}{g.endTime ? ` — ${to12Hour(g.endTime)}` : ''}
+                        </div>
+                      )}
                       {(g.venue || g.city) && (
                         <div style={{
                           fontSize: 13,
@@ -649,16 +677,38 @@ export default function MaskOffDJPage() {
                         </div>
                       )}
                     </div>
-                    <div style={{
-                      padding: '5px 14px',
-                      borderRadius: 100,
-                      border: `1px solid ${C.gold}`,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: C.gold,
-                      letterSpacing: '0.06em',
-                    }}>
-                      BOOKED
+                    <div style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'flex-end', gap: 6 }}>
+                      <div style={{
+                        padding: '5px 14px',
+                        borderRadius: 100,
+                        border: `1px solid ${C.gold}`,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: C.gold,
+                        letterSpacing: '0.06em',
+                      }}>
+                        BOOKED
+                      </div>
+                      {g.ticketLink && (
+                        <a
+                          href={g.ticketLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            padding: '4px 12px',
+                            borderRadius: 100,
+                            backgroundColor: C.gold,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: C.white,
+                            textDecoration: 'none',
+                            letterSpacing: '0.06em',
+                          }}
+                        >
+                          TICKETS
+                        </a>
+                      )}
                     </div>
                   </div>
                 )

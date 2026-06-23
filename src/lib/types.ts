@@ -550,7 +550,7 @@ export interface Business {
 
 // ── DJ Gigs ──
 export type GigStatus = 'inquiry' | 'pending' | 'confirmed' | 'completed' | 'cancelled'
-export type GigType = 'wedding' | 'birthday' | 'corporate' | 'nightclub' | 'bar' | 'festival' | 'private' | 'other'
+export type GigType = 'wedding' | 'birthday' | 'corporate' | 'nightclub' | 'bar' | 'festival' | 'private' | 'other' | (string & {})
 
 export interface DJPartialPayment {
   id: string
@@ -565,6 +565,8 @@ export interface DJGig {
   clientEmail?: string
   clientPhone?: string
   eventType: GigType
+  customEventType?: string
+  ticketLink?: string
   date: string
   startTime: string
   endTime: string
