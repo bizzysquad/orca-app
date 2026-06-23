@@ -136,6 +136,31 @@ export default function BizzyPlugPage() {
   const [editClientId, setEditClientId] = useState<string | null>(null)
   const [clientForm, setClientForm] = useState<Partial<BizClientProfile>>({})
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
+  const [portfolioPhotos, setPortfolioPhotos] = useState<{ id: string; url: string; title: string; category: string }[]>([])
+  const [uploadingPortfolio, setUploadingPortfolio] = useState(false)
+  const [newPhotoTitle, setNewPhotoTitle] = useState('')
+  const [newPhotoCategory, setNewPhotoCategory] = useState('album-covers')
+
+  const loadPortfolio = useCallback(async () => {
+    try { const res = await fetch('/api/bizzyplug/photos'); if (res.ok) { const d = await res.json(); setPortfolioPhotos(d.photos || []) } } catch {}
+  }, [])
+
+  const uploadPortfolioPhoto = async (file: File) => {
+    setUploadingPortfolio(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('title', newPhotoTitle || file.name.replace(/\.[^.]+$/, ''))
+      fd.append('category', newPhotoCategory)
+      const res = await fetch('/api/bizzyplug/photos', { method: 'POST', body: fd })
+      if (res.ok) { await loadPortfolio(); setNewPhotoTitle('') }
+    } catch {}
+    setUploadingPortfolio(false)
+  }
+
+  const deletePortfolioPhoto = async (id: string) => {
+    try { await fetch('/api/bizzyplug/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); setPortfolioPhotos(p => p.filter(x => x.id !== id)) } catch {}
+  }
 
   useEffect(() => {
     try { const s = localStorage.getItem('orca-bizzplug-clients'); if (s) setProjects(JSON.parse(s)) } catch {}
@@ -213,6 +238,7 @@ export default function BizzyPlugPage() {
   }, [])
 
   useEffect(() => { if (activeTab === 'inbox') loadSubmissions() }, [activeTab, loadSubmissions])
+  useEffect(() => { if (activeTab === 'website') loadPortfolio() }, [activeTab, loadPortfolio])
 
   const saveSiteSettings = async () => {
     const payload = { ...siteSettings, services }
@@ -532,6 +558,47 @@ export default function BizzyPlugPage() {
                 <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>About Text</label>
                 <textarea rows={3} value={siteSettings.aboutText || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, aboutText: e.target.value }))}
                   className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} placeholder="Bizzyplug is more than a design studio..." />
+              </div>
+            </div>
+
+            {/* Portfolio Photos */}
+            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Portfolio Photos</p>
+              {portfolioPhotos.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {portfolioPhotos.map(p => (
+                    <div key={p.id} className="relative group rounded-xl overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
+                      <img src={p.url} alt={p.title} style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
+                      <div className="absolute inset-0 flex items-end" style={{ background: 'linear-gradient(transparent 40%, rgba(0,0,0,0.8))' }}>
+                        <div className="p-2 w-full flex items-end justify-between">
+                          <div>
+                            <p className="text-[10px] font-bold text-white truncate">{p.title}</p>
+                            <p className="text-[9px] capitalize" style={{ color: '#94A3B8' }}>{p.category.replace('-', ' ')}</p>
+                          </div>
+                          <button onClick={() => deletePortfolioPhoto(p.id)} className="p-1 rounded-lg shrink-0" style={{ backgroundColor: '#EF444440' }}>
+                            <Trash2 size={11} style={{ color: '#EF4444' }} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input className={inputCls} style={inputStyle} placeholder="Photo title" value={newPhotoTitle} onChange={e => setNewPhotoTitle(e.target.value)} />
+                  <select className={inputCls} style={inputStyle} value={newPhotoCategory} onChange={e => setNewPhotoCategory(e.target.value)}>
+                    <option value="album-covers">Album Covers</option>
+                    <option value="logos">Logos</option>
+                    <option value="flyers">Flyers</option>
+                    <option value="websites">Websites</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer" style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40` }}>
+                  {uploadingPortfolio ? <><RefreshCw size={14} className="animate-spin" /> Uploading...</> : <><Plus size={14} /> Upload Photo</>}
+                  <input type="file" accept="image/*" className="hidden" disabled={uploadingPortfolio} onChange={e => { const f = e.target.files?.[0]; if (f) uploadPortfolioPhoto(f); e.target.value = '' }} />
+                </label>
               </div>
             </div>
 

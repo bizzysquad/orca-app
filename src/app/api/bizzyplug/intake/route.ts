@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const {
       name, artistName, email, phone, instagram,
       projectType, songName, tracklist, details,
-      deadline, notes,
+      deadline, notes, referenceUrls,
     } = body
 
     if (!artistName || !email) {
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       tracklist: tracklist || '',
       details: details || '',
       notes: notes || '',
+      referenceUrls: referenceUrls || [],
     })
 
     const row = {

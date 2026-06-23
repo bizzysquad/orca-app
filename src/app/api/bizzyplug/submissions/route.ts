@@ -39,6 +39,7 @@ export async function GET() {
         tracklist: parsed.tracklist || '',
         details: parsed.details || '',
         notes: parsed.notes || '',
+        referenceUrls: parsed.referenceUrls || [],
         deadline: r.event_date || '',
         status: r.status || 'pending',
         createdAt: r.created_at || '',

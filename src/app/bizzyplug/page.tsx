@@ -69,12 +69,17 @@ export default function BizzyPlugPublicPage() {
   const [mobileNav, setMobileNav] = useState(false)
   const [portfolioFilter, setPortfolioFilter] = useState('all')
   const [form, setForm] = useState({ artistName: '', email: '', instagram: '', projectType: '', songName: '', tracklist: '', details: '', deadline: '', notes: '' })
+  const [refFiles, setRefFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [portfolioPhotos, setPortfolioPhotos] = useState<{ id: string; url: string; title: string; category: string }[]>([])
 
   useEffect(() => {
     fetch('/api/bizzyplug/site-settings', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
       if (d?.settings) { setSiteSettings(d.settings); if (d.settings.services?.length > 0) setServices(d.settings.services) }
+    }).catch(() => {})
+    fetch('/api/bizzyplug/photos', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.photos?.length > 0) setPortfolioPhotos(d.photos)
     }).catch(() => {})
   }, [])
 
@@ -83,7 +88,17 @@ export default function BizzyPlugPublicPage() {
   const handleSubmit = async () => {
     if (!form.artistName || !form.email) return
     setSubmitting(true)
-    try { const res = await fetch('/api/bizzyplug/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); if (res.ok) { setSubmitted(true); setForm({ artistName: '', email: '', instagram: '', projectType: '', songName: '', tracklist: '', details: '', deadline: '', notes: '' }) } } catch {}
+    try {
+      let referenceUrls: string[] = []
+      if (refFiles.length > 0) {
+        const fd = new FormData()
+        refFiles.forEach(f => fd.append('files', f))
+        const upRes = await fetch('/api/bizzyplug/reference-upload', { method: 'POST', body: fd })
+        if (upRes.ok) { const d = await upRes.json(); referenceUrls = d.urls || [] }
+      }
+      const res = await fetch('/api/bizzyplug/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, referenceUrls }) })
+      if (res.ok) { setSubmitted(true); setForm({ artistName: '', email: '', instagram: '', projectType: '', songName: '', tracklist: '', details: '', deadline: '', notes: '' }); setRefFiles([]) }
+    } catch {}
     setSubmitting(false)
   }
 
@@ -91,7 +106,8 @@ export default function BizzyPlugPublicPage() {
   const paypalLink = siteSettings.paypalEmail ? `https://paypal.me/${siteSettings.paypalEmail}` : 'https://paypal.me/buzyplug'
   const venmoLink = siteSettings.venmoHandle ? `https://venmo.com/${siteSettings.venmoHandle.replace('@', '')}` : 'https://venmo.com/Buzyplug'
 
-  const filteredPortfolio = portfolioFilter === 'all' ? PORTFOLIO_ITEMS : PORTFOLIO_ITEMS.filter(p => p.tag === portfolioFilter)
+  const displayPortfolio = portfolioPhotos.length > 0 ? portfolioPhotos : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
+  const filteredPortfolio = portfolioFilter === 'all' ? displayPortfolio : displayPortfolio.filter(p => p.category === portfolioFilter)
 
   const NAV_LINKS = [
     { label: 'Home', id: 'hero' }, { label: 'About', id: 'about' }, { label: 'Services', id: 'services' },
@@ -195,14 +211,18 @@ export default function BizzyPlugPublicPage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20 }}>
             {filteredPortfolio.map((item, i) => (
-              <div key={i} style={{ borderRadius: 14, overflow: 'hidden', backgroundColor: C.bgCard, border: `1px solid ${C.border}` }}>
-                <div style={{ height: 200, backgroundColor: `${C.purpleDim}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Sparkles size={40} style={{ color: C.purpleDim, opacity: 0.4 }} />
-                </div>
+              <div key={item.id || i} style={{ borderRadius: 14, overflow: 'hidden', backgroundColor: C.bgCard, border: `1px solid ${C.border}` }}>
+                {item.url ? (
+                  <img src={item.url} alt={item.title} style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />
+                ) : (
+                  <div style={{ height: 200, backgroundColor: `${C.purpleDim}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Sparkles size={40} style={{ color: C.purpleDim, opacity: 0.4 }} />
+                  </div>
+                )}
                 <div style={{ padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 2px' }}>{item.title}</p>
-                    <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{item.client}</p>
+                    <p style={{ fontSize: 12, color: C.muted, margin: 0, textTransform: 'capitalize' }}>{item.category.replace('-', ' ')}</p>
                   </div>
                   <PenTool size={14} style={{ color: C.muted }} />
                 </div>
@@ -328,6 +348,23 @@ export default function BizzyPlugPublicPage() {
                 <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Song / Project Name</label><input style={inputStyle} placeholder="Song title or project name" value={form.songName} onChange={e => setForm(f => ({ ...f, songName: e.target.value }))} /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Project Details</label><textarea style={{ ...inputStyle, minHeight: 100, resize: 'vertical' as const }} placeholder="Describe your vision, style references, colors, text to include..." value={form.details} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Notes</label><textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' as const }} placeholder="Anything else?" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Reference Photos (optional)</label>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 0', borderRadius: 10, border: `1.5px dashed ${C.border}`, backgroundColor: `${C.purple}08`, cursor: 'pointer', fontSize: 13, color: C.mutedLight }}>
+                    <Image size={16} style={{ color: C.purple }} /> {refFiles.length > 0 ? `${refFiles.length} file${refFiles.length > 1 ? 's' : ''} selected` : 'Upload reference images, inspiration, or examples'}
+                    <input type="file" accept="image/*" multiple className="hidden" style={{ display: 'none' }} onChange={e => { if (e.target.files) setRefFiles(Array.from(e.target.files)); }} />
+                  </label>
+                  {refFiles.length > 0 && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                      {refFiles.map((f, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, backgroundColor: C.bgCard, border: `1px solid ${C.border}`, fontSize: 11, color: C.mutedLight }}>
+                          {f.name.length > 20 ? f.name.slice(0, 17) + '...' : f.name}
+                          <button onClick={() => setRefFiles(refFiles.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 0 }}><X size={12} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <button onClick={handleSubmit} disabled={submitting || !form.artistName || !form.email} style={{
                 width: '100%', marginTop: 20, padding: '16px 0', borderRadius: 10,
