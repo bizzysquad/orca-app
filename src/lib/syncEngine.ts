@@ -14,6 +14,7 @@ export const SYNC_KEYS = [
   // Income sources
   'orca-lyft-sessions',
   'orca-bizzplug-clients',
+  'orca-bizzplug-client-db',
   'orca-bizzplug-site-settings',
   'orca-bizzplug-projects',
   // DJ

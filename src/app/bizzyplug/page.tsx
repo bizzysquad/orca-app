@@ -74,7 +74,7 @@ export default function BizzyPlugPublicPage() {
   }, [])
 
   const handleSubmit = async () => {
-    if (!form.name || !form.email) return
+    if (!form.artistName || !form.email) return
     setSubmitting(true)
     try {
       const res = await fetch('/api/bizzyplug/intake', {
@@ -225,25 +225,17 @@ export default function BizzyPlugPublicPage() {
           ) : (
             <div style={{ backgroundColor: C.card, borderRadius: 20, padding: 28, border: `1px solid ${C.border}` }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Your Name *</label>
-                  <input style={inputStyle} placeholder="Full name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-                </div>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Artist / Brand Name</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Artist / Brand Name *</label>
                   <input style={inputStyle} placeholder="Artist or brand name" value={form.artistName} onChange={e => setForm(f => ({ ...f, artistName: e.target.value }))} />
                 </div>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Instagram</label>
                   <input style={inputStyle} placeholder="@yourhandle" value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} />
                 </div>
-                <div>
+                <div style={{ gridColumn: '1 / -1' }}>
                   <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Email *</label>
                   <input style={inputStyle} type="email" placeholder="you@email.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Phone</label>
-                  <input style={inputStyle} type="tel" placeholder="(555) 000-0000" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
                 </div>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Service Needed</label>
@@ -276,11 +268,11 @@ export default function BizzyPlugPublicPage() {
 
               <button
                 onClick={handleSubmit}
-                disabled={submitting || !form.name || !form.email}
+                disabled={submitting || !form.artistName || !form.email}
                 style={{
                   width: '100%', marginTop: 20, padding: '16px 0', borderRadius: 12,
-                  backgroundColor: (!form.name || !form.email) ? C.border : C.purple,
-                  color: C.white, border: 'none', cursor: (!form.name || !form.email) ? 'default' : 'pointer',
+                  backgroundColor: (!form.artistName || !form.email) ? C.border : C.purple,
+                  color: C.white, border: 'none', cursor: (!form.artistName || !form.email) ? 'default' : 'pointer',
                   fontSize: 16, fontWeight: 800,
                   opacity: submitting ? 0.6 : 1,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
