@@ -73,10 +73,19 @@ export default function BizzyPlugPublicPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ id: string; url: string; title: string; category: string }[]>([])
+  const [portfolioCategories, setPortfolioCategories] = useState<{ label: string; val: string }[]>([
+    { label: 'Album Covers', val: 'album-covers' }, { label: 'Logos', val: 'logos' }, { label: 'Flyers', val: 'flyers' }, { label: 'Websites', val: 'websites' },
+  ])
 
   useEffect(() => {
     fetch('/api/bizzyplug/site-settings', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.settings) { setSiteSettings(d.settings); if (d.settings.services?.length > 0) setServices(d.settings.services) }
+      if (d?.settings) {
+        setSiteSettings(d.settings)
+        if (d.settings.services?.length > 0) setServices(d.settings.services)
+        if (d.settings.portfolioCategories?.length > 0) {
+          setPortfolioCategories(d.settings.portfolioCategories.map((c: string) => ({ label: c.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), val: c })))
+        }
+      }
     }).catch(() => {})
     fetch('/api/bizzyplug/photos', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
       if (d?.photos?.length > 0) setPortfolioPhotos(d.photos)
@@ -201,7 +210,7 @@ export default function BizzyPlugPublicPage() {
               <h2 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Our Latest Creations</h2>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {[{ label: 'All', val: 'all' }, { label: 'Album Covers', val: 'album-covers' }, { label: 'Logos', val: 'logos' }, { label: 'Flyers', val: 'flyers' }, { label: 'Websites', val: 'websites' }].map(f => (
+              {[{ label: 'All', val: 'all' }, ...portfolioCategories].map(f => (
                 <button key={f.val} onClick={() => setPortfolioFilter(f.val)}
                   style={{ padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: portfolioFilter === f.val ? 'none' : `1px solid ${C.border}`, backgroundColor: portfolioFilter === f.val ? C.purple : 'transparent', color: portfolioFilter === f.val ? C.white : C.mutedLight }}>
                   {f.label}

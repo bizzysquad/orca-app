@@ -72,6 +72,53 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  try {
+    const admin = getAdmin()
+    const formData = await req.formData()
+    const id = formData.get('id') as string
+    if (!id) return NextResponse.json({ error: 'No id' }, { status: 400 })
+
+    const { data: profiles } = await admin.from('profiles').select('id, local_data').limit(1)
+    const profile = profiles?.[0]
+    if (!profile) return NextResponse.json({ error: 'No profile' }, { status: 404 })
+
+    const localData = (profile.local_data as Record<string, any>) || {}
+    const photos: any[] = localData[LS_KEY] || []
+    const idx = photos.findIndex((p: any) => p.id === id)
+    if (idx === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const photo = { ...photos[idx] }
+    const file = formData.get('file') as File | null
+
+    if (file) {
+      await ensureBucket(admin)
+      if (photo.fileName) await admin.storage.from(BUCKET).remove([photo.fileName])
+      const ext = file.name.split('.').pop() || 'jpg'
+      const fileName = `portfolio-${Date.now()}.${ext}`
+      const buffer = new Uint8Array(await file.arrayBuffer())
+      const { error: uploadError } = await admin.storage
+        .from(BUCKET)
+        .upload(fileName, buffer, { contentType: file.type, upsert: true })
+      if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
+      const { data: urlData } = admin.storage.from(BUCKET).getPublicUrl(fileName)
+      photo.url = urlData?.publicUrl
+      photo.fileName = fileName
+    }
+
+    const title = formData.get('title') as string | null
+    const category = formData.get('category') as string | null
+    if (title !== null) photo.title = title
+    if (category !== null) photo.category = category
+
+    photos[idx] = photo
+    await admin.from('profiles').update({ local_data: { ...localData, [LS_KEY]: photos } }).eq('id', profile.id)
+    return NextResponse.json({ ok: true, photo })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const { id } = await req.json()

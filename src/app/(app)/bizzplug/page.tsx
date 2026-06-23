@@ -16,6 +16,10 @@ const BIZ_PURPLE = '#9333EA'
 const BIZ_GOLD = '#F59E0B'
 
 function gid() { return Math.random().toString(36).slice(2, 10) }
+function fmtCat(s: string) { return s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') }
+function slugCat(s: string) { return s.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }
+
+const DEFAULT_CATEGORIES = ['album-covers', 'logos', 'flyers', 'websites', 'other']
 
 type ProjectStatus = 'new-lead' | 'completed'
 
@@ -142,6 +146,13 @@ export default function BizzyPlugPage() {
   const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [newPhotoTitle, setNewPhotoTitle] = useState('')
   const [newPhotoCategory, setNewPhotoCategory] = useState('album-covers')
+  const [portfolioCategories, setPortfolioCategories] = useState<string[]>(DEFAULT_CATEGORIES)
+  const [adminPortfolioFilter, setAdminPortfolioFilter] = useState('all')
+  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null)
+  const [editPhotoTitle, setEditPhotoTitle] = useState('')
+  const [editPhotoCategory, setEditPhotoCategory] = useState('')
+  const [newCatName, setNewCatName] = useState('')
+  const [showCatManager, setShowCatManager] = useState(false)
 
   const loadPortfolio = useCallback(async () => {
     try { const res = await fetch('/api/bizzyplug/photos'); if (res.ok) { const d = await res.json(); setPortfolioPhotos(d.photos || []) } } catch {}
@@ -188,6 +199,25 @@ export default function BizzyPlugPage() {
     try { await fetch('/api/bizzyplug/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); setPortfolioPhotos(p => p.filter(x => x.id !== id)) } catch {}
   }
 
+  const updatePhoto = async (id: string, updates: { title?: string; category?: string; file?: File }) => {
+    const fd = new FormData()
+    fd.append('id', id)
+    if (updates.title !== undefined) fd.append('title', updates.title)
+    if (updates.category !== undefined) fd.append('category', updates.category)
+    if (updates.file) fd.append('file', updates.file)
+    try {
+      const res = await fetch('/api/bizzyplug/photos', { method: 'PATCH', body: fd })
+      if (res.ok) await loadPortfolio()
+    } catch {}
+    setEditingPhotoId(null)
+  }
+
+  const startEditPhoto = (p: { id: string; title: string; category: string }) => {
+    setEditingPhotoId(p.id); setEditPhotoTitle(p.title); setEditPhotoCategory(p.category)
+  }
+
+  const filteredAdminPhotos = adminPortfolioFilter === 'all' ? portfolioPhotos : portfolioPhotos.filter(p => p.category === adminPortfolioFilter)
+
   useEffect(() => {
     try { const s = localStorage.getItem('orca-bizzplug-clients'); if (s) setProjects(JSON.parse(s)) } catch {}
     try { const c = localStorage.getItem('orca-bizzplug-client-db'); if (c) setClientDb(JSON.parse(c)) } catch {}
@@ -196,6 +226,7 @@ export default function BizzyPlugPage() {
       if (ss) {
         const parsed = JSON.parse(ss)
         if (parsed.services?.length > 0) setServices(parsed.services)
+        if (parsed.portfolioCategories?.length > 0) setPortfolioCategories(parsed.portfolioCategories)
         setSiteSettings((s: any) => ({ ...s, ...parsed }))
       }
     } catch {}
@@ -267,7 +298,7 @@ export default function BizzyPlugPage() {
   useEffect(() => { if (activeTab === 'website') loadPortfolio() }, [activeTab, loadPortfolio])
 
   const saveSiteSettings = async () => {
-    const payload = { ...siteSettings, services }
+    const payload = { ...siteSettings, services, portfolioCategories }
     try { setLocalSynced('orca-bizzplug-site-settings', JSON.stringify(payload)) } catch {}
     try { await fetch('/api/bizzyplug/site-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) } catch {}
     setSiteSaved(true)
@@ -589,36 +620,102 @@ export default function BizzyPlugPage() {
 
             {/* Portfolio Photos */}
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Portfolio Photos</p>
-              {portfolioPhotos.length > 0 && (
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Portfolio Photos</p>
+                <button onClick={() => setShowCatManager(!showCatManager)} className="text-[10px] font-bold px-2 py-1 rounded-lg"
+                  style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
+                  {showCatManager ? 'Done' : 'Manage Categories'}
+                </button>
+              </div>
+
+              {showCatManager && (
+                <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                  <div className="flex flex-wrap gap-2">
+                    {portfolioCategories.map(cat => (
+                      <div key={cat} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
+                        {fmtCat(cat)}
+                        <button onClick={() => setPortfolioCategories(c => c.filter(x => x !== cat))} className="ml-0.5" style={{ color: '#EF4444' }}><X size={10} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input className={inputCls} style={{ ...inputStyle, fontSize: 11 }} placeholder="New category name" value={newCatName} onChange={e => setNewCatName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && newCatName.trim()) { const slug = slugCat(newCatName); if (slug && !portfolioCategories.includes(slug)) { setPortfolioCategories(c => [...c, slug]); setNewCatName('') } } }} />
+                    <button onClick={() => { const slug = slugCat(newCatName); if (slug && !portfolioCategories.includes(slug)) { setPortfolioCategories(c => [...c, slug]); setNewCatName('') } }}
+                      className="px-3 py-1.5 rounded-xl text-[10px] font-bold shrink-0" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>+ Add</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-1.5 flex-wrap">
+                <button onClick={() => setAdminPortfolioFilter('all')}
+                  className="px-2.5 py-1 rounded-full text-[10px] font-bold"
+                  style={{ backgroundColor: adminPortfolioFilter === 'all' ? BIZ_PURPLE : theme.bg, color: adminPortfolioFilter === 'all' ? '#fff' : theme.textM, border: `1px solid ${adminPortfolioFilter === 'all' ? BIZ_PURPLE : theme.border}` }}>
+                  All ({portfolioPhotos.length})
+                </button>
+                {portfolioCategories.map(cat => {
+                  const count = portfolioPhotos.filter(p => p.category === cat).length
+                  return (
+                    <button key={cat} onClick={() => setAdminPortfolioFilter(cat)}
+                      className="px-2.5 py-1 rounded-full text-[10px] font-bold"
+                      style={{ backgroundColor: adminPortfolioFilter === cat ? BIZ_PURPLE : theme.bg, color: adminPortfolioFilter === cat ? '#fff' : theme.textM, border: `1px solid ${adminPortfolioFilter === cat ? BIZ_PURPLE : theme.border}` }}>
+                      {fmtCat(cat)} ({count})
+                    </button>
+                  )
+                })}
+              </div>
+
+              {filteredAdminPhotos.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {portfolioPhotos.map(p => (
-                    <div key={p.id} className="relative group rounded-xl overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
-                      <img src={p.url} alt={p.title} style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
-                      <div className="absolute inset-0 flex items-end" style={{ background: 'linear-gradient(transparent 40%, rgba(0,0,0,0.8))' }}>
-                        <div className="p-2 w-full flex items-end justify-between">
-                          <div>
-                            <p className="text-[10px] font-bold text-white truncate">{p.title}</p>
-                            <p className="text-[9px] capitalize" style={{ color: '#94A3B8' }}>{p.category.replace('-', ' ')}</p>
+                  {filteredAdminPhotos.map(p => (
+                    <div key={p.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
+                      <div className="relative">
+                        <img src={p.url} alt={p.title} style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
+                        <div className="absolute inset-0 flex items-end" style={{ background: 'linear-gradient(transparent 40%, rgba(0,0,0,0.8))' }}>
+                          <div className="p-2 w-full flex items-end justify-between">
+                            <div className="min-w-0 flex-1 mr-1">
+                              <p className="text-[10px] font-bold text-white truncate">{p.title}</p>
+                              <p className="text-[9px]" style={{ color: '#94A3B8' }}>{fmtCat(p.category)}</p>
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <button onClick={() => startEditPhoto(p)} className="p-1 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}60` }}>
+                                <Edit3 size={10} style={{ color: '#fff' }} />
+                              </button>
+                              <label className="p-1 rounded-lg cursor-pointer" style={{ backgroundColor: '#3B82F640' }}>
+                                <RefreshCw size={10} style={{ color: '#93C5FD' }} />
+                                <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) updatePhoto(p.id, { file: f }); e.target.value = '' }} />
+                              </label>
+                              <button onClick={() => deletePortfolioPhoto(p.id)} className="p-1 rounded-lg" style={{ backgroundColor: '#EF444440' }}>
+                                <Trash2 size={10} style={{ color: '#EF4444' }} />
+                              </button>
+                            </div>
                           </div>
-                          <button onClick={() => deletePortfolioPhoto(p.id)} className="p-1 rounded-lg shrink-0" style={{ backgroundColor: '#EF444440' }}>
-                            <Trash2 size={11} style={{ color: '#EF4444' }} />
-                          </button>
                         </div>
                       </div>
+                      {editingPhotoId === p.id && (
+                        <div className="p-2 space-y-1.5" style={{ backgroundColor: theme.bg }}>
+                          <input className={inputCls} style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }} value={editPhotoTitle} onChange={e => setEditPhotoTitle(e.target.value)} placeholder="Title" />
+                          <select className={inputCls} style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }} value={editPhotoCategory} onChange={e => setEditPhotoCategory(e.target.value)}>
+                            {portfolioCategories.map(c => <option key={c} value={c}>{fmtCat(c)}</option>)}
+                          </select>
+                          <div className="flex gap-1.5">
+                            <button onClick={() => updatePhoto(p.id, { title: editPhotoTitle, category: editPhotoCategory })}
+                              className="flex-1 py-1.5 rounded-lg text-[10px] font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>Save</button>
+                            <button onClick={() => setEditingPhotoId(null)}
+                              className="flex-1 py-1.5 rounded-lg text-[10px] font-bold" style={{ backgroundColor: theme.border, color: theme.textM }}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
+
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <input className={inputCls} style={inputStyle} placeholder="Photo title (optional)" value={newPhotoTitle} onChange={e => setNewPhotoTitle(e.target.value)} />
                   <select className={inputCls} style={inputStyle} value={newPhotoCategory} onChange={e => setNewPhotoCategory(e.target.value)}>
-                    <option value="album-covers">Album Covers</option>
-                    <option value="logos">Logos</option>
-                    <option value="flyers">Flyers</option>
-                    <option value="websites">Websites</option>
-                    <option value="other">Other</option>
+                    {portfolioCategories.map(c => <option key={c} value={c}>{fmtCat(c)}</option>)}
                   </select>
                 </div>
                 <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer" style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40`, opacity: uploadingPortfolio ? 0.6 : 1 }}>
