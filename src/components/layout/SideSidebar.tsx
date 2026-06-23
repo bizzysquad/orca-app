@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, DollarSign, Briefcase, Activity,
   X, CreditCard, Star, Mic2, Palette, ChevronDown, ChevronRight, Building2,
+  CheckSquare,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '@/context/ThemeContext'
@@ -46,6 +47,7 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   { id: 'life', name: 'Life', icon: Activity, href: '/fitness', accent: '#EC4899' },
+  { id: 'task-list', name: 'Task List', icon: CheckSquare, href: '/task-list', accent: BENTLEY_INDIGO },
 ]
 
 interface SideSidebarProps {
@@ -64,6 +66,7 @@ export default function SideSidebar({ open, onClose, userName }: SideSidebarProp
     if (item.id === 'finances') return pathname.startsWith('/bill-boss') || pathname.startsWith('/smart-stack')
     if (item.id === 'work') return pathname.startsWith('/work') || pathname.startsWith('/dj') || pathname.startsWith('/bizzplug')
     if (item.id === 'life') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery')
+    if (item.id === 'task-list') return pathname.startsWith('/task-list')
     return pathname.startsWith(item.href)
   }
 

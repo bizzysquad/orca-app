@@ -7,6 +7,7 @@ import {
   Check, DollarSign, Calendar,
   Mic2, Flame, Scale,
   ChevronLeft, ChevronRight, Target, Loader2,
+  CheckSquare, Circle,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -337,6 +338,8 @@ export default function DashboardPage() {
   const [currentWeight, setCurrentWeight] = useState(159)
   // Checking balance
   const [checkingBalance, setCheckingBalance] = useState(0)
+  // Tasks
+  const [tasks, setTasks] = useState<{ id: string; text: string; completed: boolean; priority: string; starred: boolean; category: string }[]>([])
   // Raw income source data (synced with Smart Stack)
   const [lyftSessions, setLyftSessions] = useState<any[]>([])
   const [djGigsList, setDjGigsList] = useState<any[]>([])
@@ -420,6 +423,10 @@ export default function DashboardPage() {
     try {
       const biz = localStorage.getItem('orca-bizzplug-clients')
       if (biz) setBizzplugClientsList(JSON.parse(biz))
+    } catch {}
+    try {
+      const t = localStorage.getItem('orca-tasks')
+      if (t) setTasks(JSON.parse(t))
     } catch {}
     // Check for new quote requests
     fetch('/api/dj/bookings').then(r => r.ok ? r.json() : null).then(d => {
@@ -744,6 +751,50 @@ export default function DashboardPage() {
     )
   }
 
+  const PRIORITY_COLORS: Record<string, string> = { high: '#EF4444', medium: '#F59E0B', low: '#10B981' }
+
+  const TaskListWidget = () => {
+    const incomplete = tasks.filter(t => !t.completed)
+    const starred = incomplete.filter(t => t.starred)
+    const display = starred.length > 0 ? starred : incomplete
+    const shown = display.slice(0, 5)
+    const totalIncomplete = incomplete.length
+
+    return (
+      <Link href="/task-list">
+        <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={14} style={{ color: BENTLEY_INDIGO }} />
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Task List</span>
+            </div>
+            {totalIncomplete > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${BENTLEY_INDIGO}18`, color: BENTLEY_INDIGO }}>
+                {totalIncomplete}
+              </span>
+            )}
+          </div>
+          {shown.length > 0 ? (
+            <div className="space-y-1.5">
+              {shown.map(t => (
+                <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ backgroundColor: `${BENTLEY_INDIGO}08` }}>
+                  <Circle size={12} style={{ color: PRIORITY_COLORS[t.priority] || BENTLEY_INDIGO }} />
+                  <span className="text-sm truncate flex-1" style={{ color: theme.text }}>{t.text}</span>
+                  {t.starred && <span className="text-[10px]">⭐</span>}
+                </div>
+              ))}
+              {totalIncomplete > 5 && (
+                <p className="text-[10px] text-center pt-1" style={{ color: theme.subtext }}>+{totalIncomplete - 5} more</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-center py-3" style={{ color: theme.subtext }}>No tasks yet — tap to add</p>
+          )}
+        </div>
+      </Link>
+    )
+  }
+
   const UpcomingGigsList = () => upcomingGigs.length === 0 ? null : (
     <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
       <div className="flex items-center gap-2 mb-3">
@@ -802,6 +853,7 @@ export default function DashboardPage() {
             </div>
             <DayDetail date={selectedDate} bills={bills} gigs={gigs} priorities={selectedPriorities} onTogglePriority={handleTogglePriority} onAddPriority={handleAddPriority} onDeletePriority={handleDeletePriority} />
           </motion.div>
+          <motion.div variants={fadeUp}><TaskListWidget /></motion.div>
           <motion.div variants={fadeUp}><FitnessBar /></motion.div>
           <motion.div variants={fadeUp}><MonthlyIncome /></motion.div>
         </motion.div>
@@ -850,6 +902,7 @@ export default function DashboardPage() {
 
             {/* Right column */}
             <motion.div variants={fadeUp} className="space-y-4">
+              <TaskListWidget />
               <FitnessBar />
               <MonthlyIncome />
               <UpcomingGigsList />
