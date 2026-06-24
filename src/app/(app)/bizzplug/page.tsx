@@ -162,7 +162,7 @@ export default function BizzyPlugPage() {
     setUploadingPortfolio(true)
     setUploadStatus(null)
     setUploadProgress({ current: 0, total: files.length })
-    let succeeded = 0
+    const uploadedPhotos: any[] = []
     let failed = 0
 
     for (let i = 0; i < files.length; i++) {
@@ -176,10 +176,17 @@ export default function BizzyPlugPage() {
         fd.append('file', file)
         fd.append('title', title)
         fd.append('category', newPhotoCategory)
+        fd.append('skipDb', 'true')
         const res = await fetch('/api/bizzyplug/photos', { method: 'POST', body: fd })
-        if (res.ok) succeeded++
+        if (res.ok) { const d = await res.json(); if (d.photo) uploadedPhotos.push(d.photo) }
         else failed++
       } catch { failed++ }
+    }
+
+    if (uploadedPhotos.length > 0) {
+      try {
+        await fetch('/api/bizzyplug/photos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ photos: uploadedPhotos }) })
+      } catch { failed += uploadedPhotos.length; uploadedPhotos.length = 0 }
     }
 
     await loadPortfolio()
@@ -187,10 +194,13 @@ export default function BizzyPlugPage() {
     setUploadingPortfolio(false)
     setUploadProgress({ current: 0, total: 0 })
 
-    if (failed === 0) {
+    const succeeded = uploadedPhotos.length
+    if (failed === 0 && succeeded > 0) {
       setUploadStatus({ type: 'success', message: `${succeeded} photo${succeeded !== 1 ? 's' : ''} uploaded` })
-    } else {
+    } else if (succeeded > 0) {
       setUploadStatus({ type: 'error', message: `${succeeded} uploaded, ${failed} failed` })
+    } else {
+      setUploadStatus({ type: 'error', message: 'Upload failed' })
     }
     setTimeout(() => setUploadStatus(null), 3000)
   }
