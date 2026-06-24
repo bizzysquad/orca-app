@@ -117,6 +117,7 @@ export default function BizzyPlugPublicPage() {
 
   const displayPortfolio = portfolioPhotos.length > 0 ? portfolioPhotos : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
   const filteredPortfolio = portfolioFilter === 'all' ? displayPortfolio : displayPortfolio.filter(p => p.category === portfolioFilter)
+  const featuredPhotos = portfolioPhotos.length > 0 ? portfolioPhotos.slice(-5).reverse() : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
 
   const NAV_LINKS = [
     { label: 'Home', id: 'hero' }, { label: 'About', id: 'about' }, { label: 'Services', id: 'services' },
@@ -209,17 +210,9 @@ export default function BizzyPlugPublicPage() {
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>FEATURED WORK</div>
               <h2 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Our Latest Creations</h2>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[{ label: 'All', val: 'all' }, ...portfolioCategories].map(f => (
-                <button key={f.val} onClick={() => setPortfolioFilter(f.val)}
-                  style={{ padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: portfolioFilter === f.val ? 'none' : `1px solid ${C.border}`, backgroundColor: portfolioFilter === f.val ? C.purple : 'transparent', color: portfolioFilter === f.val ? C.white : C.mutedLight }}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20 }}>
-            {filteredPortfolio.map((item, i) => (
+            {featuredPhotos.map((item, i) => (
               <div key={item.id || i} style={{ borderRadius: 14, overflow: 'hidden', backgroundColor: C.bgCard, border: `1px solid ${C.border}` }}>
                 {item.url ? (
                   <img src={item.url} alt={item.title} style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />
@@ -239,9 +232,9 @@ export default function BizzyPlugPublicPage() {
             ))}
           </div>
           <div style={{ textAlign: 'center', marginTop: 32 }}>
-            <button onClick={() => scrollTo('contact')} style={{ background: 'none', border: 'none', color: C.purple, fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <a href="/bizzyplug/portfolio" style={{ background: 'none', border: 'none', color: C.purple, fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
               VIEW FULL PORTFOLIO <ArrowRight size={14} />
-            </button>
+            </a>
           </div>
         </div>
       </section>
