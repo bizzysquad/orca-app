@@ -30,7 +30,7 @@ export default function PortfolioPage() {
       }
     }).catch(() => {})
     fetch('/api/bizzyplug/photos', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.photos?.length > 0) setPhotos(d.photos)
+      if (d?.photos?.length > 0) setPhotos(d.photos.filter((p: any) => p.url && p.url.startsWith('http')))
     }).catch(() => {})
   }, [])
 

@@ -16,7 +16,6 @@ export const SYNC_KEYS = [
   'orca-bizzplug-clients',
   'orca-bizzplug-client-db',
   'orca-bizzplug-site-settings',
-  'orca-bizzplug-portfolio-photos',
   'orca-bizzplug-projects',
   // DJ
   'orca-dj-gigs',

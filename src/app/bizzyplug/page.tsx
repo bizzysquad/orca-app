@@ -115,9 +115,10 @@ export default function BizzyPlugPublicPage() {
   const paypalLink = siteSettings.paypalEmail ? `https://paypal.me/${siteSettings.paypalEmail}` : 'https://paypal.me/buzyplug'
   const venmoLink = siteSettings.venmoHandle ? `https://venmo.com/${siteSettings.venmoHandle.replace('@', '')}` : 'https://venmo.com/Buzyplug'
 
-  const displayPortfolio = portfolioPhotos.length > 0 ? portfolioPhotos : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
+  const validPhotos = portfolioPhotos.filter(p => p.url && p.url.startsWith('http'))
+  const displayPortfolio = validPhotos.length > 0 ? validPhotos : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
   const filteredPortfolio = portfolioFilter === 'all' ? displayPortfolio : displayPortfolio.filter(p => p.category === portfolioFilter)
-  const featuredPhotos = portfolioPhotos.length > 0 ? portfolioPhotos.slice(-5).reverse() : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
+  const featuredPhotos = validPhotos.length > 0 ? validPhotos.slice(-5).reverse() : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
 
   const NAV_LINKS = [
     { label: 'Home', id: 'hero' }, { label: 'About', id: 'about' }, { label: 'Services', id: 'services' },
@@ -192,7 +193,7 @@ export default function BizzyPlugPublicPage() {
               </button>
             </div>
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              {['100% Custom Designs', 'Fast Turnaround', 'Unlimited Revisions', 'Satisfaction Guaranteed'].map((t, i) => (
+              {['100% Custom Designs', 'Fast Turnaround', 'Satisfaction Guaranteed'].map((t, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mutedLight }}>
                   <Check size={14} style={{ color: C.purple }} /> {t}
                 </div>
