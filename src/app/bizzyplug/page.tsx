@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowRight, CheckCircle, Send, Star, Instagram, Mail, Phone, Menu, X, Check, Disc3, PenTool, Image, Globe, Sparkles } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ArrowRight, CheckCircle, Star, Instagram, Mail, Menu, X, Check, PenTool, Image, Globe, Sparkles, MessageSquare } from 'lucide-react'
 
 const C = {
   bg: '#09090b',
@@ -18,7 +18,7 @@ const C = {
   green: '#10B981',
 }
 
-interface Service { name: string; price: number; description?: string; popular?: boolean }
+interface Service { name: string; price: number; description?: string; popular?: boolean; tag?: string; salePrice?: number }
 
 const DEFAULT_SERVICES: Service[] = [
   { name: 'Pre-Made Artwork', price: 25 },
@@ -44,18 +44,6 @@ const TESTIMONIALS = [
   { name: 'DJ Supreme', role: 'Event Promoter', text: 'The flyers Bizzyplug designed for our event had the club packed out. Real results!', rating: 5 },
 ]
 
-const SERVICE_CARDS = [
-  { icon: Disc3, title: 'Album Covers', desc: 'Stand out in the music industry with custom album artwork that captures your sound and story.' },
-  { icon: PenTool, title: 'Logos', desc: 'Bold, memorable logos that represent your brand and leave a lasting impression.' },
-  { icon: Image, title: 'Flyers', desc: 'High-impact flyers designed to promote your events and fill the room every time.' },
-  { icon: Globe, title: 'Websites', desc: 'Modern, responsive websites that elevate your brand and convert visitors to clients.' },
-]
-
-const PROJECT_TYPES = [
-  'Pre-Made Artwork', 'Custom Artwork', 'Story Promo Ad', 'Streaming Ad',
-  'Tracklist', 'Flyer', 'Cartoons', 'Logos', 'Album Cover', 'Branding', 'Social Media Kit', 'Website', 'Other',
-]
-
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '14px 16px', fontSize: 14, borderRadius: 10,
   border: `1.5px solid ${C.border}`, backgroundColor: C.bgCard, color: C.white, outline: 'none',
@@ -67,32 +55,39 @@ export default function BizzyPlugPublicPage() {
   const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES)
   const [siteSettings, setSiteSettings] = useState<any>({})
   const [mobileNav, setMobileNav] = useState(false)
-  const [portfolioFilter, setPortfolioFilter] = useState('all')
-  const [form, setForm] = useState({ artistName: '', email: '', instagram: '', projectType: '', songName: '', tracklist: '', details: '', deadline: '', notes: '' })
+  const [selectedServices, setSelectedServices] = useState<string[]>([])
+  const [form, setForm] = useState({ artistName: '', email: '', instagram: '', songName: '', tracklist: '', details: '', deadline: '', notes: '' })
   const [refFiles, setRefFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ id: string; url: string; title: string; category: string }[]>([])
-  const [portfolioCategories, setPortfolioCategories] = useState<{ label: string; val: string }[]>([
-    { label: 'Album Covers', val: 'album-covers' }, { label: 'Logos', val: 'logos' }, { label: 'Flyers', val: 'flyers' }, { label: 'Websites', val: 'websites' },
-  ])
+  const [reviews, setReviews] = useState<any[]>([])
+  const [reviewForm, setReviewForm] = useState({ name: '', role: '', text: '', rating: 5 })
+  const [reviewSubmitting, setReviewSubmitting] = useState(false)
+  const [reviewSubmitted, setReviewSubmitted] = useState(false)
+  const contactRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     fetch('/api/bizzyplug/site-settings', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
       if (d?.settings) {
         setSiteSettings(d.settings)
         if (d.settings.services?.length > 0) setServices(d.settings.services)
-        if (d.settings.portfolioCategories?.length > 0) {
-          setPortfolioCategories(d.settings.portfolioCategories.map((c: string) => ({ label: c.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), val: c })))
-        }
       }
     }).catch(() => {})
     fetch('/api/bizzyplug/photos', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
       if (d?.photos?.length > 0) setPortfolioPhotos(d.photos)
     }).catch(() => {})
+    fetch('/api/bizzyplug/reviews', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.reviews?.length > 0) setReviews(d.reviews)
+    }).catch(() => {})
   }, [])
 
   const scrollTo = (id: string) => { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }); setMobileNav(false) }
+
+  const selectService = (name: string) => {
+    setSelectedServices(prev => prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name])
+    setTimeout(() => contactRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+  }
 
   const handleSubmit = async () => {
     if (!form.artistName || !form.email) return
@@ -105,10 +100,20 @@ export default function BizzyPlugPublicPage() {
         const upRes = await fetch('/api/bizzyplug/reference-upload', { method: 'POST', body: fd })
         if (upRes.ok) { const d = await upRes.json(); referenceUrls = d.urls || [] }
       }
-      const res = await fetch('/api/bizzyplug/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, referenceUrls }) })
-      if (res.ok) { setSubmitted(true); setForm({ artistName: '', email: '', instagram: '', projectType: '', songName: '', tracklist: '', details: '', deadline: '', notes: '' }); setRefFiles([]) }
+      const res = await fetch('/api/bizzyplug/intake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, projectType: selectedServices.join(', '), referenceUrls }) })
+      if (res.ok) { setSubmitted(true); setForm({ artistName: '', email: '', instagram: '', songName: '', tracklist: '', details: '', deadline: '', notes: '' }); setSelectedServices([]); setRefFiles([]) }
     } catch {}
     setSubmitting(false)
+  }
+
+  const handleReviewSubmit = async () => {
+    if (!reviewForm.name || !reviewForm.text) return
+    setReviewSubmitting(true)
+    try {
+      const res = await fetch('/api/bizzyplug/reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reviewForm) })
+      if (res.ok) { setReviewSubmitted(true); setReviewForm({ name: '', role: '', text: '', rating: 5 }) }
+    } catch {}
+    setReviewSubmitting(false)
   }
 
   const cashAppLink = siteSettings.cashAppTag ? `https://cash.app/${siteSettings.cashAppTag}` : 'https://cash.app/$BizzyPlug'
@@ -116,13 +121,13 @@ export default function BizzyPlugPublicPage() {
   const venmoLink = siteSettings.venmoHandle ? `https://venmo.com/${siteSettings.venmoHandle.replace('@', '')}` : 'https://venmo.com/Buzyplug'
 
   const validPhotos = portfolioPhotos.filter(p => p.url && p.url.startsWith('http'))
-  const displayPortfolio = validPhotos.length > 0 ? validPhotos : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
-  const filteredPortfolio = portfolioFilter === 'all' ? displayPortfolio : displayPortfolio.filter(p => p.category === portfolioFilter)
   const featuredPhotos = validPhotos.length > 0 ? validPhotos.slice(-5).reverse() : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
 
+  const allTestimonials = [...TESTIMONIALS, ...reviews.map((r: any) => ({ name: r.name, role: r.role || 'Client', text: r.text, rating: r.rating || 5 }))]
+
   const NAV_LINKS = [
-    { label: 'Home', id: 'hero' }, { label: 'About', id: 'about' }, { label: 'Services', id: 'services' },
-    { label: 'Portfolio', id: 'portfolio' }, { label: 'Testimonials', id: 'testimonials' }, { label: 'Contact', id: 'contact' },
+    { label: 'Home', id: 'hero' }, { label: 'Portfolio', id: 'portfolio' },
+    { label: 'Pricing', id: 'services' }, { label: 'Reviews', id: 'testimonials' }, { label: 'Contact', id: 'contact' },
   ]
 
   return (
@@ -135,14 +140,12 @@ export default function BizzyPlugPublicPage() {
             <span style={{ fontWeight: 900, fontSize: 20, color: C.white, letterSpacing: '0.04em' }}>BIZZY</span>
             <span style={{ fontWeight: 900, fontSize: 20, color: C.purple, letterSpacing: '0.04em' }}>PLUG</span>
           </div>
-          {/* Desktop nav */}
           <div style={{ display: 'flex', gap: 28, alignItems: 'center' }} className="hidden-mobile">
             {NAV_LINKS.map(l => (
               <button key={l.id} onClick={() => scrollTo(l.id)} style={{ background: 'none', border: 'none', color: C.mutedLight, fontSize: 13, fontWeight: 500, cursor: 'pointer', letterSpacing: '0.02em' }}>{l.label}</button>
             ))}
             <button onClick={() => scrollTo('contact')} style={{ padding: '10px 22px', borderRadius: 8, backgroundColor: C.purple, color: C.white, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>BOOK A DESIGN</button>
           </div>
-          {/* Mobile hamburger */}
           <button onClick={() => setMobileNav(!mobileNav)} className="show-mobile" style={{ background: 'none', border: 'none', color: C.white, cursor: 'pointer', padding: 4 }}>
             {mobileNav ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -206,11 +209,9 @@ export default function BizzyPlugPublicPage() {
       {/* ═══ PORTFOLIO ═══ */}
       <section id="portfolio" style={{ ...sectionPad, backgroundColor: C.bg }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>FEATURED WORK</div>
-              <h2 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Our Latest Creations</h2>
-            </div>
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>FEATURED WORK</div>
+            <h2 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Our Latest Creations</h2>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20 }}>
             {featuredPhotos.map((item, i) => (
@@ -240,92 +241,53 @@ export default function BizzyPlugPublicPage() {
         </div>
       </section>
 
-      {/* ═══ SERVICES ═══ */}
+      {/* ═══ PRICING ═══ */}
       <section id="services" style={{ ...sectionPad, backgroundColor: C.bgCard }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap' }}>
-            {/* Services cards */}
-            <div style={{ flex: '1 1 500px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>WHAT WE DO</div>
-              <h2 style={{ fontSize: 28, fontWeight: 900, margin: '0 0 28px' }}>Premium Design Services</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
-                {SERVICE_CARDS.map((s, i) => {
-                  const Icon = s.icon
-                  return (
-                    <div key={i} style={{ padding: 24, borderRadius: 14, backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: `${C.purple}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-                        <Icon size={22} style={{ color: C.purple }} />
-                      </div>
-                      <p style={{ fontWeight: 700, fontSize: 15, margin: '0 0 6px' }}>{s.title}</p>
-                      <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: '0 0 12px' }}>{s.desc}</p>
-                      <button onClick={() => scrollTo('contact')} style={{ background: 'none', border: 'none', color: C.purple, fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        LEARN MORE <ArrowRight size={12} />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-            {/* About section */}
-            <div id="about" style={{ flex: '1 1 380px', minWidth: 300 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>ABOUT BIZZYPLUG</div>
-              <h2 style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.15, margin: '0 0 16px' }}>{siteSettings.aboutHeadline || 'Creativity. Culture.\nBranding That Hits.'}</h2>
-              <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.7, margin: '0 0 24px' }}>
-                {siteSettings.aboutText || 'Bizzyplug is more than a design studio — we\'re your creative partner. We blend urban culture, modern aesthetics, and strategic thinking to build powerful visual identities that connect, inspire, and drive real results.'}
-              </p>
-              {['Urban Inspired, Globally Respected', 'Creative Excellence', 'Professional & Reliable'].map((t, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                  <Check size={16} style={{ color: C.purple }} />
-                  <span style={{ fontSize: 14, color: C.mutedLight }}>{t}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Pricing grid */}
-          <div style={{ marginTop: 48 }}>
-            <h3 style={{ fontSize: 20, fontWeight: 800, marginBottom: 20 }}>Pricing</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
-              {services.map((s, i) => (
-                <div key={i} style={{ padding: 20, borderRadius: 12, backgroundColor: C.bg, border: s.popular ? `1.5px solid ${C.purple}` : `1px solid ${C.border}`, position: 'relative' }}>
-                  {s.popular && <div style={{ position: 'absolute', top: 8, right: 8, padding: '2px 8px', borderRadius: 100, backgroundColor: C.purple, fontSize: 9, fontWeight: 700, color: C.white }}>POPULAR</div>}
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>OUR SERVICES</div>
+          <h2 style={{ fontSize: 28, fontWeight: 900, margin: '0 0 8px' }}>Pricing</h2>
+          <p style={{ fontSize: 14, color: C.muted, margin: '0 0 28px' }}>Click any service to add it to your project request. Select multiple if needed.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+            {services.map((s, i) => {
+              const isSelected = selectedServices.includes(s.name)
+              const tag = s.tag || (s.popular ? 'Popular' : '')
+              const hasSale = s.salePrice !== undefined && s.salePrice !== null && s.salePrice < s.price
+              return (
+                <div key={i} onClick={() => selectService(s.name)} style={{
+                  padding: 20, borderRadius: 12, cursor: 'pointer', position: 'relative', transition: 'all 0.2s',
+                  backgroundColor: isSelected ? `${C.purple}15` : C.bg,
+                  border: isSelected ? `2px solid ${C.purple}` : tag ? `1.5px solid ${C.purple}60` : `1px solid ${C.border}`,
+                }}>
+                  {tag && <div style={{ position: 'absolute', top: 8, right: 8, padding: '2px 8px', borderRadius: 100, backgroundColor: C.purple, fontSize: 9, fontWeight: 700, color: C.white, textTransform: 'uppercase' }}>{tag}</div>}
+                  {isSelected && <div style={{ position: 'absolute', top: 8, left: 8 }}><Check size={14} style={{ color: C.purple }} /></div>}
                   <p style={{ fontWeight: 600, fontSize: 13, color: C.mutedLight, margin: '0 0 4px' }}>{s.name}</p>
-                  <p style={{ fontSize: 24, fontWeight: 900, color: C.purple, margin: 0 }}>${s.price}</p>
+                  {hasSale ? (
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                      <p style={{ fontSize: 24, fontWeight: 900, color: C.green, margin: 0 }}>${s.salePrice}</p>
+                      <p style={{ fontSize: 14, fontWeight: 600, color: C.muted, margin: 0, textDecoration: 'line-through' }}>${s.price}</p>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 24, fontWeight: 900, color: C.purple, margin: 0 }}>${s.price}</p>
+                  )}
                 </div>
+              )
+            })}
+          </div>
+          {selectedServices.length > 0 && (
+            <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Selected:</span>
+              {selectedServices.map(s => (
+                <span key={s} onClick={() => setSelectedServices(prev => prev.filter(x => x !== s))} style={{ padding: '4px 12px', borderRadius: 100, backgroundColor: `${C.purple}20`, color: C.purpleLight, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {s} <X size={12} />
+                </span>
               ))}
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ TESTIMONIALS ═══ */}
-      <section id="testimonials" style={{ ...sectionPad, backgroundColor: C.bg }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>CLIENT RESULTS</div>
-          <h2 style={{ fontSize: 28, fontWeight: 900, margin: '0 0 32px' }}>What Our Clients Say</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
-            {TESTIMONIALS.map((t, i) => (
-              <div key={i} style={{ padding: 28, borderRadius: 14, backgroundColor: C.bgCard, border: `1px solid ${C.border}` }}>
-                <div style={{ display: 'flex', gap: 2, marginBottom: 12 }}>
-                  {Array.from({ length: t.rating }).map((_, j) => <Star key={j} size={14} fill={C.purple} style={{ color: C.purple }} />)}
-                </div>
-                <p style={{ fontSize: 14, color: C.mutedLight, lineHeight: 1.7, margin: '0 0 20px', fontStyle: 'italic' }}>"{t.text}"</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: `${C.purple}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: C.purple }}>
-                    {t.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{t.name}</p>
-                    <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{t.role}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          )}
         </div>
       </section>
 
       {/* ═══ CONTACT / BOOK A DESIGN ═══ */}
-      <section id="contact" style={{ ...sectionPad, background: `linear-gradient(180deg, ${C.bgCard} 0%, ${C.purple}10 50%, ${C.bgCard} 100%)` }}>
+      <section id="contact" ref={contactRef} style={{ ...sectionPad, background: `linear-gradient(180deg, ${C.bgCard} 0%, ${C.purple}10 50%, ${C.bgCard} 100%)` }}>
         <div style={{ maxWidth: 620, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 36 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>READY TO LEVEL UP?</div>
@@ -342,20 +304,31 @@ export default function BizzyPlugPublicPage() {
             </div>
           ) : (
             <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 28, border: `1px solid ${C.border}` }}>
+              {selectedServices.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Selected Services</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {selectedServices.map(s => (
+                      <span key={s} onClick={() => setSelectedServices(prev => prev.filter(x => x !== s))} style={{ padding: '6px 14px', borderRadius: 8, backgroundColor: `${C.purple}20`, color: C.purpleLight, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {s} <X size={12} />
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Artist / Brand Name *</label><input style={inputStyle} placeholder="Your name or brand" value={form.artistName} onChange={e => setForm(f => ({ ...f, artistName: e.target.value }))} /></div>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Instagram</label><input style={inputStyle} placeholder="@yourhandle" value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Email *</label><input style={inputStyle} type="email" placeholder="you@email.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
-                <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Service Needed</label><select style={{ ...inputStyle, cursor: 'pointer' }} value={form.projectType} onChange={e => setForm(f => ({ ...f, projectType: e.target.value }))}><option value="">Select a service...</option>{PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Deadline</label><input style={inputStyle} type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Song / Project Name</label><input style={inputStyle} placeholder="Song title or project name" value={form.songName} onChange={e => setForm(f => ({ ...f, songName: e.target.value }))} /></div>
+                <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Song / Project Name</label><input style={inputStyle} placeholder="Song title or project name" value={form.songName} onChange={e => setForm(f => ({ ...f, songName: e.target.value }))} /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Project Details</label><textarea style={{ ...inputStyle, minHeight: 100, resize: 'vertical' as const }} placeholder="Describe your vision, style references, colors, text to include..." value={form.details} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Notes</label><textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' as const }} placeholder="Anything else?" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Reference Photos (optional)</label>
                   <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 0', borderRadius: 10, border: `1.5px dashed ${C.border}`, backgroundColor: `${C.purple}08`, cursor: 'pointer', fontSize: 13, color: C.mutedLight }}>
-                    <Image size={16} style={{ color: C.purple }} /> {refFiles.length > 0 ? `${refFiles.length} file${refFiles.length > 1 ? 's' : ''} selected` : 'Upload reference images, inspiration, or examples'}
-                    <input type="file" accept="image/*" multiple className="hidden" style={{ display: 'none' }} onChange={e => { if (e.target.files) setRefFiles(Array.from(e.target.files)); }} />
+                    <Image size={16} style={{ color: C.purple }} /> {refFiles.length > 0 ? `${refFiles.length} file${refFiles.length > 1 ? 's' : ''} selected` : 'Upload reference images'}
+                    <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => { if (e.target.files) setRefFiles(Array.from(e.target.files)); }} />
                   </label>
                   {refFiles.length > 0 && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
@@ -381,7 +354,6 @@ export default function BizzyPlugPublicPage() {
             </div>
           )}
 
-          {/* Payment + Talk to us */}
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24, flexWrap: 'wrap' }}>
             {[
               { label: 'Cash App', href: cashAppLink },
@@ -395,9 +367,80 @@ export default function BizzyPlugPublicPage() {
             ))}
           </div>
           <div style={{ textAlign: 'center', marginTop: 16 }}>
-            <a href="mailto:buzyplug@gmail.com" style={{ color: C.muted, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <a href={`mailto:${siteSettings.contactEmail || 'buzyplug@gmail.com'}`} style={{ color: C.muted, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Mail size={14} /> TALK TO US <ArrowRight size={12} />
             </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ TESTIMONIALS + REVIEWS ═══ */}
+      <section id="testimonials" style={{ ...sectionPad, backgroundColor: C.bg }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>CLIENT RESULTS</div>
+          <h2 style={{ fontSize: 28, fontWeight: 900, margin: '0 0 32px' }}>What Our Clients Say</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+            {allTestimonials.map((t, i) => (
+              <div key={i} style={{ padding: 28, borderRadius: 14, backgroundColor: C.bgCard, border: `1px solid ${C.border}` }}>
+                <div style={{ display: 'flex', gap: 2, marginBottom: 12 }}>
+                  {Array.from({ length: t.rating }).map((_, j) => <Star key={j} size={14} fill={C.purple} style={{ color: C.purple }} />)}
+                </div>
+                <p style={{ fontSize: 14, color: C.mutedLight, lineHeight: 1.7, margin: '0 0 20px', fontStyle: 'italic' }}>"{t.text}"</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: `${C.purple}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: C.purple }}>
+                    {t.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{t.name}</p>
+                    <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{t.role}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Review Submission */}
+          <div style={{ marginTop: 48, maxWidth: 500, marginLeft: 'auto', marginRight: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <MessageSquare size={18} style={{ color: C.purple }} />
+              <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Leave a Review</h3>
+            </div>
+            {reviewSubmitted ? (
+              <div style={{ backgroundColor: C.bgCard, borderRadius: 14, padding: 32, textAlign: 'center', border: `1px solid ${C.green}40` }}>
+                <CheckCircle size={32} style={{ color: C.green, marginBottom: 8 }} />
+                <p style={{ fontWeight: 700, fontSize: 15, margin: '0 0 4px' }}>Thank you!</p>
+                <p style={{ color: C.muted, fontSize: 13 }}>Your review has been submitted.</p>
+              </div>
+            ) : (
+              <div style={{ backgroundColor: C.bgCard, borderRadius: 14, padding: 20, border: `1px solid ${C.border}` }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Your Name *</label><input style={{ ...inputStyle, padding: '10px 14px', fontSize: 13 }} placeholder="Your name" value={reviewForm.name} onChange={e => setReviewForm(f => ({ ...f, name: e.target.value }))} /></div>
+                  <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Title / Role</label><input style={{ ...inputStyle, padding: '10px 14px', fontSize: 13 }} placeholder="e.g. Recording Artist" value={reviewForm.role} onChange={e => setReviewForm(f => ({ ...f, role: e.target.value }))} /></div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Rating</label>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <button key={n} onClick={() => setReviewForm(f => ({ ...f, rating: n }))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                        <Star size={20} fill={n <= reviewForm.rating ? C.purple : 'none'} style={{ color: n <= reviewForm.rating ? C.purple : C.border }} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Your Review *</label>
+                  <textarea style={{ ...inputStyle, padding: '10px 14px', fontSize: 13, minHeight: 80, resize: 'vertical' as const }} placeholder="Tell us about your experience..." value={reviewForm.text} onChange={e => setReviewForm(f => ({ ...f, text: e.target.value }))} />
+                </div>
+                <button onClick={handleReviewSubmit} disabled={reviewSubmitting || !reviewForm.name || !reviewForm.text} style={{
+                  width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 13, fontWeight: 700,
+                  backgroundColor: (!reviewForm.name || !reviewForm.text) ? C.border : C.purple,
+                  color: C.white, border: 'none', cursor: (!reviewForm.name || !reviewForm.text) ? 'default' : 'pointer',
+                  opacity: reviewSubmitting ? 0.6 : 1,
+                }}>
+                  {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -415,14 +458,13 @@ export default function BizzyPlugPublicPage() {
           <div style={{ display: 'flex', gap: 32 }}>
             <div>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Quick Links</p>
-              {['Home', 'About', 'Services', 'Portfolio', 'Contact'].map(l => (
-                <button key={l} onClick={() => scrollTo(l.toLowerCase())} style={{ display: 'block', background: 'none', border: 'none', color: C.mutedLight, fontSize: 12, cursor: 'pointer', padding: '3px 0' }}>{l}</button>
+              {['Home', 'Portfolio', 'Pricing', 'Reviews', 'Contact'].map(l => (
+                <button key={l} onClick={() => scrollTo(l === 'Pricing' ? 'services' : l === 'Reviews' ? 'testimonials' : l.toLowerCase())} style={{ display: 'block', background: 'none', border: 'none', color: C.mutedLight, fontSize: 12, cursor: 'pointer', padding: '3px 0' }}>{l}</button>
               ))}
             </div>
             <div>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Connect</p>
               <a href={siteSettings.instagramUrl || 'https://instagram.com/bizzyplug'} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.mutedLight, fontSize: 12, textDecoration: 'none', padding: '3px 0' }}><Instagram size={13} /> Instagram</a>
-              <a href="https://behance.net/bizzyplug" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.mutedLight, fontSize: 12, textDecoration: 'none', padding: '3px 0' }}><Globe size={13} /> Behance</a>
               <a href={`mailto:${siteSettings.contactEmail || 'buzyplug@gmail.com'}`} style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.mutedLight, fontSize: 12, textDecoration: 'none', padding: '3px 0' }}><Mail size={13} /> Email</a>
             </div>
           </div>

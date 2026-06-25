@@ -834,15 +834,38 @@ export default function BizzyPlugPage() {
                 {services.map((s, i) => (
                   <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
                     {editingService === i ? (
-                      <div className="flex-1 grid grid-cols-3 gap-2">
-                        <input className="px-2 py-1.5 rounded-lg border text-xs col-span-1" style={inputStyle} value={s.name} onChange={e => { const u = [...services]; u[i] = { ...u[i], name: e.target.value }; setServices(u) }} />
-                        <input type="number" className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} value={s.price} onChange={e => { const u = [...services]; u[i] = { ...u[i], price: Number(e.target.value) }; setServices(u) }} />
-                        <button onClick={() => setEditingService(null)} className="px-2 py-1.5 rounded-lg text-xs font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>Done</button>
+                      <div className="flex-1 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} placeholder="Name" value={s.name} onChange={e => { const u = [...services]; u[i] = { ...u[i], name: e.target.value }; setServices(u) }} />
+                          <input type="number" className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} placeholder="Price" value={s.price} onChange={e => { const u = [...services]; u[i] = { ...u[i], price: Number(e.target.value) }; setServices(u) }} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} value={(s as any).tag || ''} onChange={e => { const u = [...services]; u[i] = { ...u[i], tag: e.target.value, popular: e.target.value === 'Popular' } as any; setServices(u) }}>
+                            <option value="">No tag</option>
+                            <option value="Popular">Popular</option>
+                            <option value="Discount">Discount</option>
+                            <option value="50% Off">50% Off</option>
+                            <option value="Limited Time">Limited Time</option>
+                            <option value="New">New</option>
+                            <option value="Bundle">Bundle</option>
+                          </select>
+                          <input type="number" className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} placeholder="Sale $" value={(s as any).salePrice || ''} onChange={e => { const u = [...services]; u[i] = { ...u[i], salePrice: e.target.value ? Number(e.target.value) : undefined } as any; setServices(u) }} />
+                        </div>
+                        <button onClick={() => setEditingService(null)} className="w-full px-2 py-1.5 rounded-lg text-xs font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>Done</button>
                       </div>
                     ) : (
                       <>
-                        <p className="flex-1 text-sm font-semibold" style={{ color: theme.text }}>{s.name}</p>
-                        <span className="text-sm font-bold" style={{ color: BIZ_PURPLE }}>${s.price}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{s.name}</p>
+                          {(s as any).tag && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${BIZ_PURPLE}20`, color: BIZ_PURPLE }}>{(s as any).tag}</span>}
+                        </div>
+                        <div className="text-right shrink-0">
+                          {(s as any).salePrice ? (
+                            <><span className="text-sm font-bold" style={{ color: '#10B981' }}>${(s as any).salePrice}</span><span className="text-xs ml-1 line-through" style={{ color: theme.textM }}>${s.price}</span></>
+                          ) : (
+                            <span className="text-sm font-bold" style={{ color: BIZ_PURPLE }}>${s.price}</span>
+                          )}
+                        </div>
                         <button onClick={() => setEditingService(i)} className="p-1 rounded-lg" style={{ color: theme.textM }}><Edit3 size={12} /></button>
                         <button onClick={() => setServices(services.filter((_, j) => j !== i))} className="p-1 rounded-lg" style={{ color: '#EF4444' }}><Trash2 size={12} /></button>
                       </>

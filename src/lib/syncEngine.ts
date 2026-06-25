@@ -239,9 +239,20 @@ export async function pushToCloud(retries = 2): Promise<{ ok: boolean; error?: s
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      // Read existing cloud data first to preserve keys not managed by sync (e.g. portfolio photos)
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('local_data')
+        .eq('id', userId)
+        .single()
+
+      const cloudBase = (existing?.local_data && typeof existing.local_data === 'object')
+        ? existing.local_data as Record<string, any> : {}
+      const merged = { ...cloudBase, ...localData }
+
       const { error } = await supabase
         .from('profiles')
-        .update({ local_data: localData })
+        .update({ local_data: merged })
         .eq('id', userId)
 
       if (error) {
