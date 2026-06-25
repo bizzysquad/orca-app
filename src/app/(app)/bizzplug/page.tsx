@@ -21,6 +21,34 @@ function slugCat(s: string) { return s.toLowerCase().trim().replace(/\s+/g, '-')
 
 const DEFAULT_CATEGORIES = ['album-covers', 'logos', 'flyers', 'websites', 'other']
 
+function compressImage(file: File, maxDim = 2000, quality = 0.85): Promise<File> {
+  return new Promise((resolve) => {
+    if (file.size < 500_000) { resolve(file); return }
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      let { width, height } = img
+      if (width <= maxDim && height <= maxDim && file.size < 3_000_000) { resolve(file); return }
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height)
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width; canvas.height = height
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+      canvas.toBlob((blob) => {
+        if (blob && blob.size < file.size) {
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }))
+        } else { resolve(file) }
+      }, 'image/jpeg', quality)
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.src = url
+  })
+}
+
 type ProjectStatus = 'new-lead' | 'completed'
 
 interface BizProject {
@@ -167,10 +195,11 @@ export default function BizzyPlugPage() {
 
     for (let i = 0; i < files.length; i++) {
       setUploadProgress({ current: i + 1, total: files.length })
-      const file = files[i]
+      const raw = files[i]
+      const file = await compressImage(raw)
       const title = newPhotoTitle
         ? (files.length > 1 ? `${newPhotoTitle} ${i + 1}` : newPhotoTitle)
-        : file.name.replace(/\.[^.]+$/, '')
+        : raw.name.replace(/\.[^.]+$/, '')
       try {
         const fd = new FormData()
         fd.append('file', file)
@@ -207,6 +236,14 @@ export default function BizzyPlugPage() {
 
   const deletePortfolioPhoto = async (id: string) => {
     try { await fetch('/api/bizzyplug/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); setPortfolioPhotos(p => p.filter(x => x.id !== id)) } catch {}
+  }
+
+  const purgeAllPhotos = async () => {
+    try {
+      const res = await fetch('/api/bizzyplug/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ purgeAll: true }) })
+      if (res.ok) { setPortfolioPhotos([]); setUploadStatus({ type: 'success', message: 'All photos cleared' }); setTimeout(() => setUploadStatus(null), 3000) }
+    } catch {}
+    try { localStorage.removeItem('orca-bizzplug-portfolio-photos') } catch {}
   }
 
   const updatePhoto = async (id: string, updates: { title?: string; category?: string; file?: File }) => {
@@ -631,11 +668,19 @@ export default function BizzyPlugPage() {
             {/* Portfolio Photos */}
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
               <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Portfolio Photos</p>
-                <button onClick={() => setShowCatManager(!showCatManager)} className="text-[10px] font-bold px-2 py-1 rounded-lg"
-                  style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
-                  {showCatManager ? 'Done' : 'Manage Categories'}
-                </button>
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Portfolio Photos ({portfolioPhotos.length}/40)</p>
+                <div className="flex gap-1.5">
+                  {portfolioPhotos.length > 0 && (
+                    <button onClick={() => { if (confirm('Delete ALL portfolio photos?')) purgeAllPhotos() }} className="text-[10px] font-bold px-2 py-1 rounded-lg"
+                      style={{ backgroundColor: '#EF444415', color: '#EF4444' }}>
+                      Clear All
+                    </button>
+                  )}
+                  <button onClick={() => setShowCatManager(!showCatManager)} className="text-[10px] font-bold px-2 py-1 rounded-lg"
+                    style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
+                    {showCatManager ? 'Done' : 'Manage Categories'}
+                  </button>
+                </div>
               </div>
 
               {showCatManager && (

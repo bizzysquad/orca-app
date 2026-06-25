@@ -142,7 +142,7 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { id } = await req.json()
+    const { id, purgeAll } = await req.json()
     const admin = getAdmin()
 
     const { data: profiles } = await admin.from('profiles').select('id, local_data').limit(1)
@@ -151,8 +151,19 @@ export async function DELETE(req: NextRequest) {
 
     const localData = (profile.local_data as Record<string, any>) || {}
     const photos: any[] = localData[LS_KEY] || []
-    const photo = photos.find((p: any) => p.id === id)
 
+    if (purgeAll) {
+      const fileNames = photos.map((p: any) => p.fileName).filter(Boolean)
+      if (fileNames.length > 0) {
+        for (let i = 0; i < fileNames.length; i += 20) {
+          await admin.storage.from(BUCKET).remove(fileNames.slice(i, i + 20))
+        }
+      }
+      await admin.from('profiles').update({ local_data: { ...localData, [LS_KEY]: [] } }).eq('id', profile.id)
+      return NextResponse.json({ ok: true, purged: photos.length })
+    }
+
+    const photo = photos.find((p: any) => p.id === id)
     if (photo?.fileName) {
       await admin.storage.from(BUCKET).remove([photo.fileName])
     }
