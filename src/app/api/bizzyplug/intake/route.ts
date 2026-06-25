@@ -58,6 +58,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Auto-create project + client in BizzyPlug system
+    try {
+      const { data: profiles } = await supabase.from('profiles').select('id, local_data').limit(1)
+      const profile = profiles?.[0]
+      if (profile) {
+        const localData = (profile.local_data as Record<string, any>) || {}
+        const pid = Math.random().toString(36).slice(2, 10)
+        const cid = Math.random().toString(36).slice(2, 10)
+        const now = new Date().toISOString().slice(0, 10)
+
+        const projects: any[] = localData['orca-bizzplug-clients'] ? (typeof localData['orca-bizzplug-clients'] === 'string' ? JSON.parse(localData['orca-bizzplug-clients']) : localData['orca-bizzplug-clients']) : []
+        const clients: any[] = localData['orca-bizzplug-client-db'] ? (typeof localData['orca-bizzplug-client-db'] === 'string' ? JSON.parse(localData['orca-bizzplug-client-db']) : localData['orca-bizzplug-client-db']) : []
+
+        const totalPrice = 0
+        projects.unshift({
+          id: pid, artistName: artistName || name || '', email: email || '', phone: phone || '',
+          instagram: instagram || '', projectType: projectType || 'other', status: 'new-lead',
+          quote: totalPrice, paid: 0, paymentMethod: '', notes: notes || '',
+          songName: songName || '', tracklist: tracklist || '', details: details || '',
+          deadline: deadline || '', createdAt: now,
+        })
+
+        const clientKey = (email || artistName || '').toLowerCase()
+        if (clientKey && !clients.some((c: any) => (c.email || c.artistName || '').toLowerCase() === clientKey)) {
+          clients.push({
+            id: cid, artistName: artistName || name || '', email: email || '',
+            phone: phone || '', instagram: instagram || '', createdAt: now,
+          })
+        }
+
+        await supabase.from('profiles').update({
+          local_data: { ...localData, 'orca-bizzplug-clients': projects, 'orca-bizzplug-client-db': clients },
+        }).eq('id', profile.id)
+      }
+    } catch (e) { console.error('Auto-create project/client failed:', e) }
+
     sendNotification({ name, artistName, email, phone, instagram, projectType, songName, details, deadline, notes })
     sendCustomerConfirmation(name, email, projectType)
 

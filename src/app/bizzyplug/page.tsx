@@ -58,6 +58,7 @@ export default function BizzyPlugPublicPage() {
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [form, setForm] = useState({ artistName: '', email: '', instagram: '', songName: '', tracklist: '', details: '', deadline: '', notes: '' })
   const [refFiles, setRefFiles] = useState<File[]>([])
+  const [bookingStep, setBookingStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ id: string; url: string; title: string; category: string }[]>([])
@@ -119,6 +120,12 @@ export default function BizzyPlugPublicPage() {
   const cashAppLink = siteSettings.cashAppTag ? `https://cash.app/${siteSettings.cashAppTag}` : 'https://cash.app/$BizzyPlug'
   const paypalLink = siteSettings.paypalEmail ? `https://paypal.me/${siteSettings.paypalEmail}` : 'https://paypal.me/buzyplug'
   const venmoLink = siteSettings.venmoHandle ? `https://venmo.com/${siteSettings.venmoHandle.replace('@', '')}` : 'https://venmo.com/Buzyplug'
+
+  const bookingTotal = selectedServices.reduce((sum, name) => {
+    const svc = services.find(s => s.name === name)
+    if (!svc) return sum
+    return sum + ((svc as any).salePrice !== undefined && (svc as any).salePrice !== null && (svc as any).salePrice < svc.price ? (svc as any).salePrice : svc.price)
+  }, 0)
 
   const validPhotos = portfolioPhotos.filter(p => p.url && p.url.startsWith('http'))
   const featuredPhotos = validPhotos.length > 0 ? validPhotos.slice(-5).reverse() : PORTFOLIO_ITEMS.map((p, i) => ({ id: `default-${i}`, url: '', title: p.title, category: p.tag }))
@@ -286,89 +293,156 @@ export default function BizzyPlugPublicPage() {
         </div>
       </section>
 
-      {/* ═══ CONTACT / BOOK A DESIGN ═══ */}
+      {/* ═══ BOOKING FLOW ═══ */}
       <section id="contact" ref={contactRef} style={{ ...sectionPad, background: `linear-gradient(180deg, ${C.bgCard} 0%, ${C.purple}10 50%, ${C.bgCard} 100%)` }}>
         <div style={{ maxWidth: 620, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>READY TO LEVEL UP?</div>
-            <h2 style={{ fontSize: 32, fontWeight: 900, margin: '0 0 8px' }}>Let's Bring Your Vision To Life</h2>
-            <p style={{ color: C.muted, fontSize: 15 }}>Whether you're an artist, entrepreneur, brand, or promoter — we're here to deliver designs that set you apart.</p>
+            <h2 style={{ fontSize: 32, fontWeight: 900, margin: '0 0 8px' }}>Book Your Design</h2>
           </div>
+
+          {/* Step Indicator */}
+          {!submitted && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginBottom: 28 }}>
+              {[{ n: 1, label: 'Services' }, { n: 2, label: 'Details' }, { n: 3, label: 'Payment' }].map(({ n, label }) => (
+                <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800,
+                    backgroundColor: bookingStep >= n ? C.purple : C.border, color: bookingStep >= n ? C.white : C.muted }}>
+                    {bookingStep > n ? <Check size={14} /> : n}
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: bookingStep >= n ? C.white : C.muted, marginRight: 8 }}>{label}</span>
+                  {n < 3 && <div style={{ width: 24, height: 2, backgroundColor: bookingStep > n ? C.purple : C.border, marginRight: 4 }} />}
+                </div>
+              ))}
+            </div>
+          )}
 
           {submitted ? (
             <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 48, textAlign: 'center', border: `1px solid ${C.green}40` }}>
               <CheckCircle size={48} style={{ color: C.green, marginBottom: 16 }} />
-              <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>Request Submitted!</h3>
-              <p style={{ color: C.muted, fontSize: 14 }}>We'll review your project and follow up within 24 hours.</p>
-              <button onClick={() => setSubmitted(false)} style={{ marginTop: 20, padding: '12px 28px', borderRadius: 8, backgroundColor: C.purple, color: C.white, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>Submit Another</button>
+              <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>You're All Set!</h3>
+              <p style={{ color: C.muted, fontSize: 14 }}>Your project has been submitted and added to our system. We'll follow up within 24 hours.</p>
+              <button onClick={() => { setSubmitted(false); setBookingStep(1) }} style={{ marginTop: 20, padding: '12px 28px', borderRadius: 8, backgroundColor: C.purple, color: C.white, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>Start New Project</button>
             </div>
           ) : (
             <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 28, border: `1px solid ${C.border}` }}>
-              {selectedServices.length > 0 && (
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Selected Services</label>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {selectedServices.map(s => (
-                      <span key={s} onClick={() => setSelectedServices(prev => prev.filter(x => x !== s))} style={{ padding: '6px 14px', borderRadius: 8, backgroundColor: `${C.purple}20`, color: C.purpleLight, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {s} <X size={12} />
-                      </span>
-                    ))}
+
+              {/* Step 1: Services */}
+              {bookingStep === 1 && (
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: C.white, marginBottom: 12 }}>Select the services you need:</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: 16 }}>
+                    {services.map((s, i) => {
+                      const sel = selectedServices.includes(s.name)
+                      const hasSale = (s as any).salePrice !== undefined && (s as any).salePrice < s.price
+                      return (
+                        <div key={i} onClick={() => setSelectedServices(prev => prev.includes(s.name) ? prev.filter(x => x !== s.name) : [...prev, s.name])}
+                          style={{ padding: 14, borderRadius: 10, cursor: 'pointer', textAlign: 'center', border: sel ? `2px solid ${C.purple}` : `1px solid ${C.border}`, backgroundColor: sel ? `${C.purple}15` : C.bg }}>
+                          {sel && <Check size={12} style={{ color: C.purple, marginBottom: 4 }} />}
+                          <p style={{ fontSize: 12, fontWeight: 600, color: C.mutedLight, margin: '0 0 2px' }}>{s.name}</p>
+                          {hasSale ? (
+                            <div><span style={{ fontSize: 16, fontWeight: 900, color: C.green }}>${(s as any).salePrice}</span> <span style={{ fontSize: 11, color: C.muted, textDecoration: 'line-through' }}>${s.price}</span></div>
+                          ) : (
+                            <p style={{ fontSize: 16, fontWeight: 900, color: C.purple, margin: 0 }}>${s.price}</p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {selectedServices.length > 0 && (
+                    <div style={{ padding: 12, borderRadius: 10, backgroundColor: C.bg, border: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <span style={{ fontSize: 13, color: C.mutedLight }}>{selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} selected</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: C.purple }}>Total: ${bookingTotal}</span>
+                    </div>
+                  )}
+                  <button onClick={() => setBookingStep(2)} disabled={selectedServices.length === 0}
+                    style={{ width: '100%', padding: '14px 0', borderRadius: 10, fontSize: 14, fontWeight: 800, backgroundColor: selectedServices.length === 0 ? C.border : C.purple, color: C.white, border: 'none', cursor: selectedServices.length === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    CONTINUE <ArrowRight size={16} />
+                  </button>
+                </div>
+              )}
+
+              {/* Step 2: Details */}
+              {bookingStep === 2 && (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Artist / Brand Name *</label><input style={inputStyle} placeholder="Your name or brand" value={form.artistName} onChange={e => setForm(f => ({ ...f, artistName: e.target.value }))} /></div>
+                    <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Instagram</label><input style={inputStyle} placeholder="@yourhandle" value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} /></div>
+                    <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Email *</label><input style={inputStyle} type="email" placeholder="you@email.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
+                    <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Deadline</label><input style={inputStyle} type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} /></div>
+                    <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Song / Project Name</label><input style={inputStyle} placeholder="Song title or project name" value={form.songName} onChange={e => setForm(f => ({ ...f, songName: e.target.value }))} /></div>
+                    <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Project Details</label><textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' as const }} placeholder="Describe your vision, style references, colors..." value={form.details} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} /></div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Reference Photos (optional)</label>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 0', borderRadius: 10, border: `1.5px dashed ${C.border}`, backgroundColor: `${C.purple}08`, cursor: 'pointer', fontSize: 13, color: C.mutedLight }}>
+                        <Image size={16} style={{ color: C.purple }} /> {refFiles.length > 0 ? `${refFiles.length} file${refFiles.length > 1 ? 's' : ''} selected` : 'Upload reference images'}
+                        <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => { if (e.target.files) setRefFiles(Array.from(e.target.files)); }} />
+                      </label>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                    <button onClick={() => setBookingStep(1)} style={{ flex: 1, padding: '14px 0', borderRadius: 10, fontSize: 13, fontWeight: 700, backgroundColor: C.bg, color: C.mutedLight, border: `1px solid ${C.border}`, cursor: 'pointer' }}>Back</button>
+                    <button onClick={() => setBookingStep(3)} disabled={!form.artistName || !form.email}
+                      style={{ flex: 2, padding: '14px 0', borderRadius: 10, fontSize: 14, fontWeight: 800, backgroundColor: (!form.artistName || !form.email) ? C.border : C.purple, color: C.white, border: 'none', cursor: (!form.artistName || !form.email) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      CONTINUE TO PAYMENT <ArrowRight size={16} />
+                    </button>
                   </div>
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Artist / Brand Name *</label><input style={inputStyle} placeholder="Your name or brand" value={form.artistName} onChange={e => setForm(f => ({ ...f, artistName: e.target.value }))} /></div>
-                <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Instagram</label><input style={inputStyle} placeholder="@yourhandle" value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Email *</label><input style={inputStyle} type="email" placeholder="you@email.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
-                <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Deadline</label><input style={inputStyle} type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} /></div>
-                <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Song / Project Name</label><input style={inputStyle} placeholder="Song title or project name" value={form.songName} onChange={e => setForm(f => ({ ...f, songName: e.target.value }))} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Project Details</label><textarea style={{ ...inputStyle, minHeight: 100, resize: 'vertical' as const }} placeholder="Describe your vision, style references, colors, text to include..." value={form.details} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Notes</label><textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' as const }} placeholder="Anything else?" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Reference Photos (optional)</label>
-                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 0', borderRadius: 10, border: `1.5px dashed ${C.border}`, backgroundColor: `${C.purple}08`, cursor: 'pointer', fontSize: 13, color: C.mutedLight }}>
-                    <Image size={16} style={{ color: C.purple }} /> {refFiles.length > 0 ? `${refFiles.length} file${refFiles.length > 1 ? 's' : ''} selected` : 'Upload reference images'}
-                    <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => { if (e.target.files) setRefFiles(Array.from(e.target.files)); }} />
-                  </label>
-                  {refFiles.length > 0 && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                      {refFiles.map((f, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, backgroundColor: C.bgCard, border: `1px solid ${C.border}`, fontSize: 11, color: C.mutedLight }}>
-                          {f.name.length > 20 ? f.name.slice(0, 17) + '...' : f.name}
-                          <button onClick={() => setRefFiles(refFiles.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 0 }}><X size={12} /></button>
+
+              {/* Step 3: Payment */}
+              {bookingStep === 3 && (
+                <div>
+                  <div style={{ padding: 16, borderRadius: 12, backgroundColor: C.bg, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>Order Summary</p>
+                    {selectedServices.map(s => {
+                      const svc = services.find(x => x.name === s)
+                      const hasSale = svc && (svc as any).salePrice !== undefined && (svc as any).salePrice < svc.price
+                      return (
+                        <div key={s} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+                          <span style={{ fontSize: 13, color: C.mutedLight }}>{s}</span>
+                          {hasSale ? (
+                            <span><span style={{ fontSize: 13, fontWeight: 700, color: C.green }}>${(svc as any).salePrice}</span> <span style={{ fontSize: 11, textDecoration: 'line-through', color: C.muted }}>${svc!.price}</span></span>
+                          ) : (
+                            <span style={{ fontSize: 13, fontWeight: 700, color: C.purple }}>${svc?.price || 0}</span>
+                          )}
                         </div>
-                      ))}
+                      )
+                    })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', marginTop: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: C.white }}>Total</span>
+                      <span style={{ fontSize: 22, fontWeight: 900, color: C.purple }}>${bookingTotal}</span>
                     </div>
-                  )}
+                  </div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 10 }}>Select payment method:</p>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                    {[
+                      { label: 'Cash App', href: cashAppLink },
+                      { label: 'PayPal', href: paypalLink },
+                      { label: 'Venmo', href: venmoLink },
+                    ].map((p, i) => (
+                      <a key={i} href={p.href} target="_blank" rel="noopener noreferrer"
+                        style={{ flex: 1, padding: '14px 0', borderRadius: 10, backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.white, fontSize: 13, fontWeight: 700, textDecoration: 'none', textAlign: 'center', display: 'block' }}>
+                        {p.label}
+                      </a>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', marginBottom: 16 }}>Complete payment using one of the methods above, then submit your project below.</p>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={() => setBookingStep(2)} style={{ flex: 1, padding: '14px 0', borderRadius: 10, fontSize: 13, fontWeight: 700, backgroundColor: C.bg, color: C.mutedLight, border: `1px solid ${C.border}`, cursor: 'pointer' }}>Back</button>
+                    <button onClick={handleSubmit} disabled={submitting}
+                      style={{ flex: 2, padding: '14px 0', borderRadius: 10, fontSize: 14, fontWeight: 800, backgroundColor: C.purple, color: C.white, border: 'none', cursor: 'pointer', opacity: submitting ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      {submitting ? 'Submitting...' : <>SUBMIT PROJECT <CheckCircle size={16} /></>}
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <button onClick={handleSubmit} disabled={submitting || !form.artistName || !form.email} style={{
-                width: '100%', marginTop: 20, padding: '16px 0', borderRadius: 10,
-                backgroundColor: (!form.artistName || !form.email) ? C.border : C.purple,
-                color: C.white, border: 'none', cursor: (!form.artistName || !form.email) ? 'default' : 'pointer',
-                fontSize: 15, fontWeight: 800, opacity: submitting ? 0.6 : 1,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              }}>
-                {submitting ? 'Submitting...' : <>START YOUR PROJECT <ArrowRight size={16} /></>}
-              </button>
+              )}
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24, flexWrap: 'wrap' }}>
-            {[
-              { label: 'Cash App', href: cashAppLink },
-              { label: 'PayPal', href: paypalLink },
-              { label: 'Venmo', href: venmoLink },
-            ].map((p, i) => (
-              <a key={i} href={p.href} target="_blank" rel="noopener noreferrer"
-                style={{ padding: '8px 18px', borderRadius: 8, backgroundColor: C.bgCard, border: `1px solid ${C.border}`, color: C.mutedLight, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
-                {p.label}
-              </a>
-            ))}
-          </div>
-          <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <div style={{ textAlign: 'center', marginTop: 20 }}>
             <a href={`mailto:${siteSettings.contactEmail || 'buzyplug@gmail.com'}`} style={{ color: C.muted, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Mail size={14} /> TALK TO US <ArrowRight size={12} />
+              <Mail size={14} /> Questions? TALK TO US <ArrowRight size={12} />
             </a>
           </div>
         </div>

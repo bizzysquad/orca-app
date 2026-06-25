@@ -6,7 +6,7 @@ import {
   Palette, Plus, Trash2, Edit3, DollarSign, CheckCircle,
   Clock, X, Mail, Inbox, Globe, Instagram, Phone, User,
   ExternalLink, Save, Eye, Layers, RefreshCw, ChevronRight,
-  FileText, Database,
+  FileText, Database, Send, Upload, Paperclip,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { fmt } from '@/lib/utils'
@@ -143,7 +143,104 @@ const BLANK_PROJECT = (): Partial<BizProject> => ({
   songName: '', tracklist: '', details: '',
 })
 
-type DashTab = 'projects' | 'clients' | 'inbox' | 'website'
+type DashTab = 'projects' | 'clients' | 'inbox' | 'website' | 'delivery'
+
+function DeliveryTab({ theme, projects, inputCls, inputStyle }: { theme: any; projects: any[]; inputCls: string; inputStyle: any }) {
+  const [selectedProject, setSelectedProject] = useState<string | null>(null)
+  const [deliverEmail, setDeliverEmail] = useState('')
+  const [deliverMessage, setDeliverMessage] = useState('')
+  const [deliverFiles, setDeliverFiles] = useState<File[]>([])
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const project = projects.find(p => p.id === selectedProject)
+
+  const handleDeliver = async () => {
+    if (!deliverEmail || !project) return
+    setSending(true)
+    try {
+      let fileUrls: string[] = []
+      if (deliverFiles.length > 0) {
+        const fd = new FormData()
+        deliverFiles.forEach(f => fd.append('files', f))
+        const upRes = await fetch('/api/bizzyplug/reference-upload', { method: 'POST', body: fd })
+        if (upRes.ok) { const d = await upRes.json(); fileUrls = d.urls || [] }
+      }
+      const res = await fetch('/api/bizzyplug/deliver', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: deliverEmail, clientName: project.artistName, projectType: project.projectType, message: deliverMessage, fileUrls }),
+      })
+      if (res.ok) { setSent(true); setDeliverMessage(''); setDeliverFiles([]); setTimeout(() => setSent(false), 4000) }
+    } catch {}
+    setSending(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Send completed work via Buzyplug@gmail.com</p>
+      </div>
+
+      <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Select Project</p>
+        {projects.length === 0 ? (
+          <p className="text-sm" style={{ color: theme.textM }}>No projects yet. Projects are auto-created when customers book.</p>
+        ) : (
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {projects.map(p => (
+              <button key={p.id} onClick={() => { setSelectedProject(p.id); setDeliverEmail(p.email || '') }}
+                className="w-full text-left px-3 py-2.5 rounded-xl text-sm flex items-center justify-between"
+                style={{ backgroundColor: selectedProject === p.id ? '#9333EA15' : theme.bg, border: `1px solid ${selectedProject === p.id ? '#9333EA' : theme.border}`, color: theme.text }}>
+                <div>
+                  <span className="font-semibold">{p.artistName}</span>
+                  <span className="text-xs ml-2" style={{ color: theme.textM }}>{p.projectType}</span>
+                </div>
+                {p.email && <span className="text-[10px]" style={{ color: theme.textM }}>{p.email}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedProject && project && (
+        <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Deliver to {project.artistName}</p>
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Client Email</label>
+            <input className={inputCls} style={inputStyle} value={deliverEmail} onChange={e => setDeliverEmail(e.target.value)} placeholder="client@email.com" />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Message (optional)</label>
+            <textarea rows={3} className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} value={deliverMessage} onChange={e => setDeliverMessage(e.target.value)} placeholder="Here's your completed design..." />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Upload Artwork Files</label>
+            <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer" style={{ backgroundColor: '#9333EA12', color: '#9333EA', border: '1px dashed #9333EA40' }}>
+              <Upload size={14} /> {deliverFiles.length > 0 ? `${deliverFiles.length} file${deliverFiles.length > 1 ? 's' : ''} ready` : 'Choose files to send'}
+              <input type="file" accept="image/*,.pdf,.psd,.ai,.zip" multiple className="hidden" onChange={e => { if (e.target.files) setDeliverFiles(Array.from(e.target.files)) }} />
+            </label>
+            {deliverFiles.length > 0 && (
+              <div className="flex gap-2 flex-wrap mt-2">
+                {deliverFiles.map((f, i) => (
+                  <span key={i} className="text-[10px] px-2 py-1 rounded-lg flex items-center gap-1" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.textM }}>
+                    <Paperclip size={10} /> {f.name.length > 18 ? f.name.slice(0, 15) + '...' : f.name}
+                    <button onClick={() => setDeliverFiles(deliverFiles.filter((_, j) => j !== i))} style={{ color: '#EF4444' }}><X size={10} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="text-[9px]" style={{ color: theme.textM }}>Email will include artwork download links + a "Thank you for shopping with BizzyPlug" message with a link to leave a review.</p>
+          <button onClick={handleDeliver} disabled={sending || !deliverEmail}
+            className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+            style={{ backgroundColor: sent ? '#10B981' : '#9333EA', color: '#fff', opacity: sending ? 0.6 : 1 }}>
+            {sent ? <><CheckCircle size={16} /> Delivered!</> : sending ? 'Sending...' : <><Send size={16} /> Send to Client</>}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function BizzyPlugPage() {
   const { theme } = useTheme()
@@ -413,6 +510,7 @@ export default function BizzyPlugPage() {
             { key: 'clients' as DashTab, label: 'Clients', icon: Database },
             { key: 'inbox' as DashTab, label: 'Inbox', icon: Inbox },
             { key: 'website' as DashTab, label: 'Website', icon: Globe },
+            { key: 'delivery' as DashTab, label: 'Deliver', icon: Send },
           ]).map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setActiveTab(key)}
               className="flex-1 flex items-center justify-center gap-1 py-2.5 px-1 text-[11px] rounded-xl transition-all"
@@ -892,6 +990,11 @@ export default function BizzyPlugPage() {
               {siteSaved ? <><CheckCircle size={16} /> Saved!</> : <><Save size={16} /> Save & Publish</>}
             </button>
           </div>
+        )}
+
+        {/* ── DELIVERY TAB ── */}
+        {activeTab === 'delivery' && (
+          <DeliveryTab theme={theme} projects={projects} inputCls={inputCls} inputStyle={inputStyle} />
         )}
       </div>
 
