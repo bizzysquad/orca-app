@@ -133,8 +133,8 @@ export default function BizzyPlugPublicPage() {
   const allTestimonials = [...TESTIMONIALS, ...reviews.map((r: any) => ({ name: r.name, role: r.role || 'Client', text: r.text, rating: r.rating || 5 }))]
 
   const NAV_LINKS = [
-    { label: 'Home', id: 'hero' }, { label: 'Portfolio', id: 'portfolio' },
-    { label: 'Pricing', id: 'services' }, { label: 'Reviews', id: 'testimonials' }, { label: 'Contact', id: 'contact' },
+    { label: 'Home', id: 'hero' }, { label: 'Book', id: 'contact' },
+    { label: 'Portfolio', id: 'portfolio' }, { label: 'Reviews', id: 'testimonials' },
   ]
 
   return (
@@ -168,6 +168,13 @@ export default function BizzyPlugPublicPage() {
       </nav>
 
       <style>{`
+        @font-face {
+          font-family: 'Akira Expanded';
+          src: url('/fonts/Akira-Expanded.otf') format('opentype');
+          font-weight: 800;
+          font-style: normal;
+          font-display: swap;
+        }
         .hidden-mobile { display: flex !important; }
         .show-mobile { display: none !important; }
         @media (max-width: 768px) {
@@ -182,7 +189,7 @@ export default function BizzyPlugPublicPage() {
         <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative', display: 'flex', alignItems: 'center', gap: 60, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 500px', minWidth: 300 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 16 }}>PREMIUM DESIGN. REAL IMPACT.</div>
-            <h1 style={{ fontSize: 'clamp(32px, 5vw, 52px)', fontWeight: 900, lineHeight: 1.08, margin: '0 0 20px', letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 'clamp(28px, 5vw, 48px)', fontWeight: 900, lineHeight: 1.12, margin: '0 0 20px', letterSpacing: '0.02em', fontFamily: "'Akira Expanded', 'Inter', sans-serif" }}>
               {siteSettings.heroHeadline ? (
                 <>{siteSettings.heroHeadline.split(/\b(Authentic|authentic)\b/).map((part: string, i: number) =>
                   /authentic/i.test(part) ? <span key={i} style={{ color: C.purple }}>{part}</span> : part
@@ -198,9 +205,9 @@ export default function BizzyPlugPublicPage() {
               <button onClick={() => scrollTo('contact')} style={{ padding: '14px 28px', borderRadius: 8, backgroundColor: C.purple, color: C.white, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
                 BOOK A DESIGN <ArrowRight size={16} />
               </button>
-              <button onClick={() => scrollTo('portfolio')} style={{ padding: '14px 28px', borderRadius: 8, backgroundColor: 'transparent', color: C.white, border: `1.5px solid ${C.border}`, cursor: 'pointer', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <a href="/bizzyplug/portfolio" style={{ padding: '14px 28px', borderRadius: 8, backgroundColor: 'transparent', color: C.white, border: `1.5px solid ${C.border}`, cursor: 'pointer', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
                 VIEW PORTFOLIO <ArrowRight size={16} />
-              </button>
+              </a>
             </div>
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
               {['100% Custom Designs', 'Fast Turnaround', 'Satisfaction Guaranteed'].map((t, i) => (
@@ -210,86 +217,6 @@ export default function BizzyPlugPublicPage() {
               ))}
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ═══ PORTFOLIO ═══ */}
-      <section id="portfolio" style={{ ...sectionPad, backgroundColor: C.bg }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>FEATURED WORK</div>
-            <h2 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Our Latest Creations</h2>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20 }}>
-            {featuredPhotos.map((item, i) => (
-              <div key={item.id || i} style={{ borderRadius: 14, overflow: 'hidden', backgroundColor: C.bgCard, border: `1px solid ${C.border}` }}>
-                {item.url ? (
-                  <img src={item.url} alt={item.title} style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />
-                ) : (
-                  <div style={{ height: 200, backgroundColor: `${C.purpleDim}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Sparkles size={40} style={{ color: C.purpleDim, opacity: 0.4 }} />
-                  </div>
-                )}
-                <div style={{ padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 2px' }}>{item.title}</p>
-                    <p style={{ fontSize: 12, color: C.muted, margin: 0, textTransform: 'capitalize' }}>{item.category.replace('-', ' ')}</p>
-                  </div>
-                  <PenTool size={14} style={{ color: C.muted }} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ textAlign: 'center', marginTop: 32 }}>
-            <a href="/bizzyplug/portfolio" style={{ background: 'none', border: 'none', color: C.purple, fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-              VIEW FULL PORTFOLIO <ArrowRight size={14} />
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ PRICING ═══ */}
-      <section id="services" style={{ ...sectionPad, backgroundColor: C.bgCard }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>OUR SERVICES</div>
-          <h2 style={{ fontSize: 28, fontWeight: 900, margin: '0 0 8px' }}>Pricing</h2>
-          <p style={{ fontSize: 14, color: C.muted, margin: '0 0 28px' }}>Click any service to add it to your project request. Select multiple if needed.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
-            {services.map((s, i) => {
-              const isSelected = selectedServices.includes(s.name)
-              const tag = s.tag || (s.popular ? 'Popular' : '')
-              const hasSale = s.salePrice !== undefined && s.salePrice !== null && s.salePrice < s.price
-              return (
-                <div key={i} onClick={() => selectService(s.name)} style={{
-                  padding: 20, borderRadius: 12, cursor: 'pointer', position: 'relative', transition: 'all 0.2s',
-                  backgroundColor: isSelected ? `${C.purple}15` : C.bg,
-                  border: isSelected ? `2px solid ${C.purple}` : tag ? `1.5px solid ${C.purple}60` : `1px solid ${C.border}`,
-                }}>
-                  {tag && <div style={{ position: 'absolute', top: 8, right: 8, padding: '2px 8px', borderRadius: 100, backgroundColor: C.purple, fontSize: 9, fontWeight: 700, color: C.white, textTransform: 'uppercase' }}>{tag}</div>}
-                  {isSelected && <div style={{ position: 'absolute', top: 8, left: 8 }}><Check size={14} style={{ color: C.purple }} /></div>}
-                  <p style={{ fontWeight: 600, fontSize: 13, color: C.mutedLight, margin: '0 0 4px' }}>{s.name}</p>
-                  {hasSale ? (
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                      <p style={{ fontSize: 24, fontWeight: 900, color: C.green, margin: 0 }}>${s.salePrice}</p>
-                      <p style={{ fontSize: 14, fontWeight: 600, color: C.muted, margin: 0, textDecoration: 'line-through' }}>${s.price}</p>
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: 24, fontWeight: 900, color: C.purple, margin: 0 }}>${s.price}</p>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          {selectedServices.length > 0 && (
-            <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Selected:</span>
-              {selectedServices.map(s => (
-                <span key={s} onClick={() => setSelectedServices(prev => prev.filter(x => x !== s))} style={{ padding: '4px 12px', borderRadius: 100, backgroundColor: `${C.purple}20`, color: C.purpleLight, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {s} <X size={12} />
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </section>
 
@@ -448,6 +375,41 @@ export default function BizzyPlugPublicPage() {
         </div>
       </section>
 
+      {/* ═══ PORTFOLIO ═══ */}
+      <section id="portfolio" style={{ ...sectionPad, backgroundColor: C.bg }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>FEATURED WORK</div>
+            <h2 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Our Latest Creations</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20 }}>
+            {featuredPhotos.map((item, i) => (
+              <div key={item.id || i} style={{ borderRadius: 14, overflow: 'hidden', backgroundColor: C.bgCard, border: `1px solid ${C.border}` }}>
+                {item.url ? (
+                  <img src={item.url} alt={item.title} style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />
+                ) : (
+                  <div style={{ height: 200, backgroundColor: `${C.purpleDim}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Sparkles size={40} style={{ color: C.purpleDim, opacity: 0.4 }} />
+                  </div>
+                )}
+                <div style={{ padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 2px' }}>{item.title}</p>
+                    <p style={{ fontSize: 12, color: C.muted, margin: 0, textTransform: 'capitalize' }}>{item.category.replace('-', ' ')}</p>
+                  </div>
+                  <PenTool size={14} style={{ color: C.muted }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 32 }}>
+            <a href="/bizzyplug/portfolio" style={{ background: 'none', border: 'none', color: C.purple, fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+              VIEW FULL PORTFOLIO <ArrowRight size={14} />
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* ═══ TESTIMONIALS + REVIEWS ═══ */}
       <section id="testimonials" style={{ ...sectionPad, backgroundColor: C.bg }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -532,8 +494,8 @@ export default function BizzyPlugPublicPage() {
           <div style={{ display: 'flex', gap: 32 }}>
             <div>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Quick Links</p>
-              {['Home', 'Portfolio', 'Pricing', 'Reviews', 'Contact'].map(l => (
-                <button key={l} onClick={() => scrollTo(l === 'Pricing' ? 'services' : l === 'Reviews' ? 'testimonials' : l.toLowerCase())} style={{ display: 'block', background: 'none', border: 'none', color: C.mutedLight, fontSize: 12, cursor: 'pointer', padding: '3px 0' }}>{l}</button>
+              {['Home', 'Book', 'Portfolio', 'Reviews'].map(l => (
+                <button key={l} onClick={() => scrollTo(l === 'Book' ? 'contact' : l === 'Reviews' ? 'testimonials' : l.toLowerCase())} style={{ display: 'block', background: 'none', border: 'none', color: C.mutedLight, fontSize: 12, cursor: 'pointer', padding: '3px 0' }}>{l}</button>
               ))}
             </div>
             <div>
