@@ -6,7 +6,7 @@ import {
   Palette, Plus, Trash2, Edit3, DollarSign, CheckCircle,
   Clock, X, Mail, Inbox, Globe, Instagram, Phone, User,
   ExternalLink, Save, Eye, Layers, RefreshCw, ChevronRight,
-  FileText, Database, Send, Upload, Paperclip,
+  FileText, Database, Send, Upload, Paperclip, ChevronUp, ChevronDown, Package, EyeOff, Eye as EyeIcon,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { fmt } from '@/lib/utils'
@@ -278,6 +278,19 @@ export default function BizzyPlugPage() {
   const [editPhotoCategory, setEditPhotoCategory] = useState('')
   const [newCatName, setNewCatName] = useState('')
   const [showCatManager, setShowCatManager] = useState(false)
+  const [rolloutPackages, setRolloutPackages] = useState<any[]>([
+    { id: 'artist', label: 'Artists', tiers: [
+      { id: 'a1', name: 'Starter Rollout', price: 225, period: '/mo', campaigns: 1, description: 'One full song or campaign rollout per month.', badge: '', active: true, salePrice: null, services: ['Custom Cover Artwork','Instagram Promo Ad','Booking Ad / Promo Flyer','Motion Cover','45-Second Lyric Video','T-Shirt Merch Design','Monthly Release Gameplan'], extras: [] },
+      { id: 'a2', name: 'Momentum Rollout', price: 450, period: '/mo', campaigns: 2, description: 'Two rollouts per month.', badge: 'Best Value', active: true, salePrice: null, services: ['Custom Cover Artwork','Instagram Promo Ad','Booking Ad / Promo Flyer','Motion Cover','45-Second Lyric Video','T-Shirt Merch Design','Monthly Release Gameplan'], extras: [] },
+      { id: 'a3', name: 'Campaign Rollout', price: 899, period: '/mo', campaigns: 4, description: 'Four full rollouts plus a landing page.', badge: 'Full Package', active: true, salePrice: null, services: ['Custom Cover Artwork','Instagram Promo Ad','Booking Ad / Promo Flyer','Motion Cover','45-Second Lyric Video','T-Shirt Merch Design','Monthly Release Gameplan'], extras: ['Landing Page Website'] },
+    ]},
+    { id: 'promoter', label: 'Promoters', tiers: [
+      { id: 'p1', name: 'Starter Promo', price: 199, period: '/mo', campaigns: 1, description: 'One event campaign per month.', badge: '', active: true, salePrice: null, services: ['Custom Event Flyer','Instagram Promo Ad','Story Promo Ad','Motion Flyer','Event Posting Blueprint'], extras: [] },
+      { id: 'p2', name: 'Momentum Promo', price: 399, period: '/mo', campaigns: 2, description: 'Two event campaigns per month.', badge: 'Best Value', active: true, salePrice: null, services: ['Custom Event Flyer','Instagram Promo Ad','Story Promo Ad','Motion Flyer','Event Posting Blueprint'], extras: [] },
+      { id: 'p3', name: 'Full Promo', price: 749, period: '/mo', campaigns: 4, description: 'Four event campaigns plus a landing page.', badge: 'Full Package', active: true, salePrice: null, services: ['Custom Event Flyer','Instagram Promo Ad','Story Promo Ad','Motion Flyer','Event Posting Blueprint'], extras: ['Landing Page Website'] },
+    ]},
+  ])
+  const [sectionOrder, setSectionOrder] = useState<string[]>(['booking', 'portfolio', 'rollout', 'testimonials'])
 
   const loadPortfolio = useCallback(async () => {
     try { const res = await fetch('/api/bizzyplug/photos'); if (res.ok) { const d = await res.json(); setPortfolioPhotos(d.photos || []) } } catch {}
@@ -371,6 +384,8 @@ export default function BizzyPlugPage() {
         const parsed = JSON.parse(ss)
         if (parsed.services?.length > 0) setServices(parsed.services)
         if (parsed.portfolioCategories?.length > 0) setPortfolioCategories(parsed.portfolioCategories)
+        if (parsed.rolloutPackages?.length > 0) setRolloutPackages(parsed.rolloutPackages)
+        if (parsed.sectionOrder?.length > 0) setSectionOrder(parsed.sectionOrder)
         setSiteSettings((s: any) => ({ ...s, ...parsed }))
       }
     } catch {}
@@ -442,7 +457,7 @@ export default function BizzyPlugPage() {
   useEffect(() => { if (activeTab === 'website') loadPortfolio() }, [activeTab, loadPortfolio])
 
   const saveSiteSettings = async () => {
-    const payload = { ...siteSettings, services, portfolioCategories }
+    const payload = { ...siteSettings, services, portfolioCategories, rolloutPackages, sectionOrder }
     try { setLocalSynced('orca-bizzplug-site-settings', JSON.stringify(payload)) } catch {}
     try { await fetch('/api/bizzyplug/site-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) } catch {}
     setSiteSaved(true)
@@ -981,6 +996,77 @@ export default function BizzyPlugPage() {
                 }} className="px-3 py-2 rounded-xl text-xs font-bold shrink-0" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
                   <Plus size={14} />
                 </button>
+              </div>
+            </div>
+
+            {/* Rollout Packages */}
+            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Monthly Rollout Packages</p>
+              </div>
+              {rolloutPackages.map((pkg: any, pi: number) => (
+                <div key={pkg.id} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input className="flex-1 px-2 py-1.5 rounded-lg border text-xs font-bold" style={inputStyle} value={pkg.label} onChange={e => { const u = [...rolloutPackages]; u[pi] = { ...u[pi], label: e.target.value }; setRolloutPackages(u) }} />
+                    <button onClick={() => { const u = [...rolloutPackages]; u[pi] = { ...u[pi], tiers: [...u[pi].tiers, { id: gid(), name: 'New Tier', price: 0, period: '/mo', campaigns: 1, description: '', badge: '', active: true, salePrice: null, services: ['Custom Cover Artwork'], extras: [] }] }; setRolloutPackages(u) }}
+                      className="px-2 py-1.5 rounded-lg text-[10px] font-bold shrink-0" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>+ Tier</button>
+                  </div>
+                  {pkg.tiers.map((tier: any, ti: number) => (
+                    <div key={tier.id} className="rounded-xl p-3 space-y-2" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, opacity: tier.active ? 1 : 0.5 }}>
+                      <div className="flex items-center gap-2">
+                        <input className="flex-1 px-2 py-1 rounded-lg border text-xs" style={inputStyle} value={tier.name} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, name: e.target.value }; setRolloutPackages(u) }} />
+                        <input type="number" className="w-16 px-2 py-1 rounded-lg border text-xs" style={inputStyle} value={tier.price} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, price: Number(e.target.value) }; setRolloutPackages(u) }} />
+                        <button onClick={() => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, active: !tier.active }; setRolloutPackages(u) }}
+                          className="p-1 rounded-lg" style={{ color: tier.active ? '#10B981' : theme.textM }}>{tier.active ? <EyeIcon size={12} /> : <EyeOff size={12} />}</button>
+                        <button onClick={() => { const u = [...rolloutPackages]; u[pi].tiers.splice(ti, 1); setRolloutPackages(u) }}
+                          className="p-1 rounded-lg" style={{ color: '#EF4444' }}><Trash2 size={12} /></button>
+                        {ti > 0 && <button onClick={() => { const u = [...rolloutPackages]; const t = u[pi].tiers; [t[ti-1], t[ti]] = [t[ti], t[ti-1]]; setRolloutPackages(u) }}
+                          className="p-1 rounded-lg" style={{ color: theme.textM }}><ChevronUp size={12} /></button>}
+                        {ti < pkg.tiers.length - 1 && <button onClick={() => { const u = [...rolloutPackages]; const t = u[pi].tiers; [t[ti], t[ti+1]] = [t[ti+1], t[ti]]; setRolloutPackages(u) }}
+                          className="p-1 rounded-lg" style={{ color: theme.textM }}><ChevronDown size={12} /></button>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Badge (e.g. Best Value)" value={tier.badge} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, badge: e.target.value }; setRolloutPackages(u) }} />
+                        <input type="number" className="px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Sale price" value={tier.salePrice || ''} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, salePrice: e.target.value ? Number(e.target.value) : null }; setRolloutPackages(u) }} />
+                      </div>
+                      <input className="w-full px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Description" value={tier.description} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, description: e.target.value }; setRolloutPackages(u) }} />
+                      <input type="number" className="w-full px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Campaigns per month" value={tier.campaigns} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, campaigns: Number(e.target.value) }; setRolloutPackages(u) }} />
+                      <div>
+                        <p className="text-[9px] font-bold uppercase mb-1" style={{ color: theme.textM }}>Services (one per line)</p>
+                        <textarea rows={3} className="w-full px-2 py-1 rounded-lg border text-[10px]" style={{ ...inputStyle, resize: 'vertical' as any }}
+                          value={[...tier.services, ...tier.extras].join('\n')}
+                          onChange={e => {
+                            const lines = e.target.value.split('\n').filter((l: string) => l.trim())
+                            const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, services: lines, extras: [] }; setRolloutPackages(u)
+                          }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <button onClick={() => setRolloutPackages([...rolloutPackages, { id: gid(), label: 'New Package', tiers: [] }])}
+                className="w-full py-2 rounded-xl text-xs font-bold" style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40` }}>+ Add Package Type</button>
+            </div>
+
+            {/* Section Order */}
+            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Page Section Order</p>
+              <p className="text-[10px]" style={{ color: theme.textM }}>Drag sections up or down to reorder the public page layout.</p>
+              <div className="space-y-1.5">
+                {sectionOrder.map((sec, i) => {
+                  const labels: Record<string, string> = { booking: 'Book Your Design', portfolio: 'Featured Work', rollout: 'Monthly Rollout Plans', testimonials: 'Reviews & Testimonials' }
+                  return (
+                    <div key={sec} className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                      <span className="text-sm font-semibold flex-1" style={{ color: theme.text }}>{labels[sec] || sec}</span>
+                      <div className="flex gap-1">
+                        {i > 0 && <button onClick={() => { const u = [...sectionOrder]; [u[i-1], u[i]] = [u[i], u[i-1]]; setSectionOrder(u) }}
+                          className="p-1.5 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}><ChevronUp size={14} /></button>}
+                        {i < sectionOrder.length - 1 && <button onClick={() => { const u = [...sectionOrder]; [u[i], u[i+1]] = [u[i+1], u[i]]; setSectionOrder(u) }}
+                          className="p-1.5 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}><ChevronDown size={14} /></button>}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 

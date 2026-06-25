@@ -44,50 +44,6 @@ const TESTIMONIALS = [
   { name: 'DJ Supreme', role: 'Event Promoter', text: 'The flyers Bizzyplug designed for our event had the club packed out. Real results!', rating: 5 },
 ]
 
-/* ── Monthly Rollout Tiers ──
-   Edit tier names, prices, descriptions, and services below.
-   Each campaign includes all listed services.
-   The top tier (Campaign Rollout) includes a landing page. */
-const ROLLOUT_PER_CAMPAIGN = [
-  'Custom Cover Artwork',
-  'Instagram Promo Ad',
-  'Booking Ad / Promo Flyer',
-  'Motion Cover',
-  '45-Second Lyric Video',
-  'T-Shirt Merch Design',
-  'Monthly Release Gameplan / Posting Blueprint',
-]
-
-const ROLLOUT_TIERS = [
-  {
-    name: 'Starter Rollout',
-    price: 225,
-    period: '/mo',
-    campaigns: 1,
-    description: 'One full song or campaign rollout per month — everything you need to drop with impact.',
-    badge: '',
-    extras: [],
-  },
-  {
-    name: 'Momentum Rollout',
-    price: 450,
-    period: '/mo',
-    campaigns: 2,
-    description: 'Two rollouts per month for artists and promoters who stay active and build momentum.',
-    badge: 'Best Value',
-    extras: [],
-  },
-  {
-    name: 'Campaign Rollout',
-    price: 899,
-    period: '/mo',
-    campaigns: 4,
-    description: 'Four full rollouts per month plus a custom landing page — the complete creative machine.',
-    badge: 'Full Package',
-    extras: ['Landing Page Website'],
-  },
-]
-
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '14px 16px', fontSize: 14, borderRadius: 10,
   border: `1.5px solid ${C.border}`, backgroundColor: C.bgCard, color: C.white, outline: 'none',
@@ -107,6 +63,9 @@ export default function BizzyPlugPublicPage() {
   const [submitted, setSubmitted] = useState(false)
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ id: string; url: string; title: string; category: string }[]>([])
   const [reviews, setReviews] = useState<any[]>([])
+  const [rolloutPackages, setRolloutPackages] = useState<any[]>([])
+  const [activePackage, setActivePackage] = useState(0)
+  const [sectionOrder, setSectionOrder] = useState<string[]>(['booking', 'portfolio', 'rollout', 'testimonials'])
   const [reviewForm, setReviewForm] = useState({ name: '', role: '', text: '', rating: 5 })
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
@@ -117,6 +76,8 @@ export default function BizzyPlugPublicPage() {
       if (d?.settings) {
         setSiteSettings(d.settings)
         if (d.settings.services?.length > 0) setServices(d.settings.services)
+        if (d.settings.rolloutPackages?.length > 0) setRolloutPackages(d.settings.rolloutPackages)
+        if (d.settings.sectionOrder?.length > 0) setSectionOrder(d.settings.sectionOrder)
       }
     }).catch(() => {})
     fetch('/api/bizzyplug/photos', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
@@ -455,78 +416,97 @@ export default function BizzyPlugPublicPage() {
       </section>
 
       {/* ═══ MONTHLY ROLLOUT PLANS ═══ */}
-      <section id="rollout" style={{ ...sectionPad, backgroundColor: C.bgCard, position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 800, height: 800, borderRadius: '50%', background: `radial-gradient(circle, ${C.purple}10 0%, transparent 60%)`, pointerEvents: 'none' }} />
-        <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
-          <div style={{ textAlign: 'center', marginBottom: 48 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 10 }}>MONTHLY ROLLOUT PLANS</div>
-            <h2 style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 900, margin: '0 0 6px', letterSpacing: '-0.01em' }}>Artists & Promoters</h2>
-            <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.7, maxWidth: 640, margin: '16px auto 0' }}>
-              Stop dropping music and events with no plan. BizzyPlug monthly rollout plans give artists and promoters the visuals, promo content, motion graphics, merch design, and posting blueprint needed to stay consistent and look professional every month.
-            </p>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20, alignItems: 'stretch' }}>
-            {ROLLOUT_TIERS.map((tier, i) => {
-              const isTop = i === ROLLOUT_TIERS.length - 1
-              const allServices = [...ROLLOUT_PER_CAMPAIGN, ...tier.extras]
-              return (
-                <div key={i} style={{
-                  borderRadius: 20, padding: 2, position: 'relative',
-                  background: isTop
-                    ? `linear-gradient(135deg, ${C.purple}, ${C.purpleGlow}, ${C.purpleDim})`
-                    : 'transparent',
-                }}>
-                  {tier.badge && (
-                    <div style={{
-                      position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
-                      padding: '5px 16px', borderRadius: 100, fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
-                      backgroundColor: isTop ? C.purple : C.purpleDim, color: C.white,
-                      boxShadow: `0 4px 20px ${C.purple}40`,
+      {rolloutPackages.length > 0 && (
+        <section id="rollout" style={{ ...sectionPad, backgroundColor: C.bgCard, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 800, height: 800, borderRadius: '50%', background: `radial-gradient(circle, ${C.purple}10 0%, transparent 60%)`, pointerEvents: 'none' }} />
+          <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
+            <div style={{ textAlign: 'center', marginBottom: 40 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 10 }}>MONTHLY ROLLOUT PLANS</div>
+              {rolloutPackages.length > 1 && (
+                <div style={{ display: 'inline-flex', borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border}`, marginBottom: 16 }}>
+                  {rolloutPackages.map((pkg: any, pi: number) => (
+                    <button key={pkg.id} onClick={() => setActivePackage(pi)} style={{
+                      padding: '10px 28px', fontSize: 14, fontWeight: 700, border: 'none', cursor: 'pointer',
+                      backgroundColor: activePackage === pi ? C.purple : 'transparent',
+                      color: activePackage === pi ? C.white : C.mutedLight,
                     }}>
-                      {tier.badge}
-                    </div>
-                  )}
-                  <div style={{
-                    borderRadius: 18, padding: '36px 28px 28px', height: '100%', display: 'flex', flexDirection: 'column',
-                    backgroundColor: isTop ? '#0d0d12' : C.bg,
-                    border: isTop ? 'none' : `1px solid ${C.border}`,
-                    boxShadow: isTop ? `0 0 60px ${C.purple}15, 0 0 120px ${C.purple}08` : 'none',
-                  }}>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: isTop ? C.purpleLight : C.mutedLight, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>{tier.name}</p>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
-                      <span style={{ fontSize: 44, fontWeight: 900, color: isTop ? C.white : C.purple, letterSpacing: '-0.03em' }}>${tier.price}</span>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: C.muted }}>{tier.period}</span>
-                    </div>
-                    <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: '0 0 4px' }}>{tier.description}</p>
-                    <div style={{ padding: '8px 12px', borderRadius: 8, backgroundColor: `${C.purple}10`, margin: '12px 0 20px', display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start' }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleLight }}>{tier.campaigns} {tier.campaigns === 1 ? 'song/campaign' : 'songs/campaigns'} per month</span>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>Included per {tier.campaigns === 1 ? 'release' : 'release'}</p>
-                      {allServices.map((s, j) => (
-                        <div key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-                          <Check size={14} style={{ color: tier.extras.includes(s) ? C.green : C.purple, marginTop: 2, flexShrink: 0 }} />
-                          <span style={{ fontSize: 13, color: tier.extras.includes(s) ? C.white : C.mutedLight, fontWeight: tier.extras.includes(s) ? 700 : 400 }}>{s}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <button onClick={() => scrollTo('contact')} style={{
-                      width: '100%', marginTop: 24, padding: '14px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
-                      fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      backgroundColor: isTop ? C.purple : `${C.purple}18`,
-                      color: isTop ? C.white : C.purple,
-                      boxShadow: isTop ? `0 4px 24px ${C.purple}30` : 'none',
-                    }}>
-                      GET STARTED <ArrowRight size={16} />
+                      {pkg.label}
                     </button>
-                  </div>
+                  ))}
                 </div>
-              )
-            })}
+              )}
+              {rolloutPackages.length <= 1 && <h2 style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 900, margin: '0 0 6px' }}>{rolloutPackages[0]?.label}</h2>}
+              <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.7, maxWidth: 640, margin: '12px auto 0' }}>
+                Stop dropping music and events with no plan. BizzyPlug monthly rollout plans give artists and promoters the visuals, promo content, motion graphics, merch design, and posting blueprint needed to stay consistent and look professional every month.
+              </p>
+            </div>
+
+            {rolloutPackages[activePackage] && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20, alignItems: 'stretch' }}>
+                {rolloutPackages[activePackage].tiers.filter((t: any) => t.active !== false).map((tier: any, i: number, arr: any[]) => {
+                  const isTop = i === arr.length - 1
+                  const allServices = [...(tier.services || []), ...(tier.extras || [])]
+                  const hasSale = tier.salePrice !== null && tier.salePrice !== undefined && tier.salePrice < tier.price
+                  return (
+                    <div key={tier.id || i} style={{
+                      borderRadius: 20, padding: 2, position: 'relative',
+                      background: isTop ? `linear-gradient(135deg, ${C.purple}, ${C.purpleGlow}, ${C.purpleDim})` : 'transparent',
+                    }}>
+                      {tier.badge && (
+                        <div style={{
+                          position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
+                          padding: '5px 16px', borderRadius: 100, fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
+                          backgroundColor: isTop ? C.purple : C.purpleDim, color: C.white,
+                          boxShadow: `0 4px 20px ${C.purple}40`,
+                        }}>
+                          {tier.badge}
+                        </div>
+                      )}
+                      <div style={{
+                        borderRadius: 18, padding: '36px 28px 28px', height: '100%', display: 'flex', flexDirection: 'column',
+                        backgroundColor: isTop ? '#0d0d12' : C.bg,
+                        border: isTop ? 'none' : `1px solid ${C.border}`,
+                        boxShadow: isTop ? `0 0 60px ${C.purple}15, 0 0 120px ${C.purple}08` : 'none',
+                      }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: isTop ? C.purpleLight : C.mutedLight, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>{tier.name}</p>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
+                          {hasSale ? (
+                            <><span style={{ fontSize: 44, fontWeight: 900, color: C.green, letterSpacing: '-0.03em' }}>${tier.salePrice}</span><span style={{ fontSize: 18, fontWeight: 600, color: C.muted, textDecoration: 'line-through' }}>${tier.price}</span></>
+                          ) : (
+                            <span style={{ fontSize: 44, fontWeight: 900, color: isTop ? C.white : C.purple, letterSpacing: '-0.03em' }}>${tier.price}</span>
+                          )}
+                          <span style={{ fontSize: 15, fontWeight: 600, color: C.muted }}>{tier.period || '/mo'}</span>
+                        </div>
+                        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: '0 0 4px' }}>{tier.description}</p>
+                        <div style={{ padding: '8px 12px', borderRadius: 8, backgroundColor: `${C.purple}10`, margin: '12px 0 20px', display: 'inline-flex', alignSelf: 'flex-start' }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleLight }}>{tier.campaigns} {tier.campaigns === 1 ? 'song/campaign' : 'songs/campaigns'} per month</span>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>Included per release</p>
+                          {allServices.map((s: string, j: number) => (
+                            <div key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                              <Check size={14} style={{ color: (tier.extras || []).includes(s) ? C.green : C.purple, marginTop: 2, flexShrink: 0 }} />
+                              <span style={{ fontSize: 13, color: (tier.extras || []).includes(s) ? C.white : C.mutedLight, fontWeight: (tier.extras || []).includes(s) ? 700 : 400 }}>{s}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={() => scrollTo('contact')} style={{
+                          width: '100%', marginTop: 24, padding: '14px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
+                          fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                          backgroundColor: isTop ? C.purple : `${C.purple}18`, color: isTop ? C.white : C.purple,
+                          boxShadow: isTop ? `0 4px 24px ${C.purple}30` : 'none',
+                        }}>
+                          GET STARTED <ArrowRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ═══ TESTIMONIALS + REVIEWS ═══ */}
       <section id="testimonials" style={{ ...sectionPad, backgroundColor: C.bg }}>
