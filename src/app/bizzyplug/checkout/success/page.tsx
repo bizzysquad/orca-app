@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { CheckCircle, ArrowRight, Loader2 } from 'lucide-react'
 
@@ -14,7 +14,7 @@ const C = {
   green: '#10B981',
 }
 
-export default function CheckoutSuccessPage() {
+function SuccessContent() {
   const params = useSearchParams()
   const sessionId = params.get('session_id')
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying')
@@ -71,52 +71,67 @@ export default function CheckoutSuccessPage() {
   }, [sessionId])
 
   return (
+    <>
+      {status === 'verifying' && (
+        <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 48, border: `1px solid ${C.border}` }}>
+          <Loader2 size={48} style={{ color: C.purple, marginBottom: 16, animation: 'spin 1s linear infinite' }} />
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>Verifying Payment...</h2>
+          <p style={{ color: C.muted, fontSize: 14 }}>Please wait while we confirm your payment.</p>
+          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      {status === 'success' && (
+        <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 48, border: `1px solid ${C.green}40` }}>
+          <CheckCircle size={56} style={{ color: C.green, marginBottom: 16 }} />
+          <h2 style={{ fontSize: 24, fontWeight: 900, margin: '0 0 8px' }}>Payment Successful!</h2>
+          <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
+            Your project has been submitted and payment confirmed. We'll follow up within 24 hours with next steps.
+          </p>
+          <a href="/bizzyplug" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', borderRadius: 10, backgroundColor: C.purple, color: C.white, textDecoration: 'none', fontSize: 14, fontWeight: 800 }}>
+            Back to BizzyPlug <ArrowRight size={16} />
+          </a>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 48, border: `1px solid #EF444440` }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: '#EF444420', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <span style={{ fontSize: 28 }}>!</span>
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>Payment Issue</h2>
+          <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>{errorMsg}</p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <a href="/bizzyplug" style={{ padding: '12px 24px', borderRadius: 10, backgroundColor: C.purple, color: C.white, textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
+              Try Again
+            </a>
+            <a href="mailto:buzyplug@gmail.com" style={{ padding: '12px 24px', borderRadius: 10, backgroundColor: 'transparent', color: C.white, textDecoration: 'none', fontSize: 13, fontWeight: 700, border: `1px solid ${C.border}` }}>
+              Contact Support
+            </a>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+export default function CheckoutSuccessPage() {
+  return (
     <div style={{ backgroundColor: C.bg, color: C.white, minHeight: '100vh', fontFamily: "'Inter', -apple-system, sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
         <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
           <span style={{ fontWeight: 900, fontSize: 22, color: C.white }}>BIZZY</span>
           <span style={{ fontWeight: 900, fontSize: 22, color: C.purple }}>PLUG</span>
         </div>
-
-        {status === 'verifying' && (
+        <Suspense fallback={
           <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 48, border: `1px solid ${C.border}` }}>
             <Loader2 size={48} style={{ color: C.purple, marginBottom: 16, animation: 'spin 1s linear infinite' }} />
-            <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>Verifying Payment...</h2>
-            <p style={{ color: C.muted, fontSize: 14 }}>Please wait while we confirm your payment.</p>
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>Loading...</h2>
             <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
-        )}
-
-        {status === 'success' && (
-          <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 48, border: `1px solid ${C.green}40` }}>
-            <CheckCircle size={56} style={{ color: C.green, marginBottom: 16 }} />
-            <h2 style={{ fontSize: 24, fontWeight: 900, margin: '0 0 8px' }}>Payment Successful!</h2>
-            <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
-              Your project has been submitted and payment confirmed. We'll follow up within 24 hours with next steps.
-            </p>
-            <a href="/bizzyplug" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', borderRadius: 10, backgroundColor: C.purple, color: C.white, textDecoration: 'none', fontSize: 14, fontWeight: 800 }}>
-              Back to BizzyPlug <ArrowRight size={16} />
-            </a>
-          </div>
-        )}
-
-        {status === 'error' && (
-          <div style={{ backgroundColor: C.bgCard, borderRadius: 16, padding: 48, border: `1px solid #EF444440` }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: '#EF444420', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <span style={{ fontSize: 28 }}>!</span>
-            </div>
-            <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>Payment Issue</h2>
-            <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>{errorMsg}</p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a href="/bizzyplug" style={{ padding: '12px 24px', borderRadius: 10, backgroundColor: C.purple, color: C.white, textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
-                Try Again
-              </a>
-              <a href="mailto:buzyplug@gmail.com" style={{ padding: '12px 24px', borderRadius: 10, backgroundColor: 'transparent', color: C.white, textDecoration: 'none', fontSize: 13, fontWeight: 700, border: `1px solid ${C.border}` }}>
-                Contact Support
-              </a>
-            </div>
-          </div>
-        )}
+        }>
+          <SuccessContent />
+        </Suspense>
       </div>
     </div>
   )
