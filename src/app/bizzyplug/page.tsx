@@ -69,6 +69,8 @@ export default function BizzyPlugPublicPage() {
   const [reviewForm, setReviewForm] = useState({ name: '', role: '', text: '', rating: 5 })
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
+  const [stripeLoading, setStripeLoading] = useState(false)
+  const [stripeError, setStripeError] = useState('')
   const contactRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -120,6 +122,30 @@ export default function BizzyPlugPublicPage() {
       if (res.ok) { setReviewSubmitted(true); setReviewForm({ name: '', role: '', text: '', rating: 5 }) }
     } catch {}
     setReviewSubmitting(false)
+  }
+
+  const handleStripeCheckout = async () => {
+    setStripeLoading(true)
+    setStripeError('')
+    try {
+      const serviceItems = selectedServices.map(name => {
+        const svc = services.find(s => s.name === name)
+        const price = svc && (svc as any).salePrice !== undefined && (svc as any).salePrice < svc.price
+          ? (svc as any).salePrice : svc?.price || 0
+        return { name, price }
+      })
+      const res = await fetch('/api/bizzyplug/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ services: serviceItems, form }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Checkout failed')
+      if (data.url) window.location.href = data.url
+    } catch (err: any) {
+      setStripeError(err.message || 'Payment failed. Please try another method.')
+    }
+    setStripeLoading(false)
   }
 
   const cashAppLink = siteSettings.cashAppTag ? `https://cash.app/${siteSettings.cashAppTag}` : 'https://cash.app/$BizzyPlug'
@@ -346,25 +372,35 @@ export default function BizzyPlugPublicPage() {
                       <span style={{ fontSize: 22, fontWeight: 900, color: C.purple }}>${bookingTotal}</span>
                     </div>
                   </div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 10 }}>Select payment method:</p>
-                  <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 10 }}>Pay with card:</p>
+                  <button onClick={handleStripeCheckout} disabled={stripeLoading}
+                    style={{ width: '100%', padding: '16px 0', borderRadius: 10, fontSize: 14, fontWeight: 800, backgroundColor: C.purple, color: C.white, border: 'none', cursor: stripeLoading ? 'default' : 'pointer', opacity: stripeLoading ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+                    {stripeLoading ? 'Redirecting to checkout...' : <>PAY ${bookingTotal} WITH CARD <ArrowRight size={16} /></>}
+                  </button>
+                  {stripeError && <p style={{ fontSize: 12, color: '#EF4444', textAlign: 'center', margin: '4px 0 8px' }}>{stripeError}</p>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 0' }}>
+                    <div style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+                    <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>OR PAY WITH</span>
+                    <div style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                     {[
                       { label: 'Cash App', href: cashAppLink },
                       { label: 'PayPal', href: paypalLink },
                       { label: 'Venmo', href: venmoLink },
                     ].map((p, i) => (
                       <a key={i} href={p.href} target="_blank" rel="noopener noreferrer"
-                        style={{ flex: 1, padding: '14px 0', borderRadius: 10, backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.white, fontSize: 13, fontWeight: 700, textDecoration: 'none', textAlign: 'center', display: 'block' }}>
+                        style={{ flex: 1, padding: '12px 0', borderRadius: 10, backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.mutedLight, fontSize: 12, fontWeight: 600, textDecoration: 'none', textAlign: 'center', display: 'block' }}>
                         {p.label}
                       </a>
                     ))}
                   </div>
-                  <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', marginBottom: 16 }}>Complete payment using one of the methods above, then submit your project below.</p>
+                  <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', marginBottom: 16 }}>If using Cash App, PayPal, or Venmo — complete payment then submit below.</p>
                   <div style={{ display: 'flex', gap: 10 }}>
                     <button onClick={() => setBookingStep(2)} style={{ flex: 1, padding: '14px 0', borderRadius: 10, fontSize: 13, fontWeight: 700, backgroundColor: C.bg, color: C.mutedLight, border: `1px solid ${C.border}`, cursor: 'pointer' }}>Back</button>
                     <button onClick={handleSubmit} disabled={submitting}
-                      style={{ flex: 2, padding: '14px 0', borderRadius: 10, fontSize: 14, fontWeight: 800, backgroundColor: C.purple, color: C.white, border: 'none', cursor: 'pointer', opacity: submitting ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      {submitting ? 'Submitting...' : <>SUBMIT PROJECT <CheckCircle size={16} /></>}
+                      style={{ flex: 2, padding: '14px 0', borderRadius: 10, fontSize: 14, fontWeight: 800, backgroundColor: `${C.purple}30`, color: C.purple, border: `1px solid ${C.purple}40`, cursor: 'pointer', opacity: submitting ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      {submitting ? 'Submitting...' : <>SUBMIT WITHOUT CARD <CheckCircle size={16} /></>}
                     </button>
                   </div>
                 </div>

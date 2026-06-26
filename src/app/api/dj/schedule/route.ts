@@ -30,6 +30,7 @@ export async function GET() {
 
     const rows: any[] = await res.json()
 
+    const seen = new Set<string>()
     const gigs = rows
       .filter((e: any) => {
         try {
@@ -38,27 +39,36 @@ export async function GET() {
         } catch { return true }
       })
       .map((e: any) => {
+        let gigId = ''
         let clientName = ''
         let customEventType = ''
         let ticketLink = ''
         try {
           const parsed = JSON.parse(e.message || '{}')
+          gigId = parsed.id || ''
           clientName = parsed.clientName || ''
           customEventType = parsed.customEventType || ''
           ticketLink = parsed.ticketLink || ''
         } catch {}
         return {
           id: e.id,
+          gigId,
           date: e.event_date,
           eventType: customEventType || e.event_type,
           venue: e.venue || '',
-          city: e.venue || '',
+          city: '',
           clientName,
           startTime: e.event_start_time,
           endTime: e.event_end_time,
           ticketLink,
           status: 'confirmed',
         }
+      })
+      .filter((g: any) => {
+        const key = g.gigId || `${g.date}-${g.eventType}-${g.venue}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
       })
 
     return NextResponse.json({ gigs })

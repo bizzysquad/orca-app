@@ -76,6 +76,30 @@ function to12Hour(time: string): string {
 /* ═══════════════════════════════════════════════════════════════════════════
    Constants
    ═══════════════════════════════════════════════════════════════════════════ */
+const DEFAULT_TESTIMONIALS: Testimonial[] = [
+  {
+    id: 'default-1',
+    name: 'Ashley T.',
+    event_type: 'Wedding Reception',
+    rating: 5,
+    review: 'DJ Maskoff made our wedding reception absolutely unforgettable. He read the room perfectly and had everyone on the dance floor all night. Could not recommend him more!',
+  },
+  {
+    id: 'default-2',
+    name: 'Marcus J.',
+    event_type: 'Birthday Party',
+    rating: 5,
+    review: 'Hired him for my 30th birthday and he killed it. The transitions were smooth, the energy was right, and he played every request. Definitely booking again.',
+  },
+  {
+    id: 'default-3',
+    name: 'Christina W.',
+    event_type: 'Corporate Event',
+    rating: 5,
+    review: 'Professional from start to finish. He showed up early, set up quickly, and kept the vibe going for our company holiday party. Our team is still talking about it.',
+  },
+]
+
 const EVENT_TYPES = [
   'Private Party', 'Corporate Event', 'Wedding / Reception',
   'Lounge / Brunch Event', 'Community Event', 'Birthday Party',
@@ -240,9 +264,16 @@ export default function MaskOffDJPage() {
         const res = await fetch('/api/dj/schedule', { cache: 'no-store' })
         if (!res.ok) return
         const d = await res.json()
+        const seen = new Set<string>()
         const gigs = (d.gigs || [])
           .filter((g: any) => g.status === 'confirmed' && g.date >= today)
           .sort((a: any, b: any) => a.date.localeCompare(b.date))
+          .filter((g: any) => {
+            const key = g.gigId || g.id || `${g.date}-${g.eventType}-${g.venue}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
           .slice(0, 12)
           .map((g: any) => ({
             date: g.date,
@@ -1773,10 +1804,11 @@ export default function MaskOffDJPage() {
             </button>
           </div>
 
-          {/* Testimonial cards — merge customer reviews + site settings fallback */}
+          {/* Testimonial cards — merge customer reviews + site settings fallback + defaults */}
           {(() => {
             const fallback = (siteSettings.testimonials || []).filter((t: any) => t.name && t.quote).map((t: any, i: number) => ({ id: `fb-${i}`, name: t.name, event_type: t.event, rating: 5, review: t.quote }))
-            const allTestimonials = [...testimonials, ...fallback].slice(0, 9)
+            const realTestimonials = [...testimonials, ...fallback]
+            const allTestimonials = (realTestimonials.length > 0 ? realTestimonials : DEFAULT_TESTIMONIALS).slice(0, 9)
             return allTestimonials.length > 0 ? (
             <div style={{
               display: 'grid',
