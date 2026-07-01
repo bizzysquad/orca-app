@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
-  Check, DollarSign, Calendar,
-  Mic2, Flame, Scale,
+  Check, DollarSign, Calendar, X,
+  Mic2, Flame, Scale, Palette,
   ChevronLeft, ChevronRight, Target, Loader2,
   CheckSquare, Circle,
 } from 'lucide-react'
@@ -316,6 +317,11 @@ export default function DashboardPage() {
   const { theme } = useTheme()
   const { data, loading } = useOrcaData()
   const { user, bills } = data
+  const router = useRouter()
+  // Stores the ISO timestamp when each notif type was dismissed
+  const [dismissedAt, setDismissedAt] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('orca-dismissed-notifs-ts') || '{}') } catch { return {} }
+  })
 
   const displayName = user?.name?.trim() || 'Boss'
   const { greeting, line } = getGreeting(displayName)
@@ -333,6 +339,7 @@ export default function DashboardPage() {
   // New quote requests
   const [newQuoteCount, setNewQuoteCount] = useState(0)
   const [newTestimonialCount, setNewTestimonialCount] = useState(0)
+  const [bizzyplugNotifications, setBizzyplugNotifications] = useState<any[]>([])
   // Fitness
   const [todayCalories, setTodayCalories] = useState(0)
   const [currentWeight, setCurrentWeight] = useState(159)
@@ -365,8 +372,11 @@ export default function DashboardPage() {
   }, [djGigsList, calMonth, calYear])
 
   const bizzplugEarnedIncome = useMemo(() => {
-    return bizzplugClientsList.reduce((sum: number, c: any) => sum + (c.paid || 0), 0)
-  }, [bizzplugClientsList])
+    const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`
+    return bizzplugClientsList
+      .filter((c: any) => { const dt = c?.paidDate || c?.createdAt || ''; return dt.startsWith(key) && (c.paid || 0) > 0 })
+      .reduce((sum: number, c: any) => sum + (c.paid || 0), 0)
+  }, [bizzplugClientsList, calMonth, calYear])
 
   // Re-read all localStorage data when cloud sync merges new data
   useEffect(() => {
@@ -428,10 +438,33 @@ export default function DashboardPage() {
       const t = localStorage.getItem('orca-tasks')
       if (t) setTasks(JSON.parse(t))
     } catch {}
+    // Check for new BizzyPlug leads — fetch fresh from Supabase AND merge with localStorage
+    const loadBPLeads = (projectList: any[]) => {
+      if (!Array.isArray(projectList)) return
+      const recentLeads = projectList.filter((p: any) => {
+        if (!p || p.status !== 'new-lead' || !p.createdAt) return false
+        const age = Date.now() - new Date(p.createdAt).getTime()
+        return age < 7 * 24 * 60 * 60 * 1000
+      })
+      setBizzyplugNotifications(recentLeads)
+      setBizzplugClientsList(projectList)
+    }
+    // Try Supabase first (most up-to-date, catches server-created leads)
+    fetch('/api/bizzyplug/projects').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.projects?.length > 0) {
+        loadBPLeads(d.projects)
+        try { localStorage.setItem('orca-bizzplug-clients', JSON.stringify(d.projects)) } catch {}
+      } else {
+        // Fallback to localStorage
+        try { const raw = localStorage.getItem('orca-bizzplug-clients'); if (raw) loadBPLeads(JSON.parse(raw)) } catch {}
+      }
+    }).catch(() => {
+      try { const raw = localStorage.getItem('orca-bizzplug-clients'); if (raw) loadBPLeads(JSON.parse(raw)) } catch {}
+    })
     // Check for new quote requests
     fetch('/api/dj/bookings').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.bookings) {
-        const newCount = d.bookings.filter((b: any) => b.status === 'pending' && b.client_name !== '__DJ_GIG__' && b.client_name !== '__DJ_BLOCK__').length
+        const newCount = d.bookings.filter((b: any) => b.status === 'pending' && b.client_name !== '__DJ_GIG__' && b.client_name !== '__DJ_BLOCK__' && b.client_name !== '__BIZZYPLUG__').length
         setNewQuoteCount(newCount)
       }
     }).catch(() => {})
@@ -540,13 +573,12 @@ export default function DashboardPage() {
   }, [bills, calMonth, calYear])
 
   const upcomingGigs = useMemo(() => {
-    const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`
     const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(new Date(calYear, calMonth + 1, 0).getDate()).padStart(2, '0')}`
     return gigs
-      .filter(g => g.date >= monthStart && g.date <= monthEnd && g.status !== 'cancelled')
+      .filter(g => g.date >= todayStr && g.date <= monthEnd && g.status !== 'cancelled')
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 2)
-  }, [gigs, calMonth, calYear])
+  }, [gigs, calMonth, calYear, todayStr])
 
   if (loading) {
     return (
@@ -560,35 +592,69 @@ export default function DashboardPage() {
 
   // ── Shared widget renderers ───────────────────────────────────────────────
 
-  const QuoteAlert = () => (newQuoteCount === 0 && newTestimonialCount === 0) ? null : (
+  const dismissNotif = (key: string) => {
+    const next = { ...dismissedAt, [key]: new Date().toISOString() }
+    setDismissedAt(next)
+    try { localStorage.setItem('orca-dismissed-notifs-ts', JSON.stringify(next)) } catch {}
+  }
+
+  // A notification is shown if there's a lead/quote NEWER than the last dismissal time
+  const latestLeadDate = bizzyplugNotifications.length > 0
+    ? bizzyplugNotifications.reduce((latest: string, n: any) => (n.createdAt || '') > latest ? (n.createdAt || '') : latest, '')
+    : ''
+  const showBP = bizzyplugNotifications.length > 0 && (!dismissedAt['bp'] || latestLeadDate > dismissedAt['bp'])
+  const showQuotes = newQuoteCount > 0 && !dismissedAt['quotes']
+  const showReviews = newTestimonialCount > 0 && !dismissedAt['reviews']
+
+  const QuoteAlert = () => (!showBP && !showQuotes && !showReviews) ? null : (
     <div className="space-y-2">
-      {newQuoteCount > 0 && (
-        <Link href="/dj">
-          <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: '#EC489915', border: '1px solid #EC489930' }}>
+      {showBP && (
+        <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: '#9333EA15', border: '1px solid #9333EA30' }}>
+          <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => router.push('/bizzplug')}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#9333EA25' }}>
+              <Palette size={16} style={{ color: '#9333EA' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold" style={{ color: theme.text }}>{bizzyplugNotifications.length + ' New BizzyPlug Lead' + (bizzyplugNotifications.length !== 1 ? 's' : '')}</p>
+              <p className="text-xs" style={{ color: theme.subtext }}>Tap to view in Projects</p>
+            </div>
+          </div>
+          <button onClick={() => dismissNotif('bp')} className="p-1.5 rounded-lg shrink-0 hover:opacity-70" style={{ color: theme.subtext }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
+      {showQuotes && (
+        <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: '#EC489915', border: '1px solid #EC489930' }}>
+          <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => router.push('/dj')}>
             <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#EC489925' }}>
               <Mic2 size={16} style={{ color: '#EC4899' }} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold" style={{ color: theme.text }}>{newQuoteCount} New Quote{newQuoteCount !== 1 ? 's' : ''}</p>
+              <p className="text-sm font-bold" style={{ color: theme.text }}>{newQuoteCount + ' New Quote' + (newQuoteCount !== 1 ? 's' : '')}</p>
               <p className="text-xs" style={{ color: theme.subtext }}>Tap to review in DJ Gig Manager</p>
             </div>
-            <ChevronRight size={16} style={{ color: '#EC4899' }} />
           </div>
-        </Link>
+          <button onClick={() => dismissNotif('quotes')} className="p-1.5 rounded-lg shrink-0 hover:opacity-70" style={{ color: theme.subtext }}>
+            <X size={14} />
+          </button>
+        </div>
       )}
-      {newTestimonialCount > 0 && (
-        <Link href="/dj">
-          <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: `${BENTLEY_GOLD}12`, border: `1px solid ${BENTLEY_GOLD}30` }}>
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${BENTLEY_GOLD}20` }}>
+      {showReviews && (
+        <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: BENTLEY_GOLD + '12', border: '1px solid ' + BENTLEY_GOLD + '30' }}>
+          <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => router.push('/dj')}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: BENTLEY_GOLD + '20' }}>
               <Flame size={16} style={{ color: BENTLEY_GOLD }} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold" style={{ color: theme.text }}>{newTestimonialCount} New Review{newTestimonialCount !== 1 ? 's' : ''}</p>
+              <p className="text-sm font-bold" style={{ color: theme.text }}>{newTestimonialCount + ' New Review' + (newTestimonialCount !== 1 ? 's' : '')}</p>
               <p className="text-xs" style={{ color: theme.subtext }}>View in Website tab</p>
             </div>
-            <ChevronRight size={16} style={{ color: BENTLEY_GOLD }} />
           </div>
-        </Link>
+          <button onClick={() => dismissNotif('reviews')} className="p-1.5 rounded-lg shrink-0 hover:opacity-70" style={{ color: theme.subtext }}>
+            <X size={14} />
+          </button>
+        </div>
       )}
     </div>
   )
@@ -674,8 +740,9 @@ export default function DashboardPage() {
           })
         } catch {}
         try {
-          const bc = JSON.parse(localStorage.getItem('orca-bizzplug-clients') || '[]')
-          bc.forEach((c: any) => { if (c.paidDate?.startsWith(key)) bizzplug += (c.paid || 0) })
+          let bc = JSON.parse(localStorage.getItem('orca-bizzplug-clients') || '[]')
+          if (typeof bc === 'string') bc = JSON.parse(bc)
+          if (Array.isArray(bc)) bc.forEach((c: any) => { const dt = c?.paidDate || c?.createdAt || ''; if (dt.startsWith(key) && (c.paid || 0) > 0) bizzplug += (c.paid || 0) })
         } catch {}
         months.push({ month: monthNames[m], monthNum: m, year: y, lyft, dj, bizzplug, total: lyft + dj + bizzplug })
       }
@@ -745,6 +812,7 @@ export default function DashboardPage() {
             <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>This Month</p><p className="text-sm font-bold" style={{ color: BENTLEY_GREEN }}>{fmt(monthlyData[monthlyData.length - 1]?.total || 0)}</p></div>
             <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>Lyft</p><p className="text-sm font-bold" style={{ color: '#22D3EE' }}>{fmt(monthlyData[monthlyData.length - 1]?.lyft || 0)}</p></div>
             <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>DJ</p><p className="text-sm font-bold" style={{ color: '#EC4899' }}>{fmt(monthlyData[monthlyData.length - 1]?.dj || 0)}</p></div>
+            <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>BizzyPlug</p><p className="text-sm font-bold" style={{ color: '#9333EA' }}>{fmt(monthlyData[monthlyData.length - 1]?.bizzplug || 0)}</p></div>
           </div>
         )}
       </div>
@@ -792,6 +860,84 @@ export default function DashboardPage() {
           )}
         </div>
       </Link>
+    )
+  }
+
+  const BizzyPlugPosterboard = () => {
+    const newLeads = bizzplugClientsList.filter((p: any) => p.status === 'new-lead')
+    if (newLeads.length === 0) return null
+    const pendingValue = newLeads.reduce((s: number, p: any) => s + (p.quote || 0), 0)
+
+    return (
+      <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.card, border: '1px solid #9333EA30' }}>
+        <div className="px-4 pt-4 pb-3 flex items-center justify-between" style={{ borderBottom: `1px solid #9333EA20` }}>
+          <div className="flex items-center gap-2">
+            <Palette size={14} style={{ color: '#9333EA' }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>BizzyPlug Work Board</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#9333EA18', color: '#9333EA' }}>
+              {newLeads.length} active
+            </span>
+          </div>
+          <Link href="/bizzplug">
+            <span className="text-[10px] font-bold" style={{ color: '#9333EA' }}>View All →</span>
+          </Link>
+        </div>
+
+        <div className="px-4 py-3 grid grid-cols-2 gap-2">
+          <div className="rounded-xl p-2.5 text-center" style={{ backgroundColor: '#9333EA10' }}>
+            <p className="text-[9px] font-bold uppercase mb-0.5" style={{ color: theme.subtext }}>Pending Value</p>
+            <p className="text-sm font-bold" style={{ color: '#9333EA' }}>{fmt(pendingValue)}</p>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{ backgroundColor: `${BENTLEY_GREEN}10` }}>
+            <p className="text-[9px] font-bold uppercase mb-0.5" style={{ color: theme.subtext }}>Earned This Mo.</p>
+            <p className="text-sm font-bold" style={{ color: BENTLEY_GREEN }}>{fmt(bizzplugEarnedIncome)}</p>
+          </div>
+        </div>
+
+        <div className="px-4 pb-4 space-y-2">
+          {newLeads.slice(0, 5).map((p: any) => {
+            const paid = p.paid || 0
+            const quote = p.quote || 0
+            const pct = quote > 0 ? Math.min(100, Math.round((paid / quote) * 100)) : 0
+            return (
+              <Link key={p.id} href="/bizzplug">
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: '#9333EA15' }}>
+                    <Palette size={13} style={{ color: '#9333EA' }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{p.artistName}</p>
+                    <p className="text-[10px] truncate" style={{ color: theme.subtext }}>
+                      {p.projectType}
+                      {p.deadline ? ` · Due ${p.deadline}` : ''}
+                    </p>
+                    {quote > 0 && (
+                      <div className="mt-1 h-1 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? BENTLEY_GREEN : '#9333EA' }} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    {quote > 0 ? (
+                      <>
+                        <p className="text-xs font-bold" style={{ color: paid >= quote ? BENTLEY_GREEN : '#9333EA' }}>{fmt(paid)}</p>
+                        <p className="text-[10px]" style={{ color: theme.subtext }}>of {fmt(quote)}</p>
+                      </>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ backgroundColor: '#9333EA15', color: '#9333EA' }}>Quote TBD</span>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
+          {newLeads.length > 5 && (
+            <Link href="/bizzplug">
+              <p className="text-[10px] text-center pt-1" style={{ color: theme.subtext }}>+{newLeads.length - 5} more — tap to view all</p>
+            </Link>
+          )}
+        </div>
+      </div>
     )
   }
 
@@ -853,6 +999,7 @@ export default function DashboardPage() {
             </div>
             <DayDetail date={selectedDate} bills={bills} gigs={gigs} priorities={selectedPriorities} onTogglePriority={handleTogglePriority} onAddPriority={handleAddPriority} onDeletePriority={handleDeletePriority} />
           </motion.div>
+          <motion.div variants={fadeUp}><BizzyPlugPosterboard /></motion.div>
           <motion.div variants={fadeUp}><TaskListWidget /></motion.div>
           <motion.div variants={fadeUp}><FitnessBar /></motion.div>
           <motion.div variants={fadeUp}><MonthlyIncome /></motion.div>
@@ -877,7 +1024,7 @@ export default function DashboardPage() {
 
           {/* Stats row — full width */}
           <motion.div variants={fadeUp} className="mb-6"><QuickStatsRow /></motion.div>
-          {newQuoteCount > 0 && <motion.div variants={fadeUp} className="mb-6"><QuoteAlert /></motion.div>}
+          {(showBP || showQuotes || showReviews) && <motion.div variants={fadeUp} className="mb-6"><QuoteAlert /></motion.div>}
 
           {/* Two-column grid */}
           <div className="grid grid-cols-[1fr_340px] gap-6 items-start">
@@ -902,6 +1049,7 @@ export default function DashboardPage() {
 
             {/* Right column */}
             <motion.div variants={fadeUp} className="space-y-4">
+              <BizzyPlugPosterboard />
               <TaskListWidget />
               <FitnessBar />
               <MonthlyIncome />

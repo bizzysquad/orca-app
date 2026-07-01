@@ -17,48 +17,17 @@ export async function POST(req: NextRequest) {
     const {
       name, artistName, email, phone, instagram,
       projectType, songName, tracklist, details,
-      deadline, notes, referenceUrls,
+      deadline, notes, referenceUrls, serviceDescriptions,
+      paidAmount,
     } = body
 
     if (!artistName || !email) {
       return NextResponse.json({ error: 'Artist name and email are required' }, { status: 400 })
     }
 
-    const message = JSON.stringify({
-      source: 'bizzyplug',
-      artistName: artistName || '',
-      instagram: instagram || '',
-      songName: songName || '',
-      tracklist: tracklist || '',
-      details: details || '',
-      notes: notes || '',
-      referenceUrls: referenceUrls || [],
-    })
-
-    const row = {
-      name: `__BIZZYPLUG__`,
-      email,
-      phone: phone || '',
-      event_date: deadline || new Date().toISOString().slice(0, 10),
-      event_type: projectType || 'other',
-      venue: artistName || '',
-      message,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      client_name: name,
-      client_email: email,
-      client_phone: phone || '',
-    }
-
     const supabase = getAdmin()
-    const { error } = await supabase.from('booking_requests').insert(row)
 
-    if (error) {
-      console.error('Bizzyplug intake insert error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    // Auto-create project + client in BizzyPlug system
+    // Auto-create project + client + notification FIRST (critical path)
     try {
       const { data: profiles } = await supabase.from('profiles').select('id, local_data').limit(1)
       const profile = profiles?.[0]
@@ -66,36 +35,90 @@ export async function POST(req: NextRequest) {
         const localData = (profile.local_data as Record<string, any>) || {}
         const pid = Math.random().toString(36).slice(2, 10)
         const cid = Math.random().toString(36).slice(2, 10)
-        const now = new Date().toISOString().slice(0, 10)
+        const nowFull = new Date().toISOString()
+        const now = nowFull.slice(0, 10)
 
-        const projects: any[] = localData['orca-bizzplug-clients'] ? (typeof localData['orca-bizzplug-clients'] === 'string' ? JSON.parse(localData['orca-bizzplug-clients']) : localData['orca-bizzplug-clients']) : []
-        const clients: any[] = localData['orca-bizzplug-client-db'] ? (typeof localData['orca-bizzplug-client-db'] === 'string' ? JSON.parse(localData['orca-bizzplug-client-db']) : localData['orca-bizzplug-client-db']) : []
+        const parse = (v: any): any[] => { if (!v) return []; if (typeof v === 'string') { try { return JSON.parse(v) } catch { return [] } } return Array.isArray(v) ? v : [] }
+        const projects: any[] = parse(localData['orca-bizzplug-clients'])
+        const notifications: any[] = Array.isArray(localData['orca-bizzplug-notifications']) ? localData['orca-bizzplug-notifications'] : []
 
-        const totalPrice = 0
+        const isPaid = (notes || '').includes('[Paid via')
+        const paymentMethod = isPaid
+          ? (notes || '').includes('Stripe') ? 'stripe' : (notes || '').includes('Cash App') ? 'cashapp' : (notes || '').includes('Venmo') ? 'venmo' : 'other'
+          : ''
+        const amount = Number(paidAmount) || 0
+
         projects.unshift({
           id: pid, artistName: artistName || name || '', email: email || '', phone: phone || '',
           instagram: instagram || '', projectType: projectType || 'other', status: 'new-lead',
-          quote: totalPrice, paid: 0, paymentMethod: '', notes: notes || '',
-          songName: songName || '', tracklist: tracklist || '', details: details || '',
-          deadline: deadline || '', createdAt: now,
+          quote: amount, paid: isPaid ? amount : 0, paymentMethod,
+          paidDate: isPaid ? nowFull : '',
+          notes: notes || '', songName: songName || '', tracklist: tracklist || '', details: details || '',
+          deadline: deadline || '', createdAt: nowFull,  // full ISO timestamp for notification comparison
+          serviceDescriptions: serviceDescriptions || {},
+          referenceUrls: referenceUrls || [],
+          paymentStatus: isPaid ? 'paid' : 'pending',
         })
 
+        // Add calendar work session for this project
+        const workDate = deadline || now
+        const priorityKey = `orca-priorities-${workDate}`
+        const priorities: any[] = parse(localData[priorityKey])
+        priorities.push({ id: `bp-${pid}`, text: `BizzyPlug: ${projectType || 'Project'} for ${artistName || name || 'Client'}`, area: 'business', completed: false, addedByBentley: false })
+        localData[priorityKey] = priorities
+
+        notifications.unshift({
+          id: `notif-${Date.now()}`,
+          type: 'new-lead',
+          title: `New Project: ${artistName || name || 'Client'}`,
+          message: `${projectType || 'Service request'}${isPaid ? ` — ${paymentMethod} payment received` : ''}`,
+          email: email || '',
+          createdAt: nowFull,
+          read: false,
+        })
+
+        // Re-read clients fresh to avoid race condition overwriting concurrent submissions
+        const { data: freshProfiles } = await supabase.from('profiles').select('id, local_data').limit(1)
+        const freshData = (freshProfiles?.[0]?.local_data as Record<string, any>) || {}
+        const clients: any[] = parse(freshData['orca-bizzplug-client-db'])
         const clientKey = (email || artistName || '').toLowerCase()
-        if (clientKey && !clients.some((c: any) => (c.email || c.artistName || '').toLowerCase() === clientKey)) {
-          clients.push({
-            id: cid, artistName: artistName || name || '', email: email || '',
-            phone: phone || '', instagram: instagram || '', createdAt: now,
-          })
+        const existingClient = clients.find((c: any) => (c.email || c.artistName || '').toLowerCase() === clientKey)
+        if (existingClient) {
+          if (phone && !existingClient.phone) existingClient.phone = phone
+          if (instagram && !existingClient.instagram) existingClient.instagram = instagram
+        } else if (clientKey) {
+          clients.push({ id: cid, artistName: artistName || name || '', email: email || '', phone: phone || '', instagram: instagram || '', createdAt: now })
+        }
+
+        // Update sync timestamps so pullFromCloud() treats this server-written data as newest
+        const TIMESTAMPS_KEY = '_orca-sync-timestamps'
+        const existingTs = (localData[TIMESTAMPS_KEY] as Record<string, string>) || {}
+        const freshTs = (freshData[TIMESTAMPS_KEY] as Record<string, string>) || {}
+        const newTimestamps = {
+          ...existingTs,
+          ...freshTs,
+          'orca-bizzplug-clients': nowFull,
+          'orca-bizzplug-client-db': nowFull,
+          'orca-bizzplug-notifications': nowFull,
         }
 
         await supabase.from('profiles').update({
-          local_data: { ...localData, 'orca-bizzplug-clients': projects, 'orca-bizzplug-client-db': clients },
+          local_data: {
+            ...localData,
+            ...freshData,
+            'orca-bizzplug-clients': projects,
+            'orca-bizzplug-client-db': clients,
+            'orca-bizzplug-notifications': notifications.slice(0, 50),
+            [TIMESTAMPS_KEY]: newTimestamps,
+          },
         }).eq('id', profile.id)
       }
     } catch (e) { console.error('Auto-create project/client failed:', e) }
 
-    sendNotification({ name, artistName, email, phone, instagram, projectType, songName, details, deadline, notes })
-    sendCustomerConfirmation(name, email, projectType)
+    await Promise.all([
+      sendNotification({ name, artistName, email, phone, instagram, projectType, songName, details, deadline, notes }, serviceDescriptions || {}),
+      sendCustomerConfirmation(name, email, projectType),
+    ])
 
     return NextResponse.json({ success: true })
   } catch (err: any) {
@@ -104,13 +127,19 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function sendNotification(data: Record<string, string>) {
+async function sendNotification(data: Record<string, string>, svcDescs: Record<string, string> = {}) {
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return
   try {
     const t = nodemailer.createTransport({
       service: 'gmail',
       auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
     })
+    const svcDescRows = Object.entries(svcDescs).filter(([, v]) => v).map(([svc, desc]) => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #27272a;color:#94A3B8;font-size:13px;width:120px;">${svc}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #27272a;color:#F1F5F9;font-size:13px;">${desc}</td>
+      </tr>
+    `).join('')
     const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#0a0a0a;color:#F1F5F9;padding:32px;border-radius:16px;">
         <div style="background:linear-gradient(135deg,#7C3AED,#9333EA);padding:20px;border-radius:12px;text-align:center;margin-bottom:24px;">
@@ -136,6 +165,12 @@ async function sendNotification(data: Record<string, string>) {
             </tr>
           `).join('')}
         </table>
+        ${svcDescRows ? `
+          <div style="margin-top:20px;padding:16px;background:#18181b;border-radius:12px;border:1px solid #27272a;">
+            <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:#C084FC;">Service Descriptions</p>
+            <table style="width:100%;border-collapse:collapse;">${svcDescRows}</table>
+          </div>
+        ` : ''}
       </div>
     `
     await t.sendMail({

@@ -11,9 +11,18 @@ import {
 import { useTheme } from '@/context/ThemeContext'
 import { fmt } from '@/lib/utils'
 import { setLocalSynced } from '@/lib/syncLocal'
+import { pullFromCloud } from '@/lib/syncEngine'
 
 const BIZ_PURPLE = '#9333EA'
 const BIZ_GOLD = '#F59E0B'
+
+const THEME_PRESETS = [
+  { id: 'dark-modern', name: 'Dark Modern', colors: { bg: '#09090b', bgCard: '#131316', purple: '#8B5CF6', white: '#F4F4F5' } },
+  { id: 'light-clean', name: 'Light Clean', colors: { bg: '#FFFFFF', bgCard: '#F9FAFB', purple: '#7C3AED', white: '#111827' } },
+  { id: 'dark-slate', name: 'Dark Slate', colors: { bg: '#0F172A', bgCard: '#1E293B', purple: '#6366F1', white: '#F1F5F9' } },
+  { id: 'light-warm', name: 'Light Warm', colors: { bg: '#FFFBF5', bgCard: '#FFF7ED', purple: '#9333EA', white: '#1C1917' } },
+  { id: 'dark-charcoal', name: 'Dark Charcoal', colors: { bg: '#171717', bgCard: '#1F1F1F', purple: '#A855F7', white: '#FAFAFA' } },
+]
 
 function gid() { return Math.random().toString(36).slice(2, 10) }
 function fmtCat(s: string) { return s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') }
@@ -143,35 +152,146 @@ const BLANK_PROJECT = (): Partial<BizProject> => ({
   songName: '', tracklist: '', details: '',
 })
 
-type DashTab = 'projects' | 'clients' | 'inbox' | 'website' | 'delivery'
+type DashTab = 'projects' | 'clients' | 'website' | 'delivery'
 
-function DeliveryTab({ theme, projects, inputCls, inputStyle }: { theme: any; projects: any[]; inputCls: string; inputStyle: any }) {
-  const [selectedProject, setSelectedProject] = useState<string | null>(null)
+interface ReplyTemplate {
+  id: string
+  label: string
+  text: string
+}
+
+const DEFAULT_REPLY_TEMPLATES: ReplyTemplate[] = [
+  { id: 'complete', label: 'Design Complete', text: "Your design is complete and ready to download! Let me know if you need any adjustments or different file formats." },
+  { id: 'revision', label: 'Revision Delivered', text: "Here's your revised design based on your feedback. Hope this is exactly what you had in mind! Reach out if anything needs tweaking." },
+  { id: 'rush', label: 'Rush Order Done', text: "Your rush order is complete and delivered on time as promised! All files are ready to download. Thanks for trusting BizzyPlug with your project!" },
+  { id: 'branding', label: 'Full Branding Package', text: "Your full branding package is complete! Logo, flyers, and social media assets are all included. Let me know if you need file formats adjusted or additional sizes." },
+  { id: 'thanks', label: 'Thank You Note', text: "Thank you for your patience throughout this process! Your project is complete and ready for download. It was a pleasure working with you — I look forward to the next one!" },
+  { id: 'followup', label: 'Follow-Up Check-In', text: "Just following up to make sure you received your files and everything looks good! Don't hesitate to reach out if you have any questions or need any revisions." },
+  { id: 'payment', label: 'Payment Reminder', text: "Your design is ready to go! Please complete the remaining balance so I can send over your final files. Reach out if you have any questions about payment." },
+]
+
+const TEMPLATES_KEY = 'orca-bizzplug-reply-templates'
+
+function DeliveryTab({ theme, clients, inputCls, inputStyle }: { theme: any; clients: BizClientProfile[]; inputCls: string; inputStyle: any }) {
+  const [selectedClient, setSelectedClient] = useState<string | null>(null)
   const [deliverEmail, setDeliverEmail] = useState('')
   const [deliverMessage, setDeliverMessage] = useState('')
+  const [deliverSubject, setDeliverSubject] = useState('')
   const [deliverFiles, setDeliverFiles] = useState<File[]>([])
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sendError, setSendError] = useState('')
+  const [showManageTemplates, setShowManageTemplates] = useState(false)
+  const [newTplLabel, setNewTplLabel] = useState('')
+  const [newTplText, setNewTplText] = useState('')
+  // Inline edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editLabel, setEditLabel] = useState('')
+  const [editText, setEditText] = useState('')
 
-  const project = projects.find(p => p.id === selectedProject)
+  const [templates, setTemplates] = useState<ReplyTemplate[]>(() => {
+    try {
+      const saved = localStorage.getItem(TEMPLATES_KEY)
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_REPLY_TEMPLATES
+  })
+
+  const client = clients.find(c => c.id === selectedClient)
+
+  const saveTemplates = (updated: ReplyTemplate[]) => {
+    setTemplates(updated)
+    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated)) } catch {}
+  }
+
+  const startEdit = (t: ReplyTemplate) => {
+    setEditingId(t.id)
+    setEditLabel(t.label)
+    setEditText(t.text)
+  }
+
+  const saveEdit = () => {
+    if (!editLabel.trim() || !editText.trim() || !editingId) return
+    saveTemplates(templates.map(t => t.id === editingId ? { ...t, label: editLabel.trim(), text: editText.trim() } : t))
+    setEditingId(null)
+  }
+
+  const cancelEdit = () => setEditingId(null)
+
+  const deleteTemplate = (id: string) => {
+    if (editingId === id) setEditingId(null)
+    saveTemplates(templates.filter(t => t.id !== id))
+  }
+
+  const moveTemplate = (idx: number, dir: -1 | 1) => {
+    const updated = [...templates]
+    const target = idx + dir
+    if (target < 0 || target >= updated.length) return
+    ;[updated[idx], updated[target]] = [updated[target], updated[idx]]
+    saveTemplates(updated)
+  }
+
+  const addTemplate = () => {
+    if (!newTplLabel.trim() || !newTplText.trim()) return
+    saveTemplates([...templates, { id: gid(), label: newTplLabel.trim(), text: newTplText.trim() }])
+    setNewTplLabel('')
+    setNewTplText('')
+  }
+
+  const resetToDefaults = () => {
+    saveTemplates(DEFAULT_REPLY_TEMPLATES)
+    setEditingId(null)
+  }
+
+  const applyTemplate = (id: string) => {
+    const tpl = templates.find(t => t.id === id)
+    if (tpl) { setDeliverMessage(tpl.text); setDeliverSubject(tpl.label) }
+  }
 
   const handleDeliver = async () => {
-    if (!deliverEmail || !project) return
+    if (!deliverEmail || !client) return
     setSending(true)
+    setSendError('')
     try {
-      let fileUrls: string[] = []
+      let downloadUrl: string | null = null
       if (deliverFiles.length > 0) {
-        const fd = new FormData()
-        deliverFiles.forEach(f => fd.append('files', f))
-        const upRes = await fetch('/api/bizzyplug/reference-upload', { method: 'POST', body: fd })
-        if (upRes.ok) { const d = await upRes.json(); fileUrls = d.urls || [] }
+        const serverRes = await fetch('https://api.gofile.io/servers')
+        if (!serverRes.ok) throw new Error('Could not reach file hosting service.')
+        const serverData = await serverRes.json()
+        const servers = serverData?.data?.servers
+        const server = Array.isArray(servers) ? servers[0]?.name : serverData?.data?.server
+        if (!server) throw new Error('No upload server available.')
+        let folderId: string | null = null
+        for (const file of deliverFiles) {
+          const fd = new FormData()
+          fd.append('file', file)
+          if (folderId) fd.append('folderId', folderId)
+          const upRes = await fetch(`https://${server}.gofile.io/contents/uploadfile`, { method: 'POST', body: fd })
+          const upData = await upRes.json()
+          if (upData.status === 'ok') {
+            if (!folderId) folderId = upData.data.parentFolder
+            downloadUrl = upData.data.downloadPage
+          }
+        }
+        if (!downloadUrl) throw new Error('File upload failed. Please try again.')
       }
       const res = await fetch('/api/bizzyplug/deliver', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: deliverEmail, clientName: project.artistName, projectType: project.projectType, message: deliverMessage, fileUrls }),
+        body: JSON.stringify({ to: deliverEmail, clientName: client.artistName, message: deliverMessage, downloadUrl, subject: deliverSubject }),
       })
-      if (res.ok) { setSent(true); setDeliverMessage(''); setDeliverFiles([]); setTimeout(() => setSent(false), 4000) }
-    } catch {}
+      if (res.ok) {
+        setSent(true)
+        setDeliverMessage('')
+        setDeliverSubject('')
+        setDeliverFiles([])
+        setTimeout(() => setSent(false), 4000)
+      } else {
+        const d = await res.json()
+        setSendError(d.error || 'Failed to send email. Check your Gmail settings.')
+      }
+    } catch (e: any) {
+      setSendError(e.message || 'Network error. Please try again.')
+    }
     setSending(false)
   }
 
@@ -181,43 +301,213 @@ function DeliveryTab({ theme, projects, inputCls, inputStyle }: { theme: any; pr
         <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Send completed work via Buzyplug@gmail.com</p>
       </div>
 
+      {/* ── Reply Templates Manager ── */}
+      <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+        <button
+          onClick={() => setShowManageTemplates(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3"
+          style={{ borderBottom: showManageTemplates ? `1px solid ${theme.border}` : 'none' }}>
+          <div className="flex items-center gap-2">
+            <FileText size={13} style={{ color: '#9333EA' }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.text }}>Reply Templates</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#9333EA15', color: '#9333EA' }}>{templates.length}</span>
+          </div>
+          {showManageTemplates
+            ? <ChevronUp size={14} style={{ color: theme.textM }} />
+            : <ChevronDown size={14} style={{ color: theme.textM }} />}
+        </button>
+
+        {showManageTemplates && (
+          <div className="p-4 space-y-3">
+
+            {/* Template list */}
+            <div className="space-y-2">
+              {templates.map((t, idx) => (
+                <div key={t.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${editingId === t.id ? '#9333EA' : theme.border}` }}>
+                  {editingId === t.id ? (
+                    /* ── Inline edit mode ── */
+                    <div className="p-3 space-y-2" style={{ backgroundColor: '#9333EA08' }}>
+                      <input
+                        className={inputCls} style={{ ...inputStyle, fontSize: 12 }}
+                        placeholder="Template name"
+                        value={editLabel}
+                        onChange={e => setEditLabel(e.target.value)} />
+                      <textarea
+                        rows={3} className={inputCls}
+                        style={{ ...inputStyle, fontSize: 12, resize: 'vertical' as any }}
+                        placeholder="Message text"
+                        value={editText}
+                        onChange={e => setEditText(e.target.value)} />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={saveEdit}
+                          disabled={!editLabel.trim() || !editText.trim()}
+                          className="flex-1 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 disabled:opacity-40"
+                          style={{ backgroundColor: '#9333EA', color: '#fff' }}>
+                          <Save size={11} /> Save
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="flex-1 py-1.5 rounded-lg text-[11px] font-bold"
+                          style={{ backgroundColor: theme.border, color: theme.textM }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Normal view mode ── */
+                    <div className="flex items-center gap-2 px-3 py-2.5" style={{ backgroundColor: theme.bg }}>
+                      {/* Reorder arrows */}
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <button
+                          onClick={() => moveTemplate(idx, -1)}
+                          disabled={idx === 0}
+                          className="p-0.5 rounded disabled:opacity-20"
+                          style={{ color: theme.textM }}>
+                          <ChevronUp size={12} />
+                        </button>
+                        <button
+                          onClick={() => moveTemplate(idx, 1)}
+                          disabled={idx === templates.length - 1}
+                          className="p-0.5 rounded disabled:opacity-20"
+                          style={{ color: theme.textM }}>
+                          <ChevronDown size={12} />
+                        </button>
+                      </div>
+                      {/* Label + preview */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate" style={{ color: theme.text }}>{t.label}</p>
+                        <p className="text-[10px] mt-0.5 truncate" style={{ color: theme.textM }}>{t.text}</p>
+                      </div>
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => startEdit(t)}
+                          className="p-1.5 rounded-lg"
+                          style={{ backgroundColor: `#9333EA12`, color: '#9333EA' }}
+                          title="Edit">
+                          <Edit3 size={11} />
+                        </button>
+                        <button
+                          onClick={() => deleteTemplate(t.id)}
+                          className="p-1.5 rounded-lg"
+                          style={{ backgroundColor: '#EF444412', color: '#EF4444' }}
+                          title="Delete">
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {templates.length === 0 && (
+                <p className="text-xs text-center py-3" style={{ color: theme.textM }}>No templates. Add one below or reset to defaults.</p>
+              )}
+            </div>
+
+            {/* Reset + Add */}
+            <div className="pt-2 border-t space-y-3" style={{ borderColor: theme.border }}>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Add New Template</p>
+                <button
+                  onClick={resetToDefaults}
+                  className="text-[10px] font-bold px-2 py-1 rounded-lg"
+                  style={{ backgroundColor: theme.border, color: theme.textM }}>
+                  Reset to Defaults
+                </button>
+              </div>
+              <input
+                className={inputCls} style={inputStyle}
+                placeholder="Template name (e.g. Album Cover Done)"
+                value={newTplLabel}
+                onChange={e => setNewTplLabel(e.target.value)} />
+              <textarea
+                rows={2} className={inputCls}
+                style={{ ...inputStyle, resize: 'vertical' as any }}
+                placeholder="Message text..."
+                value={newTplText}
+                onChange={e => setNewTplText(e.target.value)} />
+              <button
+                onClick={addTemplate}
+                disabled={!newTplLabel.trim() || !newTplText.trim()}
+                className="w-full py-2 rounded-xl text-xs font-bold disabled:opacity-40"
+                style={{ backgroundColor: '#9333EA', color: '#fff' }}>
+                + Save Template
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Select Client ── */}
       <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Select Project</p>
-        {projects.length === 0 ? (
-          <p className="text-sm" style={{ color: theme.textM }}>No projects yet. Projects are auto-created when customers book.</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Select Client</p>
+        {clients.length === 0 ? (
+          <p className="text-sm" style={{ color: theme.textM }}>No clients yet. Clients are auto-added when projects are created.</p>
         ) : (
           <div className="space-y-2 max-h-48 overflow-y-auto">
-            {projects.map(p => (
-              <button key={p.id} onClick={() => { setSelectedProject(p.id); setDeliverEmail(p.email || '') }}
+            {clients.map(c => (
+              <button key={c.id} onClick={() => { setSelectedClient(c.id); setDeliverEmail(c.email || '') }}
                 className="w-full text-left px-3 py-2.5 rounded-xl text-sm flex items-center justify-between"
-                style={{ backgroundColor: selectedProject === p.id ? '#9333EA15' : theme.bg, border: `1px solid ${selectedProject === p.id ? '#9333EA' : theme.border}`, color: theme.text }}>
+                style={{ backgroundColor: selectedClient === c.id ? '#9333EA15' : theme.bg, border: `1px solid ${selectedClient === c.id ? '#9333EA' : theme.border}`, color: theme.text }}>
                 <div>
-                  <span className="font-semibold">{p.artistName}</span>
-                  <span className="text-xs ml-2" style={{ color: theme.textM }}>{p.projectType}</span>
+                  <span className="font-semibold">{c.artistName}</span>
+                  {c.instagram && <span className="text-xs ml-2" style={{ color: theme.textM }}>{c.instagram}</span>}
                 </div>
-                {p.email && <span className="text-[10px]" style={{ color: theme.textM }}>{p.email}</span>}
+                {c.email && <span className="text-[10px]" style={{ color: theme.textM }}>{c.email}</span>}
               </button>
             ))}
           </div>
         )}
       </div>
 
-      {selectedProject && project && (
+      {/* ── Compose & Send ── */}
+      {selectedClient && client && (
         <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Deliver to {project.artistName}</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Deliver to {client.artistName}</p>
+
           <div>
             <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Client Email</label>
             <input className={inputCls} style={inputStyle} value={deliverEmail} onChange={e => setDeliverEmail(e.target.value)} placeholder="client@email.com" />
           </div>
+
+          {/* Quick Reply Dropdown */}
           <div>
-            <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Message (optional)</label>
-            <textarea rows={3} className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} value={deliverMessage} onChange={e => setDeliverMessage(e.target.value)} placeholder="Here's your completed design..." />
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Quick Reply Template</label>
+            <select
+              className={inputCls}
+              style={inputStyle}
+              value=""
+              onChange={e => { if (e.target.value) applyTemplate(e.target.value) }}>
+              <option value="">— Select a template to fill message —</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
           </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-semibold" style={{ color: theme.textM }}>Message</label>
+              {deliverMessage && (
+                <button onClick={() => { setDeliverMessage(''); setDeliverSubject('') }} className="text-[10px]" style={{ color: theme.textM }}>Clear</button>
+              )}
+            </div>
+            <textarea
+              rows={4}
+              className={inputCls}
+              style={{ ...inputStyle, resize: 'vertical' as any }}
+              value={deliverMessage}
+              onChange={e => setDeliverMessage(e.target.value)}
+              placeholder="Select a template above or write a custom message..." />
+          </div>
+
           <div>
             <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Upload Artwork Files</label>
             <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer" style={{ backgroundColor: '#9333EA12', color: '#9333EA', border: '1px dashed #9333EA40' }}>
               <Upload size={14} /> {deliverFiles.length > 0 ? `${deliverFiles.length} file${deliverFiles.length > 1 ? 's' : ''} ready` : 'Choose files to send'}
-              <input type="file" accept="image/*,.pdf,.psd,.ai,.zip" multiple className="hidden" onChange={e => { if (e.target.files) setDeliverFiles(Array.from(e.target.files)) }} />
+              <input type="file" accept="image/*,video/*,.pdf,.psd,.ai,.zip" multiple className="hidden" onChange={e => { if (e.target.files) setDeliverFiles(Array.from(e.target.files)) }} />
             </label>
             {deliverFiles.length > 0 && (
               <div className="flex gap-2 flex-wrap mt-2">
@@ -230,7 +520,15 @@ function DeliveryTab({ theme, projects, inputCls, inputStyle }: { theme: any; pr
               </div>
             )}
           </div>
+
           <p className="text-[9px]" style={{ color: theme.textM }}>Email will include artwork download links + a "Thank you for shopping with BizzyPlug" message with a link to leave a review.</p>
+
+          {sendError && (
+            <div className="px-3 py-2 rounded-xl text-xs font-semibold" style={{ backgroundColor: '#EF444415', color: '#EF4444', border: '1px solid #EF444430' }}>
+              {sendError}
+            </div>
+          )}
+
           <button onClick={handleDeliver} disabled={sending || !deliverEmail}
             className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
             style={{ backgroundColor: sent ? '#10B981' : '#9333EA', color: '#fff', opacity: sending ? 0.6 : 1 }}>
@@ -250,6 +548,7 @@ export default function BizzyPlugPage() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<Partial<BizProject>>(BLANK_PROJECT())
+  const [selectedClientId, setSelectedClientId] = useState('')
   const [filterStatus, setFilterStatus] = useState<ProjectStatus | 'all'>('new-lead')
   const [submissions, setSubmissions] = useState<BizSubmission[]>([])
   const [loadingSubmissions, setLoadingSubmissions] = useState(false)
@@ -259,12 +558,14 @@ export default function BizzyPlugPage() {
     cashAppTag: '$BizzyPlug', paypalEmail: 'buzyplug@gmail.com', venmoHandle: '@Buzyplug',
   })
   const [editingService, setEditingService] = useState<number | null>(null)
+  const [websiteSection, setWebsiteSection] = useState<string | null>('theme')
   const [newService, setNewService] = useState({ name: '', price: '' })
   const [siteSaved, setSiteSaved] = useState(false)
   const [showClientForm, setShowClientForm] = useState(false)
   const [editClientId, setEditClientId] = useState<string | null>(null)
   const [clientForm, setClientForm] = useState<Partial<BizClientProfile>>({})
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
+  const [expandedProject, setExpandedProject] = useState<string | null>(null)
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ id: string; url: string; title: string; category: string }[]>([])
   const [uploadingPortfolio, setUploadingPortfolio] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
@@ -291,9 +592,18 @@ export default function BizzyPlugPage() {
     ]},
   ])
   const [sectionOrder, setSectionOrder] = useState<string[]>(['booking', 'portfolio', 'rollout', 'testimonials'])
+  const [hiddenSections, setHiddenSections] = useState<string[]>([])
 
   const loadPortfolio = useCallback(async () => {
-    try { const res = await fetch('/api/bizzyplug/photos'); if (res.ok) { const d = await res.json(); setPortfolioPhotos(d.photos || []) } } catch {}
+    try {
+      const res = await fetch('/api/bizzyplug/photos')
+      if (res.ok) {
+        const d = await res.json()
+        const photos = d.photos || []
+        setPortfolioPhotos(photos)
+        try { localStorage.setItem('orca-bizzplug-portfolio-photos', JSON.stringify(photos)) } catch {}
+      }
+    } catch {}
   }, [])
 
   const uploadPortfolioPhotos = async (files: File[]) => {
@@ -345,7 +655,10 @@ export default function BizzyPlugPage() {
   }
 
   const deletePortfolioPhoto = async (id: string) => {
-    try { await fetch('/api/bizzyplug/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); setPortfolioPhotos(p => p.filter(x => x.id !== id)) } catch {}
+    try {
+      await fetch('/api/bizzyplug/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+      setPortfolioPhotos(p => { const updated = p.filter(x => x.id !== id); try { localStorage.setItem('orca-bizzplug-portfolio-photos', JSON.stringify(updated)) } catch {}; return updated })
+    } catch {}
   }
 
   const purgeAllPhotos = async () => {
@@ -378,6 +691,7 @@ export default function BizzyPlugPage() {
   useEffect(() => {
     try { const s = localStorage.getItem('orca-bizzplug-clients'); if (s) setProjects(JSON.parse(s)) } catch {}
     try { const c = localStorage.getItem('orca-bizzplug-client-db'); if (c) setClientDb(JSON.parse(c)) } catch {}
+    try { const p = localStorage.getItem('orca-bizzplug-portfolio-photos'); if (p) setPortfolioPhotos(JSON.parse(p)) } catch {}
     try {
       const ss = localStorage.getItem('orca-bizzplug-site-settings')
       if (ss) {
@@ -386,19 +700,52 @@ export default function BizzyPlugPage() {
         if (parsed.portfolioCategories?.length > 0) setPortfolioCategories(parsed.portfolioCategories)
         if (parsed.rolloutPackages?.length > 0) setRolloutPackages(parsed.rolloutPackages)
         if (parsed.sectionOrder?.length > 0) setSectionOrder(parsed.sectionOrder)
+        if (parsed.hiddenSections) setHiddenSections(parsed.hiddenSections)
         setSiteSettings((s: any) => ({ ...s, ...parsed }))
       }
     } catch {}
+    // Fetch fresh from Supabase directly — bypasses the timestamp-merge issue where
+    // pullFromCloud keeps stale local data when the server wrote new leads without a client timestamp.
+    fetch('/api/bizzyplug/projects')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.projects && Array.isArray(d.projects)) {
+          setProjects(d.projects)
+          try { localStorage.setItem('orca-bizzplug-clients', JSON.stringify(d.projects)) } catch {}
+        }
+        if (d?.clientDb && Array.isArray(d.clientDb)) {
+          setClientDb(d.clientDb)
+          try { localStorage.setItem('orca-bizzplug-client-db', JSON.stringify(d.clientDb)) } catch {}
+        }
+      })
+      .catch(() => {
+        // Fallback to cloud sync if API unavailable
+        pullFromCloud().then(() => {
+          try { const s = localStorage.getItem('orca-bizzplug-clients'); if (s) setProjects(JSON.parse(s)) } catch {}
+          try { const c = localStorage.getItem('orca-bizzplug-client-db'); if (c) setClientDb(JSON.parse(c)) } catch {}
+        }).catch(() => {})
+      })
   }, [])
 
   const persistProjects = (updated: BizProject[]) => {
     setProjects(updated)
     try { setLocalSynced('orca-bizzplug-clients', JSON.stringify(updated)) } catch {}
+    // Immediately write to Supabase so status changes and deletions survive page reload
+    fetch('/api/bizzyplug/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projects: updated }),
+    }).catch(() => {})
   }
 
   const persistClients = (updated: BizClientProfile[]) => {
     setClientDb(updated)
     try { setLocalSynced('orca-bizzplug-client-db', JSON.stringify(updated)) } catch {}
+    fetch('/api/bizzyplug/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientDb: updated }),
+    }).catch(() => {})
   }
 
   const handleSaveProject = () => {
@@ -453,11 +800,11 @@ export default function BizzyPlugPage() {
     setLoadingSubmissions(false)
   }, [])
 
-  useEffect(() => { if (activeTab === 'inbox') loadSubmissions() }, [activeTab, loadSubmissions])
+  useEffect(() => { loadPortfolio() }, [loadPortfolio])
   useEffect(() => { if (activeTab === 'website') loadPortfolio() }, [activeTab, loadPortfolio])
 
   const saveSiteSettings = async () => {
-    const payload = { ...siteSettings, services, portfolioCategories, rolloutPackages, sectionOrder }
+    const payload = { ...siteSettings, services, portfolioCategories, rolloutPackages, sectionOrder, hiddenSections }
     try { setLocalSynced('orca-bizzplug-site-settings', JSON.stringify(payload)) } catch {}
     try { await fetch('/api/bizzyplug/site-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) } catch {}
     setSiteSaved(true)
@@ -465,7 +812,7 @@ export default function BizzyPlugPage() {
   }
 
   const visible = filterStatus === 'all' ? projects : projects.filter(p => p.status === filterStatus)
-  const totalRevenue = projects.filter(p => p.status === 'completed').reduce((s, p) => s + p.paid, 0)
+  const totalRevenue = projects.reduce((s, p) => s + (p.paid || 0), 0)
   const newLeadCount = projects.filter(p => p.status === 'new-lead').length
   const completedCount = projects.filter(p => p.status === 'completed').length
 
@@ -476,6 +823,21 @@ export default function BizzyPlugPage() {
 
   const inputCls = "w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
   const inputStyle = { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }
+
+  function accHead(id: string, label: string, Ic: any) {
+    const open = websiteSection === id
+    return (
+      <button key={'acc-' + id} onClick={() => setWebsiteSection(open ? null : id)}
+        className="w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all"
+        style={{ backgroundColor: open ? BIZ_PURPLE + '12' : theme.card, border: '1px solid ' + (open ? BIZ_PURPLE + '40' : theme.border) }}>
+        <div className="flex items-center gap-2">
+          <Ic size={14} style={{ color: BIZ_PURPLE }} />
+          <span className="text-xs font-bold" style={{ color: theme.text }}>{label}</span>
+        </div>
+        {open ? <ChevronUp size={14} style={{ color: BIZ_PURPLE }} /> : <ChevronDown size={14} style={{ color: theme.textM }} />}
+      </button>
+    )
+  }
 
   return (
     <div style={{ backgroundColor: theme.bg }} className="min-h-screen pb-12">
@@ -489,7 +851,7 @@ export default function BizzyPlugPage() {
             <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Client & project management</p>
           </div>
           {activeTab === 'projects' && (
-            <button onClick={() => { setForm(BLANK_PROJECT()); setEditId(null); setShowForm(true) }}
+            <button onClick={() => { setForm(BLANK_PROJECT()); setEditId(null); setSelectedClientId(''); setShowForm(true) }}
               className="px-4 py-2.5 rounded-xl text-sm font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>
               + New Project
             </button>
@@ -523,7 +885,6 @@ export default function BizzyPlugPage() {
           {([
             { key: 'projects' as DashTab, label: 'Projects', icon: Layers },
             { key: 'clients' as DashTab, label: 'Clients', icon: Database },
-            { key: 'inbox' as DashTab, label: 'Inbox', icon: Inbox },
             { key: 'website' as DashTab, label: 'Website', icon: Globe },
             { key: 'delivery' as DashTab, label: 'Deliver', icon: Send },
           ]).map(({ key, label, icon: Icon }) => (
@@ -568,39 +929,126 @@ export default function BizzyPlugPage() {
                   const pct = p.quote > 0 ? Math.min(100, Math.round((p.paid / p.quote) * 100)) : 0
                   return (
                     <motion.div key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                      className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0 mr-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-bold text-sm" style={{ color: theme.text }}>{p.artistName}</h3>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>{cfg.label}</span>
+                      className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+                      <button onClick={() => setExpandedProject(expandedProject === p.id ? null : p.id)} className="w-full p-4 text-left">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0 mr-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-bold text-sm" style={{ color: theme.text }}>{p.artistName}</h3>
+                              <button onClick={e => { e.stopPropagation(); persistProjects(projects.map(x => x.id === p.id ? { ...x, status: x.status === 'completed' ? 'new-lead' : 'completed' } : x)) }}
+                                className="px-2 py-0.5 rounded-full text-[10px] font-bold transition-all"
+                                style={{ backgroundColor: `${cfg.color}18`, color: cfg.color, border: 'none', cursor: 'pointer' }}>
+                                {cfg.label}
+                              </button>
+                              {(p as any).paymentStatus === 'paid' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: '#10B98118', color: '#10B981' }}>Paid</span>}
+                            </div>
+                            <p className="text-xs mt-0.5" style={{ color: theme.textM }}>
+                              {PROJECT_TYPES.find(t => t.value === p.projectType)?.label || p.projectType}
+                              {p.deadline ? ` · Due ${p.deadline}` : ''}
+                            </p>
+                            <div className="flex items-center gap-3 mt-1 flex-wrap">
+                              {p.email && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Mail size={10} />{p.email}</span>}
+                              {p.instagram && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Instagram size={10} />{p.instagram}</span>}
+                              {p.phone && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Phone size={10} />{p.phone}</span>}
+                            </div>
                           </div>
-                          <p className="text-xs mt-0.5" style={{ color: theme.textM }}>
-                            {PROJECT_TYPES.find(t => t.value === p.projectType)?.label || p.projectType}
-                            {p.deadline ? ` · Due ${p.deadline}` : ''}
-                          </p>
-                          <div className="flex items-center gap-3 mt-1 flex-wrap">
-                            {p.email && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Mail size={10} />{p.email}</span>}
-                            {p.instagram && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Instagram size={10} />{p.instagram}</span>}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <ChevronDown size={14} style={{ color: theme.textM, transform: expandedProject === p.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                           </div>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => handleEdit(p)} className="p-1.5 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}><Edit3 size={13} /></button>
-                          <button onClick={() => handleDelete(p.id)} className="p-1.5 rounded-lg" style={{ backgroundColor: '#EF444418', color: '#EF4444' }}><Trash2 size={13} /></button>
-                        </div>
-                      </div>
-                      {p.quote > 0 && (
-                        <div className="mt-2">
-                          <div className="flex justify-between text-xs mb-1" style={{ color: theme.textM }}>
-                            <span>Paid: <span className="font-bold" style={{ color: '#10B981' }}>{fmt(p.paid)}</span></span>
-                            <span>Quote: <span className="font-bold" style={{ color: BIZ_GOLD }}>{fmt(p.quote)}</span></span>
+                        {p.quote > 0 && (
+                          <div className="mt-2">
+                            <div className="flex justify-between text-xs mb-1" style={{ color: theme.textM }}>
+                              <span>Paid: <span className="font-bold" style={{ color: '#10B981' }}>{fmt(p.paid)}</span></span>
+                              <span>Quote: <span className="font-bold" style={{ color: BIZ_GOLD }}>{fmt(p.quote)}</span></span>
+                            </div>
+                            <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
+                              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#10B981' : BIZ_PURPLE }} />
+                            </div>
                           </div>
-                          <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#10B981' : BIZ_PURPLE }} />
+                        )}
+                      </button>
+                      {expandedProject === p.id && (
+                        <div className="px-4 pb-4 space-y-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                          <div className="flex items-center gap-1 pt-3 flex-wrap">
+                            {p.status === 'new-lead' ? (
+                              <button
+                                onClick={() => { persistProjects(projects.map(x => x.id === p.id ? { ...x, status: 'completed' as ProjectStatus } : x)); setExpandedProject(null) }}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1"
+                                style={{ backgroundColor: '#10B98118', color: '#10B981' }}>
+                                <CheckCircle size={11} />Mark Complete
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => { persistProjects(projects.map(x => x.id === p.id ? { ...x, status: 'new-lead' as ProjectStatus } : x)); setExpandedProject(null) }}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold"
+                                style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
+                                Move to Active
+                              </button>
+                            )}
+                            <button onClick={() => handleEdit(p)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}><Edit3 size={11} className="inline mr-1" />Edit</button>
+                            <button onClick={() => handleDelete(p.id)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold" style={{ backgroundColor: '#EF444418', color: '#EF4444' }}><Trash2 size={11} className="inline mr-1" />Delete</button>
                           </div>
+
+                          {p.songName && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Song / Project</p>
+                              <p className="text-xs" style={{ color: theme.text }}>{p.songName}</p>
+                            </div>
+                          )}
+
+                          {p.details && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Project Details</p>
+                              <p className="text-xs whitespace-pre-wrap" style={{ color: theme.text }}>{p.details}</p>
+                            </div>
+                          )}
+
+                          {p.notes && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Notes</p>
+                              <p className="text-xs whitespace-pre-wrap" style={{ color: theme.text }}>{p.notes}</p>
+                            </div>
+                          )}
+
+                          {(p as any).serviceDescriptions && Object.keys((p as any).serviceDescriptions).length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Service Details</p>
+                              <div className="space-y-1.5">
+                                {Object.entries((p as any).serviceDescriptions).map(([key, val]) => (
+                                  <div key={key} className="rounded-lg px-3 py-2" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                                    <p className="text-[10px] font-bold" style={{ color: BIZ_PURPLE }}>{key.includes('::') ? key.split('::').join(' — ') : key}</p>
+                                    <p className="text-xs mt-0.5" style={{ color: theme.text }}>{val as string}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {(p as any).referenceUrls && (p as any).referenceUrls.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Uploaded Files ({(p as any).referenceUrls.length})</p>
+                              <div className="grid grid-cols-3 gap-2">
+                                {(p as any).referenceUrls.map((url: string, idx: number) => (
+                                  <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
+                                    <img src={url} alt={`Reference ${idx + 1}`} style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {(p as any).paymentMethod && (
+                            <div className="flex items-center gap-2 text-[10px]" style={{ color: theme.textM }}>
+                              <DollarSign size={10} />
+                              <span>Payment: <span className="font-bold" style={{ color: '#10B981' }}>{(p as any).paymentMethod}</span></span>
+                              {(p as any).paidDate && <span>· {new Date((p as any).paidDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                            </div>
+                          )}
+
+                          <p className="text-[9px]" style={{ color: theme.textM }}>Created {p.createdAt}</p>
                         </div>
                       )}
-                      {p.details && <p className="text-xs mt-2 italic truncate" style={{ color: theme.textM }}>"{p.details}"</p>}
                     </motion.div>
                   )
                 })}
@@ -686,62 +1134,11 @@ export default function BizzyPlugPage() {
           </div>
         )}
 
-        {/* ── INBOX TAB ── */}
-        {activeTab === 'inbox' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Submissions from orcafin.app/bizzyplug</p>
-              <button onClick={loadSubmissions} disabled={loadingSubmissions}
-                className="p-2 rounded-xl" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                <RefreshCw size={14} className={loadingSubmissions ? 'animate-spin' : ''} style={{ color: theme.textM }} />
-              </button>
-            </div>
-            {loadingSubmissions ? (
-              <div className="rounded-2xl p-10 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                <RefreshCw size={24} className="animate-spin mx-auto mb-3" style={{ color: BIZ_PURPLE }} />
-                <p className="text-sm" style={{ color: theme.textM }}>Loading...</p>
-              </div>
-            ) : submissions.length === 0 ? (
-              <div className="rounded-2xl p-10 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                <Inbox size={32} className="mx-auto mb-3 opacity-30" style={{ color: BIZ_PURPLE }} />
-                <p className="text-sm" style={{ color: theme.textM }}>No submissions yet. Share orcafin.app/bizzyplug</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {submissions.map(sub => (
-                  <div key={sub.id} className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-sm" style={{ color: theme.text }}>{sub.artistName || sub.name}</h3>
-                        <p className="text-xs mt-0.5" style={{ color: theme.textM }}>
-                          {sub.projectType || 'Project Request'}{sub.deadline ? ` · Deadline: ${sub.deadline}` : ''}
-                        </p>
-                        <div className="flex items-center gap-3 mt-1 flex-wrap">
-                          {sub.email && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Mail size={10} />{sub.email}</span>}
-                          {sub.instagram && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Instagram size={10} />{sub.instagram}</span>}
-                        </div>
-                        {sub.details && <p className="text-xs mt-2 italic" style={{ color: theme.textM }}>"{sub.details}"</p>}
-                      </div>
-                      <button onClick={() => importSubmission(sub)}
-                        className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold"
-                        style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE, border: `1px solid ${BIZ_PURPLE}30` }}>
-                        + Import
-                      </button>
-                    </div>
-                    <p className="text-[10px]" style={{ color: theme.textM }}>
-                      {sub.createdAt ? new Date(sub.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ── WEBSITE TAB ── */}
         {activeTab === 'website' && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Manage orcafin.app/bizzyplug</p>
               <a href="/bizzyplug" target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl"
@@ -750,23 +1147,137 @@ export default function BizzyPlugPage() {
               </a>
             </div>
 
+            {/* Theme & Branding */}
+            {accHead('theme', 'Theme & Branding', Palette)}
+            {websiteSection === 'theme' && (
+            <div className="rounded-2xl p-4 space-y-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+
+              {/* Logo Upload */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-semibold block" style={{ color: theme.textM }}>Logo</label>
+                {siteSettings.logoUrl && (
+                  <div className="flex items-center gap-3">
+                    <img src={siteSettings.logoUrl} alt="Logo" style={{ height: 40, objectFit: 'contain', borderRadius: 6, border: `1px solid ${theme.border}` }} />
+                    <button onClick={() => setSiteSettings((s: any) => ({ ...s, logoUrl: '' }))}
+                      className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ backgroundColor: '#EF444415', color: '#EF4444' }}>
+                      Remove Logo
+                    </button>
+                  </div>
+                )}
+                <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer"
+                  style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40` }}>
+                  <Upload size={14} /> {siteSettings.logoUrl ? 'Change Logo' : 'Upload Logo'}
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const fd = new FormData()
+                    fd.append('file', file)
+                    fd.append('title', `bizzyplug-logo-${Date.now()}`)
+                    fd.append('category', 'branding')
+                    fd.append('skipDb', 'true')
+                    try {
+                      const res = await fetch('/api/bizzyplug/photos', { method: 'POST', body: fd })
+                      if (res.ok) {
+                        const d = await res.json()
+                        if (d.photo?.url) setSiteSettings((s: any) => ({ ...s, logoUrl: d.photo.url }))
+                      }
+                    } catch {}
+                    e.target.value = ''
+                  }} />
+                </label>
+              </div>
+
+              {/* Theme Selector */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-semibold block" style={{ color: theme.textM }}>Theme</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {THEME_PRESETS.map(preset => {
+                    const isActive = (siteSettings.activeTheme || 'dark-modern') === preset.id
+                    return (
+                      <button key={preset.id} onClick={() => setSiteSettings((s: any) => ({ ...s, activeTheme: preset.id }))}
+                        className="rounded-xl p-3 text-left relative"
+                        style={{
+                          backgroundColor: theme.bg,
+                          border: isActive ? `2px solid ${BIZ_PURPLE}` : `1px solid ${theme.border}`,
+                        }}>
+                        {isActive && (
+                          <span className="absolute top-1.5 right-1.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full"
+                            style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>Active</span>
+                        )}
+                        <p className="text-xs font-bold mb-2" style={{ color: theme.text }}>{preset.name}</p>
+                        <div className="flex gap-1.5">
+                          {[preset.colors.bg, preset.colors.purple, preset.colors.white, preset.colors.bgCard].map((c, i) => (
+                            <div key={i} style={{
+                              width: 18, height: 18, borderRadius: '50%', backgroundColor: c,
+                              border: `1px solid ${theme.border}`,
+                            }} />
+                          ))}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Glow & Effects */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-semibold block" style={{ color: theme.textM }}>Effects</label>
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                  <span className="text-xs font-semibold" style={{ color: theme.text }}>Glow Effects</span>
+                  <button onClick={() => setSiteSettings((s: any) => ({ ...s, glowEnabled: !s.glowEnabled }))}
+                    className="relative w-10 h-5 rounded-full transition-colors"
+                    style={{ backgroundColor: siteSettings.glowEnabled ? BIZ_PURPLE : theme.border }}>
+                    <div className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                      style={{ left: siteSettings.glowEnabled ? 22 : 2 }} />
+                  </button>
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Background Style</label>
+                  <select className={inputCls} style={inputStyle} value={siteSettings.gradientStyle || 'radial'}
+                    onChange={e => setSiteSettings((s: any) => ({ ...s, gradientStyle: e.target.value }))}>
+                    <option value="radial">Radial Gradient</option>
+                    <option value="linear">Linear Gradient</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            )}
+
             {/* Hero Section */}
+            {accHead('hero', 'Hero & Content', FileText)}
+            {websiteSection === 'hero' && (
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Hero Section</p>
               <div>
                 <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Headline</label>
                 <input className={inputCls} style={inputStyle} value={siteSettings.heroHeadline || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, heroHeadline: e.target.value }))} placeholder="Tired Of The AI Covers, Lets Get You Something Authentic" />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Sub-headline</label>
+                <input className={inputCls} style={inputStyle} value={siteSettings.heroSubheadline || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, heroSubheadline: e.target.value }))} placeholder="PREMIUM DESIGN. REAL IMPACT." />
               </div>
               <div>
                 <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Description</label>
                 <textarea rows={3} value={siteSettings.bio || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, bio: e.target.value }))}
                   className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} placeholder="Stand out with custom album covers, logos, flyers..." />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Primary CTA Text</label>
+                  <input className={inputCls} style={inputStyle} value={siteSettings.ctaText || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, ctaText: e.target.value }))} placeholder="BOOK A DESIGN" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Secondary CTA Text</label>
+                  <input className={inputCls} style={inputStyle} value={siteSettings.ctaSecondaryText || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, ctaSecondaryText: e.target.value }))} placeholder="VIEW PORTFOLIO" />
+                </div>
+              </div>
             </div>
+            )}
 
-            {/* About Section */}
+            {/* About Section — merged into Hero */}
+            {accHead('about', 'About Section', User)}
+            {websiteSection === 'about' && (
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>About Section</p>
               <div>
                 <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>About Headline</label>
                 <input className={inputCls} style={inputStyle} value={siteSettings.aboutHeadline || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, aboutHeadline: e.target.value }))} placeholder="Creativity. Culture. Branding That Hits." />
@@ -777,8 +1288,11 @@ export default function BizzyPlugPage() {
                   className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} placeholder="Bizzyplug is more than a design studio..." />
               </div>
             </div>
+            )}
 
             {/* Portfolio Photos */}
+            {accHead('portfolio', `Portfolio Photos (${portfolioPhotos.length}/40)`, Layers)}
+            {websiteSection === 'portfolio' && (
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Portfolio Photos ({portfolioPhotos.length}/40)</p>
@@ -906,7 +1420,11 @@ export default function BizzyPlugPage() {
               </div>
             </div>
 
-            {/* Payment Links */}
+            )}
+
+            {/* Payment & Social Links */}
+            {accHead('links', 'Payment & Social Links', ExternalLink)}
+            {websiteSection === 'links' && (
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
               <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Payment Links</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -923,11 +1441,8 @@ export default function BizzyPlugPage() {
                   <input className={inputCls} style={inputStyle} value={siteSettings.venmoHandle || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, venmoHandle: e.target.value }))} placeholder="@Buzyplug" />
                 </div>
               </div>
-            </div>
 
-            {/* Social Links */}
-            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Social Links</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider mt-4" style={{ color: BIZ_PURPLE }}>Social & Contact</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Instagram URL</label>
@@ -939,10 +1454,12 @@ export default function BizzyPlugPage() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Services & Pricing */}
+            {accHead('services', `Services & Pricing (${services.length})`, DollarSign)}
+            {websiteSection === 'services' && (
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Services & Pricing</p>
               <div className="space-y-2">
                 {services.map((s, i) => (
                   <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
@@ -964,6 +1481,29 @@ export default function BizzyPlugPage() {
                           </select>
                           <input type="number" className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} placeholder="Sale $" value={(s as any).salePrice || ''} onChange={e => { const u = [...services]; u[i] = { ...u[i], salePrice: e.target.value ? Number(e.target.value) : undefined } as any; setServices(u) }} />
                         </div>
+                        <div className="border-t pt-2 mt-1" style={{ borderColor: theme.border }}>
+                          <p className="text-[9px] font-bold uppercase tracking-wider mb-1.5" style={{ color: BIZ_PURPLE }}>Custom Form Fields</p>
+                          {((s as any).customFields || []).map((f: any, fi: number) => (
+                            <div key={fi} className="flex items-center gap-1.5 mb-1">
+                              <input className="flex-1 px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Field label" value={f.label}
+                                onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], label: e.target.value }; (u[i] as any).customFields = cf; setServices(u) }} />
+                              <select className="px-1.5 py-1 rounded-lg border text-[10px]" style={inputStyle} value={f.type}
+                                onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], type: e.target.value }; (u[i] as any).customFields = cf; setServices(u) }}>
+                                <option value="text">Text</option>
+                                <option value="textarea">Textarea</option>
+                                <option value="select">Dropdown</option>
+                              </select>
+                              {f.type === 'select' && (
+                                <input className="flex-1 px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Options (comma separated)" value={f.options || ''}
+                                  onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], options: e.target.value }; (u[i] as any).customFields = cf; setServices(u) }} />
+                              )}
+                              <button onClick={() => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf.splice(fi, 1); (u[i] as any).customFields = cf; setServices(u) }}
+                                className="p-0.5" style={{ color: '#EF4444' }}><X size={10} /></button>
+                            </div>
+                          ))}
+                          <button onClick={() => { const u = [...services]; (u[i] as any).customFields = [...((u[i] as any).customFields || []), { label: '', type: 'text', options: '' }]; setServices(u) }}
+                            className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}10`, color: BIZ_PURPLE }}>+ Add Field</button>
+                        </div>
                         <button onClick={() => setEditingService(null)} className="w-full px-2 py-1.5 rounded-lg text-xs font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>Done</button>
                       </div>
                     ) : (
@@ -979,6 +1519,8 @@ export default function BizzyPlugPage() {
                             <span className="text-sm font-bold" style={{ color: BIZ_PURPLE }}>${s.price}</span>
                           )}
                         </div>
+                        {i > 0 && <button onClick={() => { const u = [...services]; [u[i-1], u[i]] = [u[i], u[i-1]]; setServices(u) }} className="p-1 rounded-lg" style={{ color: theme.textM }}><ChevronUp size={12} /></button>}
+                        {i < services.length - 1 && <button onClick={() => { const u = [...services]; [u[i], u[i+1]] = [u[i+1], u[i]]; setServices(u) }} className="p-1 rounded-lg" style={{ color: theme.textM }}><ChevronDown size={12} /></button>}
                         <button onClick={() => setEditingService(i)} className="p-1 rounded-lg" style={{ color: theme.textM }}><Edit3 size={12} /></button>
                         <button onClick={() => setServices(services.filter((_, j) => j !== i))} className="p-1 rounded-lg" style={{ color: '#EF4444' }}><Trash2 size={12} /></button>
                       </>
@@ -999,11 +1541,12 @@ export default function BizzyPlugPage() {
               </div>
             </div>
 
+            )}
+
             {/* Rollout Packages */}
+            {accHead('rollout', `Rollout Packages (${rolloutPackages.length})`, Package)}
+            {websiteSection === 'rollout' && (
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Monthly Rollout Packages</p>
-              </div>
               {rolloutPackages.map((pkg: any, pi: number) => (
                 <div key={pkg.id} className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -1048,17 +1591,24 @@ export default function BizzyPlugPage() {
                 className="w-full py-2 rounded-xl text-xs font-bold" style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40` }}>+ Add Package Type</button>
             </div>
 
+            )}
+
             {/* Section Order */}
+            {accHead('order', 'Page Section Order', Layers)}
+            {websiteSection === 'order' && (
             <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Page Section Order</p>
-              <p className="text-[10px]" style={{ color: theme.textM }}>Drag sections up or down to reorder the public page layout.</p>
               <div className="space-y-1.5">
                 {sectionOrder.map((sec, i) => {
                   const labels: Record<string, string> = { booking: 'Book Your Design', portfolio: 'Featured Work', rollout: 'Monthly Rollout Plans', testimonials: 'Reviews & Testimonials' }
+                  const isHidden = hiddenSections.includes(sec)
                   return (
-                    <div key={sec} className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                    <div key={sec} className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${isHidden ? '#EF444430' : theme.border}`, opacity: isHidden ? 0.5 : 1 }}>
                       <span className="text-sm font-semibold flex-1" style={{ color: theme.text }}>{labels[sec] || sec}</span>
                       <div className="flex gap-1">
+                        <button onClick={() => setHiddenSections(h => h.includes(sec) ? h.filter(s => s !== sec) : [...h, sec])}
+                          className="p-1.5 rounded-lg" style={{ backgroundColor: isHidden ? '#EF444415' : `${BIZ_PURPLE}15`, color: isHidden ? '#EF4444' : BIZ_PURPLE }}>
+                          {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
                         {i > 0 && <button onClick={() => { const u = [...sectionOrder]; [u[i-1], u[i]] = [u[i], u[i-1]]; setSectionOrder(u) }}
                           className="p-1.5 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}><ChevronUp size={14} /></button>}
                         {i < sectionOrder.length - 1 && <button onClick={() => { const u = [...sectionOrder]; [u[i], u[i+1]] = [u[i+1], u[i]]; setSectionOrder(u) }}
@@ -1069,9 +1619,10 @@ export default function BizzyPlugPage() {
                 })}
               </div>
             </div>
+            )}
 
             <button onClick={saveSiteSettings}
-              className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 mt-3"
               style={{ backgroundColor: siteSaved ? '#10B981' : BIZ_PURPLE, color: '#fff' }}>
               {siteSaved ? <><CheckCircle size={16} /> Saved!</> : <><Save size={16} /> Save & Publish</>}
             </button>
@@ -1080,7 +1631,7 @@ export default function BizzyPlugPage() {
 
         {/* ── DELIVERY TAB ── */}
         {activeTab === 'delivery' && (
-          <DeliveryTab theme={theme} projects={projects} inputCls={inputCls} inputStyle={inputStyle} />
+          <DeliveryTab theme={theme} clients={clientDb} inputCls={inputCls} inputStyle={inputStyle} />
         )}
       </div>
 
@@ -1098,6 +1649,39 @@ export default function BizzyPlugPage() {
                 <button onClick={() => setShowForm(false)} className="p-2 rounded-xl" style={{ backgroundColor: theme.border }}><X size={16} style={{ color: theme.text }} /></button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Existing client picker — only shown for new projects */}
+                {!editId && clientDb.length > 0 && (
+                  <div className="sm:col-span-2 pb-3 border-b" style={{ borderColor: theme.border }}>
+                    <label className="text-[10px] font-bold uppercase block mb-1.5" style={{ color: BIZ_PURPLE }}>
+                      Fill From Existing Client
+                    </label>
+                    <select
+                      className={inputCls}
+                      style={{ ...inputStyle, borderColor: selectedClientId ? BIZ_PURPLE : undefined }}
+                      value={selectedClientId}
+                      onChange={e => {
+                        const cid = e.target.value
+                        setSelectedClientId(cid)
+                        if (cid) {
+                          const c = clientDb.find(x => x.id === cid)
+                          if (c) setForm(f => ({ ...f, artistName: c.artistName || '', email: c.email || '', phone: c.phone || '', instagram: c.instagram || '', clientId: c.id }))
+                        } else {
+                          setForm(f => ({ ...f, artistName: '', email: '', phone: '', instagram: '', clientId: undefined }))
+                        }
+                      }}
+                    >
+                      <option value="">— Select a client to auto-fill —</option>
+                      {[...clientDb].sort((a, b) => a.artistName.localeCompare(b.artistName)).map(c => (
+                        <option key={c.id} value={c.id}>{c.artistName}{c.email ? ` · ${c.email}` : ''}</option>
+                      ))}
+                    </select>
+                    {selectedClientId && (
+                      <p className="text-[10px] mt-1.5 flex items-center gap-1" style={{ color: BIZ_PURPLE }}>
+                        <CheckCircle size={10} /> Fields pre-filled — edit anything below as needed.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Artist / Brand *</label><input className={inputCls} style={inputStyle} placeholder="Artist name" value={form.artistName || ''} onChange={e => setForm(f => ({ ...f, artistName: e.target.value }))} /></div>
                 <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Instagram</label><input className={inputCls} style={inputStyle} placeholder="@handle" value={form.instagram || ''} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} /></div>
                 <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Email</label><input className={inputCls} style={inputStyle} type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>

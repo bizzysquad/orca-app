@@ -3,10 +3,15 @@ import Stripe from 'stripe'
 
 export const dynamic = 'force-dynamic'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY?.trim()
+  if (!key) throw new Error('STRIPE_SECRET_KEY is not configured')
+  return new Stripe(key)
+}
 
 export async function GET(req: NextRequest) {
   try {
+    const stripe = getStripe()
     const sessionId = req.nextUrl.searchParams.get('session_id')
     if (!sessionId) {
       return NextResponse.json({ error: 'Missing session_id' }, { status: 400 })

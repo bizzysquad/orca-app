@@ -381,30 +381,26 @@ export default function BillBossPage() {
     apr: number
     minPayment: number
     monthlyPayment: number
-    payments: { date: string; amount: number; remaining: number; paid: boolean }[]
+    dueDay: number
+    payments: { date: string; amount: number; remaining: number; interest: number; paid: boolean }[]
   }
   const [creditCards, setCreditCards] = useState<CreditCardDebt[]>(() => { try { return JSON.parse(localStorage.getItem('orca-credit-cards') || '[]') } catch { return [] } })
   const [showAddCard, setShowAddCard] = useState(false)
-  const [cardForm, setCardForm] = useState({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '' })
+  const [cardForm, setCardForm] = useState({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '', dueDay: '' })
+  const [editingCardId, setEditingCardId] = useState<string | null>(null)
 
   const saveCreditCards = (cards: CreditCardDebt[]) => {
     setCreditCards(cards)
     try { setLocalSynced('orca-credit-cards', JSON.stringify(cards)) } catch {}
   }
 
-  const addCreditCard = () => {
-    const balance = parseFloat(cardForm.balance) || 0
-    const monthly = parseFloat(cardForm.monthlyPayment) || parseFloat(cardForm.minPayment) || 50
-    const apr = parseFloat(cardForm.apr) || 0
-    if (!cardForm.name || balance <= 0) return
-
-    // Generate payment schedule
+  const generatePayments = (balance: number, monthly: number, apr: number, dueDay: number) => {
     const payments: CreditCardDebt['payments'] = []
     let remaining = balance
     const today = new Date()
-    let payDate = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+    let payDate = new Date(today.getFullYear(), today.getMonth() + 1, Math.min(dueDay || 1, 28))
     const monthlyRate = apr / 100 / 12
-    while (remaining > 0 && payments.length < 120) {
+    while (remaining > 0 && payments.length < 360) {
       const interest = remaining * monthlyRate
       const payAmount = Math.min(monthly, remaining + interest)
       remaining = Math.max(0, remaining + interest - payAmount)
@@ -412,10 +408,54 @@ export default function BillBossPage() {
         date: payDate.toISOString().slice(0, 10),
         amount: Math.round(payAmount * 100) / 100,
         remaining: Math.round(remaining * 100) / 100,
+        interest: Math.round(interest * 100) / 100,
         paid: false,
       })
-      payDate = new Date(payDate.getFullYear(), payDate.getMonth() + 1, 1)
+      payDate = new Date(payDate.getFullYear(), payDate.getMonth() + 1, Math.min(dueDay || 1, 28))
     }
+    return payments
+  }
+
+  const getPayoffInsights = (balance: number, monthly: number, apr: number, minPayment: number) => {
+    const monthlyRate = apr / 100 / 12
+    const calcSchedule = (pmt: number) => {
+      let rem = balance; let totalInterest = 0; let months = 0
+      while (rem > 0 && months < 360) {
+        const interest = rem * monthlyRate
+        const pay = Math.min(pmt, rem + interest)
+        rem = Math.max(0, rem + interest - pay)
+        totalInterest += interest
+        months++
+      }
+      return { months, totalInterest: Math.round(totalInterest * 100) / 100 }
+    }
+    const current = calcSchedule(monthly)
+    const minOnly = minPayment > 0 ? calcSchedule(minPayment) : null
+    const extra25 = calcSchedule(monthly + 25)
+    const extra50 = calcSchedule(monthly + 50)
+    const extra100 = calcSchedule(monthly + 100)
+    const double = calcSchedule(monthly * 2)
+    // Find the payment that cuts months roughly in half using binary search
+    const targetMonths = Math.ceil(current.months / 2)
+    let lo = monthly, hi = balance + monthly, halvePmt = monthly * 2
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2
+      const m = calcSchedule(mid).months
+      if (m <= targetMonths) { halvePmt = mid; hi = mid } else { lo = mid }
+    }
+    halvePmt = Math.ceil(halvePmt / 5) * 5 // round up to nearest $5
+    const halve = calcSchedule(halvePmt)
+    return { current, minOnly, extra25, extra50, extra100, double, halvePmt: Math.round(halvePmt * 100) / 100, halve }
+  }
+
+  const addCreditCard = () => {
+    const balance = parseFloat(cardForm.balance) || 0
+    const monthly = parseFloat(cardForm.monthlyPayment) || parseFloat(cardForm.minPayment) || 50
+    const apr = parseFloat(cardForm.apr) || 0
+    const dueDay = parseInt(cardForm.dueDay) || 1
+    if (!cardForm.name || balance <= 0) return
+
+    const payments = generatePayments(balance, monthly, apr, dueDay)
 
     const card: CreditCardDebt = {
       id: Date.now().toString(),
@@ -424,11 +464,53 @@ export default function BillBossPage() {
       apr,
       minPayment: parseFloat(cardForm.minPayment) || 0,
       monthlyPayment: monthly,
+      dueDay,
       payments,
     }
     saveCreditCards([...creditCards, card])
-    setCardForm({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '' })
+    setCardForm({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '', dueDay: '' })
     setShowAddCard(false)
+  }
+
+  const startEditCard = (card: CreditCardDebt) => {
+    setEditingCardId(card.id)
+    setCardForm({
+      name: card.name,
+      balance: String(card.balance),
+      apr: String(card.apr),
+      minPayment: String(card.minPayment || ''),
+      monthlyPayment: String(card.monthlyPayment),
+      dueDay: String(card.dueDay || ''),
+    })
+  }
+
+  const saveEditCard = () => {
+    if (!editingCardId) return
+    const balance = parseFloat(cardForm.balance) || 0
+    const monthly = parseFloat(cardForm.monthlyPayment) || parseFloat(cardForm.minPayment) || 50
+    const apr = parseFloat(cardForm.apr) || 0
+    const dueDay = parseInt(cardForm.dueDay) || 1
+    if (!cardForm.name || balance <= 0) return
+
+    const oldCard = creditCards.find(c => c.id === editingCardId)
+    const paidPayments = oldCard?.payments.filter(p => p.paid) || []
+    const totalAlreadyPaid = paidPayments.reduce((s, p) => s + p.amount, 0)
+    const effectiveBalance = Math.max(0, balance - totalAlreadyPaid)
+    const newPayments = generatePayments(effectiveBalance, monthly, apr, dueDay)
+
+    saveCreditCards(creditCards.map(c => c.id === editingCardId ? {
+      ...c, name: cardForm.name, balance, apr,
+      minPayment: parseFloat(cardForm.minPayment) || 0,
+      monthlyPayment: monthly, dueDay,
+      payments: [...paidPayments, ...newPayments],
+    } : c))
+    setEditingCardId(null)
+    setCardForm({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '', dueDay: '' })
+  }
+
+  const cancelEditCard = () => {
+    setEditingCardId(null)
+    setCardForm({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '', dueDay: '' })
   }
 
   const markCardPayment = (cardId: string, paymentIdx: number) => {
@@ -573,6 +655,17 @@ export default function BillBossPage() {
     if (m > 11) { m = 0; y++ }
     setCalMonth(m)
     setCalYear(y)
+  }
+
+  // Returns the display due date adjusted to the currently viewed billing cycle
+  const cycleDue = (bill: Bill): string => {
+    const rec = bill.recurrence || 'one-time'
+    if (rec === 'one-time') return bill.due
+    const originalDay = new Date(bill.due + 'T00:00:00').getDate()
+    // Clamp to valid days in the viewed month (e.g. day 31 in a 30-day month)
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
+    const day = Math.min(originalDay, daysInMonth)
+    return `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
   // Calculate unpaid total — subtracts any partial payments made in this billing cycle
@@ -762,7 +855,21 @@ export default function BillBossPage() {
         }
         return false
       })
-      .sort((a, b) => new Date(a.due + 'T00:00:00').getTime() - new Date(b.due + 'T00:00:00').getTime())
+      .sort((a, b) => {
+        // Sort by effective due day within the currently viewed month
+        const dayA = new Date(a.due + 'T00:00:00').getDate()
+        const dayB = new Date(b.due + 'T00:00:00').getDate()
+        // For the current month, bills already past sort after upcoming ones
+        const today = new Date()
+        const isCurrentView = calMonth === today.getMonth() && calYear === today.getFullYear()
+        if (isCurrentView) {
+          const todayDay = today.getDate()
+          const aOverdue = dayA < todayDay
+          const bOverdue = dayB < todayDay
+          if (aOverdue !== bOverdue) return aOverdue ? 1 : -1
+        }
+        return dayA - dayB
+      })
   }
 
   // Handler: Add bill
@@ -1141,7 +1248,7 @@ export default function BillBossPage() {
           <div className="relative overflow-hidden rounded-2xl p-4 sm:p-8 w-full max-w-full box-border" style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)`, color: '#fff' }}>
             <div className="text-center mb-6">
               <p className="text-sm font-medium opacity-80 mb-2">Total Monthly Bills</p>
-              <p className="text-3xl sm:text-5xl font-bold mb-4 break-words">{fmt(unpaidTotal + paidTotal)}</p>
+              <p className="text-3xl sm:text-5xl font-bold mb-4 break-words">{fmt(unpaidTotal)}</p>
               <div className="rounded-full inline-flex gap-4 px-5 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
                 <div>
                   <p className="text-xs opacity-70">Paid</p>
@@ -1149,8 +1256,8 @@ export default function BillBossPage() {
                 </div>
                 <div style={{ width: '1px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
                 <div>
-                  <p className="text-xs opacity-70">Remaining</p>
-                  <p className="text-sm font-bold">{fmt(unpaidTotal)}</p>
+                  <p className="text-xs opacity-70">Total</p>
+                  <p className="text-sm font-bold">{fmt(unpaidTotal + paidTotal)}</p>
                 </div>
               </div>
             </div>
@@ -1271,7 +1378,9 @@ export default function BillBossPage() {
                 <input value={cardForm.name} onChange={e => setCardForm({ ...cardForm, name: e.target.value })} placeholder="Card name *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
                 <input type="number" value={cardForm.balance} onChange={e => setCardForm({ ...cardForm, balance: e.target.value })} placeholder="Total balance *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
                 <input type="number" value={cardForm.apr} onChange={e => setCardForm({ ...cardForm, apr: e.target.value })} placeholder="APR % (e.g. 24.99)" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <input type="number" value={cardForm.monthlyPayment} onChange={e => setCardForm({ ...cardForm, monthlyPayment: e.target.value })} placeholder="Monthly payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <input type="number" value={cardForm.minPayment} onChange={e => setCardForm({ ...cardForm, minPayment: e.target.value })} placeholder="Minimum payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <input type="number" value={cardForm.monthlyPayment} onChange={e => setCardForm({ ...cardForm, monthlyPayment: e.target.value })} placeholder="Your monthly payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <input type="number" value={cardForm.dueDay} onChange={e => setCardForm({ ...cardForm, dueDay: e.target.value })} placeholder="Due day (1-28)" min="1" max="28" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setShowAddCard(false)} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.textM }}>Cancel</button>
@@ -1289,11 +1398,37 @@ export default function BillBossPage() {
           )}
 
           {creditCards.map(card => {
+            const isEditing = editingCardId === card.id
             const nextPayment = card.payments.find(p => !p.paid)
             const paidCount = card.payments.filter(p => p.paid).length
             const totalPaid = card.payments.filter(p => p.paid).reduce((s, p) => s + p.amount, 0)
             const currentBalance = nextPayment ? nextPayment.remaining + nextPayment.amount : 0
             const progressPct = card.balance > 0 ? Math.min(100, (totalPaid / card.balance) * 100) : 0
+            const unpaidPayments = card.payments.filter(p => !p.paid)
+            const totalInterest = unpaidPayments.reduce((s, p) => s + (p.interest || 0), 0)
+            const payoffDate = unpaidPayments.length > 0 ? unpaidPayments[unpaidPayments.length - 1].date : null
+            const insights = getPayoffInsights(currentBalance, card.monthlyPayment, card.apr, card.minPayment)
+
+            if (isEditing) {
+              return (
+                <div key={card.id} className="rounded-2xl p-4 space-y-3" style={{ background: `${theme.accent}08`, border: `1px solid ${theme.accent}` }}>
+                  <p className="text-xs font-bold" style={{ color: theme.accent }}>Edit {card.name}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={cardForm.name} onChange={e => setCardForm({ ...cardForm, name: e.target.value })} placeholder="Card name *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                    <input type="number" value={cardForm.balance} onChange={e => setCardForm({ ...cardForm, balance: e.target.value })} placeholder="Total balance *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                    <input type="number" value={cardForm.apr} onChange={e => setCardForm({ ...cardForm, apr: e.target.value })} placeholder="APR %" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                    <input type="number" value={cardForm.minPayment} onChange={e => setCardForm({ ...cardForm, minPayment: e.target.value })} placeholder="Minimum payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                    <input type="number" value={cardForm.monthlyPayment} onChange={e => setCardForm({ ...cardForm, monthlyPayment: e.target.value })} placeholder="Your monthly payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                    <input type="number" value={cardForm.dueDay} onChange={e => setCardForm({ ...cardForm, dueDay: e.target.value })} placeholder="Due day (1-28)" min="1" max="28" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={cancelEditCard} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.textM }}>Cancel</button>
+                    <button onClick={() => deleteCard(card.id)} className="py-2 px-4 rounded-xl text-xs font-bold" style={{ background: '#EF444420', color: '#EF4444', border: '1px solid #EF444440' }}><Trash2 size={12} /></button>
+                    <button onClick={saveEditCard} disabled={!cardForm.name || !cardForm.balance} className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40" style={{ background: theme.accent, color: '#fff' }}>Save Changes</button>
+                  </div>
+                </div>
+              )
+            }
 
             return (
               <div key={card.id} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
@@ -1302,12 +1437,17 @@ export default function BillBossPage() {
                     <div>
                       <p className="text-sm font-bold" style={{ color: theme.text }}>{card.name}</p>
                       <p className="text-xs" style={{ color: theme.textM }}>
-                        {card.apr}% APR · ${card.monthlyPayment}/mo · {card.payments.length - paidCount} payments left
+                        {card.apr}% APR · ${card.monthlyPayment}/mo · {unpaidPayments.length} payments left
                       </p>
                     </div>
-                    <button onClick={() => deleteCard(card.id)} className="p-1.5 rounded-lg" style={{ color: theme.textS }}>
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => startEditCard(card)} className="p-1.5 rounded-lg" style={{ color: theme.textM }}>
+                        <Edit3 size={14} />
+                      </button>
+                      <button onClick={() => deleteCard(card.id)} className="p-1.5 rounded-lg" style={{ color: theme.textS }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Progress bar */}
@@ -1321,12 +1461,74 @@ export default function BillBossPage() {
                     </div>
                   </div>
 
+                  {/* Payoff Strategy */}
+                  {currentBalance > 0 && (
+                    <div className="rounded-xl p-3 space-y-2" style={{ background: `${theme.accent}06`, border: `1px solid ${theme.accent}20` }}>
+                      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.accent }}>Payoff Strategy</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="text-center px-2 py-1.5 rounded-lg" style={{ background: theme.bg }}>
+                          <p className="text-[10px]" style={{ color: theme.textM }}>Debt Free</p>
+                          <p className="text-xs font-bold" style={{ color: theme.text }}>{payoffDate ? new Date(payoffDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—'}</p>
+                        </div>
+                        <div className="text-center px-2 py-1.5 rounded-lg" style={{ background: theme.bg }}>
+                          <p className="text-[10px]" style={{ color: theme.textM }}>Interest Cost</p>
+                          <p className="text-xs font-bold" style={{ color: '#EF4444' }}>${fmt(totalInterest)}</p>
+                        </div>
+                        <div className="text-center px-2 py-1.5 rounded-lg" style={{ background: theme.bg }}>
+                          <p className="text-[10px]" style={{ color: theme.textM }}>Months Left</p>
+                          <p className="text-xs font-bold" style={{ color: theme.text }}>{unpaidPayments.length}</p>
+                        </div>
+                      </div>
+
+                      {insights.minOnly && insights.minOnly.months > insights.current.months && (
+                        <div className="px-2 py-1.5 rounded-lg text-[10px]" style={{ background: '#EF444410', border: '1px solid #EF444420' }}>
+                          <span style={{ color: '#EF4444' }}>Minimum-only warning: </span>
+                          <span style={{ color: theme.textM }}>Paying only ${card.minPayment}/mo would take {insights.minOnly.months} months and cost ${fmt(insights.minOnly.totalInterest)} in interest</span>
+                        </div>
+                      )}
+
+                      {/* Recommended: Cut payoff in half */}
+                      {insights.halvePmt > card.monthlyPayment && insights.halve.months < insights.current.months && (
+                        <div className="rounded-lg p-2.5" style={{ background: '#10B98112', border: '1px solid #10B98130' }}>
+                          <p className="text-[10px] font-bold mb-1" style={{ color: '#10B981' }}>⚡ Recommended — Pay Off in Half the Time</p>
+                          <p className="text-[10px]" style={{ color: theme.textM }}>
+                            Raise your payment to <span className="font-bold" style={{ color: '#10B981' }}>${fmt(insights.halvePmt)}/mo</span> and pay off in{' '}
+                            <span className="font-bold" style={{ color: theme.text }}>{insights.halve.months} months</span> instead of {insights.current.months}.
+                            You'd save <span className="font-bold" style={{ color: '#10B981' }}>${fmt(insights.current.totalInterest - insights.halve.totalInterest)}</span> in interest.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold" style={{ color: theme.textM }}>Other options:</p>
+                        {[
+                          { label: `+$25/mo ($${Math.round(card.monthlyPayment + 25)})`, data: insights.extra25 },
+                          { label: `+$50/mo ($${Math.round(card.monthlyPayment + 50)})`, data: insights.extra50 },
+                          { label: `+$100/mo ($${Math.round(card.monthlyPayment + 100)})`, data: insights.extra100 },
+                        ].filter(opt => opt.data.months < insights.current.months).map(opt => {
+                          const savedMonths = insights.current.months - opt.data.months
+                          const savedInterest = insights.current.totalInterest - opt.data.totalInterest
+                          return (
+                            <div key={opt.label} className="flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px]" style={{ background: theme.bg }}>
+                              <span className="font-bold" style={{ color: '#10B981' }}>{opt.label}</span>
+                              <span style={{ color: theme.textM }}>{opt.data.months} mo</span>
+                              <span style={{ color: theme.textM }}>Save ${fmt(savedInterest)}</span>
+                              <span className="font-semibold" style={{ color: '#10B981' }}>{savedMonths} faster</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Next payment */}
                   {nextPayment && (
                     <div className="flex items-center justify-between px-3 py-2.5 rounded-xl" style={{ background: theme.bg }}>
                       <div>
                         <p className="text-xs font-semibold" style={{ color: theme.text }}>Next: {new Date(nextPayment.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                        <p className="text-[10px]" style={{ color: theme.textM }}>After payment: ${fmt(nextPayment.remaining)}</p>
+                        <p className="text-[10px]" style={{ color: theme.textM }}>
+                          ${fmt(nextPayment.interest || 0)} interest · ${fmt(nextPayment.amount - (nextPayment.interest || 0))} to principal
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold" style={{ color: theme.accent }}>${fmt(nextPayment.amount)}</span>
@@ -1337,10 +1539,10 @@ export default function BillBossPage() {
                     </div>
                   )}
 
-                  {/* Upcoming schedule (next 3) */}
+                  {/* Upcoming schedule */}
                   <div className="space-y-1">
-                    <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: theme.textS }}>Schedule</p>
-                    {card.payments.filter(p => !p.paid).slice(0, 4).map((p, i) => (
+                    <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: theme.textS }}>Upcoming Payments</p>
+                    {unpaidPayments.slice(0, 4).map((p, i) => (
                       <div key={i} className="flex items-center justify-between text-xs px-2 py-1 rounded-lg" style={{ background: i === 0 ? `${theme.accent}08` : 'transparent' }}>
                         <span style={{ color: theme.text }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                         <span style={{ color: theme.textM }}>${fmt(p.amount)}</span>
@@ -1640,7 +1842,7 @@ export default function BillBossPage() {
                           )}
                         </div>
                         <p className="text-sm" style={{ color: theme.textM }}>
-                          Due {fmtD(bill.due)}
+                          Due {fmtD(cycleDue(bill))}
                           {bill.recurrence && bill.recurrence !== 'monthly' && (
                             <span> · {bill.recurrence === 'custom' && bill.customRecurrenceDays ? `Every ${bill.customRecurrenceDays}d` : bill.recurrence}</span>
                           )}
@@ -1800,61 +2002,22 @@ export default function BillBossPage() {
                   className="flex items-center gap-3 px-4 py-3"
                   style={{ borderColor: theme.border }}
                 >
-                  {/* Name + Category */}
+                  {/* Name + Due Date */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{bill.name}</p>
-                      {partial?.isPartial && (
-                        <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: '#F59E0B20', color: '#F59E0B' }}>PARTIAL</span>
-                      )}
-                    </div>
-                    <p className="text-xs truncate" style={{ color: theme.textM }}>
-                      {bill.cat} · Due {fmtD(bill.due)}{partial?.isPartial ? ` · ${fmt(partial.remaining)} left` : ''}
-                    </p>
+                    <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{bill.name}</p>
+                    <p className="text-xs" style={{ color: theme.textM }}>Due {fmtD(bill.due)}</p>
                   </div>
                   {/* Amount */}
                   <p className="text-sm font-bold flex-shrink-0 tabular-nums" style={{ color: '#EF4444' }}>–{fmt(partial?.isPartial ? partial.remaining : bill.amount)}</p>
-                  {/* Quick actions */}
+                  {/* Pay button only */}
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => handlePayFull(bill.id, getEffectiveBillDate(bill))}
                       className="p-1.5 rounded-lg transition-colors hover:opacity-80"
                       style={{ backgroundColor: theme.accent }}
-                      title="Pay"
+                      title="Mark Paid"
                     >
                       <Check size={13} style={{ color: '#fff' }} />
-                    </button>
-                    <button
-                      onClick={() => setSplitModalBillId(bill.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: '#F59E0B20' }}
-                      title="Split Payment"
-                    >
-                      <ChevronRight size={13} style={{ color: '#F59E0B' }} />
-                    </button>
-                    <button
-                      onClick={() => handleStartEdit(bill.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: `${theme.gold}20` }}
-                      title="Edit"
-                    >
-                      <Edit3 size={13} style={{ color: theme.gold }} />
-                    </button>
-                    <button
-                      onClick={() => handleDuplicateBill(bill)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: `${theme.accent}15` }}
-                      title="Duplicate"
-                    >
-                      <span style={{ color: theme.accent, fontSize: 11, fontWeight: 700 }}>⊕</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBill(bill.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: `${theme.bad}20` }}
-                      title="Delete"
-                    >
-                      <Trash2 size={14} style={{ color: theme.bad }} />
                     </button>
                   </div>
                 </motion.div>

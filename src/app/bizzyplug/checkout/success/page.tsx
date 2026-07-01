@@ -44,6 +44,9 @@ function SuccessContent() {
         }
 
         const meta = data.metadata || {}
+        let svcDescs = {}
+        try { svcDescs = JSON.parse(meta.serviceDescriptions || '{}') } catch {}
+        const paidAmount = data.amount ? Math.round(data.amount / 100 * 100) / 100 : 0
         await fetch('/api/bizzyplug/intake', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -57,6 +60,8 @@ function SuccessContent() {
             notes: `${meta.notes || ''}\n[Paid via Stripe — Session: ${sessionId}]`.trim(),
             projectType: meta.projectType || '',
             referenceUrls: [],
+            serviceDescriptions: svcDescs,
+            paidAmount,
           }),
         })
 

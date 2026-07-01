@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 const BUCKET = 'bizzyplug-references'
 
@@ -19,6 +20,14 @@ async function ensureBucket(admin: any) {
   }
 }
 
+const MIME_BY_EXT: Record<string, string> = {
+  mp3: 'audio/mpeg', mp4: 'video/mp4', mov: 'video/quicktime',
+  webm: 'video/webm', ogg: 'audio/ogg', wav: 'audio/wav',
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf',
+  zip: 'application/zip',
+}
+
 export async function POST(req: NextRequest) {
   try {
     const admin = getAdmin()
@@ -34,13 +43,14 @@ export async function POST(req: NextRequest) {
     const urls: string[] = []
 
     for (const file of files) {
-      const ext = file.name.split('.').pop() || 'jpg'
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
       const fileName = `ref-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`
       const buffer = new Uint8Array(await file.arrayBuffer())
+      const contentType = file.type || MIME_BY_EXT[ext] || 'application/octet-stream'
 
       const { error } = await admin.storage
         .from(BUCKET)
-        .upload(fileName, buffer, { contentType: file.type, upsert: true })
+        .upload(fileName, buffer, { contentType, upsert: true })
 
       if (!error) {
         const { data } = admin.storage.from(BUCKET).getPublicUrl(fileName)

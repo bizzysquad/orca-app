@@ -282,7 +282,7 @@ export default function SmartStackPage() {
     return [];
   });
   const [newAccountName, setNewAccountName] = useState('');
-  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj'>('lyft');
+  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj' | 'bizzplug'>('lyft');
 
   // ── Income source data from localStorage ──
   const [lyftSessions, setLyftSessions] = useState<{id:string;date:string;earnings:number;trips:number;miles?:number;gasExpense?:number}[]>([])
@@ -292,8 +292,12 @@ export default function SmartStackPage() {
   const [lyftAddTrips, setLyftAddTrips] = useState('')
   const [lyftAddMiles, setLyftAddMiles] = useState('')
   const [lyftAddGas, setLyftAddGas] = useState('')
+  const [lyftEditId, setLyftEditId] = useState<string | null>(null)
+  const [lyftEditEarnings, setLyftEditEarnings] = useState('')
   const [djGigs, setDjGigs] = useState<{id:string;date:string;clientName?:string;eventType?:string;contractAmount?:number;fee?:number;depositPaid?:boolean;depositAmount?:number;partialPayments?:{amount:number}[];status:string}[]>([])
   const [bizzplugClients, setBizzplugClients] = useState<{id:string;quote:number;paid:number;status:string}[]>([])
+  const [metricsMonth, setMetricsMonth] = useState(new Date().getMonth())
+  const [metricsYear, setMetricsYear] = useState(new Date().getFullYear())
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
   const [collapsedAccounts, setCollapsedAccounts] = useState<Record<string, boolean>>({});
   const [scheduledPaymentsCollapsed, setScheduledPaymentsCollapsed] = useState(false);
@@ -567,6 +571,43 @@ export default function SmartStackPage() {
 
   const totalIncome = lyftNet + djEarned + bizzplugEarned
 
+  // ── Metrics month navigation (Lyft / DJ / BizzyPlug metrics reset each month, like Bill Boss) ──
+  const handleMetricsMonthChange = (dir: number) => {
+    let m = metricsMonth + dir
+    let y = metricsYear
+    if (m < 0) { m = 11; y-- }
+    if (m > 11) { m = 0; y++ }
+    setMetricsMonth(m)
+    setMetricsYear(y)
+  }
+  const metricsMonthKey = useMemo(() => `${metricsYear}-${String(metricsMonth + 1).padStart(2, '0')}`, [metricsMonth, metricsYear])
+
+  const lyftSessionsMonth = useMemo(() => lyftSessions.filter(s => (s.date || '').startsWith(metricsMonthKey)), [lyftSessions, metricsMonthKey])
+  const lyftGrossMonth = useMemo(() => lyftSessionsMonth.reduce((s, sess) => s + (sess.earnings || 0), 0), [lyftSessionsMonth])
+  const lyftGasMonth = useMemo(() => lyftSessionsMonth.reduce((s, sess) => s + (sess.gasExpense || 0), 0), [lyftSessionsMonth])
+  const lyftNetMonth = useMemo(() => lyftGrossMonth - lyftGasMonth, [lyftGrossMonth, lyftGasMonth])
+  const lyftTripsMonth = useMemo(() => lyftSessionsMonth.reduce((s, sess) => s + (sess.trips || 0), 0), [lyftSessionsMonth])
+
+  const djGigsMonth = useMemo(() => djGigs.filter(g => (g.date || '').startsWith(metricsMonthKey)), [djGigs, metricsMonthKey])
+  const djEarnedMonth = useMemo(() => djGigsMonth.reduce((s, gig) => {
+    const deposit = gig.depositPaid ? (gig.depositAmount || 0) : 0
+    const partials = (gig.partialPayments || []).reduce((sp, p) => sp + p.amount, 0)
+    return s + deposit + partials
+  }, 0), [djGigsMonth])
+  const djBookedMonth = useMemo(() => djGigsMonth
+    .filter(g => ['confirmed', 'pending', 'inquiry'].includes(g.status))
+    .reduce((s, gig) => s + (gig.contractAmount || gig.fee || 0), 0), [djGigsMonth])
+  const djUpcomingMonth = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return djGigsMonth.filter(g => g.date >= today && g.status !== 'cancelled').length
+  }, [djGigsMonth])
+
+  const bizzplugClientsMonth = useMemo(() => bizzplugClients.filter((c: any) => ((c.paidDate || c.createdAt || '') as string).startsWith(metricsMonthKey)), [bizzplugClients, metricsMonthKey])
+  const bizzplugEarnedMonth = useMemo(() => bizzplugClientsMonth.reduce((s: number, c: any) => s + (c.paid || 0), 0), [bizzplugClientsMonth])
+  const bizzplugPendingMonth = useMemo(() => bizzplugClientsMonth.reduce((s: number, c: any) => s + Math.max(0, (c.quote || 0) - (c.paid || 0)), 0), [bizzplugClientsMonth])
+
+  const totalIncomeMonth = lyftNetMonth + djEarnedMonth + bizzplugEarnedMonth
+
   // Live summary totals — recompute any time income sources or savings change
   const summaryTotals = useMemo(() => {
     const totalSavings = savingsAccounts.reduce((sum, a) => sum + (a.amount || 0), 0);
@@ -591,6 +632,24 @@ export default function SmartStackPage() {
     setLyftAddMiles('')
     setLyftAddGas('')
     setLyftFormExpanded(false)
+  }
+
+  const updateLyftSession = () => {
+    if (!lyftEditId) return
+    const earnings = parseFloat(lyftEditEarnings)
+    if (isNaN(earnings) || earnings <= 0) return
+    const updated = lyftSessions.map(s => s.id === lyftEditId ? { ...s, earnings } : s)
+    setLyftSessions(updated)
+    try { setLocalSynced('orca-lyft-sessions', JSON.stringify(updated)) } catch {}
+    setLyftEditId(null)
+    setLyftEditEarnings('')
+  }
+
+  const deleteLyftSession = (id: string) => {
+    const updated = lyftSessions.filter(s => s.id !== id)
+    setLyftSessions(updated)
+    try { setLocalSynced('orca-lyft-sessions', JSON.stringify(updated)) } catch {}
+    if (lyftEditId === id) { setLyftEditId(null); setLyftEditEarnings('') }
   }
 
   const renderCheckProjectionWithCalendar = () => {
@@ -944,8 +1003,8 @@ export default function SmartStackPage() {
         <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
           {[
             { key: 'lyft', label: 'Lyft Metrics', icon: Car },
-            { key: 'dj', label: 'DJ Gig Manager', icon: Mic2 },
-            // Projection calculator removed
+            { key: 'dj', label: 'DJ Gigs', icon: Mic2 },
+            { key: 'bizzplug', label: 'BizzyPlug', icon: Palette },
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -963,6 +1022,37 @@ export default function SmartStackPage() {
           ))}
         </div>
 
+        {/* ── Metrics Month Navigator — metrics reset at the start of each month, like Bill Boss ── */}
+        <div className="rounded-2xl p-4 flex items-center justify-between" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+          <button
+            onClick={() => handleMetricsMonthChange(-1)}
+            className="p-2 rounded-xl transition-all active:scale-95"
+            style={{ backgroundColor: theme.bg, color: theme.text }}
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="text-center min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: theme.textM }}>
+              {new Date(metricsYear, metricsMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </p>
+            <p className="text-2xl sm:text-3xl font-black tabular-nums" style={{ color: theme.text }}>
+              {fmt(projectionMode === 'lyft' ? lyftNetMonth : projectionMode === 'dj' ? djEarnedMonth : bizzplugEarnedMonth)}
+            </p>
+            <p className="text-[10px]" style={{ color: theme.textM }}>
+              {projectionMode === 'lyft' ? 'Lyft' : projectionMode === 'dj' ? 'DJ Gigs' : 'BizzyPlug'} income this month
+            </p>
+          </div>
+          <button
+            onClick={() => handleMetricsMonthChange(1)}
+            className="p-2 rounded-xl transition-all active:scale-95"
+            style={{ backgroundColor: theme.bg, color: theme.text }}
+            aria-label="Next month"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
         {projectionMode === 'lyft' && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
             <div className="flex items-center gap-3 mb-5">
@@ -971,14 +1061,14 @@ export default function SmartStackPage() {
               </div>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Lyft Earnings</h2>
-                <p className="text-xs" style={{ color: theme.textM }}>{lyftSessions.length} week{lyftSessions.length !== 1 ? 's' : ''} logged</p>
+                <p className="text-xs" style={{ color: theme.textM }}>{lyftSessionsMonth.length} week{lyftSessionsMonth.length !== 1 ? 's' : ''} this month</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 mb-5">
               <div className="rounded-xl p-4" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                <p className="text-xs font-semibold mb-1" style={{ color: theme.textM }}>Total Earnings</p>
-                <p className="text-2xl font-black" style={{ color: '#10B981' }}>{fmt(lyftGross)}</p>
+                <p className="text-xs font-semibold mb-1" style={{ color: theme.textM }}>Total Earnings This Month</p>
+                <p className="text-2xl font-black" style={{ color: '#10B981' }}>{fmt(lyftGrossMonth)}</p>
               </div>
             </div>
 
@@ -1040,20 +1130,61 @@ export default function SmartStackPage() {
             </div>
 
             <div>
-              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Recent Weeks</p>
-              {lyftSessions.length === 0 ? (
+              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Weeks This Month</p>
+              {lyftSessionsMonth.length === 0 ? (
                 <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
-                  No weeks logged yet
+                  No weeks logged this month
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {[...lyftSessions].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6).map((sess) => (
-                    <div key={sess.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                      <p className="text-xs font-semibold" style={{ color: theme.text }}>
-                        Week of {new Date(sess.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </p>
-                      <p className="text-sm font-black" style={{ color: '#10B981' }}>+{fmt(sess.earnings)}</p>
-                    </div>
+                  {[...lyftSessionsMonth].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6).map((sess) => (
+                    lyftEditId === sess.id ? (
+                      <div key={sess.id} className="rounded-xl px-3 py-2.5 space-y-2" style={{ backgroundColor: theme.bg, border: `1px solid #22D3EE` }}>
+                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
+                          Week of {new Date(sess.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Earned ($)</label>
+                          <input
+                            type="number"
+                            value={lyftEditEarnings}
+                            onChange={e => setLyftEditEarnings(e.target.value)}
+                            className="flex-1 px-2 py-1.5 rounded-lg text-sm outline-none"
+                            style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setLyftEditId(null); setLyftEditEarnings('') }}
+                            className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
+                            style={{ backgroundColor: theme.card, color: theme.textM, border: `1px solid ${theme.border}` }}
+                          >Cancel</button>
+                          <button
+                            onClick={() => deleteLyftSession(sess.id)}
+                            className="py-1.5 px-3 rounded-lg text-xs font-bold"
+                            style={{ backgroundColor: '#EF444420', color: '#EF4444', border: '1px solid #EF444440' }}
+                          ><Trash2 className="w-3 h-3" /></button>
+                          <button
+                            onClick={updateLyftSession}
+                            disabled={!lyftEditEarnings || parseFloat(lyftEditEarnings) <= 0}
+                            className="flex-1 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40"
+                            style={{ backgroundColor: '#22D3EE', color: '#fff' }}
+                          >Save</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={sess.id} className="flex items-center justify-between rounded-xl px-3 py-2.5 cursor-pointer" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}
+                        onClick={() => { setLyftEditId(sess.id); setLyftEditEarnings(String(sess.earnings)) }}>
+                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
+                          Week of {new Date(sess.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-black" style={{ color: '#10B981' }}>+{fmt(sess.earnings)}</p>
+                          <Edit3 className="w-3 h-3" style={{ color: theme.textM }} />
+                        </div>
+                      </div>
+                    )
                   ))}
                 </div>
               )}
@@ -1070,15 +1201,15 @@ export default function SmartStackPage() {
               </div>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>DJ Gig Manager</h2>
-                <p className="text-xs" style={{ color: theme.textM }}>{djGigs.length} gigs · {djUpcoming} upcoming</p>
+                <p className="text-xs" style={{ color: theme.textM }}>{djGigsMonth.length} gigs · {djUpcomingMonth} upcoming this month</p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3 mb-5">
               {[
-                { label: 'Total Earned', value: fmt(djEarned), color: '#10B981' },
-                { label: 'Booked Value', value: fmt(djBooked), color: '#F43F5E' },
-                { label: 'Upcoming', value: String(djUpcoming), color: theme.text },
+                { label: 'Earned This Month', value: fmt(djEarnedMonth), color: '#10B981' },
+                { label: 'Booked This Month', value: fmt(djBookedMonth), color: '#F43F5E' },
+                { label: 'Upcoming', value: String(djUpcomingMonth), color: theme.text },
               ].map(({ label, value, color }) => (
                 <div key={label} className="rounded-xl p-3 overflow-hidden" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
                   <p className="text-xs font-semibold mb-1 truncate" style={{ color: theme.textM }}>{label}</p>
@@ -1088,14 +1219,14 @@ export default function SmartStackPage() {
             </div>
 
             <div>
-              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Recent Gigs</p>
-              {djGigs.length === 0 ? (
+              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Gigs This Month</p>
+              {djGigsMonth.length === 0 ? (
                 <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
-                  No gigs yet — add your first DJ gig
+                  No gigs this month yet
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {[...djGigs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map((gig) => (
+                  {[...djGigsMonth].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map((gig) => (
                     <div key={gig.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
                       <div>
                         <p className="text-xs font-semibold" style={{ color: theme.text }}>
@@ -1122,6 +1253,75 @@ export default function SmartStackPage() {
             </div>
           </motion.div>
         )}
+
+        {projectionMode === 'bizzplug' && (() => {
+          const totalProjects = bizzplugClientsMonth.length
+          const newLeads = bizzplugClientsMonth.filter((c: any) => c.status === 'new-lead').length
+          const completed = bizzplugClientsMonth.filter((c: any) => c.status === 'completed').length
+          const recentProjects = [...bizzplugClientsMonth].sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 6)
+          return (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#9333EA20' }}>
+                <Palette className="w-5 h-5" style={{ color: '#9333EA' }} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>BizzyPlug</h2>
+                <p className="text-xs" style={{ color: theme.textM }}>{totalProjects} project{totalProjects !== 1 ? 's' : ''} this month · {newLeads} active</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {[
+                { label: 'Earned This Month', value: fmt(bizzplugEarnedMonth), color: '#10B981' },
+                { label: 'Pending', value: fmt(bizzplugPendingMonth), color: '#F59E0B' },
+                { label: 'Completed', value: String(completed), color: theme.text },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="rounded-xl p-3 overflow-hidden" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                  <p className="text-xs font-semibold mb-1 truncate" style={{ color: theme.textM }}>{label}</p>
+                  <p className="text-sm font-black truncate" style={{ color }}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Projects This Month</p>
+              {recentProjects.length === 0 ? (
+                <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
+                  No projects this month yet
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {recentProjects.map((proj: any) => (
+                    <div key={proj.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                      <div>
+                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
+                          {proj.artistName || 'Client'} · {proj.projectType || 'Project'}
+                        </p>
+                        <p className="text-xs" style={{ color: theme.textM }}>
+                          {proj.createdAt ? new Date(proj.createdAt + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                          {' · '}<span style={{ textTransform: 'capitalize' }}>{proj.status || 'new-lead'}</span>
+                        </p>
+                      </div>
+                      <p className="text-sm font-black" style={{ color: proj.paid > 0 ? '#10B981' : '#9333EA' }}>
+                        {proj.paid > 0 ? `+${fmt(proj.paid)}` : fmt(proj.quote || 0)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <a href="/bizzplug" className="flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
+                style={{ backgroundColor: '#9333EA', color: '#fff' }}>
+                <Palette className="w-4 h-4" />
+                BizzyPlug Dashboard
+              </a>
+            </div>
+          </motion.div>
+          )
+        })()}
 
         {false && (
           <motion.div ref={paymentSectionRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
@@ -1625,6 +1825,46 @@ export default function SmartStackPage() {
                 </div>
               </div>
             </div>
+
+            {/* This Month by Source */}
+            {(() => {
+              const now = new Date()
+              const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+              const monthLyft = lyftSessions.filter(s => (s.date || '').startsWith(key)).reduce((sum, s) => sum + (s.earnings || 0), 0)
+              const monthLyftGas = lyftSessions.filter(s => (s.date || '').startsWith(key)).reduce((sum, s) => sum + (s.gasExpense || 0), 0)
+              const monthDj = djGigs.filter((g: any) => (g.date || '').startsWith(key)).reduce((sum, g: any) => {
+                const dep = g.depositPaid ? (g.depositAmount || 0) : 0
+                const parts = (g.partialPayments || []).reduce((sp: number, p: any) => sp + p.amount, 0)
+                return sum + dep + parts
+              }, 0)
+              const monthBp = bizzplugClients.filter((c: any) => (c.paidDate || c.createdAt || '').startsWith(key)).reduce((sum, c: any) => sum + (c.paid || 0), 0)
+              const monthTotal = (monthLyft - monthLyftGas) + monthDj + monthBp
+              return (
+                <div className="mb-4 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                  <div className="px-3 pt-3 pb-2">
+                    <p className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: 'rgba(255,255,255,0.8)' }}>This Month</p>
+                    <p className="text-lg font-black text-white tabular-nums">${monthTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="px-3 pb-3 grid grid-cols-3 gap-2">
+                    <div className="rounded-lg p-2 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                      <Car className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#22D3EE' }} />
+                      <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>Lyft</p>
+                      <p className="text-xs font-black text-white tabular-nums">${(monthLyft - monthLyftGas).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <div className="rounded-lg p-2 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                      <Mic2 className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#F43F5E' }} />
+                      <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>DJ</p>
+                      <p className="text-xs font-black text-white tabular-nums">${monthDj.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <div className="rounded-lg p-2 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                      <Palette className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#9333EA' }} />
+                      <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>BizzyPlug</p>
+                      <p className="text-xs font-black text-white tabular-nums">${monthBp.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* CTA row */}
             <div className="flex gap-2">

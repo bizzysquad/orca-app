@@ -3,15 +3,25 @@ import Stripe from 'stripe'
 
 export const dynamic = 'force-dynamic'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY?.trim()
+  if (!key) throw new Error('STRIPE_SECRET_KEY is not configured')
+  return new Stripe(key)
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const stripe = getStripe()
     const body = await req.json()
-    const { services, form } = body
+    const { services, form, serviceDescriptions } = body
 
     if (!services?.length || !form?.artistName || !form?.email) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    const email = String(form.email).trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: `Please enter a valid email address` }, { status: 400 })
     }
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = services.map(
@@ -25,13 +35,13 @@ export async function POST(req: NextRequest) {
       })
     )
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://orcafin.app').trim()
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: lineItems,
       mode: 'payment',
-      customer_email: form.email,
+      customer_email: email,
       metadata: {
         artistName: form.artistName,
         email: form.email,
@@ -41,6 +51,7 @@ export async function POST(req: NextRequest) {
         deadline: form.deadline || '',
         notes: form.notes || '',
         projectType: services.map((s: { name: string }) => s.name).join(', '),
+        serviceDescriptions: JSON.stringify(serviceDescriptions || {}).slice(0, 500),
       },
       success_url: `${appUrl}/bizzyplug/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/bizzyplug/checkout/cancel`,
