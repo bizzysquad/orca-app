@@ -535,11 +535,6 @@ export default function DashboardPage() {
     setCalYear(y)
   }
 
-  const upcomingBills = useMemo(() =>
-    bills.filter(b => b.status !== 'paid').sort((a, b) => a.due.localeCompare(b.due)).slice(0, 3),
-    [bills]
-  )
-
   // Bills due in the currently viewed calendar month (month-aware, handles recurrence + partial payments)
   const totalDue = useMemo(() => {
     const monthEnd = new Date(calYear, calMonth + 1, 0)
@@ -579,6 +574,42 @@ export default function DashboardPage() {
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 2)
   }, [gigs, calMonth, calYear, todayStr])
+
+  // Next few unpaid bills, synced live from Bill Boss (same `bills` data via useOrcaData)
+  const upcomingBills = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const items: { bill: Bill; due: Date }[] = []
+    bills.forEach(b => {
+      const rec = b.recurrence || 'one-time'
+      let due = new Date(b.due + 'T00:00:00')
+      if (rec === 'one-time') {
+        if (b.status === 'paid' || due < today) return
+      } else {
+        const stepDays = rec === 'weekly' ? 7 : rec === 'custom' ? Math.max(1, b.customRecurrenceDays || 30) : null
+        let guard = 0
+        while (due < today && guard < 60) {
+          if (stepDays) due = new Date(due.getTime() + stepDays * 86400000)
+          else if (rec === 'monthly') due = new Date(due.getFullYear(), due.getMonth() + 1, due.getDate())
+          else if (rec === 'yearly') due = new Date(due.getFullYear() + 1, due.getMonth(), due.getDate())
+          else break
+          guard++
+        }
+        const cycleAllocs = b.alloc.filter(a => {
+          const ad = new Date(a.date + 'T00:00:00')
+          return ad.getMonth() === due.getMonth() && ad.getFullYear() === due.getFullYear()
+        })
+        const paidAmt = cycleAllocs.filter(a => a.paid).reduce((s, a) => s + a.amount, 0)
+        if (paidAmt >= b.amount) return
+        if (b.status === 'paid' && b.paidDate) {
+          const pd = new Date(b.paidDate + 'T00:00:00')
+          if (pd.getMonth() === due.getMonth() && pd.getFullYear() === due.getFullYear()) return
+        }
+      }
+      items.push({ bill: b, due })
+    })
+    return items.sort((a, b) => a.due.getTime() - b.due.getTime()).slice(0, 5)
+  }, [bills])
 
   if (loading) {
     return (
@@ -941,6 +972,69 @@ export default function DashboardPage() {
     )
   }
 
+  const BillBossPosterboard = () => {
+    if (upcomingBills.length === 0) return null
+    const totalUpcoming = upcomingBills.reduce((s, { bill: b, due }) => {
+      const rec = b.recurrence || 'one-time'
+      const cycleAllocs = rec !== 'one-time'
+        ? b.alloc.filter(a => { const ad = new Date(a.date + 'T00:00:00'); return ad.getMonth() === due.getMonth() && ad.getFullYear() === due.getFullYear() })
+        : b.alloc
+      const paidAmt = cycleAllocs.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
+      return s + Math.max(0, b.amount - paidAmt)
+    }, 0)
+
+    return (
+      <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.card, border: `1px solid ${BENTLEY_RED}30` }}>
+        <div className="px-4 pt-4 pb-3 flex items-center justify-between" style={{ borderBottom: `1px solid ${BENTLEY_RED}20` }}>
+          <div className="flex items-center gap-2">
+            <DollarSign size={14} style={{ color: BENTLEY_RED }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Bill Boss Board</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${BENTLEY_RED}18`, color: BENTLEY_RED }}>
+              {upcomingBills.length} upcoming
+            </span>
+          </div>
+          <Link href="/bill-boss">
+            <span className="text-[10px] font-bold" style={{ color: BENTLEY_RED }}>View All →</span>
+          </Link>
+        </div>
+
+        <div className="px-4 py-3">
+          <div className="rounded-xl p-2.5 text-center" style={{ backgroundColor: `${BENTLEY_RED}10` }}>
+            <p className="text-[9px] font-bold uppercase mb-0.5" style={{ color: theme.subtext }}>Due Soon</p>
+            <p className="text-sm font-bold" style={{ color: BENTLEY_RED }}>{fmt(totalUpcoming)}</p>
+          </div>
+        </div>
+
+        <div className="px-4 pb-4 space-y-2">
+          {upcomingBills.map(({ bill: b, due }) => {
+            const dueStr = due.toISOString().slice(0, 10)
+            const isOverdue = dueStr < todayStr
+            const daysAway = Math.ceil((due.getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000)
+            return (
+              <Link key={b.id + dueStr} href="/bill-boss">
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${BENTLEY_RED}15` }}>
+                    <DollarSign size={13} style={{ color: BENTLEY_RED }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{b.name}</p>
+                    <p className="text-[10px] truncate" style={{ color: theme.subtext }}>
+                      {isOverdue
+                        ? 'Overdue'
+                        : daysAway === 0 ? 'Due today' : daysAway === 1 ? 'Due tomorrow' : `Due in ${daysAway} days`}
+                      {' · '}{due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <p className="text-xs font-bold shrink-0" style={{ color: isOverdue ? BENTLEY_RED : theme.text }}>{fmt(b.amount)}</p>
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   const UpcomingGigsList = () => upcomingGigs.length === 0 ? null : (
     <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
       <div className="flex items-center gap-2 mb-3">
@@ -999,6 +1093,7 @@ export default function DashboardPage() {
             </div>
             <DayDetail date={selectedDate} bills={bills} gigs={gigs} priorities={selectedPriorities} onTogglePriority={handleTogglePriority} onAddPriority={handleAddPriority} onDeletePriority={handleDeletePriority} />
           </motion.div>
+          <motion.div variants={fadeUp}><BillBossPosterboard /></motion.div>
           <motion.div variants={fadeUp}><BizzyPlugPosterboard /></motion.div>
           <motion.div variants={fadeUp}><TaskListWidget /></motion.div>
           <motion.div variants={fadeUp}><FitnessBar /></motion.div>
@@ -1049,6 +1144,7 @@ export default function DashboardPage() {
 
             {/* Right column */}
             <motion.div variants={fadeUp} className="space-y-4">
+              <BillBossPosterboard />
               <BizzyPlugPosterboard />
               <TaskListWidget />
               <FitnessBar />

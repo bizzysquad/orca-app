@@ -298,6 +298,7 @@ export default function SmartStackPage() {
   const [bizzplugClients, setBizzplugClients] = useState<{id:string;quote:number;paid:number;status:string}[]>([])
   const [metricsMonth, setMetricsMonth] = useState(new Date().getMonth())
   const [metricsYear, setMetricsYear] = useState(new Date().getFullYear())
+  const [summaryAllTime, setSummaryAllTime] = useState(true)
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
   const [collapsedAccounts, setCollapsedAccounts] = useState<Record<string, boolean>>({});
   const [scheduledPaymentsCollapsed, setScheduledPaymentsCollapsed] = useState(false);
@@ -607,6 +608,16 @@ export default function SmartStackPage() {
   const bizzplugPendingMonth = useMemo(() => bizzplugClientsMonth.reduce((s: number, c: any) => s + Math.max(0, (c.quote || 0) - (c.paid || 0)), 0), [bizzplugClientsMonth])
 
   const totalIncomeMonth = lyftNetMonth + djEarnedMonth + bizzplugEarnedMonth
+
+  // ── Financial Summary Banner data — All Time or scoped to the selected month ──
+  const summaryLyftNet = summaryAllTime ? lyftNet : lyftNetMonth
+  const summaryLyftTrips = summaryAllTime ? lyftTrips : lyftTripsMonth
+  const summaryLyftSessions = summaryAllTime ? lyftSessions : lyftSessionsMonth
+  const summaryDjEarned = summaryAllTime ? djEarned : djEarnedMonth
+  const summaryDjGigs = summaryAllTime ? djGigs : djGigsMonth
+  const summaryBizzplugEarned = summaryAllTime ? bizzplugEarned : bizzplugEarnedMonth
+  const summaryBizzplugClients = summaryAllTime ? bizzplugClients : bizzplugClientsMonth
+  const summaryTotalIncome = summaryAllTime ? totalIncome : totalIncomeMonth
 
   // Live summary totals — recompute any time income sources or savings change
   const summaryTotals = useMemo(() => {
@@ -1774,6 +1785,40 @@ export default function SmartStackPage() {
           style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)` }}
         >
           <div className="p-4 sm:p-5">
+            {/* Summary filter — All Time or a specific month */}
+            <div className="flex items-center justify-between gap-2 mb-4 rounded-xl p-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+              <button
+                onClick={() => { setSummaryAllTime(false); handleMetricsMonthChange(-1) }}
+                className="p-1.5 rounded-lg transition-all active:scale-95 shrink-0"
+                style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff' }}
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setSummaryAllTime(false)}
+                className="flex-1 text-center text-xs font-bold py-1 rounded-lg transition-all"
+                style={{ backgroundColor: !summaryAllTime ? 'rgba(255,255,255,0.25)' : 'transparent', color: '#fff' }}
+              >
+                {new Date(metricsYear, metricsMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </button>
+              <button
+                onClick={() => setSummaryAllTime(true)}
+                className="text-xs font-bold py-1.5 px-3 rounded-lg transition-all shrink-0"
+                style={{ backgroundColor: summaryAllTime ? 'rgba(255,255,255,0.25)' : 'transparent', color: '#fff' }}
+              >
+                All Time
+              </button>
+              <button
+                onClick={() => { setSummaryAllTime(false); handleMetricsMonthChange(1) }}
+                className="p-1.5 rounded-lg transition-all active:scale-95 shrink-0"
+                style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff' }}
+                aria-label="Next month"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
             {/* Metrics row */}
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
@@ -1784,7 +1829,7 @@ export default function SmartStackPage() {
                   </p>
                 </div>
                 <p className="text-xl font-black text-white tabular-nums">
-                  ${summaryTotals.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${summaryTotalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
                   Lyft · DJ Gigs · BizzyPlug
@@ -1801,7 +1846,7 @@ export default function SmartStackPage() {
                   ${summaryTotals.totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  {savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}
+                  {savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''} · current balance
                 </p>
               </div>
             </div>
@@ -1816,25 +1861,25 @@ export default function SmartStackPage() {
                   <div className="flex items-center gap-1.5">
                     <Car className="w-3 h-3" style={{ color: '#22D3EE' }} />
                     <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>Lyft</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{lyftSessions.length} sessions · {lyftTrips} trips</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{summaryLyftSessions.length} sessions · {summaryLyftTrips} trips</span>
                   </div>
-                  <span className="text-sm font-black text-white tabular-nums">${lyftNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="text-sm font-black text-white tabular-nums">${summaryLyftNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Mic2 className="w-3 h-3" style={{ color: '#F43F5E' }} />
                     <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>DJ Gigs</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{djGigs.length} gigs</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{summaryDjGigs.length} gigs</span>
                   </div>
-                  <span className="text-sm font-black text-white tabular-nums">${djEarned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="text-sm font-black text-white tabular-nums">${summaryDjEarned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Palette className="w-3 h-3" style={{ color: '#F59E0B' }} />
                     <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>BizzyPlug</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{bizzplugClients.length} clients</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{summaryBizzplugClients.length} clients</span>
                   </div>
-                  <span className="text-sm font-black text-white tabular-nums">${bizzplugEarned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="text-sm font-black text-white tabular-nums">${summaryBizzplugEarned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
