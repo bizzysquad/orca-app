@@ -1022,37 +1022,6 @@ export default function SmartStackPage() {
           ))}
         </div>
 
-        {/* ── Metrics Month Navigator — metrics reset at the start of each month, like Bill Boss ── */}
-        <div className="rounded-2xl p-4 flex items-center justify-between" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-          <button
-            onClick={() => handleMetricsMonthChange(-1)}
-            className="p-2 rounded-xl transition-all active:scale-95"
-            style={{ backgroundColor: theme.bg, color: theme.text }}
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <div className="text-center min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: theme.textM }}>
-              {new Date(metricsYear, metricsMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </p>
-            <p className="text-2xl sm:text-3xl font-black tabular-nums" style={{ color: theme.text }}>
-              {fmt(projectionMode === 'lyft' ? lyftNetMonth : projectionMode === 'dj' ? djEarnedMonth : bizzplugEarnedMonth)}
-            </p>
-            <p className="text-[10px]" style={{ color: theme.textM }}>
-              {projectionMode === 'lyft' ? 'Lyft' : projectionMode === 'dj' ? 'DJ Gigs' : 'BizzyPlug'} income this month
-            </p>
-          </div>
-          <button
-            onClick={() => handleMetricsMonthChange(1)}
-            className="p-2 rounded-xl transition-all active:scale-95"
-            style={{ backgroundColor: theme.bg, color: theme.text }}
-            aria-label="Next month"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-
         {projectionMode === 'lyft' && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
             <div className="flex items-center gap-3 mb-5">
@@ -1752,6 +1721,50 @@ export default function SmartStackPage() {
           </p>
         </motion.div>
 
+        {/* ── Total Monthly Income — combined Lyft + DJ Gigs + BizzyPlug, navigable by month ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl p-4 sm:p-5 mb-6 flex items-center justify-between"
+          style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)` }}
+        >
+          <button
+            onClick={() => handleMetricsMonthChange(-1)}
+            className="p-2 rounded-xl transition-all active:scale-95 shrink-0"
+            style={{ backgroundColor: 'rgba(255,255,255,0.18)', color: '#fff' }}
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="text-center min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>
+              Total Monthly Income · {new Date(metricsYear, metricsMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </p>
+            <p className="text-3xl sm:text-4xl font-black text-white tabular-nums mt-1">
+              ${totalIncomeMonth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <div className="flex items-center justify-center gap-3 mt-2 flex-wrap">
+              <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                <Car className="w-3 h-3 inline mr-1" style={{ color: '#22D3EE' }} />Lyft ${lyftNetMonth.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+              <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                <Mic2 className="w-3 h-3 inline mr-1" style={{ color: '#F43F5E' }} />DJ ${djEarnedMonth.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+              <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                <Palette className="w-3 h-3 inline mr-1" style={{ color: '#9333EA' }} />BizzyPlug ${bizzplugEarnedMonth.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => handleMetricsMonthChange(1)}
+            className="p-2 rounded-xl transition-all active:scale-95 shrink-0"
+            style={{ backgroundColor: 'rgba(255,255,255,0.18)', color: '#fff' }}
+            aria-label="Next month"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </motion.div>
+
         {/* ── Financial Summary Banner ── */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -1825,46 +1838,6 @@ export default function SmartStackPage() {
                 </div>
               </div>
             </div>
-
-            {/* This Month by Source */}
-            {(() => {
-              const now = new Date()
-              const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-              const monthLyft = lyftSessions.filter(s => (s.date || '').startsWith(key)).reduce((sum, s) => sum + (s.earnings || 0), 0)
-              const monthLyftGas = lyftSessions.filter(s => (s.date || '').startsWith(key)).reduce((sum, s) => sum + (s.gasExpense || 0), 0)
-              const monthDj = djGigs.filter((g: any) => (g.date || '').startsWith(key)).reduce((sum, g: any) => {
-                const dep = g.depositPaid ? (g.depositAmount || 0) : 0
-                const parts = (g.partialPayments || []).reduce((sp: number, p: any) => sp + p.amount, 0)
-                return sum + dep + parts
-              }, 0)
-              const monthBp = bizzplugClients.filter((c: any) => (c.paidDate || c.createdAt || '').startsWith(key)).reduce((sum, c: any) => sum + (c.paid || 0), 0)
-              const monthTotal = (monthLyft - monthLyftGas) + monthDj + monthBp
-              return (
-                <div className="mb-4 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                  <div className="px-3 pt-3 pb-2">
-                    <p className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: 'rgba(255,255,255,0.8)' }}>This Month</p>
-                    <p className="text-lg font-black text-white tabular-nums">${monthTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                  </div>
-                  <div className="px-3 pb-3 grid grid-cols-3 gap-2">
-                    <div className="rounded-lg p-2 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                      <Car className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#22D3EE' }} />
-                      <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>Lyft</p>
-                      <p className="text-xs font-black text-white tabular-nums">${(monthLyft - monthLyftGas).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
-                    </div>
-                    <div className="rounded-lg p-2 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                      <Mic2 className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#F43F5E' }} />
-                      <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>DJ</p>
-                      <p className="text-xs font-black text-white tabular-nums">${monthDj.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
-                    </div>
-                    <div className="rounded-lg p-2 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                      <Palette className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#9333EA' }} />
-                      <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>BizzyPlug</p>
-                      <p className="text-xs font-black text-white tabular-nums">${monthBp.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
 
             {/* CTA row */}
             <div className="flex gap-2">
