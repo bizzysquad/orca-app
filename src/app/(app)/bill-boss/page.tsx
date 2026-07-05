@@ -64,6 +64,30 @@ function getBillEffectiveStatus(bill: Bill, calMonth: number, calYear: number): 
   return 'paid'
 }
 
+// Returns true if a recurring bill occurrence falls within its active start/end window.
+// `occurrenceDate` is the candidate date for this cycle; `occurrenceIndex` is the
+// zero-based count of this occurrence since the bill's start date (used for the
+// "after N times" end condition).
+function isBillOccurrenceActive(bill: Bill, occurrenceDate: Date, occurrenceIndex: number): boolean {
+  const start = new Date(bill.due + 'T00:00:00')
+  if (occurrenceDate < start) return false
+  if (bill.recurrenceEndType === 'after-date' && bill.recurrenceEndDate) {
+    if (occurrenceDate > new Date(bill.recurrenceEndDate + 'T00:00:00')) return false
+  }
+  if (bill.recurrenceEndType === 'after-count' && bill.recurrenceEndAfter) {
+    if (occurrenceIndex >= bill.recurrenceEndAfter) return false
+  }
+  return true
+}
+
+function monthlyOccurrenceIndex(start: Date, y: number, m: number): number {
+  return (y - start.getFullYear()) * 12 + (m - start.getMonth())
+}
+
+function yearlyOccurrenceIndex(start: Date, y: number): number {
+  return y - start.getFullYear()
+}
+
 // Category to icon mapping with Figma colors
 const CATEGORY_ICONS: Record<string, { Icon: React.ComponentType<any>, color: string }> = {
   'Housing': { Icon: Home, color: '#6366F1' },
@@ -176,25 +200,34 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
       if (recurrence === 'one-time') {
         showOnThisDay = dueDate.getDate() === day && dueDate.getMonth() === month && dueDate.getFullYear() === year
       } else if (recurrence === 'monthly') {
-        showOnThisDay = dueDate.getDate() === day
+        if (dueDate.getDate() === day) {
+          const candidate = new Date(year, month, day)
+          showOnThisDay = isBillOccurrenceActive(b, candidate, monthlyOccurrenceIndex(dueDate, year, month))
+        }
       } else if (recurrence === 'yearly') {
-        showOnThisDay = dueDate.getDate() === day && dueDate.getMonth() === month
+        if (dueDate.getDate() === day && dueDate.getMonth() === month) {
+          const candidate = new Date(year, month, day)
+          showOnThisDay = isBillOccurrenceActive(b, candidate, yearlyOccurrenceIndex(dueDate, year))
+        }
       } else {
         // Weekly / custom — check if any occurrence in this month lands on this day
         const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
         const monthStart = new Date(year, month, 1)
         const monthEnd = new Date(year, month + 1, 0)
         const cursor = new Date(dueDate)
+        let occurrenceIndex = 0
         if (cursor < monthStart) {
           const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
           cursor.setDate(cursor.getDate() + gap)
+          occurrenceIndex = Math.round(gap / intervalDays)
         }
         while (cursor <= monthEnd) {
-          if (cursor >= dueDate && cursor.getDate() === day && cursor.getMonth() === month && cursor.getFullYear() === year) {
+          if (cursor >= dueDate && cursor.getDate() === day && cursor.getMonth() === month && cursor.getFullYear() === year && isBillOccurrenceActive(b, cursor, occurrenceIndex)) {
             showOnThisDay = true
             break
           }
           cursor.setDate(cursor.getDate() + intervalDays)
+          occurrenceIndex++
         }
       }
 
@@ -668,9 +701,61 @@ export default function BillBossPage() {
     return `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
+  // Returns true if a bill has any relevant occurrence in the given calendar month/year —
+  // i.e. it is on/after its start date and not yet past its end date (or occurrence count).
+  const isBillVisibleInCycle = (b: Bill, cMonth: number, cYear: number): boolean => {
+    const recurrence = b.recurrence || 'one-time'
+    const monthStart = new Date(cYear, cMonth, 1)
+    const monthEnd = new Date(cYear, cMonth + 1, 0)
+
+    if (b.alloc.length > 0) {
+      const hasCurrentCycleAlloc = b.alloc.some(a => {
+        const ad = new Date(a.date + 'T00:00:00')
+        return ad.getMonth() === cMonth && ad.getFullYear() === cYear
+      })
+      // One-time bills: their alloc entries are the sole source of truth
+      if (recurrence === 'one-time') return hasCurrentCycleAlloc
+      // Recurring bills: current-cycle allocs keep the bill visible this month,
+      // but stale (past-cycle) allocs must NOT hide the bill in future months —
+      // fall through to recurrence-based logic below in either case.
+      if (hasCurrentCycleAlloc) return true
+    }
+
+    const dueDate = new Date(b.due + 'T00:00:00')
+
+    if (recurrence === 'monthly') {
+      const day = Math.min(dueDate.getDate(), monthEnd.getDate())
+      const candidate = new Date(cYear, cMonth, day)
+      return isBillOccurrenceActive(b, candidate, monthlyOccurrenceIndex(dueDate, cYear, cMonth))
+    }
+    if (recurrence === 'yearly') {
+      if (dueDate.getMonth() !== cMonth) return false
+      const candidate = new Date(cYear, cMonth, dueDate.getDate())
+      return isBillOccurrenceActive(b, candidate, yearlyOccurrenceIndex(dueDate, cYear))
+    }
+    if (recurrence === 'one-time' || !recurrence) {
+      return dueDate.getMonth() === cMonth && dueDate.getFullYear() === cYear
+    }
+    // Weekly / custom — check if any occurrence lands in the month
+    const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
+    const cursor = new Date(dueDate)
+    let occurrenceIndex = 0
+    if (cursor < monthStart) {
+      const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
+      cursor.setDate(cursor.getDate() + gap)
+      occurrenceIndex = Math.round(gap / intervalDays)
+    }
+    while (cursor <= monthEnd) {
+      if (cursor >= monthStart && cursor >= dueDate && isBillOccurrenceActive(b, cursor, occurrenceIndex)) return true
+      cursor.setDate(cursor.getDate() + intervalDays)
+      occurrenceIndex++
+    }
+    return false
+  }
+
   // Calculate unpaid total — subtracts any partial payments made in this billing cycle
   const unpaidTotal = bills
-    .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
+    .filter(b => isBillVisibleInCycle(b, calMonth, calYear) && getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
     .reduce((sum, b) => {
       const rec = b.recurrence || 'one-time'
       const cycleAllocs = (rec !== 'one-time' && b.alloc.length > 0)
@@ -682,7 +767,7 @@ export default function BillBossPage() {
 
   // Calculate paid total — uses effective status for the currently viewed month
   const paidTotal = bills
-    .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid')
+    .filter(b => isBillVisibleInCycle(b, calMonth, calYear) && getBillEffectiveStatus(b, calMonth, calYear) === 'paid')
     .reduce((sum, b) => sum + b.amount, 0)
 
 
@@ -719,6 +804,7 @@ export default function BillBossPage() {
           const targetDay = Math.min(dueDate.getDate(), daysInMon)
           const targetDate = new Date(tYear, tMon, targetDay)
           if (targetDate < dueDate) continue // hasn't started yet
+          if (!isBillOccurrenceActive(b, targetDate, monthlyOccurrenceIndex(dueDate, tYear, tMon))) break // past end date/count
           const targetStr = targetDate.toISOString().split('T')[0]
           const isPaid = getBillEffectiveStatus(b, tMon, tYear) === 'paid'
           if (!isPaid) {
@@ -730,14 +816,21 @@ export default function BillBossPage() {
         // Use getBillEffectiveStatus scoped to the bill's own due month/year so that
         // yearly bills reappear correctly in future years after being paid once.
         const dueDate2 = new Date(b.due + 'T00:00:00')
-        const isPaid = getBillEffectiveStatus(b, dueDate2.getMonth(), today.getFullYear()) === 'paid'
-        if (!isPaid) candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+        const candidateDate = new Date(today.getFullYear(), dueDate2.getMonth(), dueDate2.getDate())
+        if (isBillOccurrenceActive(b, candidateDate, yearlyOccurrenceIndex(dueDate2, today.getFullYear()))) {
+          const isPaid = getBillEffectiveStatus(b, dueDate2.getMonth(), today.getFullYear()) === 'paid'
+          if (!isPaid) candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+        }
       } else if (recurrence === 'one-time') {
         if (b.status !== 'paid') candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
       } else {
         // Weekly / custom — check effective status for current month so paid status resets properly
-        const isPaid = getBillEffectiveStatus(b, today.getMonth(), today.getFullYear()) === 'paid'
-        if (!isPaid) candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+        const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
+        const occurrenceIndex = Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / (86400000 * intervalDays)))
+        if (isBillOccurrenceActive(b, today, occurrenceIndex)) {
+          const isPaid = getBillEffectiveStatus(b, today.getMonth(), today.getFullYear()) === 'paid'
+          if (!isPaid) candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
+        }
       }
     })
 
@@ -776,14 +869,14 @@ export default function BillBossPage() {
         // Monthly: appears once per month (on the same day, clamped to month length)
         const day = Math.min(dueDate.getDate(), monthEnd.getDate())
         const candidate = new Date(calYear, calMonth, day)
-        if (candidate >= dueDate) {
+        if (isBillOccurrenceActive(b, candidate, monthlyOccurrenceIndex(dueDate, calYear, calMonth))) {
           total += b.amount
         }
       } else if (recurrence === 'yearly') {
         // Yearly: appears once per year on the same month/day
         if (dueDate.getMonth() === calMonth) {
           const candidate = new Date(calYear, calMonth, dueDate.getDate())
-          if (candidate >= dueDate) {
+          if (isBillOccurrenceActive(b, candidate, yearlyOccurrenceIndex(dueDate, calYear))) {
             total += b.amount
           }
         }
@@ -791,17 +884,20 @@ export default function BillBossPage() {
         // Weekly, biweekly, custom: generate occurrences and count those in this month
         const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
         const cursor = new Date(dueDate)
+        let occurrenceIndex = 0
         // Fast-forward to near the month start
         if (cursor < monthStart) {
           const daysGap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
           cursor.setDate(cursor.getDate() + daysGap)
+          occurrenceIndex = Math.round(daysGap / intervalDays)
         }
         // Walk forward and count hits in the month
         while (cursor <= monthEnd) {
-          if (cursor >= monthStart && cursor >= dueDate) {
+          if (cursor >= monthStart && cursor >= dueDate && isBillOccurrenceActive(b, cursor, occurrenceIndex)) {
             total += b.amount
           }
           cursor.setDate(cursor.getDate() + intervalDays)
+          occurrenceIndex++
         }
       }
     })
@@ -813,48 +909,8 @@ export default function BillBossPage() {
   // Monthly recurring bills always appear (they recur every month).
   // One-time / weekly / biweekly bills only appear if they have an occurrence in the selected month.
   const getVisibleBills = () => {
-    const monthStart = new Date(calYear, calMonth, 1)
-    const monthEnd = new Date(calYear, calMonth + 1, 0)
-
     return [...bills]
-      .filter(b => {
-        const recurrence = b.recurrence || 'one-time'
-
-        if (b.alloc.length > 0) {
-          const hasCurrentCycleAlloc = b.alloc.some(a => {
-            const ad = new Date(a.date + 'T00:00:00')
-            return ad.getMonth() === calMonth && ad.getFullYear() === calYear
-          })
-          // One-time bills: their alloc entries are the sole source of truth
-          if (recurrence === 'one-time') return hasCurrentCycleAlloc
-          // Recurring bills: current-cycle allocs keep the bill visible this month,
-          // but stale (past-cycle) allocs must NOT hide the bill in future months —
-          // fall through to recurrence-based logic below in either case.
-          if (hasCurrentCycleAlloc) return true
-        }
-
-        const dueDate = new Date(b.due + 'T00:00:00')
-
-        if (recurrence === 'monthly') return true  // always visible — recurs every month
-        if (recurrence === 'yearly') {
-          return dueDate.getMonth() === calMonth  // same month, any year
-        }
-        if (recurrence === 'one-time' || !recurrence) {
-          return dueDate.getMonth() === calMonth && dueDate.getFullYear() === calYear
-        }
-        // Weekly / biweekly / custom: check if any occurrence lands in the month
-        const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
-        const cursor = new Date(dueDate)
-        if (cursor < monthStart) {
-          const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
-          cursor.setDate(cursor.getDate() + gap)
-        }
-        while (cursor <= monthEnd) {
-          if (cursor >= monthStart && cursor >= dueDate) return true
-          cursor.setDate(cursor.getDate() + intervalDays)
-        }
-        return false
-      })
+      .filter(b => isBillVisibleInCycle(b, calMonth, calYear))
       .sort((a, b) => {
         // Sort by effective due day within the currently viewed month
         const dayA = new Date(a.due + 'T00:00:00').getDate()
@@ -1648,7 +1704,9 @@ export default function BillBossPage() {
                         className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none font-medium"
                       />
                       <div>
-                        <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>Due Date</label>
+                        <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>
+                          {formData.recurrence === 'one-time' ? 'Due Date' : 'Start Date'}
+                        </label>
                         <input
                           type="date"
                           value={formData.due}
@@ -1656,6 +1714,9 @@ export default function BillBossPage() {
                           style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
                           className="w-full px-5 py-3 border rounded-xl focus:outline-none font-medium"
                         />
+                        {formData.recurrence !== 'one-time' && (
+                          <p className="text-[10px] mt-1" style={{ color: theme.textM }}>The bill won&apos;t appear before this date</p>
+                        )}
                       </div>
                     </div>
                     <select
@@ -1846,6 +1907,7 @@ export default function BillBossPage() {
                           {bill.recurrence && bill.recurrence !== 'monthly' && (
                             <span> · {bill.recurrence === 'custom' && bill.customRecurrenceDays ? `Every ${bill.customRecurrenceDays}d` : bill.recurrence}</span>
                           )}
+                          {bill.recurrence && bill.recurrence !== 'one-time' && <span> · Starts {fmtD(bill.due)}</span>}
                           {bill.recurrenceEndDate && <span> · Ends {fmtD(bill.recurrenceEndDate)}</span>}
                           {bill.recurrenceEndAfter && <span> · {bill.recurrenceEndAfter}x left</span>}
                         </p>
