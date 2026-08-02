@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, DollarSign, Briefcase, Activity,
+  LayoutDashboard, DollarSign, Briefcase, Ticket,
   X, CreditCard, Star, Mic2, Palette, ChevronDown, ChevronRight, Building2,
   CheckSquare,
 } from 'lucide-react'
@@ -46,7 +46,7 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'bizzplug', name: 'BizzyPlug', href: '/bizzplug', icon: Palette },
     ],
   },
-  { id: 'life', name: 'Life', icon: Activity, href: '/fitness', accent: '#EC4899' },
+  { id: 'rsvp', name: 'RSVP', icon: Ticket, href: '/RSVP/admin', accent: '#D4AF37' },
   { id: 'task-list', name: 'Task List', icon: CheckSquare, href: '/task-list', accent: BENTLEY_INDIGO },
 ]
 
@@ -65,7 +65,7 @@ export default function SideSidebar({ open, onClose, userName }: SideSidebarProp
     if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     if (item.id === 'finances') return pathname.startsWith('/bill-boss') || pathname.startsWith('/smart-stack')
     if (item.id === 'work') return pathname.startsWith('/work') || pathname.startsWith('/dj') || pathname.startsWith('/bizzplug')
-    if (item.id === 'life') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery')
+    if (item.id === 'rsvp') return pathname.startsWith('/RSVP')
     if (item.id === 'task-list') return pathname.startsWith('/task-list')
     return pathname.startsWith(item.href)
   }

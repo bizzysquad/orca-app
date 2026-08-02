@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Menu, Settings2, LayoutDashboard, CreditCard,
-  TrendingUp, Mic2, Activity, Briefcase, CheckSquare,
+  TrendingUp, Mic2, Ticket, Briefcase, CheckSquare,
   RefreshCw, Check, AlertCircle,
 } from 'lucide-react'
 import SettingsSheet from './SettingsSheet'
@@ -23,7 +23,7 @@ const SIDEBAR_NAV = [
   { id: 'bill-boss',  name: 'Bill Boss',   icon: CreditCard,      href: '/bill-boss', accent: '#10B981' },
   { id: 'smart-stack',name: 'Smart Stack', icon: TrendingUp,      href: '/smart-stack', accent: '#10B981' },
   { id: 'dj',         name: 'DJ Maskoff',  icon: Mic2,            href: '/dj',        accent: '#F43F5E' },
-  { id: 'fitness',    name: 'Fitness',     icon: Activity,        href: '/fitness',   accent: '#EC4899' },
+  { id: 'rsvp',       name: 'RSVP',        icon: Ticket,          href: '/RSVP/admin', accent: '#D4AF37' },
   { id: 'bizzplug',   name: 'BizzyPlug',  icon: Briefcase,       href: '/bizzplug',  accent: BENTLEY_GOLD },
   { id: 'task-list',  name: 'Task List',   icon: CheckSquare,     href: '/task-list', accent: BENTLEY_INDIGO },
 ]
@@ -71,7 +71,7 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
   const isNavActive = (item: typeof SIDEBAR_NAV[0]) => {
     if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
     if (item.href === '/dj') return pathname === '/dj' || pathname.startsWith('/dj/')
-    if (item.href === '/fitness') return pathname.startsWith('/fitness') || pathname.startsWith('/grocery') || pathname.startsWith('/music')
+    if (item.href === '/RSVP/admin') return pathname.startsWith('/RSVP')
     if (item.href === '/bill-boss') return pathname.startsWith('/bill-boss')
     return pathname.startsWith(item.href)
   }
