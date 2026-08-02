@@ -5,6 +5,16 @@ import { STAFF_SESSION_COOKIE, verifyStaffSession } from '@/lib/rsvp/session'
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // URLs are case-sensitive, but real people typing /rsvp by hand (off a
+  // flyer, from memory, autocapitalize-off phones, etc.) shouldn't 404 —
+  // redirect any casing of the /rsvp segment to the canonical /RSVP.
+  const rsvpCasingMatch = pathname.match(/^\/rsvp(\/.*)?$/i)
+  if (rsvpCasingMatch && !pathname.startsWith('/RSVP')) {
+    const rest = rsvpCasingMatch[1] || ''
+    const correctedUrl = new URL(`/RSVP${rest}${request.nextUrl.search}`, request.url)
+    return NextResponse.redirect(correctedUrl)
+  }
+
   // Skip middleware entirely for static assets and API routes
   // (API routes handle their own auth)
   if (
