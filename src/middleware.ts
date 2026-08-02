@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { STAFF_SESSION_COOKIE, verifyStaffSession } from '@/lib/rsvp/session'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -15,11 +16,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // RSVP staff-gated pages (event admin dashboard, door check-in tools) use
+  // their own shared-password-per-role session, separate from core ORCA auth.
+  const isRsvpStaffPage =
+    (pathname.startsWith('/RSVP/admin') && pathname !== '/RSVP/admin/login') ||
+    pathname.startsWith('/RSVP/check-in')
+  if (isRsvpStaffPage) {
+    const secret = process.env.RSVP_STAFF_SESSION_SECRET
+    const token = request.cookies.get(STAFF_SESSION_COOKIE)?.value
+    const staff = secret ? await verifyStaffSession(token, secret) : null
+    if (!staff) {
+      const loginUrl = new URL('/RSVP/admin/login', request.url)
+      loginUrl.searchParams.set('next', pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+    return NextResponse.next()
+  }
+
   // Public pages — always accessible without auth
   const isPublicPage =
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/maskoffdadj') ||
-    pathname.startsWith('/bizzyplug')
+    pathname.startsWith('/bizzyplug') ||
+    pathname.startsWith('/RSVP')
   if (isPublicPage) {
     return NextResponse.next()
   }
