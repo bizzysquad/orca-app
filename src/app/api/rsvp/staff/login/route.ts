@@ -4,10 +4,10 @@ import {
   ROLE_LABELS,
   STAFF_SESSION_COOKIE,
   STAFF_SESSION_MAX_AGE,
-  roleForPassword,
   signStaffSession,
   verifyStaffSession,
 } from '@/lib/rsvp/session'
+import { roleForPassword } from '@/lib/rsvp/staffPasswords'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const role = roleForPassword(password)
+    const role = await roleForPassword(password)
     if (!role) {
       return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
     }

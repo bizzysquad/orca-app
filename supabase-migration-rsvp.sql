@@ -107,7 +107,7 @@ create table if not exists public.rsvp_votes (
   wants_updates boolean not null default false,
   ip_hash text,
   session_token text,
-  edit_token text not null unique default encode(gen_random_bytes(24), 'base64url'),
+  edit_token text not null unique default encode(gen_random_bytes(24), 'hex'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (
@@ -213,7 +213,7 @@ create table if not exists public.rsvp_tickets (
   order_id uuid not null references public.rsvp_orders(id) on delete cascade,
   event_id uuid not null references public.rsvp_events(id) on delete cascade,
   ticket_type_id uuid references public.rsvp_ticket_types(id),
-  qr_token text not null unique default encode(gen_random_bytes(32), 'base64url'),
+  qr_token text not null unique default encode(gen_random_bytes(32), 'hex'),
   verification_code text not null default lpad((floor(random() * 1000000))::text, 6, '0'),
   ticket_number text not null unique,
   holder_name text not null,

@@ -36,26 +36,10 @@ export interface StaffPayload {
 export const STAFF_SESSION_COOKIE = 'rsvp-staff-token'
 export const STAFF_SESSION_MAX_AGE = 60 * 60 * 12 // 12 hours — an event-night shift
 
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let out = 0
-  for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  return out === 0
-}
-
-export function roleForPassword(password: string): StaffRole | null {
-  if (!password) return null
-  const pairs: [StaffRole, string | undefined][] = [
-    ['owner', process.env.RSVP_OWNER_PASSWORD],
-    ['event_admin', process.env.RSVP_EVENT_ADMIN_PASSWORD],
-    ['door_staff', process.env.RSVP_DOOR_STAFF_PASSWORD],
-    ['readonly_staff', process.env.RSVP_READONLY_STAFF_PASSWORD],
-  ]
-  for (const [role, configured] of pairs) {
-    if (configured && safeEqual(configured, password)) return role
-  }
-  return null
-}
+// Password checking (env-var defaults + DB-stored overrides) lives in
+// staffPasswords.ts, which uses node:crypto and must only be imported from
+// Node-runtime API routes — never from here or middleware.ts, both of which
+// need to stay Edge-compatible (Web Crypto only).
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()

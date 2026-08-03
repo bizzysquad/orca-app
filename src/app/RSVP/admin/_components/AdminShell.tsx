@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LogOut, CalendarDays, Users, MessageSquareText, Mail, BarChart3, Loader2 } from 'lucide-react'
+import { LogOut, CalendarDays, Users, MessageSquareText, Mail, BarChart3, Loader2, Settings } from 'lucide-react'
 
 interface StaffSession {
   role: 'owner' | 'event_admin' | 'door_staff' | 'readonly_staff'
@@ -17,6 +17,7 @@ const NAV = [
   { href: '/RSVP/admin/suggestions', label: 'Suggestions', icon: MessageSquareText, minRole: 'readonly_staff' },
   { href: '/RSVP/admin/emails', label: 'Emails', icon: Mail, minRole: 'event_admin' },
   { href: '/RSVP/admin/analytics', label: 'Analytics', icon: BarChart3, minRole: 'readonly_staff' },
+  { href: '/RSVP/admin/settings', label: 'Settings', icon: Settings, minRole: 'owner' },
 ] as const
 
 const RANK: Record<string, number> = { readonly_staff: 0, door_staff: 1, event_admin: 2, owner: 3 }
