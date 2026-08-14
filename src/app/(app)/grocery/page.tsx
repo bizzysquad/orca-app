@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { useTheme } from '@/context/ThemeContext'
 import type { GroceryItem, GroceryCategory } from '@/lib/types'
 import { setLocalSynced } from '@/lib/syncLocal'
+import { CAT_CONFIG, getSuggestedGroceries, getStaplesRunningLow, getDefaultGrocerySettings, type GrocerySettings, WEEKDAY_NAMES } from '@/lib/grocery'
 
 const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
@@ -21,34 +22,7 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 280, damping: 26 } },
 }
 
-const CAT_CONFIG: Record<GroceryCategory, { label: string; color: string; emoji: string }> = {
-  protein:   { label: 'Protein',   color: BENTLEY_RED,   emoji: '🥩' },
-  produce:   { label: 'Produce',   color: BENTLEY_GREEN, emoji: '🥦' },
-  dairy:     { label: 'Dairy',     color: '#F59E0B',     emoji: '🥛' },
-  grains:    { label: 'Grains',    color: '#D97706',     emoji: '🌾' },
-  frozen:    { label: 'Frozen',    color: '#06B6D4',     emoji: '🧊' },
-  pantry:    { label: 'Pantry',    color: '#8B5CF6',     emoji: '🏺' },
-  snacks:    { label: 'Snacks',    color: '#EC4899',     emoji: '🍿' },
-  beverages: { label: 'Beverages', color: '#3B82F6',     emoji: '🥤' },
-  other:     { label: 'Other',     color: '#64748B',     emoji: '📦' },
-}
-
-const BENTLEY_SUGGESTIONS: { name: string; category: GroceryCategory; calories?: number; protein?: number; note: string }[] = [
-  { name: 'Whole Milk (gallon)', category: 'dairy', calories: 150, protein: 8, note: 'Cheap calories, high protein' },
-  { name: 'Eggs (18 pack)', category: 'protein', calories: 70, protein: 6, note: '18g protein per 3 eggs' },
-  { name: 'Oats (large)', category: 'grains', calories: 150, protein: 5, note: 'Cheap carb base for smoothies' },
-  { name: 'Peanut Butter (big)', category: 'pantry', calories: 190, protein: 8, note: 'Calorie-dense, easy gains' },
-  { name: 'Bananas (bunch)', category: 'produce', calories: 105, protein: 1, note: 'Smoothie base + carbs' },
-  { name: 'Strawberries', category: 'produce', calories: 50, protein: 1, note: 'Smoothie flavor, vitamins' },
-  { name: 'Chicken Breast (5lb)', category: 'protein', calories: 165, protein: 31, note: 'Lean protein king' },
-  { name: 'Ground Beef (2lb)', category: 'protein', calories: 250, protein: 25, note: 'Affordable mass builder' },
-  { name: 'Rice (10lb bag)', category: 'grains', calories: 200, protein: 4, note: 'Bulk calorie source' },
-  { name: 'Greek Yogurt', category: 'dairy', calories: 100, protein: 17, note: 'High protein snack' },
-  { name: 'Protein Powder', category: 'protein', calories: 120, protein: 25, note: '25g protein per scoop' },
-  { name: 'Sweet Potatoes', category: 'produce', calories: 130, protein: 3, note: 'Complex carbs for gains' },
-  { name: 'Pasta (2 boxes)', category: 'grains', calories: 200, protein: 7, note: 'Cheap calorie base' },
-  { name: 'Whole Wheat Bread', category: 'grains', calories: 80, protein: 4, note: 'Easy sandwich calories' },
-]
+const MEAL_PLAN_SUGGESTIONS = getSuggestedGroceries()
 
 function getExpiryStatus(item: GroceryItem): { label: string; color: string; urgent: boolean } {
   if (!item.expirationDate) return { label: '', color: '', urgent: false }
@@ -76,6 +50,12 @@ export default function GroceryPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [newItem, setNewItem] = useState<Partial<GroceryItem>>(BLANK_ITEM())
+  const [grocerySettings, setGrocerySettings] = useState<GrocerySettings>(() => {
+    try {
+      const saved = localStorage.getItem('orca-grocery-settings')
+      return saved ? JSON.parse(saved) : getDefaultGrocerySettings()
+    } catch { return getDefaultGrocerySettings() }
+  })
 
   useEffect(() => {
     try {
@@ -88,17 +68,24 @@ export default function GroceryPage() {
     try { setLocalSynced('orca-grocery', JSON.stringify(i)) } catch {}
   }
 
-  const addItem = (suggestion?: typeof BENTLEY_SUGGESTIONS[0]) => {
+  const saveGrocerySettings = (s: GrocerySettings) => {
+    setGrocerySettings(s)
+    try { setLocalSynced('orca-grocery-settings', JSON.stringify(s)) } catch {}
+  }
+
+  const addItem = (suggestion?: { name: string; category: GroceryCategory }) => {
     const item: GroceryItem = {
       id: Date.now().toString(),
       name: suggestion?.name || newItem.name || '',
-      category: suggestion?.category || (newItem.category as GroceryCategory) || 'other',
+      category: suggestion?.category || (newItem.category as GroceryCategory) || 'household',
       quantity: newItem.quantity || 1,
       unit: newItem.unit || 'item',
       purchaseDate: newItem.purchaseDate || new Date().toISOString().slice(0, 10),
       expirationDate: newItem.expirationDate,
-      calories: suggestion?.calories || newItem.calories,
-      protein: suggestion?.protein || newItem.protein,
+      calories: newItem.calories,
+      protein: newItem.protein,
+      estimatedDays: newItem.estimatedDays,
+      lowStockThreshold: newItem.lowStockThreshold,
     }
     if (!item.name) return
     const next = [...items, item]
@@ -143,6 +130,7 @@ export default function GroceryPage() {
     items.reduce((s, i) => s + ((i.protein || 0) * i.quantity), 0),
     [items]
   )
+  const staplesRunningLow = useMemo(() => getStaplesRunningLow(items), [items])
 
   return (
     <div className="min-h-screen pb-28" style={{ background: theme.bg, color: theme.text }}>
@@ -188,6 +176,44 @@ export default function GroceryPage() {
         variants={{ show: { transition: { staggerChildren: 0.05 } } }}
         className="px-4 pt-4 space-y-5 max-w-lg mx-auto lg:max-w-3xl"
       >
+        {/* ── Grocery Re-Up Day ── */}
+        <motion.div variants={fadeUp}>
+          <div className="rounded-2xl p-3 flex items-center justify-between" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+            <div className="flex items-center gap-2">
+              <RefreshCw size={14} style={{ color: BENTLEY_INDIGO }} />
+              <span className="text-xs font-semibold" style={{ color: theme.text }}>Grocery Re-Up Day</span>
+            </div>
+            <select
+              value={grocerySettings.reUpDay}
+              onChange={e => saveGrocerySettings({ ...grocerySettings, reUpDay: Number(e.target.value) })}
+              className="text-xs font-semibold rounded-lg px-2 py-1.5 outline-none"
+              style={{ background: theme.bg, border: `1px solid ${theme.border}`, color: BENTLEY_INDIGO }}
+            >
+              {WEEKDAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
+            </select>
+          </div>
+        </motion.div>
+
+        {/* ── Staples Running Low ── */}
+        {staplesRunningLow.length > 0 && (
+          <motion.div variants={fadeUp}>
+            <div className="rounded-2xl p-4" style={{ background: `${BENTLEY_GOLD}10`, border: `1px solid ${BENTLEY_GOLD}30` }}>
+              <div className="flex items-center gap-2 mb-2">
+                <Package size={14} style={{ color: BENTLEY_GOLD }} />
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: BENTLEY_GOLD }}>
+                  Running Low
+                </span>
+              </div>
+              {staplesRunningLow.map(item => (
+                <div key={item.id} className="flex items-center justify-between py-1">
+                  <span className="text-sm" style={{ color: theme.text }}>{item.name}</span>
+                  <span className="text-xs font-bold" style={{ color: BENTLEY_GOLD }}>Restock soon</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
         {/* ── Expiry Alerts ── */}
         {alerts.length > 0 && (
           <motion.div variants={fadeUp}>
@@ -248,11 +274,11 @@ export default function GroceryPage() {
                 <div className="flex items-center gap-2 mb-3">
                   <Sparkles size={13} style={{ color: BENTLEY_GOLD }} />
                   <span className="text-xs font-bold uppercase tracking-widest" style={{ color: BENTLEY_GOLD }}>
-                    Bentley's Muscle-Gain List
+                    From Your Meal Plan
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {BENTLEY_SUGGESTIONS.map(s => (
+                  {MEAL_PLAN_SUGGESTIONS.map(s => (
                     <motion.button
                       key={s.name}
                       whileTap={{ scale: 0.98 }}
@@ -265,12 +291,9 @@ export default function GroceryPage() {
                     >
                       <div className="text-left">
                         <p className="text-sm font-medium" style={{ color: '#F8FAFC' }}>{s.name}</p>
-                        <p className="text-xs" style={{ color: '#94A3B8' }}>{s.note}</p>
+                        <p className="text-xs" style={{ color: '#94A3B8' }}>{CAT_CONFIG[s.category].label}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {s.protein && <span className="text-xs font-bold" style={{ color: BENTLEY_GREEN }}>{s.protein}g</span>}
-                        <Plus size={14} style={{ color: BENTLEY_GOLD }} />
-                      </div>
+                      <Plus size={14} style={{ color: BENTLEY_GOLD }} />
                     </motion.button>
                   ))}
                 </div>
@@ -282,7 +305,7 @@ export default function GroceryPage() {
         {/* ── Category filter ── */}
         {items.length > 0 && (
           <motion.div variants={fadeUp} className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {(['all', 'protein', 'produce', 'dairy', 'grains', 'pantry'] as const).map(c => (
+            {(['all', ...Object.keys(CAT_CONFIG)] as (GroceryCategory | 'all')[]).map(c => (
               <button
                 key={c}
                 onClick={() => setFilterCat(c)}
@@ -306,7 +329,7 @@ export default function GroceryPage() {
               <ShoppingCart size={32} style={{ color: theme.subtext, margin: '0 auto 12px' }} />
               <p className="text-sm font-medium" style={{ color: theme.text }}>No grocery items yet.</p>
               <p className="text-xs mt-1 mb-4" style={{ color: theme.subtext }}>
-                Tap the ✨ button for Bentley's muscle-gain list.
+                Tap the ✨ button for suggestions from your meal plan.
               </p>
             </div>
           </motion.div>
@@ -407,6 +430,14 @@ export default function GroceryPage() {
               <input type="date" value={newItem.expirationDate || ''} onChange={e => setNewItem(p => ({ ...p, expirationDate: e.target.value }))}
                 className="w-full rounded-xl px-4 py-3 outline-none"
                 style={{ background: theme.card, border: `1px solid ${theme.border}`, color: theme.text }} />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" value={newItem.estimatedDays || ''} onChange={e => setNewItem(p => ({ ...p, estimatedDays: Number(e.target.value) }))}
+                  placeholder="Lasts about (days)" className="rounded-xl px-3 py-3 outline-none"
+                  style={{ background: theme.card, border: `1px solid ${theme.border}`, color: theme.text }} />
+                <input type="number" value={newItem.lowStockThreshold || ''} onChange={e => setNewItem(p => ({ ...p, lowStockThreshold: Number(e.target.value) }))}
+                  placeholder="Low-stock qty" className="rounded-xl px-3 py-3 outline-none"
+                  style={{ background: theme.card, border: `1px solid ${theme.border}`, color: theme.text }} />
+              </div>
               <div className="flex gap-3">
                 <button onClick={() => setShowAddModal(false)} className="flex-1 py-3 rounded-xl font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
                 <button onClick={() => addItem()} className="flex-1 py-3 rounded-xl font-semibold" style={{ background: BENTLEY_GREEN, color: '#fff' }}>Add Item</button>

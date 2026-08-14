@@ -8,12 +8,23 @@ import {
   Check, DollarSign, Calendar, X,
   Mic2, Flame, Scale, Palette,
   ChevronLeft, ChevronRight, Target, Loader2,
-  CheckSquare, Circle,
+  CheckSquare, Circle, Dumbbell, Utensils, ShoppingCart, Clock, Plus,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt } from '@/lib/utils'
-import type { DailyPriority, WeightLog, MealLog, Bill } from '@/lib/types'
+import { setLocalSynced } from '@/lib/syncLocal'
+import type { DailyPriority, WeightLog, MealLog, Bill, Subscription, WellsSettings, PlannerBlock, WorkoutDayPlan, WorkoutExerciseLog } from '@/lib/types'
+import { getDefaultWellsSettings, getRequiredWellsBalance } from '@/lib/subscriptions'
+import { getDefaultWeekdayTemplates, getBlocksForDate, getLifeTaskRemindersForDate } from '@/lib/planner'
+import { getDefaultWorkoutPlan } from '@/lib/workouts'
+import { MEAL_ORDER, MEAL_LABELS, PROTEIN_TARGET, getDailyTotals } from '@/lib/meals'
+import { getDefaultGrocerySettings, WEEKDAY_NAMES, type GrocerySettings } from '@/lib/grocery'
+import {
+  getDefaultLaundrySettings, getDefaultLiquorSettings, DAILY_BUDGET,
+  getDailySpending,
+  type LaundrySettings, type LiquorSettings, type SpendingEntry,
+} from '@/lib/lifeTasks'
 
 const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
@@ -351,6 +362,40 @@ export default function DashboardPage() {
   const [lyftSessions, setLyftSessions] = useState<any[]>([])
   const [djGigsList, setDjGigsList] = useState<any[]>([])
   const [bizzplugClientsList, setBizzplugClientsList] = useState<any[]>([])
+
+  // ── Today Dashboard (Phase 7) ──
+  const [todayPriorities, setTodayPriorities] = useState<DailyPriority['items']>(() => {
+    try { return JSON.parse(localStorage.getItem(`orca-priorities-${todayStr}`) || '[]') } catch { return [] }
+  })
+  const [newPriorityText, setNewPriorityText] = useState('')
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [wellsSettings, setWellsSettings] = useState<WellsSettings>(getDefaultWellsSettings())
+  const [plannerTemplates, setPlannerTemplates] = useState<Record<number, PlannerBlock[]>>(getDefaultWeekdayTemplates())
+  const [plannerOverrides, setPlannerOverrides] = useState<Record<string, PlannerBlock[]>>({})
+  const [workoutPlan, setWorkoutPlan] = useState<Record<number, WorkoutDayPlan>>(getDefaultWorkoutPlan())
+  const [workoutLogs, setWorkoutLogs] = useState<WorkoutExerciseLog[]>([])
+  const [mealLogs, setMealLogs] = useState<MealLog[]>([])
+  const [dailySpendingEntries, setDailySpendingEntries] = useState<SpendingEntry[]>([])
+  const [grocerySettings, setGrocerySettings] = useState<GrocerySettings>(getDefaultGrocerySettings())
+  const [laundrySettings, setLaundrySettings] = useState<LaundrySettings>(getDefaultLaundrySettings())
+  const [liquorSettings, setLiquorSettings] = useState<LiquorSettings>(getDefaultLiquorSettings())
+
+  useEffect(() => {
+    try {
+      const parse = (key: string, fallback: any) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback } catch { return fallback } }
+      setSubscriptions(parse('orca-subscriptions', []))
+      setWellsSettings(parse('orca-wells-settings', getDefaultWellsSettings()))
+      setPlannerTemplates(parse('orca-planner-templates', getDefaultWeekdayTemplates()))
+      setPlannerOverrides(parse('orca-planner-overrides', {}))
+      setWorkoutPlan(parse('orca-workout-plan', getDefaultWorkoutPlan()))
+      setWorkoutLogs(parse('orca-workout-logs', []))
+      setMealLogs(parse('orca-meal-logs', []))
+      setDailySpendingEntries(parse('orca-daily-spending', []))
+      setGrocerySettings(parse('orca-grocery-settings', getDefaultGrocerySettings()))
+      setLaundrySettings(parse('orca-laundry-settings', getDefaultLaundrySettings()))
+      setLiquorSettings(parse('orca-liquor-settings', getDefaultLiquorSettings()))
+    } catch {}
+  }, [])
 
   // Month-aware income totals — recalculate when calMonth/calYear changes
   const lyftNetIncome = useMemo(() => {
@@ -717,6 +762,166 @@ export default function DashboardPage() {
     </div>
   )
 
+  // ── TODAY DASHBOARD (Phase 7) ──
+  const todayWeekday = new Date(todayStr + 'T00:00:00').getDay()
+  const todayScheduleBlocks = getBlocksForDate(todayStr, plannerTemplates, plannerOverrides)
+  const todayWorkoutPlan = workoutPlan[todayWeekday] || { title: 'Rest Day', exercises: [] }
+  const todayLoggedExerciseIds = workoutLogs.filter(l => l.date === todayStr).map(l => l.exerciseId)
+  const workoutLoggedCount = todayWorkoutPlan.exercises.filter(e => todayLoggedExerciseIds.includes(e.id)).length
+  const todayMealTotals = getDailyTotals(mealLogs, todayStr)
+  const proteinRemaining = Math.max(0, PROTEIN_TARGET - todayMealTotals.protein)
+  const isMealLogged = (meal: MealLog['meal']) => mealLogs.some(l => l.date === todayStr && l.meal === meal)
+  const dailySpent = getDailySpending(dailySpendingEntries, todayStr)
+  const dailyRemaining = DAILY_BUDGET - dailySpent
+  const wellsRequired = getRequiredWellsBalance(subscriptions, wellsSettings)
+  const todayLifeTasks = getLifeTaskRemindersForDate(todayStr, laundrySettings, liquorSettings, grocerySettings.reUpDay)
+
+  const addTodayPriority = () => {
+    if (!newPriorityText.trim()) return
+    const updated = [...todayPriorities, { id: gid(), text: newPriorityText.trim(), area: 'personal', completed: false, addedByBentley: false }]
+    setTodayPriorities(updated)
+    try { setLocalSynced(`orca-priorities-${todayStr}`, JSON.stringify(updated)) } catch {}
+    setNewPriorityText('')
+  }
+  const toggleTodayPriority = (id: string) => {
+    const updated = todayPriorities.map(p => p.id === id ? { ...p, completed: !p.completed } : p)
+    setTodayPriorities(updated)
+    try { setLocalSynced(`orca-priorities-${todayStr}`, JSON.stringify(updated)) } catch {}
+  }
+  const deleteTodayPriority = (id: string) => {
+    const updated = todayPriorities.filter(p => p.id !== id)
+    setTodayPriorities(updated)
+    try { setLocalSynced(`orca-priorities-${todayStr}`, JSON.stringify(updated)) } catch {}
+  }
+
+  const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+    <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: BENTLEY_GOLD }}>{children}</p>
+  )
+
+  const TodayDashboard = () => (
+    <div className="rounded-2xl p-4 space-y-5" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+      {/* TODAY */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <SectionLabel>Today</SectionLabel>
+          <span className="text-xs font-semibold" style={{ color: theme.subtext }}>
+            {new Date(todayStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          {todayPriorities.map(p => (
+            <div key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: theme.bg }}>
+              <button onClick={() => toggleTodayPriority(p.id)} className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ background: p.completed ? BENTLEY_GREEN : 'transparent', border: `1.5px solid ${p.completed ? BENTLEY_GREEN : theme.border}` }}>
+                {p.completed && <Check size={10} color="#fff" />}
+              </button>
+              <span className="flex-1 text-sm" style={{ color: theme.text, textDecoration: p.completed ? 'line-through' : 'none', opacity: p.completed ? 0.6 : 1 }}>{p.text}</span>
+              <button onClick={() => deleteTodayPriority(p.id)} style={{ color: theme.subtext }}><X size={12} /></button>
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <input value={newPriorityText} onChange={e => setNewPriorityText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTodayPriority()} placeholder="Add a priority for today..." className="flex-1 rounded-xl px-3 py-2 text-sm outline-none" style={{ background: theme.bg, border: `1px solid ${theme.border}`, color: theme.text }} />
+            <button onClick={addTodayPriority} className="px-3 rounded-xl" style={{ background: `${BENTLEY_GOLD}18`, color: BENTLEY_GOLD }}><Plus size={14} /></button>
+          </div>
+        </div>
+      </div>
+
+      {/* MONEY */}
+      <div>
+        <SectionLabel>Money</SectionLabel>
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <div className="rounded-xl p-2.5" style={{ background: theme.bg }}>
+            <p className="text-[10px]" style={{ color: theme.subtext }}>Spent Today</p>
+            <p className="text-sm font-bold" style={{ color: theme.text }}>{fmt(dailySpent)}</p>
+          </div>
+          <div className="rounded-xl p-2.5" style={{ background: theme.bg }}>
+            <p className="text-[10px]" style={{ color: theme.subtext }}>Remaining ({fmt(DAILY_BUDGET)})</p>
+            <p className="text-sm font-bold" style={{ color: dailyRemaining < 0 ? BENTLEY_RED : BENTLEY_GREEN }}>{fmt(dailyRemaining)}</p>
+          </div>
+          <div className="rounded-xl p-2.5" style={{ background: theme.bg }}>
+            <p className="text-[10px]" style={{ color: theme.subtext }}>Wells Needed</p>
+            <p className="text-sm font-bold" style={{ color: theme.text }}>{fmt(wellsRequired)}</p>
+          </div>
+        </div>
+        {upcomingBills.length > 0 && (
+          <div className="space-y-1">
+            {upcomingBills.slice(0, 3).map(({ bill, due }) => (
+              <div key={bill.id} className="flex items-center justify-between text-xs px-2">
+                <span style={{ color: theme.text }}>{bill.name}</span>
+                <span style={{ color: theme.subtext }}>{fmt(bill.amount)} · {due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* SCHEDULE */}
+      <div>
+        <SectionLabel>Schedule</SectionLabel>
+        {todayScheduleBlocks.length === 0 ? (
+          <p className="text-xs" style={{ color: theme.subtext }}>No blocks scheduled.</p>
+        ) : (
+          <div className="space-y-1">
+            {todayScheduleBlocks.map(b => (
+              <div key={b.id} className="flex items-center gap-2 text-xs">
+                <Clock size={11} style={{ color: theme.subtext }} />
+                <span style={{ color: theme.subtext }}>{b.startTime}</span>
+                <span style={{ color: theme.text }}>{b.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <Link href="/planner" className="text-xs font-semibold" style={{ color: BENTLEY_INDIGO }}>Open Planner →</Link>
+      </div>
+
+      {/* WORKOUT */}
+      <div>
+        <SectionLabel>Workout</SectionLabel>
+        <div className="flex items-center gap-2 mb-1">
+          <Dumbbell size={13} style={{ color: BENTLEY_GREEN }} />
+          <span className="text-sm font-semibold" style={{ color: theme.text }}>{todayWorkoutPlan.title}</span>
+        </div>
+        {todayWorkoutPlan.exercises.length > 0 && (
+          <p className="text-xs" style={{ color: theme.subtext }}>{workoutLoggedCount}/{todayWorkoutPlan.exercises.length} exercises logged</p>
+        )}
+        <Link href="/fitness" className="text-xs font-semibold" style={{ color: BENTLEY_INDIGO }}>Open Workout →</Link>
+      </div>
+
+      {/* FOOD */}
+      <div>
+        <SectionLabel>Food</SectionLabel>
+        <div className="space-y-1 mb-2">
+          {MEAL_ORDER.map(meal => (
+            <div key={meal} className="flex items-center gap-2 text-xs">
+              {isMealLogged(meal) ? <Check size={12} style={{ color: BENTLEY_GREEN }} /> : <Circle size={12} style={{ color: theme.subtext }} />}
+              <span style={{ color: isMealLogged(meal) ? theme.text : theme.subtext }}>{MEAL_LABELS[meal]}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <Utensils size={12} style={{ color: BENTLEY_GREEN }} />
+          <span className="text-xs font-semibold" style={{ color: theme.text }}>{Math.round(todayMealTotals.protein)}g protein · {Math.round(proteinRemaining)}g remaining of {PROTEIN_TARGET}g</span>
+        </div>
+      </div>
+
+      {/* TASKS */}
+      <div>
+        <SectionLabel>Tasks</SectionLabel>
+        {todayLifeTasks.length === 0 ? (
+          <p className="text-xs" style={{ color: theme.subtext }}>No recurring tasks today.</p>
+        ) : (
+          <div className="space-y-1">
+            {todayLifeTasks.map((t, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                {t.kind === 'grocery' ? <ShoppingCart size={12} style={{ color: BENTLEY_INDIGO }} /> : <CheckSquare size={12} style={{ color: BENTLEY_INDIGO }} />}
+                <span style={{ color: theme.text }}>{t.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
   const FitnessBar = () => (
     <Link href="/fitness">
       <div className="rounded-2xl p-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
@@ -1077,7 +1282,8 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold leading-tight" style={{ color: theme.text }}>{greeting}</h1>
             <p className="text-sm mt-0.5" style={{ color: theme.subtext }}>{line}</p>
           </motion.div>
-                    <motion.div variants={fadeUp}><QuickStatsRow /></motion.div>
+          <motion.div variants={fadeUp}><TodayDashboard /></motion.div>
+          <motion.div variants={fadeUp}><QuickStatsRow /></motion.div>
           <motion.div variants={fadeUp}><QuoteAlert /></motion.div>
           <motion.div variants={fadeUp}>
             <div className="flex items-center gap-2 mb-2">
@@ -1116,6 +1322,9 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold leading-tight" style={{ color: theme.text }}>{greeting}</h1>
             <p className="text-sm mt-1" style={{ color: theme.subtext }}>{line}</p>
           </motion.div>
+
+          {/* Today Dashboard — full width */}
+          <motion.div variants={fadeUp} className="mb-6"><TodayDashboard /></motion.div>
 
           {/* Stats row — full width */}
           <motion.div variants={fadeUp} className="mb-6"><QuickStatsRow /></motion.div>

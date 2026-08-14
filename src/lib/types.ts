@@ -151,6 +151,71 @@ export interface Bill {
   paidDate?: string
 }
 
+// ── Structured Workouts ──
+export interface WorkoutExerciseDef {
+  id: string
+  name: string
+  sets: number
+  repMin: number
+  repMax: number
+  incrementLbs: number
+}
+
+export interface WorkoutDayPlan {
+  title: string
+  exercises: WorkoutExerciseDef[]
+}
+
+export interface WorkoutExerciseLog {
+  id: string
+  date: string
+  exerciseId: string
+  exerciseName: string
+  weightUsed: number
+  repsAchieved: number
+  completedSets: number
+  targetSets: number
+  goodForm: boolean
+  notes?: string
+}
+
+// ── Day Planner ──
+export type PlannerBlockType = 'meal' | 'workout' | 'trade' | 'drive' | 'work' | 'errand' | 'appointment' | 'custom'
+
+export interface PlannerBlock {
+  id: string
+  startTime: string
+  endTime: string
+  label: string
+  type: PlannerBlockType
+  notes?: string
+}
+
+// ── Subscriptions ──
+export type SubscriptionFrequency = 'weekly' | 'monthly' | 'yearly' | 'custom'
+export type SubscriptionStatus = 'active' | 'cancelled'
+
+export interface Subscription {
+  id: string
+  name: string
+  category: string
+  price: number
+  billingDate: string
+  frequency: SubscriptionFrequency
+  customFrequencyDays?: number
+  paymentAccount: string
+  nextPaymentDate: string
+  status: SubscriptionStatus
+  createdAt: string
+}
+
+export interface WellsSettings {
+  accountName: string
+  nextDepositDate: string
+  depositFreq: 'weekly' | 'biweekly' | 'monthly' | 'manual'
+  bufferMultiplier: number
+}
+
 // ── Expenses ──
 export interface Expense {
   id: string
@@ -420,7 +485,7 @@ export interface FitnessProfile {
 }
 
 // ── Grocery ──
-export type GroceryCategory = 'protein' | 'produce' | 'dairy' | 'grains' | 'frozen' | 'pantry' | 'snacks' | 'beverages' | 'other'
+export type GroceryCategory = 'protein' | 'carbs' | 'fruit' | 'vegetables' | 'smoothie' | 'snacks' | 'breakfast' | 'household'
 
 export interface GroceryItem {
   id: string

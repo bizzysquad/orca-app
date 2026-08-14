@@ -4,7 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, DollarSign, Mic2, Activity,
+  LayoutDashboard, DollarSign, Mic2, Activity, CalendarDays,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useTheme } from '@/context/ThemeContext'
@@ -21,6 +21,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', name: 'Home', icon: LayoutDashboard, href: '/dashboard', accent: BENTLEY_INDIGO },
+  { id: 'planner', name: 'Plan', icon: CalendarDays, href: '/planner', accent: '#EC4899' },
   { id: 'money', name: 'Money', icon: DollarSign, href: '/bill-boss', accent: '#10B981' },
   { id: 'dj', name: 'DJ', icon: Mic2, href: '/dj', accent: '#F43F5E' },
   { id: 'life', name: 'Life', icon: Activity, href: '/fitness', accent: '#EC4899' },

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, DollarSign, Briefcase, Ticket,
   X, CreditCard, Star, Mic2, Palette, ChevronDown, ChevronRight, Building2,
-  CheckSquare,
+  CheckSquare, CalendarDays,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '@/context/ThemeContext'
@@ -32,6 +32,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', name: 'Home', icon: LayoutDashboard, href: '/dashboard', accent: BENTLEY_INDIGO },
+  { id: 'planner', name: 'Planner', icon: CalendarDays, href: '/planner', accent: '#EC4899' },
   {
     id: 'finances', name: 'Finances', icon: DollarSign, href: '/bill-boss', accent: '#10B981',
     children: [

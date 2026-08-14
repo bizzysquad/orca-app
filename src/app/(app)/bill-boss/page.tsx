@@ -2,14 +2,25 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Edit3, Home, Car, CreditCard, Heart, Utensils, BookOpen, Zap, Plus } from 'lucide-react'
+import { Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Edit3, Home, Car, CreditCard, Heart, Utensils, BookOpen, Zap, Plus, RefreshCw, Landmark } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, gid } from '@/lib/utils'
 import { getRecurringBillDates } from '@/lib/income-engine'
 import { useTheme } from '@/context/ThemeContext'
 import { setLocalSynced } from '@/lib/syncLocal'
+import {
+  SUBSCRIPTION_CATEGORIES,
+  getMonthlyEquivalent,
+  getRecurringSubscriptionDates,
+  getUpcomingCharges,
+  getRequiredWellsBalance,
+  getAmountNeededThisWeek,
+  getAmountNeededBeforeNextCharge,
+  getRecommendedBuffer,
+  getDefaultWellsSettings,
+} from '@/lib/subscriptions'
 
-import type { Bill, BillAlloc, BillRecurrence, RecurrenceEndType } from '@/lib/types'
+import type { Bill, BillAlloc, BillRecurrence, RecurrenceEndType, Subscription, WellsSettings, SubscriptionFrequency, SubscriptionStatus } from '@/lib/types'
 import CalendarPicker from '@/components/CalendarPicker'
 import { orcaEvents } from '@/lib/eventBus'
 
@@ -381,6 +392,129 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
   )
 }
 
+function SubscriptionCalendar({ subscriptions, month, year, onMonthChange, onDayClick, selectedDay, theme }: {
+  subscriptions: Subscription[]
+  month: number
+  year: number
+  onMonthChange: (dir: number) => void
+  onDayClick?: (day: number) => void
+  selectedDay?: number | null
+  theme: any
+}) {
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const todayDate = new Date()
+  const isCurrentMonth = todayDate.getFullYear() === year && todayDate.getMonth() === month
+  const todayDay = isCurrentMonth ? todayDate.getDate() : -1
+  const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  const today = new Date()
+  const monthDiff = (year - today.getFullYear()) * 12 + (month - today.getMonth())
+  const monthsAhead = Math.max(3, monthDiff + 3)
+
+  const eventsByDay = useMemo(() => {
+    const map = new Map<number, { name: string; amount: number; category: string }[]>()
+    subscriptions.filter(s => s.status === 'active').forEach(sub => {
+      getRecurringSubscriptionDates(sub, monthsAhead).forEach(dateStr => {
+        const d = new Date(dateStr + 'T00:00:00')
+        if (d.getMonth() === month && d.getFullYear() === year) {
+          const day = d.getDate()
+          const list = map.get(day) || []
+          list.push({ name: sub.name, amount: sub.price, category: sub.category })
+          map.set(day, list)
+        }
+      })
+    })
+    return map
+  }, [subscriptions, month, year, monthsAhead])
+
+  const cells = []
+  for (let i = 0; i < firstDay; i++) {
+    cells.push(<div key={`empty-${i}`} className="aspect-square" />)
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayEvents = eventsByDay.get(d) || []
+    const isToday = d === todayDay
+    const hasSub = dayEvents.length > 0
+
+    cells.push(
+      <div
+        key={d}
+        onClick={() => onDayClick?.(d)}
+        className="aspect-square rounded-lg flex flex-col items-center justify-center relative text-xs sm:text-sm transition-all cursor-pointer"
+        style={{
+          backgroundColor: isToday ? `${theme.gold}33` : selectedDay === d ? `${theme.gold}1a` : hasSub && selectedDay !== d ? `${theme.accent}1a` : 'transparent',
+          border: isToday ? `1px solid ${theme.gold}` : selectedDay === d ? `1px solid ${theme.gold}80` : 'none',
+        }}
+      >
+        <span className="font-medium" style={{ color: isToday ? theme.gold : hasSub ? theme.text : theme.textM }}>
+          {d}
+        </span>
+        {hasSub && (
+          <div className="flex gap-0.5 mt-0.5">
+            {dayEvents.slice(0, 3).map((_, i) => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: theme.accent }} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const selectedDayEvents = selectedDay ? (eventsByDay.get(selectedDay) || []) : []
+
+  return (
+    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-full box-border">
+      <div className="flex items-center justify-between mb-6">
+        <button onClick={() => onMonthChange(-1)} className="p-2 rounded-lg transition-colors" style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.accent} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
+          <ChevronLeft size={20} />
+        </button>
+        <div className="flex items-center gap-3">
+          <RefreshCw size={18} style={{ color: theme.accent }} />
+          <h3 className="font-bold text-lg" style={{ color: theme.text }}>{monthName}</h3>
+        </div>
+        <button onClick={() => onMonthChange(1)} className="p-2 rounded-lg transition-colors" style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.accent} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
+          <ChevronRight size={20} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+          <div key={i} className="text-center text-[10px] sm:text-xs font-semibold py-1" style={{ color: theme.textM }}>{d}</div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">{cells}</div>
+
+      {selectedDay && selectedDay > 0 && (
+        <div className="mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold" style={{ color: theme.text }}>
+              {new Date(year, month, selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
+            <button onClick={() => onDayClick?.(0)} className="text-xs" style={{ color: theme.textM }}>Close</button>
+          </div>
+          {selectedDayEvents.length > 0 ? (
+            <div className="space-y-2">
+              {selectedDayEvents.map((ev, i) => (
+                <div key={i} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: `${theme.card}60` }}>
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: theme.text }}>{ev.name}</p>
+                    <p className="text-xs" style={{ color: theme.textM }}>{ev.category}</p>
+                  </div>
+                  <p className="text-sm font-bold" style={{ color: theme.accent }}>-{fmt(ev.amount)}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm" style={{ color: theme.textM }}>No subscriptions due this day</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function BillBossPage() {
   const { data, setData, loading } = useOrcaData()
   const { theme } = useTheme()
@@ -553,6 +687,133 @@ export default function BillBossPage() {
   const deleteCard = (cardId: string) => {
     saveCreditCards(creditCards.filter(c => c.id !== cardId))
   }
+
+  // ── Subscriptions ──
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>(() => { try { return JSON.parse(localStorage.getItem('orca-subscriptions') || '[]') } catch { return [] } })
+  const [wellsSettings, setWellsSettings] = useState<WellsSettings>(() => {
+    try {
+      const saved = localStorage.getItem('orca-wells-settings')
+      return saved ? JSON.parse(saved) : getDefaultWellsSettings()
+    } catch { return getDefaultWellsSettings() }
+  })
+  const [subTab, setSubTab] = useState<'list' | 'calendar' | 'total' | 'wells'>('list')
+  const [subCalMonth, setSubCalMonth] = useState(new Date().getMonth())
+  const [subCalYear, setSubCalYear] = useState(new Date().getFullYear())
+  const [showAddSubscription, setShowAddSubscription] = useState(false)
+  const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null)
+  const emptySubForm = { name: '', category: SUBSCRIPTION_CATEGORIES[0], price: '', billingDate: new Date().toISOString().split('T')[0], frequency: 'monthly' as SubscriptionFrequency, customFrequencyDays: '', paymentAccount: 'Wells', status: 'active' as SubscriptionStatus }
+  const [subForm, setSubForm] = useState(emptySubForm)
+
+  const persistSubscriptions = (updated: Subscription[]) => {
+    setSubscriptions(updated)
+    try { setLocalSynced('orca-subscriptions', JSON.stringify(updated)) } catch {}
+  }
+
+  const saveWellsSettings = (updated: WellsSettings) => {
+    setWellsSettings(updated)
+    try { setLocalSynced('orca-wells-settings', JSON.stringify(updated)) } catch {}
+  }
+
+  const addSubscription = () => {
+    const price = parseFloat(subForm.price) || 0
+    if (!subForm.name || price <= 0) return
+    const candidate: Subscription = {
+      id: Date.now().toString(),
+      name: subForm.name,
+      category: subForm.category,
+      price,
+      billingDate: subForm.billingDate,
+      frequency: subForm.frequency,
+      customFrequencyDays: subForm.frequency === 'custom' ? (parseInt(subForm.customFrequencyDays) || 30) : undefined,
+      paymentAccount: subForm.paymentAccount || 'Wells',
+      nextPaymentDate: subForm.billingDate,
+      status: subForm.status,
+      createdAt: new Date().toISOString(),
+    }
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const occurrences = getRecurringSubscriptionDates(candidate, 24)
+    const nextOccurrence = occurrences.find(d => new Date(d + 'T00:00:00') >= today)
+    candidate.nextPaymentDate = nextOccurrence || subForm.billingDate
+    persistSubscriptions([...subscriptions, candidate])
+    setSubForm(emptySubForm)
+    setShowAddSubscription(false)
+  }
+
+  const startEditSubscription = (sub: Subscription) => {
+    setEditingSubscriptionId(sub.id)
+    setSubForm({
+      name: sub.name,
+      category: sub.category,
+      price: String(sub.price),
+      billingDate: sub.billingDate,
+      frequency: sub.frequency,
+      customFrequencyDays: sub.customFrequencyDays ? String(sub.customFrequencyDays) : '',
+      paymentAccount: sub.paymentAccount,
+      status: sub.status,
+    })
+  }
+
+  const saveEditSubscription = () => {
+    if (!editingSubscriptionId) return
+    const price = parseFloat(subForm.price) || 0
+    if (!subForm.name || price <= 0) return
+    persistSubscriptions(subscriptions.map(s => {
+      if (s.id !== editingSubscriptionId) return s
+      const updated: Subscription = {
+        ...s,
+        name: subForm.name,
+        category: subForm.category,
+        price,
+        billingDate: subForm.billingDate,
+        frequency: subForm.frequency,
+        customFrequencyDays: subForm.frequency === 'custom' ? (parseInt(subForm.customFrequencyDays) || 30) : undefined,
+        paymentAccount: subForm.paymentAccount || 'Wells',
+        status: subForm.status,
+      }
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const occurrences = getRecurringSubscriptionDates(updated, 24)
+      updated.nextPaymentDate = occurrences.find(d => new Date(d + 'T00:00:00') >= today) || updated.billingDate
+      return updated
+    }))
+    setEditingSubscriptionId(null)
+    setSubForm(emptySubForm)
+  }
+
+  const cancelEditSubscription = () => {
+    setEditingSubscriptionId(null)
+    setSubForm(emptySubForm)
+  }
+
+  const toggleSubscriptionStatus = (id: string) => {
+    persistSubscriptions(subscriptions.map(s => s.id === id ? { ...s, status: s.status === 'active' ? 'cancelled' : 'active' } : s))
+  }
+
+  const deleteSubscription = (id: string) => {
+    persistSubscriptions(subscriptions.filter(s => s.id !== id))
+  }
+
+  const activeSubscriptions = useMemo(() => subscriptions.filter(s => s.status === 'active'), [subscriptions])
+  const sortedSubscriptions = useMemo(() => [...activeSubscriptions].sort((a, b) => new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime()), [activeSubscriptions])
+  const monthlySubscriptionTotal = useMemo(() => activeSubscriptions.reduce((sum, s) => sum + getMonthlyEquivalent(s), 0), [activeSubscriptions])
+  const subscriptionCategoryTotals = useMemo(() => {
+    const totals: Record<string, number> = {}
+    activeSubscriptions.forEach(s => { totals[s.category] = (totals[s.category] || 0) + getMonthlyEquivalent(s) })
+    return Object.entries(totals).sort((a, b) => b[1] - a[1])
+  }, [activeSubscriptions])
+  const wellsRequiredBalance = useMemo(() => getRequiredWellsBalance(subscriptions, wellsSettings), [subscriptions, wellsSettings])
+  const wellsNeededThisWeek = useMemo(() => getAmountNeededThisWeek(subscriptions, wellsSettings), [subscriptions, wellsSettings])
+  const wellsNeededBeforeNextCharge = useMemo(() => getAmountNeededBeforeNextCharge(subscriptions, wellsSettings), [subscriptions, wellsSettings])
+  const wellsRecommendedBuffer = useMemo(() => getRecommendedBuffer(subscriptions, wellsSettings), [subscriptions, wellsSettings])
+  const wellsMonthlyTotal = useMemo(() => {
+    const wellsSubs = activeSubscriptions.filter(s => s.paymentAccount.trim().toLowerCase() === wellsSettings.accountName.trim().toLowerCase())
+    return wellsSubs.reduce((sum, s) => sum + getMonthlyEquivalent(s), 0)
+  }, [activeSubscriptions, wellsSettings])
+  const wellsUpcomingCharges = useMemo(() => {
+    const wellsSubs = subscriptions.filter(s => s.status === 'active' && s.paymentAccount.trim().toLowerCase() === wellsSettings.accountName.trim().toLowerCase())
+    const from = new Date()
+    const to = new Date(from); to.setMonth(to.getMonth() + 3)
+    return getUpcomingCharges(wellsSubs, from, to).slice(0, 10)
+  }, [subscriptions, wellsSettings])
 
   // Load bills: prefer context data, fallback to localStorage
   useEffect(() => {
@@ -1610,6 +1871,236 @@ export default function BillBossPage() {
               </div>
             )
           })}
+        </motion.div>
+
+        {/* ── SUBSCRIPTIONS ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.19 }}
+          className="space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <RefreshCw size={16} style={{ color: theme.accent }} />
+              <h2 className="text-sm font-bold" style={{ color: theme.text }}>Subscriptions</h2>
+            </div>
+            {!showAddSubscription && subTab === 'list' && (
+              <button onClick={() => setShowAddSubscription(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold" style={{ background: `${theme.accent}15`, color: theme.accent, border: `1px solid ${theme.accent}30` }}>
+                <Plus size={11} /> Add Subscription
+              </button>
+            )}
+          </div>
+
+          {/* Sub-tabs */}
+          <div className="flex gap-2 overflow-x-auto">
+            {([
+              { key: 'list', label: 'All Subscriptions' },
+              { key: 'calendar', label: 'Calendar' },
+              { key: 'total', label: 'Monthly Total' },
+              { key: 'wells', label: 'Wells Account' },
+            ] as { key: typeof subTab; label: string }[]).map(t => (
+              <button
+                key={t.key}
+                onClick={() => setSubTab(t.key)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all"
+                style={{
+                  backgroundColor: subTab === t.key ? theme.accent : theme.card,
+                  color: subTab === t.key ? '#fff' : theme.textM,
+                  border: `1px solid ${subTab === t.key ? theme.accent : theme.border}`,
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Add / Edit Subscription Form */}
+          {(showAddSubscription || editingSubscriptionId) && (
+            <div className="rounded-xl p-4 space-y-3" style={{ background: `${theme.accent}08`, border: `1px solid ${theme.accent}25` }}>
+              <p className="text-xs font-bold" style={{ color: theme.accent }}>{editingSubscriptionId ? 'Edit Subscription' : 'Add Subscription'}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={subForm.name} onChange={e => setSubForm({ ...subForm, name: e.target.value })} placeholder="Name *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <select value={subForm.category} onChange={e => setSubForm({ ...subForm, category: e.target.value })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}>
+                  {SUBSCRIPTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input type="number" value={subForm.price} onChange={e => setSubForm({ ...subForm, price: e.target.value })} placeholder="Price *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <select value={subForm.frequency} onChange={e => setSubForm({ ...subForm, frequency: e.target.value as SubscriptionFrequency })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="custom">Custom (days)</option>
+                </select>
+                {subForm.frequency === 'custom' && (
+                  <input type="number" value={subForm.customFrequencyDays} onChange={e => setSubForm({ ...subForm, customFrequencyDays: e.target.value })} placeholder="Every N days" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                )}
+                <input type="date" value={subForm.billingDate} onChange={e => setSubForm({ ...subForm, billingDate: e.target.value })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <input value={subForm.paymentAccount} onChange={e => setSubForm({ ...subForm, paymentAccount: e.target.value })} placeholder="Payment account (e.g. Wells)" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                <select value={subForm.status} onChange={e => setSubForm({ ...subForm, status: e.target.value as SubscriptionStatus })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}>
+                  <option value="active">Active</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setShowAddSubscription(false); cancelEditSubscription() }} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.textM }}>Cancel</button>
+                <button
+                  onClick={editingSubscriptionId ? saveEditSubscription : addSubscription}
+                  disabled={!subForm.name || !subForm.price}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40"
+                  style={{ background: theme.accent, color: '#fff' }}
+                >
+                  {editingSubscriptionId ? 'Save Changes' : 'Add Subscription'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* All Subscriptions */}
+          {subTab === 'list' && (
+            <div className="space-y-2">
+              {subscriptions.length === 0 && !showAddSubscription && (
+                <div className="rounded-2xl p-5 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <RefreshCw size={24} className="mx-auto mb-2" style={{ color: theme.textM, opacity: 0.5 }} />
+                  <p className="text-sm" style={{ color: theme.textM }}>No subscriptions tracked yet</p>
+                  <p className="text-xs mt-1" style={{ color: theme.textS }}>Add one to start tracking recurring charges</p>
+                </div>
+              )}
+              {[...subscriptions].sort((a, b) => {
+                if (a.status !== b.status) return a.status === 'active' ? -1 : 1
+                return new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime()
+              }).map(sub => (
+                <div key={sub.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}`, opacity: sub.status === 'cancelled' ? 0.55 : 1 }}>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{sub.name}</p>
+                      {sub.status === 'cancelled' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${theme.textM}20`, color: theme.textM }}>CANCELLED</span>
+                      )}
+                    </div>
+                    <p className="text-xs" style={{ color: theme.textM }}>
+                      {sub.category} · {sub.paymentAccount} · Next: {fmtD(sub.nextPaymentDate)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
+                      <p className="text-sm font-bold" style={{ color: theme.text }}>{fmt(sub.price)}</p>
+                      <p className="text-[10px]" style={{ color: theme.textS }}>{fmt(getMonthlyEquivalent(sub))}/mo</p>
+                    </div>
+                    <button onClick={() => startEditSubscription(sub)} className="p-1.5 rounded-lg" style={{ color: theme.textM }}><Edit3 size={14} /></button>
+                    <button onClick={() => toggleSubscriptionStatus(sub.id)} className="p-1.5 rounded-lg" style={{ color: sub.status === 'active' ? theme.bad : theme.ok }}>
+                      {sub.status === 'active' ? <X size={14} /> : <Check size={14} />}
+                    </button>
+                    <button onClick={() => deleteSubscription(sub.id)} className="p-1.5 rounded-lg" style={{ color: theme.bad }}><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Subscription Calendar */}
+          {subTab === 'calendar' && (
+            <SubscriptionCalendar
+              subscriptions={subscriptions}
+              month={subCalMonth}
+              year={subCalYear}
+              onMonthChange={(dir) => {
+                let m = subCalMonth + dir, y = subCalYear
+                if (m < 0) { m = 11; y-- } else if (m > 11) { m = 0; y++ }
+                setSubCalMonth(m); setSubCalYear(y)
+              }}
+              theme={theme}
+            />
+          )}
+
+          {/* Monthly Subscription Total */}
+          {subTab === 'total' && (
+            <div className="rounded-2xl p-5 space-y-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium" style={{ color: theme.textS }}>Total Monthly Subscription Cost</span>
+                <span className="text-2xl font-bold" style={{ color: theme.gold }}>{fmt(monthlySubscriptionTotal)}</span>
+              </div>
+              {subscriptionCategoryTotals.length > 0 && (
+                <div className="space-y-2 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
+                  {subscriptionCategoryTotals.map(([cat, amt]) => (
+                    <div key={cat} className="flex items-center justify-between">
+                      <span className="text-xs" style={{ color: theme.textM }}>{cat}</span>
+                      <span className="text-xs font-semibold" style={{ color: theme.text }}>{fmt(amt)}/mo</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Wells Subscription Account */}
+          {subTab === 'wells' && (
+            <div className="space-y-3">
+              <div className="rounded-xl p-4 space-y-3" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <div className="flex items-center gap-2">
+                  <Landmark size={14} style={{ color: theme.accent }} />
+                  <p className="text-xs font-bold" style={{ color: theme.accent }}>Wells Account Settings</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input value={wellsSettings.accountName} onChange={e => saveWellsSettings({ ...wellsSettings, accountName: e.target.value })} placeholder="Account name (e.g. Wells)" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                  <select value={wellsSettings.depositFreq} onChange={e => saveWellsSettings({ ...wellsSettings, depositFreq: e.target.value as WellsSettings['depositFreq'] })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}>
+                    <option value="weekly">Weekly deposit</option>
+                    <option value="biweekly">Biweekly deposit</option>
+                    <option value="monthly">Monthly deposit</option>
+                    <option value="manual">Manual / irregular</option>
+                  </select>
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-medium block mb-1" style={{ color: theme.textS }}>Next planned deposit / re-up date</label>
+                    <input type="date" value={wellsSettings.nextDepositDate} onChange={e => saveWellsSettings({ ...wellsSettings, nextDepositDate: e.target.value })} className="w-full px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl p-3" style={{ background: `${theme.gold}12`, border: `1px solid ${theme.gold}30` }}>
+                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Required Wells Balance</p>
+                  <p className="text-lg font-bold" style={{ color: theme.gold }}>{fmt(wellsRequiredBalance)}</p>
+                  <p className="text-[10px]" style={{ color: theme.textM }}>before {fmtD(wellsSettings.nextDepositDate)}</p>
+                </div>
+                <div className="rounded-xl p-3" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Monthly Subscription Cost</p>
+                  <p className="text-lg font-bold" style={{ color: theme.text }}>{fmt(wellsMonthlyTotal)}</p>
+                  <p className="text-[10px]" style={{ color: theme.textM }}>on {wellsSettings.accountName || 'Wells'}</p>
+                </div>
+                <div className="rounded-xl p-3" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Needed This Week</p>
+                  <p className="text-lg font-bold" style={{ color: theme.text }}>{fmt(wellsNeededThisWeek)}</p>
+                </div>
+                <div className="rounded-xl p-3" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Before Next Charge</p>
+                  <p className="text-lg font-bold" style={{ color: theme.text }}>{fmt(wellsNeededBeforeNextCharge)}</p>
+                </div>
+                <div className="rounded-xl p-3 col-span-2" style={{ background: `${theme.accent}10`, border: `1px solid ${theme.accent}30` }}>
+                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Recommended Account Buffer</p>
+                  <p className="text-lg font-bold" style={{ color: theme.accent }}>{fmt(wellsRecommendedBuffer)}</p>
+                  <p className="text-[10px]" style={{ color: theme.textM }}>{Math.round((wellsSettings.bufferMultiplier || 1.15) * 100)}% of monthly Wells total, rounded up</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl p-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
+                <p className="text-xs font-bold mb-2" style={{ color: theme.text }}>Upcoming Charges</p>
+                {wellsUpcomingCharges.length === 0 ? (
+                  <p className="text-xs" style={{ color: theme.textM }}>No upcoming charges on {wellsSettings.accountName || 'Wells'}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {wellsUpcomingCharges.map((c, i) => (
+                      <div key={i} className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm" style={{ color: theme.text }}>{c.sub.name}</p>
+                          <p className="text-[10px]" style={{ color: theme.textM }}>{fmtD(c.date)}</p>
+                        </div>
+                        <p className="text-sm font-semibold" style={{ color: theme.text }}>{fmt(c.amount)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* List / Compact Toggle */}
