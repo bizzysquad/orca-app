@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   Menu, Settings2, LayoutDashboard, CreditCard,
   TrendingUp, Mic2, Ticket, Briefcase, CheckSquare,
-  RefreshCw, Check, AlertCircle, CalendarDays,
+  RefreshCw, Check, AlertCircle, CalendarDays, Shirt,
 } from 'lucide-react'
 import SettingsSheet from './SettingsSheet'
 import SideSidebar from './SideSidebar'
@@ -21,6 +21,7 @@ const BENTLEY_INDIGO = '#6366F1'
 const SIDEBAR_NAV = [
   { id: 'dashboard',  name: 'Home',        icon: LayoutDashboard, href: '/dashboard', accent: BENTLEY_INDIGO },
   { id: 'planner',    name: 'Planner',      icon: CalendarDays,    href: '/planner',   accent: '#EC4899' },
+  { id: 'outfit',     name: 'Outfit',       icon: Shirt,           href: '/outfit',    accent: '#E0A96D' },
   { id: 'bill-boss',  name: 'Bill Boss',   icon: CreditCard,      href: '/bill-boss', accent: '#10B981' },
   { id: 'smart-stack',name: 'Smart Stack', icon: TrendingUp,      href: '/smart-stack', accent: '#10B981' },
   { id: 'dj',         name: 'DJ Maskoff',  icon: Mic2,            href: '/dj',        accent: '#F43F5E' },

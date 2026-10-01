@@ -21,6 +21,10 @@ export const SYNC_KEYS = [
   'orca-laundry-settings',
   'orca-liquor-settings',
   'orca-daily-spending',
+  // Outfit (photos live in Supabase Storage; these hold metadata + URLs only)
+  'orca-outfit-wardrobe',
+  'orca-outfit-looks',
+  'orca-outfit-prefs',
   // Income sources
   'orca-lyft-sessions',
   'orca-bizzplug-clients',
