@@ -78,6 +78,7 @@ export default function EventEditorPage() {
   const [savingTickets, setSavingTickets] = useState(false)
   const [savingPromo, setSavingPromo] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -228,6 +229,25 @@ export default function EventEditorPage() {
     }
   }
 
+  const deleteEvent = async () => {
+    const typed = window.prompt(
+      `This permanently deletes "${event.name}" along with all of its votes, polls, RSVPs, orders, and tickets. This cannot be undone.
+
+Type DELETE to confirm:`
+    )
+    if (typed !== 'DELETE') return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/rsvp/events/${id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(res.status === 403 ? 'Only the Owner role can delete events' : data.error || 'Failed to delete event')
+      router.push('/RSVP/admin')
+    } catch (e: any) {
+      flash(e.message || 'Failed to delete event', true)
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <AdminShell>
@@ -269,6 +289,13 @@ export default function EventEditorPage() {
           >
             <Eye size={13} /> Preview <ExternalLink size={11} />
           </a>
+          <button
+            onClick={deleteEvent}
+            disabled={deleting}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-danger/40 text-xs font-semibold text-danger hover:bg-danger/10 disabled:opacity-60 transition"
+          >
+            {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete
+          </button>
         </div>
       </div>
 
@@ -432,7 +459,7 @@ export default function EventEditorPage() {
       </Section>
 
       {/* POLLS */}
-      <Section icon={ListChecks} title="Polls (Genre / Theme / Format)" action={<SaveButton onClick={savePolls} saving={savingPolls} />}>
+      <Section icon={ListChecks} title="Community Polls (DJ / Genre / Venue / Theme)" action={<SaveButton onClick={savePolls} saving={savingPolls} />}>
         <div className="space-y-5">
           {pollQuestions.map((q, qi) => (
             <div key={q.id || qi} className="border border-surface-border rounded-xl p-4">
@@ -445,6 +472,8 @@ export default function EventEditorPage() {
                   <option value="genre">Genre</option>
                   <option value="theme">Theme</option>
                   <option value="format">Format</option>
+                  <option value="artist">DJ / Artist</option>
+                  <option value="venue">Venue</option>
                   <option value="custom">Custom</option>
                 </select>
                 <input
@@ -503,6 +532,9 @@ export default function EventEditorPage() {
       {/* CAPACITY & PRICING */}
       <Section icon={Ticket} title="RSVP / Ticketing">
         <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Community Goal (supporters)" hint="Momentum bar target on the /RSVP homepage. Falls back to RSVP capacity.">
+            <input type="number" className={inputCls} value={event.rsvp_goal ?? ''} onChange={e => setField('rsvp_goal', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
           <Field label="RSVP Capacity">
             <input type="number" className={inputCls} value={event.rsvp_capacity ?? ''} onChange={e => setField('rsvp_capacity', e.target.value ? Number(e.target.value) : null)} />
           </Field>

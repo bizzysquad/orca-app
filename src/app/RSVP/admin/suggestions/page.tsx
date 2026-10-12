@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, Check, X, Trash2, Mail } from 'lucide-react'
+import { Loader2, Check, X, Trash2, Mail, ChevronUp } from 'lucide-react'
 import AdminShell from '../_components/AdminShell'
 
 export default function SuggestionsAdminPage() {
   const [suggestions, setSuggestions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('pending')
+  const [sortByVotes, setSortByVotes] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -33,13 +34,23 @@ export default function SuggestionsAdminPage() {
     await fetch(`/api/rsvp/suggestions/${id}`, { method: 'DELETE' })
   }
 
-  const filtered = suggestions.filter(s => (filter === 'all' ? true : filter === 'pending' ? !s.is_approved : s.is_approved))
+  const filtered = suggestions
+    .filter(s => (filter === 'all' ? true : filter === 'pending' ? !s.is_approved : s.is_approved))
+    .sort((a, b) => (sortByVotes ? (b.upvote_count || 0) - (a.upvote_count || 0) : 0))
 
   return (
     <AdminShell>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-2xl font-extrabold text-text-primary">Suggestions</h1>
         <div className="flex gap-1">
+          <button
+            onClick={() => setSortByVotes(v => !v)}
+            className={`px-3 py-1.5 rounded-full text-2xs font-bold transition mr-2 ${
+              sortByVotes ? 'bg-gold/15 text-gold border border-gold' : 'border border-surface-border text-text-secondary'
+            }`}
+          >
+            Most voted
+          </button>
           {(['pending', 'approved', 'all'] as const).map(f => (
             <button
               key={f}
@@ -63,9 +74,18 @@ export default function SuggestionsAdminPage() {
           {filtered.map(s => (
             <div key={s.id} className="bg-surface-card border border-surface-border rounded-xl p-4">
               <div className="flex items-start justify-between gap-3 mb-2">
-                <div>
-                  <p className="font-semibold text-text-primary text-sm">{s.name}</p>
+                <div className="flex items-start gap-3">
+                  {s.is_approved && (
+                    <div className="flex flex-col items-center px-2 py-1 rounded-lg bg-gold/10 text-gold min-w-[40px]">
+                      <ChevronUp size={13} />
+                      <span className="text-xs font-bold leading-none">{s.upvote_count || 0}</span>
+                    </div>
+                  )}
+                  <div>
+                  {s.title && <p className="font-bold text-text-primary">{s.title}</p>}
+                  <p className="font-semibold text-text-primary text-sm">{s.name}{s.category && <span className="ml-2 text-2xs font-normal text-text-muted capitalize">{String(s.category).replace('_', ' ')}</span>}</p>
                   <p className="text-2xs text-text-muted flex items-center gap-1"><Mail size={10} /> {s.email}</p>
+                  </div>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
                   {!s.is_approved ? (

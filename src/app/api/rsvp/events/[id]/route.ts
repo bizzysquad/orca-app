@@ -19,6 +19,7 @@ const EDITABLE_FIELDS = [
   'music_genres',
   'performer_info',
   'rsvp_capacity',
+  'rsvp_goal',
   'ticket_capacity',
   'ticket_price_cents',
   'is_paid',

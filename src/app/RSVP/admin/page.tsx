@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Calendar, MapPin, Users, Loader2, ImageOff } from 'lucide-react'
+import { Plus, Calendar, MapPin, Users, Loader2, ImageOff, Trash2 } from 'lucide-react'
 import AdminShell from './_components/AdminShell'
 
 interface RsvpEvent {
@@ -73,6 +73,23 @@ export default function AdminEventsPage() {
     }
   }
 
+  const deleteEvent = async (ev: RsvpEvent) => {
+    const typed = window.prompt(
+      `This permanently deletes "${ev.name}" along with all of its votes, polls, RSVPs, orders, and tickets. This cannot be undone.
+
+Type DELETE to confirm:`
+    )
+    if (typed !== 'DELETE') return
+    setError('')
+    const res = await fetch(`/api/rsvp/events/${ev.id}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setError(res.status === 403 ? 'Only the Owner role can delete events' : data.error || 'Failed to delete event')
+      return
+    }
+    setEvents(list => list.filter(x => x.id !== ev.id))
+  }
+
   return (
     <AdminShell>
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
@@ -102,10 +119,13 @@ export default function AdminEventsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {events.map(ev => (
-            <button
+            <div
               key={ev.id}
+              role="link"
+              tabIndex={0}
               onClick={() => router.push(`/RSVP/admin/events/${ev.id}`)}
-              className="text-left bg-surface-card border border-surface-border rounded-2xl overflow-hidden hover:border-gold/40 hover:shadow-card-hover transition group"
+              onKeyDown={e => { if (e.key === 'Enter') router.push(`/RSVP/admin/events/${ev.id}`) }}
+              className="cursor-pointer text-left bg-surface-card border border-surface-border rounded-2xl overflow-hidden hover:border-gold/40 hover:shadow-card-hover transition group"
             >
               <div className="aspect-[4/3] bg-brand-soft flex items-center justify-center relative overflow-hidden">
                 {ev.flyer_url ? (
@@ -122,6 +142,14 @@ export default function AdminEventsPage() {
                 >
                   {statusLabel(ev.status)}
                 </span>
+                <button
+                  onClick={e => { e.stopPropagation(); deleteEvent(ev) }}
+                  aria-label={`Delete ${ev.name}`}
+                  title="Delete event"
+                  className="absolute top-2 left-2 p-2 rounded-full bg-black/60 text-text-secondary hover:text-danger hover:bg-black/80 transition"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
               <div className="p-4">
                 <h3 className="font-bold text-text-primary truncate">{ev.name}</h3>
@@ -143,7 +171,7 @@ export default function AdminEventsPage() {
                   )}
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}

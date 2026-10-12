@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getRsvpAdmin } from '@/lib/rsvp/db'
 import { getStaff } from '@/lib/rsvp/staffAuth'
 import { getClientIp, hashIp, isValidEmail } from '@/lib/rsvp/request'
+import { isMissingColumnError, normalizeCategory } from '@/lib/rsvp/community'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,22 +59,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Too many suggestions submitted recently. Please try again later.' }, { status: 429 })
     }
 
-    const { data, error } = await supabase
-      .from('rsvp_suggestions')
-      .insert({
-        event_id: body?.event_id || null,
-        name,
-        email,
-        event_idea: body?.event_idea || '',
-        preferred_location: body?.preferred_location || '',
-        preferred_weekend: body?.preferred_weekend || '',
-        preferred_music: body?.preferred_music || '',
-        artist_suggestion: body?.artist_suggestion || '',
-        theme_suggestion: body?.theme_suggestion || '',
-        comments: body?.comments || '',
-      })
-      .select()
-      .single()
+    const baseRow = {
+      event_id: body?.event_id || null,
+      name,
+      email,
+      event_idea: String(body?.event_idea || '').slice(0, 2000),
+      preferred_location: String(body?.preferred_location || '').slice(0, 200),
+      preferred_weekend: body?.preferred_weekend || '',
+      preferred_music: String(body?.preferred_music || '').slice(0, 200),
+      artist_suggestion: String(body?.artist_suggestion || '').slice(0, 200),
+      theme_suggestion: String(body?.theme_suggestion || '').slice(0, 200),
+      comments: body?.comments || '',
+    }
+    const ideaFields = body?.title !== undefined || body?.category !== undefined
+      ? { title: String(body?.title || '').trim().slice(0, 120), category: normalizeCategory(body?.category) }
+      : {}
+
+    let { data, error } = await supabase.from('rsvp_suggestions').insert({ ...baseRow, ...ideaFields }).select().single()
+    // Before the community migration runs, title/category don't exist yet; fold the title into the idea text.
+    if (isMissingColumnError(error) && 'title' in ideaFields) {
+      const fallback = { ...baseRow, event_idea: [ideaFields.title, baseRow.event_idea].filter(Boolean).join(': ') }
+      ;({ data, error } = await supabase.from('rsvp_suggestions').insert(fallback).select().single())
+    }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ suggestion: data })
