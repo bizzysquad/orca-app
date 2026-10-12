@@ -7,6 +7,7 @@ import {
   Calendar, MapPin, Music2, Ticket, Percent, ListChecks, HelpCircle,
 } from 'lucide-react'
 import AdminShell from '../../_components/AdminShell'
+import PresetMenu, { Preset } from '../../_components/PresetMenu'
 
 const STATUSES = [
   'draft', 'collecting_interest', 'voting_open', 'date_selected',
@@ -15,6 +16,22 @@ const STATUSES = [
 
 function statusLabel(s: string) {
   return s.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+}
+
+// datetime-local inputs work in the browser's local time; the DB stores UTC.
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+function fromLocalInput(value: string): string | null {
+  return value ? new Date(value).toISOString() : null
+}
+function fmtClock(hhmm: string): string {
+  if (!hhmm) return ''
+  const [h, m] = hhmm.split(':').map(Number)
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
 const GENRES = ['Hip-Hop', 'R&B', 'Afrobeats', 'Amapiano', 'House', 'EDM', 'Top 40', 'Reggae/Dancehall', 'Latin', 'Old School']
@@ -79,6 +96,7 @@ export default function EventEditorPage() {
   const [savingPromo, setSavingPromo] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [presets, setPresets] = useState<Preset[]>([])
   const [message, setMessage] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -107,6 +125,55 @@ export default function EventEditorPage() {
   }, [id])
 
   useEffect(load, [load])
+
+  useEffect(() => {
+    fetch('/api/rsvp/presets')
+      .then(res => (res.ok ? res.json() : { presets: [] }))
+      .then(data => setPresets(data.presets || []))
+      .catch(() => {})
+  }, [])
+
+  const savePreset = async (kind: 'venue' | 'schedule', suggestedName: string, data: Record<string, string>) => {
+    const name = window.prompt('Name this so you can find it later:', suggestedName)
+    if (!name || !name.trim()) return
+    const res = await fetch('/api/rsvp/presets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, name: name.trim(), data }),
+    })
+    const body = await res.json()
+    if (!res.ok) return flash(body.error || 'Failed to save', true)
+    setPresets(ps => [...ps, body.preset].sort((a, b) => a.name.localeCompare(b.name)))
+    flash(`Saved "${body.preset.name}"`)
+  }
+
+  const deletePreset = async (p: Preset) => {
+    if (!confirm(`Delete saved ${p.kind === 'venue' ? 'venue' : 'times'} "${p.name}"?`)) return
+    const res = await fetch(`/api/rsvp/presets/${p.id}`, { method: 'DELETE' })
+    if (!res.ok) return flash('Failed to delete', true)
+    setPresets(ps => ps.filter(x => x.id !== p.id))
+  }
+
+  const applyVenue = (p: Preset) => {
+    setEvent((e: any) => ({ ...e, venue: p.data.venue || '', address: p.data.address || '', city: p.data.city || '', state: p.data.state || '' }))
+    flash(`Applied "${p.name}". Save to keep it.`)
+  }
+
+  // Keeps the chosen start date, sets the saved clock times. An end time at or
+  // before the start time (e.g. 10 PM to 2 AM) lands on the next day.
+  const applySchedule = (p: Preset) => {
+    const startLocal = toLocalInput(event.start_time)
+    if (!startLocal) return flash('Pick a start date first, then apply saved times', true)
+    const day = startLocal.slice(0, 10)
+    const start = new Date(`${day}T${p.data.start_time}`)
+    let end: Date | null = null
+    if (p.data.end_time) {
+      end = new Date(`${day}T${p.data.end_time}`)
+      if (end <= start) end.setDate(end.getDate() + 1)
+    }
+    setEvent((e: any) => ({ ...e, start_time: start.toISOString(), end_time: end ? end.toISOString() : e.end_time }))
+    flash(`Applied "${p.name}". Save to keep it.`)
+  }
 
   const setField = (field: string, value: any) => setEvent((e: any) => ({ ...e, [field]: value }))
 
@@ -382,6 +449,20 @@ Type DELETE to confirm:`
 
       {/* VENUE & SCHEDULE */}
       <Section icon={MapPin} title="Venue & Schedule">
+        <div className="mb-4">
+          <PresetMenu
+            label="Saved venues"
+            saveLabel="Save this venue"
+            emptyText="No saved venues yet. Fill in the venue below and tap Save this venue."
+            presets={presets.filter(p => p.kind === 'venue')}
+            describe={p => [p.data.address, p.data.city, p.data.state].filter(Boolean).join(', ')}
+            onApply={applyVenue}
+            onDelete={deletePreset}
+            onSave={() =>
+              savePreset('venue', event.venue || '', { venue: event.venue || '', address: event.address || '', city: event.city || '', state: event.state || '' })
+            }
+          />
+        </div>
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Venue Name">
             <input className={inputCls} value={event.venue || ''} onChange={e => setField('venue', e.target.value)} />
@@ -401,12 +482,33 @@ Type DELETE to confirm:`
           <Field label="Dress Code">
             <input className={inputCls} value={event.dress_code || ''} onChange={e => setField('dress_code', e.target.value)} />
           </Field>
-          <Field label="Start Time">
-            <input type="datetime-local" className={inputCls} value={event.start_time ? event.start_time.slice(0, 16) : ''} onChange={e => setField('start_time', e.target.value)} />
-          </Field>
-          <Field label="End Time">
-            <input type="datetime-local" className={inputCls} value={event.end_time ? event.end_time.slice(0, 16) : ''} onChange={e => setField('end_time', e.target.value)} />
-          </Field>
+        </div>
+        <div className="mt-6 pt-5 border-t border-surface-border">
+          <div className="mb-4">
+            <PresetMenu
+              label="Saved times"
+              saveLabel="Save these times"
+              emptyText="No saved times yet. Set a start and end time below and tap Save these times."
+              presets={presets.filter(p => p.kind === 'schedule')}
+              describe={p => [fmtClock(p.data.start_time), fmtClock(p.data.end_time)].filter(Boolean).join(' to ')}
+              onApply={applySchedule}
+              onDelete={deletePreset}
+              onSave={async () => {
+                const start = toLocalInput(event.start_time).slice(11, 16)
+                const end = toLocalInput(event.end_time).slice(11, 16)
+                if (!start) return flash('Set a start time before saving', true)
+                await savePreset('schedule', [fmtClock(start), fmtClock(end)].filter(Boolean).join(' to '), { start_time: start, end_time: end })
+              }}
+            />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Start Time">
+              <input type="datetime-local" className={inputCls} value={toLocalInput(event.start_time)} onChange={e => setField('start_time', fromLocalInput(e.target.value))} />
+            </Field>
+            <Field label="End Time">
+              <input type="datetime-local" className={inputCls} value={toLocalInput(event.end_time)} onChange={e => setField('end_time', fromLocalInput(e.target.value))} />
+            </Field>
+          </div>
         </div>
       </Section>
 

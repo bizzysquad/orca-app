@@ -57,3 +57,21 @@ alter table public.rsvp_events add column if not exists rsvp_goal integer;
 alter table public.rsvp_poll_questions drop constraint if exists rsvp_poll_questions_kind_check;
 alter table public.rsvp_poll_questions add constraint rsvp_poll_questions_kind_check
   check (kind in ('genre','theme','format','artist','venue','custom'));
+
+-- ============================================================
+-- SAVED PRESETS: reusable venues and date/time settings for the event editor
+-- kind = 'venue'    data = { venue, address, city, state }
+-- kind = 'schedule' data = { start_time: "22:00", end_time: "02:00" }
+-- ============================================================
+create table if not exists public.rsvp_presets (
+  id uuid primary key default uuid_generate_v4(),
+  kind text not null check (kind in ('venue','schedule')),
+  name text not null,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_rsvp_presets_kind on public.rsvp_presets(kind);
+alter table public.rsvp_presets enable row level security;
+
+-- Make the new columns usable immediately
+notify pgrst, 'reload schema';
