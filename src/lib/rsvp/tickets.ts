@@ -1,4 +1,5 @@
 import { getRsvpAdmin } from '@/lib/rsvp/db'
+import { grantSeparatePerks } from '@/lib/rsvp/perks'
 
 function randomTicketNumber(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no ambiguous chars
@@ -46,6 +47,9 @@ export async function issueTickets({ orderId, eventId, ticketTypeId, quantity, h
         .eq('id', ticketTypeId)
     }
   }
+
+  // New guests get any separate-code perks the event already offers
+  if (data?.length) await grantSeparatePerks(eventId, { ticketIds: data.map(t => t.id) })
 
   return data || []
 }

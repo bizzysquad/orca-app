@@ -86,6 +86,26 @@ export default function TicketPassPage() {
             <p className="text-2xs text-white/40 mt-3 tracking-widest">CODE {ticket.verification_code}</p>
           </div>
 
+          {data.perks?.length > 0 && (
+            <div className="px-6 pb-6">
+              <div className="text-2xs font-bold tracking-[0.2em] text-gold uppercase mb-2">Your Perks</div>
+              <div className="space-y-2">
+                {data.perks.map((s: any) => (
+                  <div key={s.perk.id} className={`rounded-xl border px-3 py-2.5 ${s.ok ? 'border-gold-liquid/30 bg-gold-liquid/5' : 'border-white/10 bg-white/[0.02]'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-sm font-bold ${s.ok ? 'text-white' : 'text-white/40 line-through'}`}>{s.perk.name}</span>
+                      <span className={`text-2xs font-semibold shrink-0 ${s.ok ? 'text-emerald-400' : 'text-white/40'}`}>
+                        {s.ok ? (s.usesAllowed == null ? 'Ready' : `${s.usesLeft} left`) : s.reason}
+                      </span>
+                    </div>
+                    {s.perk.description && <p className="text-2xs text-white/50 mt-0.5">{s.perk.description}</p>}
+                  </div>
+                ))}
+              </div>
+              <p className="text-2xs text-white/40 mt-2 text-center">Show this QR at the bar to redeem.</p>
+            </div>
+          )}
+
           <div className="px-6 pb-6 space-y-2 text-2xs text-white/50">
             {event.venue && (
               <p className="flex items-center gap-1.5"><MapPin size={11} /> {event.venue}{event.address ? `, ${event.address}` : ''}{event.city ? `, ${event.city}` : ''}</p>

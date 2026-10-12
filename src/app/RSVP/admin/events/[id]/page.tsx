@@ -4,18 +4,31 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   Loader2, Save, Upload, Plus, Trash2, ExternalLink, Eye,
-  Calendar, MapPin, Music2, Ticket, Percent, ListChecks, HelpCircle,
+  Calendar, MapPin, Music2, Ticket, Percent, ListChecks, HelpCircle, Rocket, EyeOff, MoreHorizontal,
 } from 'lucide-react'
 import AdminShell from '../../_components/AdminShell'
 import PresetMenu, { Preset } from '../../_components/PresetMenu'
+import PerksPanel from '../../_components/PerksPanel'
 
-const STATUSES = [
-  'draft', 'collecting_interest', 'voting_open', 'date_selected',
-  'rsvp_open', 'tickets_on_sale', 'sold_out', 'completed', 'cancelled',
-]
+const LIVE_STATUSES = new Set(['collecting_interest', 'voting_open', 'date_selected', 'rsvp_open', 'tickets_on_sale', 'sold_out'])
 
-function statusLabel(s: string) {
-  return s.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+const PUBLISH_BADGE: Record<string, { label: string; cls: string }> = {
+  draft: { label: 'Draft', cls: 'bg-white/10 text-text-secondary' },
+  collecting_interest: { label: 'Live · Gauging Interest', cls: 'bg-emerald-500/15 text-emerald-300' },
+  voting_open: { label: 'Live · Voting Open', cls: 'bg-emerald-500/15 text-emerald-300' },
+  date_selected: { label: 'Live · Date Locked', cls: 'bg-emerald-500/15 text-emerald-300' },
+  rsvp_open: { label: 'Live · RSVPs Open', cls: 'bg-emerald-500/15 text-emerald-300' },
+  tickets_on_sale: { label: 'Live · Tickets On Sale', cls: 'bg-emerald-500/15 text-emerald-300' },
+  sold_out: { label: 'Live · Sold Out', cls: 'bg-amber-500/15 text-amber-300' },
+  completed: { label: 'Ended', cls: 'bg-white/10 text-text-secondary' },
+  cancelled: { label: 'Cancelled', cls: 'bg-red-900/30 text-red-400' },
+}
+
+// Publishing picks the stage: date voting if there are date options and no
+// fixed start time yet, otherwise tickets (paid) or RSVPs (free).
+function liveStageFor(event: any, dateOptions: any[]): string {
+  if (dateOptions.length > 0 && !event.start_time) return 'voting_open'
+  return event.is_paid ? 'tickets_on_sale' : 'rsvp_open'
 }
 
 // datetime-local inputs work in the browser's local time; the DB stores UTC.
@@ -97,6 +110,8 @@ export default function EventEditorPage() {
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [presets, setPresets] = useState<Preset[]>([])
+  const [publishing, setPublishing] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -194,6 +209,28 @@ export default function EventEditorPage() {
       flash(e.message || 'Failed to save', true)
     } finally {
       setSavingCore(false)
+    }
+  }
+
+  // Saves every edit on the page together with the new status
+  const setStatus = async (status: string, confirmMsg?: string) => {
+    if (confirmMsg && !confirm(confirmMsg)) return
+    setMenuOpen(false)
+    setPublishing(true)
+    try {
+      const res = await fetch(`/api/rsvp/events/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...event, status }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setEvent(data.event)
+      flash(LIVE_STATUSES.has(status) ? 'Published. It is live on the events page now.' : status === 'draft' ? 'Unpublished. Back to draft.' : 'Saved')
+    } catch (e: any) {
+      flash(e.message || 'Failed to update', true)
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -348,6 +385,9 @@ Type DELETE to confirm:`
         <div className="flex items-center gap-2">
           {message && <span className="text-2xs text-emerald-400 font-semibold">{message}</span>}
           {errorMsg && <span className="text-2xs text-danger font-semibold">{errorMsg}</span>}
+          <span className={`text-2xs font-bold px-2.5 py-1 rounded-full ${(PUBLISH_BADGE[event.status] || PUBLISH_BADGE.draft).cls}`}>
+            {(PUBLISH_BADGE[event.status] || PUBLISH_BADGE.draft).label}
+          </span>
           <a
             href={`/RSVP/events/${event.slug}`}
             target="_blank"
@@ -363,27 +403,43 @@ Type DELETE to confirm:`
           >
             {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete
           </button>
+          {LIVE_STATUSES.has(event.status) ? (
+            <>
+              <button
+                onClick={() => setStatus('draft')}
+                disabled={publishing}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-surface-border text-xs font-semibold text-text-secondary hover:text-text-primary disabled:opacity-60 transition"
+              >
+                {publishing ? <Loader2 size={13} className="animate-spin" /> : <EyeOff size={13} />} Unpublish
+              </button>
+              <div className="relative">
+                <button onClick={() => setMenuOpen(o => !o)} aria-label="More" className="p-2 rounded-lg border border-surface-border text-text-secondary hover:text-text-primary">
+                  <MoreHorizontal size={15} />
+                </button>
+                {menuOpen && (
+                  <div className="absolute right-0 z-30 mt-1.5 w-48 rounded-xl border border-surface-border bg-surface-elevated shadow-card-hover p-1">
+                    {event.status === 'sold_out' ? (
+                      <button onClick={() => setStatus(liveStageFor(event, dates))} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">Reopen Sales</button>
+                    ) : (
+                      <button onClick={() => setStatus('sold_out')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">Mark Sold Out</button>
+                    )}
+                    <button onClick={() => setStatus('completed', 'End this event? It moves to past events.')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">End Event</button>
+                    <button onClick={() => setStatus('cancelled', 'Cancel this event? It disappears from the public site.')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger/10">Cancel Event</button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <button
+              onClick={() => setStatus(liveStageFor(event, dates))}
+              disabled={publishing}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gold-gradient text-brand-black text-xs font-bold disabled:opacity-60 hover:shadow-gold transition"
+            >
+              {publishing ? <Loader2 size={13} className="animate-spin" /> : <Rocket size={13} />} {event.status === 'draft' ? 'Publish' : 'Republish'}
+            </button>
+          )}
         </div>
       </div>
-
-      {/* STATUS */}
-      <Section icon={ListChecks} title="Status" action={<SaveButton onClick={saveCore} saving={savingCore} />}>
-        <div className="flex flex-wrap gap-2">
-          {STATUSES.map(s => (
-            <button
-              key={s}
-              onClick={() => setField('status', s)}
-              className={`px-3 py-1.5 rounded-full text-2xs font-bold border transition ${
-                event.status === s
-                  ? 'bg-gold-gradient text-brand-black border-transparent'
-                  : 'border-surface-border text-text-secondary hover:border-gold/40'
-              }`}
-            >
-              {statusLabel(s)}
-            </button>
-          ))}
-        </div>
-      </Section>
 
       {/* BASICS */}
       <Section icon={Music2} title="Event Basics">
@@ -685,6 +741,8 @@ Type DELETE to confirm:`
           </Field>
         </div>
       </Section>
+
+      <PerksPanel eventId={id} flash={flash} />
 
       {/* TICKET TYPES */}
       {event.is_paid && (

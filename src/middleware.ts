@@ -30,7 +30,8 @@ export async function middleware(request: NextRequest) {
   // their own shared-password-per-role session, separate from core ORCA auth.
   const isRsvpStaffPage =
     (pathname.startsWith('/RSVP/admin') && pathname !== '/RSVP/admin/login') ||
-    pathname.startsWith('/RSVP/check-in')
+    pathname.startsWith('/RSVP/check-in') ||
+    pathname.startsWith('/RSVP/scan')
   if (isRsvpStaffPage) {
     const secret = process.env.RSVP_STAFF_SESSION_SECRET
     const token = request.cookies.get(STAFF_SESSION_COOKIE)?.value

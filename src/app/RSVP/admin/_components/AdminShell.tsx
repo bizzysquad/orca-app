@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LogOut, CalendarDays, Users, MessageSquareText, Mail, BarChart3, Loader2, Settings } from 'lucide-react'
+import { LogOut, CalendarDays, Users, MessageSquareText, Mail, BarChart3, Loader2, Settings, ScanLine } from 'lucide-react'
 
 interface StaffSession {
   role: 'owner' | 'event_admin' | 'door_staff' | 'readonly_staff'
@@ -14,6 +14,7 @@ interface StaffSession {
 const NAV = [
   { href: '/RSVP/admin', label: 'Events', icon: CalendarDays, minRole: 'readonly_staff' },
   { href: '/RSVP/admin/guests', label: 'Guests', icon: Users, minRole: 'readonly_staff' },
+  { href: '/RSVP/scan', label: 'Perk Scanner', icon: ScanLine, minRole: 'door_staff' },
   { href: '/RSVP/admin/suggestions', label: 'Suggestions', icon: MessageSquareText, minRole: 'readonly_staff' },
   { href: '/RSVP/admin/emails', label: 'Emails', icon: Mail, minRole: 'event_admin' },
   { href: '/RSVP/admin/analytics', label: 'Analytics', icon: BarChart3, minRole: 'readonly_staff' },
