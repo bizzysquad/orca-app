@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRsvpAdmin } from '@/lib/rsvp/db'
 import { logAudit, requireStaff } from '@/lib/rsvp/staffAuth'
+import { isValidEmail } from '@/lib/rsvp/request'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     if (body.status !== undefined && !VALID_STATUSES.includes(body.status)) {
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
+    }
+    if (body.contact_email !== undefined) {
+      body.contact_email = String(body.contact_email || '').trim().toLowerCase()
+      if (!isValidEmail(body.contact_email)) {
+        return NextResponse.json({ error: 'Enter a valid organizer contact email. Guest replies go there.' }, { status: 400 })
+      }
     }
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }

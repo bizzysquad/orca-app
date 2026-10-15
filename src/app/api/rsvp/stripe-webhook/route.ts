@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
             eventId: order.event_id,
             to: order.buyer_email,
             vars: { event_name: eventRow?.name || 'your event', ticket_url: `${getRsvpAppUrl()}/RSVP/ticket/${tickets[0].qr_token}` },
+            ticketToken: tickets[0].qr_token,
           })
         }
         break

@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
       eventId: ticket.event_id,
       to: toEmail,
       vars: { event_name: event?.name || 'the event', from_name: fromName, ticket_url: `${getRsvpAppUrl()}/RSVP/ticket/${newToken}` },
+      ticketToken: newToken,
     })
 
     return NextResponse.json({ success: true, newToken })

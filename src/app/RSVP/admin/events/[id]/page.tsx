@@ -450,6 +450,20 @@ Type DELETE to confirm:`
           <Field label="Slug (URL)" hint={`orcafin.app/RSVP/events/${event.slug}`}>
             <input className={inputCls} value={event.slug || ''} onChange={e => setField('slug', e.target.value)} />
           </Field>
+          <div className="sm:col-span-2">
+            <Field
+              label="Organizer Contact Email"
+              hint="Use the email you want to hear from guests at. Every RSVP, ticket and perk email for this event lists it, and when guests hit Reply it lands here. It also shows on the event page."
+            >
+              <input
+                type="email"
+                className={inputCls}
+                placeholder="you@example.com"
+                value={event.contact_email || ''}
+                onChange={e => setField('contact_email', e.target.value)}
+              />
+            </Field>
+          </div>
         </div>
 
         <div className="mt-4">
@@ -728,11 +742,6 @@ Type DELETE to confirm:`
         <div className="mt-4">
           <Field label="Refund Policy">
             <textarea rows={2} className={inputCls} value={event.refund_policy || ''} onChange={e => setField('refund_policy', e.target.value)} />
-          </Field>
-        </div>
-        <div className="mt-4">
-          <Field label="Contact Email">
-            <input className={inputCls} value={event.contact_email || ''} onChange={e => setField('contact_email', e.target.value)} />
           </Field>
         </div>
         <div className="mt-4">

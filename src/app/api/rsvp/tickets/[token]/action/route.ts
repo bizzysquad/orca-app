@@ -61,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { token: str
           eventId: ticket.event_id,
           to: ticket.holder_email,
           vars: { event_name: event?.name || 'the event', ticket_url: `${getRsvpAppUrl()}/RSVP/ticket/${ticket.qr_token}` },
+          ticketToken: ticket.qr_token,
         })
         await logAudit(staff, 'resend_invitation', 'rsvp_tickets', id, {})
         return NextResponse.json({ success: true })

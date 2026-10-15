@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
           eventId,
           to: buyerEmail,
           vars: { event_name: event.name, ticket_url: `${getRsvpAppUrl()}/RSVP/ticket/${tickets[0].qr_token}` },
+          ticketToken: tickets[0].qr_token,
         })
       }
 
@@ -186,6 +187,7 @@ export async function POST(req: NextRequest) {
           eventId,
           to: buyerEmail,
           vars: { event_name: event.name, ticket_url: `${getRsvpAppUrl()}/RSVP/ticket/${tickets[0].qr_token}` },
+          ticketToken: tickets[0].qr_token,
         })
       }
       return NextResponse.json({ free: true, order, tickets })
