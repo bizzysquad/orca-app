@@ -4,8 +4,17 @@ import { getRsvpAdmin } from '@/lib/rsvp/db'
 import { issueTickets } from '@/lib/rsvp/tickets'
 import { sendTemplatedEmail } from '@/lib/rsvp/email'
 import { getRsvpAppUrl } from '@/lib/rsvp/url'
+import { loadSite, recordStripePayment } from '@/lib/crooked/db'
+import { notifyPayment } from '@/lib/crooked/notify'
 
 export const dynamic = 'force-dynamic'
+
+async function handleCrookedRumorsPayment(session: any, origin: string) {
+  const result = await recordStripePayment(session)
+  if (!result?.isNew) return
+  const { site } = await loadSite()
+  await notifyPayment(result.booking, site.settings, session.amount_total || 0, `${origin}/crookedrumors/booking/${result.booking.token}`)
+}
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY?.trim()
@@ -43,6 +52,13 @@ export async function POST(req: NextRequest) {
         // Stripe.Checkout.Session type isn't exported by the installed stripe
         // package version's types (same pre-existing gap as bizzyplug/checkout.ts).
         const session = event.data.object as any
+
+        // Crooked Rumors bookings share this Stripe account + webhook endpoint.
+        if (session.metadata?.source === 'crookedrumors') {
+          await handleCrookedRumorsPayment(session, req.nextUrl.origin)
+          break
+        }
+
         const orderId = session.metadata?.orderId
         if (!orderId) break
 

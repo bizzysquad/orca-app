@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { STAFF_SESSION_COOKIE, verifyStaffSession } from '@/lib/rsvp/session'
+import { CR_ADMIN_COOKIE, verifyCrAdmin } from '@/lib/crooked/session'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -13,6 +14,12 @@ export async function middleware(request: NextRequest) {
     const rest = rsvpCasingMatch[1] || ''
     const correctedUrl = new URL(`/RSVP${rest}${request.nextUrl.search}`, request.url)
     return NextResponse.redirect(correctedUrl)
+  }
+
+  // Same idea for Crooked Rumors: /CrookedRumors, /crooked-rumors, etc.
+  const crMatch = pathname.match(/^\/crooked-?rumors?(\/.*)?$/i)
+  if (crMatch && !pathname.startsWith('/crookedrumors')) {
+    return NextResponse.redirect(new URL(`/crookedrumors${crMatch[1] || ''}${request.nextUrl.search}`, request.url))
   }
 
   // Skip middleware entirely for static assets and API routes
@@ -44,12 +51,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Crooked Rumors admin has its own password session (see lib/crooked/session.ts).
+  if (pathname.startsWith('/crookedrumors/admin') && pathname !== '/crookedrumors/admin/login') {
+    const ok = await verifyCrAdmin(request.cookies.get(CR_ADMIN_COOKIE)?.value)
+    if (!ok) return NextResponse.redirect(new URL('/crookedrumors/admin/login', request.url))
+    return NextResponse.next()
+  }
+
   // Public pages — always accessible without auth
   const isPublicPage =
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/maskoffdadj') ||
     pathname.startsWith('/bizzyplug') ||
-    pathname.startsWith('/RSVP')
+    pathname.startsWith('/RSVP') ||
+    pathname.startsWith('/crookedrumors')
   if (isPublicPage) {
     return NextResponse.next()
   }

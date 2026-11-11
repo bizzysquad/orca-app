@@ -1,0 +1,126 @@
+/* Crooked Rumors brand system — pulled from the logos:
+   stamp red, ink black, aged cream paper. Scoped under .cr-root so nothing
+   leaks into the ORCA app. */
+
+.cr-root {
+  --cr-red: #c4161c;
+  --cr-red-deep: #8f0f14;
+  --cr-ink: #141210;
+  --cr-ink-soft: #2a2520;
+  --cr-cream: #f3e7cf;
+  --cr-paper: #fff9ee;
+  --cr-tan: #e5d6b8;
+  --cr-muted: #6f6253;
+  min-height: 100vh;
+  background: var(--cr-cream);
+  color: var(--cr-ink);
+  font-family: var(--cr-font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+.cr-root ::selection { background: var(--cr-red); color: var(--cr-paper); }
+
+.cr-display {
+  font-family: var(--cr-font-display), Impact, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 0.92;
+}
+.cr-serif { font-family: var(--cr-font-serif), Georgia, serif; }
+.cr-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* paper grain */
+.cr-grain { position: relative; isolation: isolate; }
+.cr-grain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.25 0 0 0 0 0.15 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.cr-dark.cr-grain::before { opacity: 0.18; mix-blend-mode: screen; }
+
+/* buttons */
+.cr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 22px;
+  border: 3px solid var(--cr-ink);
+  border-radius: 10px;
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.15s ease;
+  box-shadow: 4px 4px 0 var(--cr-ink);
+  cursor: pointer;
+  user-select: none;
+}
+.cr-btn:hover { transform: translate(-1px, -1px); box-shadow: 6px 6px 0 var(--cr-ink); }
+.cr-btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--cr-ink); }
+.cr-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.cr-btn-red { background: var(--cr-red); color: var(--cr-paper); }
+.cr-btn-ink { background: var(--cr-ink); color: var(--cr-paper); }
+.cr-btn-paper { background: var(--cr-paper); color: var(--cr-ink); }
+.cr-btn-sm { padding: 9px 14px; font-size: 13px; box-shadow: 3px 3px 0 var(--cr-ink); border-width: 2px; }
+.cr-dark .cr-btn { border-color: var(--cr-paper); box-shadow: 4px 4px 0 var(--cr-red); }
+
+/* cards */
+.cr-card {
+  background: var(--cr-paper);
+  border: 3px solid var(--cr-ink);
+  border-radius: 16px;
+  box-shadow: 6px 6px 0 var(--cr-ink);
+}
+.cr-card-flat { background: var(--cr-paper); border: 2px solid var(--cr-ink); border-radius: 12px; }
+
+/* form fields */
+.cr-input {
+  width: 100%;
+  background: var(--cr-paper);
+  border: 2px solid var(--cr-ink);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 16px; /* 16px stops iOS zoom on focus */
+  color: var(--cr-ink);
+  outline: none;
+  transition: box-shadow 0.12s ease;
+}
+.cr-input:focus { box-shadow: 3px 3px 0 var(--cr-red); }
+.cr-input::placeholder { color: #a0927e; }
+
+/* rubber stamp */
+.cr-stamp {
+  display: inline-block;
+  border: 3px solid currentColor;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transform: rotate(-4deg);
+}
+
+/* ticker */
+.cr-marquee { display: flex; width: max-content; animation: cr-marquee 32s linear infinite; }
+@keyframes cr-marquee { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .cr-marquee { animation: none; } }
+
+.cr-wobble { animation: cr-wobble 6s ease-in-out infinite; }
+@keyframes cr-wobble { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(-2deg); } }
+@media (prefers-reduced-motion: reduce) { .cr-wobble { animation: none; } }
+
+.cr-scroll-x { scrollbar-width: none; }
+.cr-scroll-x::-webkit-scrollbar { display: none; }
+
+.cr-root a:focus-visible,
+.cr-root button:focus-visible { outline: 3px solid var(--cr-red); outline-offset: 2px; }
