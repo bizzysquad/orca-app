@@ -121,7 +121,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await notifyNewBooking(booking as Booking, site.settings, bookingUrl)
+    // Bookings that need payment get their confirmation from notifyPayment
+    // once Stripe confirms the charge. Only quotes and $0 bookings email now.
+    if (kind === 'custom' || booking.total_cents <= 0) {
+      await notifyNewBooking(booking as Booking, site.settings, bookingUrl)
+    }
 
     return NextResponse.json({ ok: true, token: booking.token, ref: booking.ref, checkoutUrl, paymentError })
   } catch (err: any) {

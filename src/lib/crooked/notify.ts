@@ -62,9 +62,7 @@ export async function notifyNewBooking(b: Booking, settings: SiteSettings, booki
         `Hey ${esc(b.client_name.split(' ')[0])}, thanks for reaching out. ${
           isQuote
             ? 'We will look over your project and send a custom quote. You can check the status any time.'
-            : b.amount_paid_cents > 0
-              ? 'Your payment went through and your spot is locked in.'
-              : 'Your booking is saved. Complete payment to lock in your date.'
+            : 'Your booking is confirmed.'
         } ${esc(settings.bookingSuccessNote)}${summary(b)}`,
         { text: 'View your booking', url: bookingUrl }
       ),
@@ -84,7 +82,39 @@ export async function notifyNewBooking(b: Booking, settings: SiteSettings, booki
   ])
 }
 
+// First payment on a booking = the booking confirmation (nothing is emailed
+// at checkout start). Later payments (balance, quoted price) = receipts.
 export async function notifyPayment(b: Booking, settings: SiteSettings, amountCents: number, bookingUrl: string) {
+  const firstPayment = b.amount_paid_cents <= amountCents
+  if (firstPayment && b.kind === 'package') {
+    const paidInFull = b.amount_paid_cents >= b.total_cents
+    await Promise.all([
+      send(
+        b.client_email,
+        `Booking confirmed: ${b.ref}`,
+        wrap(
+          'Booking confirmed',
+          `Hey ${esc(b.client_name.split(' ')[0])}, your payment of ${formatMoney(amountCents, { always2: true })} went through and your shoot is locked in. ${
+            paidInFull ? 'You are paid in full.' : `Remaining balance of ${formatMoney(b.total_cents - b.amount_paid_cents)} is due before delivery.`
+          } ${esc(settings.bookingSuccessNote)}${summary(b)}`,
+          { text: 'View your booking', url: bookingUrl }
+        ),
+        settings.contactEmail || undefined
+      ),
+      send(
+        settings.notifyEmail,
+        `New booking (paid ${formatMoney(amountCents)}): ${b.client_name} (${b.ref})`,
+        wrap(
+          'New paid booking',
+          `${esc(b.client_name)} · ${esc(b.client_email)}${b.client_phone ? ' · ' + esc(b.client_phone) : ''}${summary(b)}${
+            b.details ? `<p style="margin-top:14px;white-space:pre-wrap;">${esc(b.details)}</p>` : ''
+          }`
+        ),
+        b.client_email
+      ),
+    ])
+    return
+  }
   await Promise.all([
     send(
       b.client_email,
