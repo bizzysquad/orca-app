@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
           booking = result.booking
           if (result.isNew) {
             const { site } = await loadSite()
-            await notifyPayment(booking, site.settings, session.amount_total || 0, `${req.nextUrl.origin}/crookedrumors/booking/${booking.token}`)
+            await notifyPayment(booking, site.settings, session.amount_total || 0, `${req.nextUrl.origin}/crookedrumor/booking/${booking.token}`)
           }
         }
       }

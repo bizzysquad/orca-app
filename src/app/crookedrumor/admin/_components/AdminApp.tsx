@@ -32,7 +32,7 @@ export default function AdminApp() {
 
   const load = useCallback(async () => {
     const res = await fetch('/api/crookedrumors/admin/site', { cache: 'no-store' })
-    if (res.status === 401) { window.location.href = '/crookedrumors/admin/login'; return }
+    if (res.status === 401) { window.location.href = '/crookedrumor/admin/login'; return }
     const data = await res.json()
     setDocState(data.site)
     setMeta({ stored: data.stored, dbReady: data.dbReady, updatedAt: data.updatedAt })
@@ -85,7 +85,7 @@ export default function AdminApp() {
   async function logout() {
     if (dirty && !confirm('You have unsaved changes. Log out anyway?')) return
     await fetch('/api/crookedrumors/admin/login', { method: 'DELETE' })
-    window.location.href = '/crookedrumors/admin/login'
+    window.location.href = '/crookedrumor/admin/login'
   }
 
   const siteTab = tab !== 'bookings'
@@ -100,7 +100,7 @@ export default function AdminApp() {
             <span className="cr-display text-lg truncate">CR Admin</span>
           </div>
           <div className="flex items-center gap-2">
-            <a href="/crookedrumors" target="_blank" className="hidden sm:inline-flex items-center gap-1.5 text-sm font-bold opacity-80 hover:opacity-100">View site <ExternalLink size={14} /></a>
+            <a href="/crookedrumor" target="_blank" className="hidden sm:inline-flex items-center gap-1.5 text-sm font-bold opacity-80 hover:opacity-100">View site <ExternalLink size={14} /></a>
             <button onClick={logout} className="p-2 opacity-80 hover:opacity-100" aria-label="Log out" title="Log out"><LogOut size={18} /></button>
           </div>
         </div>

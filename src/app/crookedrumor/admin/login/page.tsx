@@ -18,7 +18,7 @@ export default function CrAdminLogin() {
       body: JSON.stringify({ password }),
     })
     if (res.ok) {
-      window.location.href = '/crookedrumors/admin'
+      window.location.href = '/crookedrumor/admin'
       return
     }
     const data = await res.json().catch(() => ({}))

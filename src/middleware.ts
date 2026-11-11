@@ -16,10 +16,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(correctedUrl)
   }
 
-  // Same idea for Crooked Rumors: /CrookedRumors, /crooked-rumors, etc.
+  // Same idea for Crooked Rumors: the canonical path is /crookedrumor. Old
+  // /crookedrumors links (early emails, Stripe returns) and any casing or
+  // dash variant redirect to it. Files (logos under /crookedrumors/*.webp)
+  // are left alone.
   const crMatch = pathname.match(/^\/crooked-?rumors?(\/.*)?$/i)
-  if (crMatch && !pathname.startsWith('/crookedrumors')) {
-    return NextResponse.redirect(new URL(`/crookedrumors${crMatch[1] || ''}${request.nextUrl.search}`, request.url))
+  if (crMatch && !/^\/crookedrumor(\/|$)/.test(pathname) && !pathname.includes('.')) {
+    return NextResponse.redirect(new URL(`/crookedrumor${crMatch[1] || ''}${request.nextUrl.search}`, request.url))
   }
 
   // Skip middleware entirely for static assets and API routes
@@ -52,9 +55,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // Crooked Rumors admin has its own password session (see lib/crooked/session.ts).
-  if (pathname.startsWith('/crookedrumors/admin') && pathname !== '/crookedrumors/admin/login') {
+  if (pathname.startsWith('/crookedrumor/admin') && pathname !== '/crookedrumor/admin/login') {
     const ok = await verifyCrAdmin(request.cookies.get(CR_ADMIN_COOKIE)?.value)
-    if (!ok) return NextResponse.redirect(new URL('/crookedrumors/admin/login', request.url))
+    if (!ok) return NextResponse.redirect(new URL('/crookedrumor/admin/login', request.url))
     return NextResponse.next()
   }
 
@@ -64,7 +67,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/maskoffdadj') ||
     pathname.startsWith('/bizzyplug') ||
     pathname.startsWith('/RSVP') ||
-    pathname.startsWith('/crookedrumors')
+    pathname.startsWith('/crookedrumor')
   if (isPublicPage) {
     return NextResponse.next()
   }

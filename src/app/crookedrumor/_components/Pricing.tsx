@@ -140,7 +140,7 @@ function PackageCard({ p }: { p: Package }) {
       )}
 
       <div className="mt-auto pt-6">
-        <Link href={`/crookedrumors/book?package=${encodeURIComponent(p.id)}`} className={`cr-btn w-full ${hot ? 'cr-btn-red' : 'cr-btn-ink'}`}>
+        <Link href={`/crookedrumor/book?package=${encodeURIComponent(p.id)}`} className={`cr-btn w-full ${hot ? 'cr-btn-red' : 'cr-btn-ink'}`}>
           Book {p.name.replace(/^the\s+/i, '')} <ArrowRight size={18} strokeWidth={3} />
         </Link>
       </div>

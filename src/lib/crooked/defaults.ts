@@ -2,7 +2,7 @@ import type { Addon, Category, Package, PackageSpecs, SiteDoc } from './types'
 
 // Starter content. Used to seed cr_site the first time the admin saves, and
 // as the public fallback while the database hasn't been set up yet.
-// Everything here is editable from /crookedrumors/admin.
+// Everything here is editable from /crookedrumor/admin.
 
 const specs = (s: PackageSpecs): PackageSpecs => s
 

@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     if (error || !booking) throw new Error(error?.message || 'Could not save booking')
 
     const origin = req.nextUrl.origin
-    const bookingUrl = `${origin}/crookedrumors/booking/${booking.token}`
+    const bookingUrl = `${origin}/crookedrumor/booking/${booking.token}`
 
     let checkoutUrl: string | null = null
     let paymentError: string | null = null

@@ -13,7 +13,7 @@ async function handleCrookedRumorsPayment(session: any, origin: string) {
   const result = await recordStripePayment(session)
   if (!result?.isNew) return
   const { site } = await loadSite()
-  await notifyPayment(result.booking, site.settings, session.amount_total || 0, `${origin}/crookedrumors/booking/${result.booking.token}`)
+  await notifyPayment(result.booking, site.settings, session.amount_total || 0, `${origin}/crookedrumor/booking/${result.booking.token}`)
 }
 
 function getStripe() {

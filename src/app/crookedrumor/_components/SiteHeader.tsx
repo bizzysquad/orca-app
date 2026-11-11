@@ -5,10 +5,10 @@ import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
 
 const LINKS = [
-  { href: '/crookedrumors#work', label: 'Work' },
-  { href: '/crookedrumors#pricing', label: 'Pricing' },
-  { href: '/crookedrumors#process', label: 'How it works' },
-  { href: '/crookedrumors#faq', label: 'FAQ' },
+  { href: '/crookedrumor#work', label: 'Work' },
+  { href: '/crookedrumor#pricing', label: 'Pricing' },
+  { href: '/crookedrumor#process', label: 'How it works' },
+  { href: '/crookedrumor#faq', label: 'FAQ' },
 ]
 
 export default function SiteHeader({ wordmarkUrl, announcement }: { wordmarkUrl: string; announcement?: string }) {
@@ -25,7 +25,7 @@ export default function SiteHeader({ wordmarkUrl, announcement }: { wordmarkUrl:
       ) : null}
       <header className="sticky top-0 z-40 bg-[var(--cr-cream)]/95 backdrop-blur border-b-[3px] border-[var(--cr-ink)]">
         <div className="mx-auto max-w-6xl px-4 h-16 md:h-[72px] flex items-center justify-between gap-4">
-          <Link href="/crookedrumors" className="shrink-0" aria-label="Crooked Rumors home">
+          <Link href="/crookedrumor" className="shrink-0" aria-label="Crooked Rumors home">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={wordmarkUrl} alt="Crooked Rumors" className="h-7 md:h-9 w-auto mix-blend-multiply" />
           </Link>
@@ -35,10 +35,10 @@ export default function SiteHeader({ wordmarkUrl, announcement }: { wordmarkUrl:
                 {l.label}
               </a>
             ))}
-            <Link href="/crookedrumors/book" className="cr-btn cr-btn-red cr-btn-sm">Book now</Link>
+            <Link href="/crookedrumor/book" className="cr-btn cr-btn-red cr-btn-sm">Book now</Link>
           </nav>
           <div className="flex md:hidden items-center gap-2">
-            <Link href="/crookedrumors/book" className="cr-btn cr-btn-red cr-btn-sm">Book</Link>
+            <Link href="/crookedrumor/book" className="cr-btn cr-btn-red cr-btn-sm">Book</Link>
             <button onClick={() => setOpen(true)} aria-label="Open menu" className="p-2 -mr-2"><Menu size={26} strokeWidth={2.5} /></button>
           </div>
         </div>
@@ -57,7 +57,7 @@ export default function SiteHeader({ wordmarkUrl, announcement }: { wordmarkUrl:
             ))}
           </nav>
           <div className="mt-auto p-6">
-            <Link href="/crookedrumors/book" onClick={() => setOpen(false)} className="cr-btn cr-btn-red w-full !border-[var(--cr-paper)]">Book a shoot</Link>
+            <Link href="/crookedrumor/book" onClick={() => setOpen(false)} className="cr-btn cr-btn-red w-full !border-[var(--cr-paper)]">Book a shoot</Link>
           </div>
         </div>
       )}

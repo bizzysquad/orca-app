@@ -144,7 +144,7 @@ function BookingRow({
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const balance = Math.max(0, b.total_cents - b.amount_paid_cents)
-  const link = typeof window !== 'undefined' ? `${window.location.origin}/crookedrumors/booking/${b.token}` : ''
+  const link = typeof window !== 'undefined' ? `${window.location.origin}/crookedrumor/booking/${b.token}` : ''
 
   useEffect(() => {
     setNotes(b.admin_notes); setTotal(b.total_cents); setDeposit(b.deposit_cents)

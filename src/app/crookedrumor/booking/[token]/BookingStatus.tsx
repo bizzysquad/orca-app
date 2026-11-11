@@ -68,7 +68,7 @@ export default function BookingStatus({ token, successNote, contactEmail }: { to
         <div className="cr-card p-8 max-w-md text-center">
           <h1 className="cr-display text-4xl">Booking not found</h1>
           <p className="mt-3">Double check the link from your email.</p>
-          <Link href="/crookedrumors" className="cr-btn cr-btn-ink mt-6">Back home</Link>
+          <Link href="/crookedrumor" className="cr-btn cr-btn-ink mt-6">Back home</Link>
         </div>
       </main>
     )

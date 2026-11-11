@@ -47,8 +47,8 @@ export async function createBookingCheckout(b: Booking, kind: PayKind, origin: s
     ],
     payment_intent_data: { description: `Crooked Rumors ${b.ref} (${KIND_LABEL[kind]})` },
     metadata: { source: 'crookedrumors', bookingId: b.id, ref: b.ref, kind },
-    success_url: `${origin}/crookedrumors/booking/${b.token}?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/crookedrumors/booking/${b.token}?canceled=1`,
+    success_url: `${origin}/crookedrumor/booking/${b.token}?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/crookedrumor/booking/${b.token}?canceled=1`,
   })
   if (!session.url) throw new Error('Could not start checkout')
   return session.url

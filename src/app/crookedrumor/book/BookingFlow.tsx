@@ -110,7 +110,7 @@ export default function BookingFlow({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Something went wrong')
       if (data.checkoutUrl) window.location.href = data.checkoutUrl
-      else window.location.href = `/crookedrumors/booking/${data.token}${data.paymentError ? '?canceled=1' : ''}`
+      else window.location.href = `/crookedrumor/booking/${data.token}${data.paymentError ? '?canceled=1' : ''}`
     } catch (err: any) {
       setError(err.message)
       setBusy(false)

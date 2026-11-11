@@ -32,7 +32,7 @@ export default async function CrookedRumorsHome() {
             </h1>
             <p className="mt-6 max-w-xl text-lg md:text-xl leading-relaxed text-[var(--cr-ink-soft)]">{s.heroSub}</p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
-              <Link href="/crookedrumors/book" className="cr-btn cr-btn-red text-base">
+              <Link href="/crookedrumor/book" className="cr-btn cr-btn-red text-base">
                 Book a shoot <ArrowRight size={18} strokeWidth={3} />
               </Link>
               <a href="#pricing" className="cr-btn cr-btn-paper text-base">See pricing</a>
@@ -100,7 +100,7 @@ export default async function CrookedRumorsHome() {
             <h2 className="cr-display text-4xl md:text-6xl">{s.customQuoteTitle}</h2>
             <p className="mt-3 text-lg max-w-2xl text-[var(--cr-paper)]/90">{s.customQuoteBody}</p>
           </div>
-          <Link href="/crookedrumors/book?custom=1" className="cr-btn cr-btn-ink shrink-0 !border-[var(--cr-ink)] text-base">
+          <Link href="/crookedrumor/book?custom=1" className="cr-btn cr-btn-ink shrink-0 !border-[var(--cr-ink)] text-base">
             Get a custom quote <ArrowRight size={18} strokeWidth={3} />
           </Link>
         </div>
@@ -164,8 +164,8 @@ export default async function CrookedRumorsHome() {
             <div className="cr-display text-4xl md:text-6xl">Got a project?</div>
             <p className="mt-3 text-[var(--cr-paper)]/70 text-lg">Lock in your date in a couple minutes.</p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/crookedrumors/book" className="cr-btn cr-btn-red">Book a shoot</Link>
-              <Link href="/crookedrumors/book?custom=1" className="cr-btn cr-btn-paper !text-[var(--cr-ink)]">Custom quote</Link>
+              <Link href="/crookedrumor/book" className="cr-btn cr-btn-red">Book a shoot</Link>
+              <Link href="/crookedrumor/book?custom=1" className="cr-btn cr-btn-paper !text-[var(--cr-ink)]">Custom quote</Link>
             </div>
           </div>
           <div className="flex flex-col gap-3 text-sm font-semibold">
