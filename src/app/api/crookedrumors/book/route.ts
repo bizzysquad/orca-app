@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         category_name: site.categories.find(x => x.id === quote.pkg.categoryId)?.name || null,
         promo_code: quote.promo?.code || null,
         payment_choice: quote.paymentChoice,
-        turnaround: rush ? '24 hour rush (subject to availability)' : quote.pkg.specs.turnaround,
+        turnaround: rush ? '24 hour rush (subject to availability)' : quote.pkg.turnaround,
       }
     }
 

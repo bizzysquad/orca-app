@@ -1,10 +1,25 @@
-import type { Addon, Category, Package, PackageSpecs, SiteDoc } from './types'
+import type { Addon, Category, DetailRow, Package, PackageSpecs, SiteDoc } from './types'
 
 // Starter content. Used to seed cr_site the first time the admin saves, and
 // as the public fallback while the database hasn't been set up yet.
 // Everything here is editable from /crookedrumor/admin.
 
-const specs = (s: PackageSpecs): PackageSpecs => s
+// Labels the old fixed spec fields turn into when converted to detail rows.
+const LEGACY_LABELS: [keyof Omit<PackageSpecs, 'turnaround'>, string][] = [
+  ['filmingTime', 'Filming'],
+  ['locations', 'Locations'],
+  ['setups', 'Setups'],
+  ['videoLength', 'Final length'],
+  ['deliverables', 'You get'],
+  ['revisions', 'Revisions'],
+]
+
+export function fromSpecs(s: Partial<PackageSpecs>): { details: DetailRow[]; turnaround: string } {
+  return {
+    details: LEGACY_LABELS.filter(([k]) => s[k]).map(([k, label]) => ({ id: k, label, value: String(s[k]) })),
+    turnaround: s.turnaround || '',
+  }
+}
 
 const categories: Category[] = [
   {
@@ -60,7 +75,7 @@ const packages: Package[] = [
       'Basic color correction and transitions',
       'One professionally edited reel',
     ],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 20 min',
       locations: '1 location',
       setups: '1 scene / setup',
@@ -85,7 +100,7 @@ const packages: Package[] = [
       'Two different cuts, hooks, or edits',
       'Basic color correction and transitions',
     ],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 30 min',
       locations: '1 location',
       setups: '1 scene / setup',
@@ -110,7 +125,7 @@ const packages: Package[] = [
       'Burned in captions on every reel',
       'Color correction, transitions, and sound cleanup',
     ],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 45 min',
       locations: '1 location',
       setups: 'Up to 2 scenes',
@@ -135,7 +150,7 @@ const packages: Package[] = [
       'Burned in captions and custom reel covers',
       'Color grade, transitions, and sound design',
     ],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 90 min',
       locations: 'Up to 2 locations',
       setups: 'Up to 3 scenes',
@@ -161,7 +176,7 @@ const packages: Package[] = [
       'We find the strongest moments for you',
       'Burned in captions on every clip',
     ],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 60 min (optional)',
       locations: '1 location',
       setups: '1 setup',
@@ -184,7 +199,7 @@ const packages: Package[] = [
     compareAtCents: null,
     badge: '',
     features: ['Two camera angles', 'Lapel mic audio', 'Burned in captions'],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 30 min',
       locations: '1 location',
       setups: '1 setup, 2 angles',
@@ -205,7 +220,7 @@ const packages: Package[] = [
     compareAtCents: null,
     badge: 'Most popular',
     features: ['Two camera angles plus b roll', 'Lower thirds and captions', 'Vertical teaser clip included'],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 60 min',
       locations: '1 location',
       setups: '1 setup, 2 angles + b roll',
@@ -226,7 +241,7 @@ const packages: Package[] = [
     compareAtCents: null,
     badge: '',
     features: ['Up to three camera angles', 'Lighting and dual lapel mics', 'Two short clips cut for social'],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 2 hours',
       locations: '1 location',
       setups: '1 setup, up to 3 angles',
@@ -249,7 +264,7 @@ const packages: Package[] = [
     compareAtCents: null,
     badge: '',
     features: ['Crowd, vibe, and detail shots', 'Music synced edit', 'Vertical format for IG and TikTok'],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 1 hour coverage',
       locations: '1 location',
       setups: 'Roaming coverage',
@@ -270,7 +285,7 @@ const packages: Package[] = [
     compareAtCents: null,
     badge: 'Most popular',
     features: ['Highlight video in widescreen or vertical', 'Teaser reel for promo', 'Color grade and sound design'],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 2 hours coverage',
       locations: '1 location',
       setups: 'Roaming coverage',
@@ -291,7 +306,7 @@ const packages: Package[] = [
     compareAtCents: null,
     badge: '',
     features: ['Coverage across two spaces or stages', 'Extended recap plus three short clips', 'Interviews with guests on request'],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 4 hours coverage',
       locations: 'Up to 2 locations',
       setups: 'Roaming coverage',
@@ -314,7 +329,7 @@ const packages: Package[] = [
     compareAtCents: 26500,
     badge: 'Save $40',
     features: ['Spotlight promo interview', 'Two extra reels from the same session', 'Captions on everything'],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 90 min',
       locations: '1 location',
       setups: 'Up to 2 setups',
@@ -335,7 +350,7 @@ const packages: Package[] = [
     compareAtCents: 37500,
     badge: 'Best value',
     features: ['Two sessions, booked when you want them', 'Six edited reels with captions', 'Custom reel covers for every post'],
-    specs: specs({
+    ...fromSpecs({
       filmingTime: 'Up to 45 min per session',
       locations: '1 location per session',
       setups: 'Up to 2 scenes per session',

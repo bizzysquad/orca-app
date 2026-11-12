@@ -5,6 +5,16 @@
 
 export type PaymentMode = 'deposit' | 'full' | 'choice'
 
+// One line of "What the client gets" on a package card. Fully admin-defined:
+// any label (e.g. "How many songs"), any value, any order.
+export interface DetailRow {
+  id: string
+  label: string
+  value: string
+}
+
+// Legacy fixed spec fields. Older stored docs (and the starter content) use
+// this shape; normalizeSite converts it into DetailRow[] + turnaround.
 export interface PackageSpecs {
   filmingTime: string
   locations: string
@@ -34,7 +44,8 @@ export interface Package {
   compareAtCents: number | null
   badge: string
   features: string[]
-  specs: PackageSpecs
+  details: DetailRow[]
+  turnaround: string // kept separate: booking summary, emails, and the client page use it
   hidden: boolean
 }
 

@@ -1,21 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Plus } from 'lucide-react'
-import type { Category, Package, SiteDoc } from '@/lib/crooked/types'
+import { ArrowDown, ArrowUp, ChevronDown, CopyPlus, Plus, X } from 'lucide-react'
+import type { Category, DetailRow, Package, SiteDoc } from '@/lib/crooked/types'
 import { formatMoney } from '@/lib/crooked/pricing'
 import type { SetDoc } from './AdminApp'
-import { Field, Money, Panel, RowActions, StringList, Text, Toggle, move, newId } from './ui'
+import { Field, Money, Panel, RowActions, StringList, Text, move, newId } from './ui'
 
-const SPEC_FIELDS: { key: keyof Package['specs']; label: string; placeholder: string }[] = [
-  { key: 'filmingTime', label: 'Filming time', placeholder: 'Up to 20 min' },
-  { key: 'locations', label: 'Locations', placeholder: '1 location' },
-  { key: 'setups', label: 'Setups / scenes', placeholder: '1 scene / setup' },
-  { key: 'videoLength', label: 'Final video length', placeholder: 'Up to 60 sec' },
-  { key: 'deliverables', label: 'Deliverables', placeholder: '1 edited reel' },
-  { key: 'revisions', label: 'Revisions', placeholder: '1 revision' },
-  { key: 'turnaround', label: 'Turnaround', placeholder: '3 to 5 business days' },
-]
+// Rows a brand new package starts with. Empty values stay hidden on the site.
+const STARTER_LABELS = ['Filming', 'Locations', 'Setups', 'Final length', 'You get', 'Revisions']
 
 // Move a package up/down among packages of the same category only.
 function moveInCategory(pkgs: Package[], id: string, dir: -1 | 1): Package[] {
@@ -35,6 +28,27 @@ export default function PackagesTab({ doc, setDoc }: { doc: SiteDoc; setDoc: Set
   const updCat = (id: string, patch: Partial<Category>) => setDoc(d => ({ ...d, categories: d.categories.map(c => (c.id === id ? { ...c, ...patch } : c)) }))
   const updPkg = (id: string, patch: Partial<Package>) => setDoc(d => ({ ...d, packages: d.packages.map(p => (p.id === id ? { ...p, ...patch } : p)) }))
 
+  // Every label used on any package, for the label box suggestions.
+  const allLabels = Array.from(new Set(doc.packages.flatMap(p => p.details.map(r => r.label.trim())).filter(Boolean))).sort()
+
+  // Adds the row's label (value left blank) to every other package in the
+  // same category that doesn't already have it. Blank values stay hidden on
+  // the site until filled in.
+  function addRowToCategory(source: Package, row: DetailRow) {
+    const label = row.label.trim()
+    if (!label) return alert('Give the detail a label first.')
+    const targets = doc.packages.filter(
+      x => x.categoryId === source.categoryId && x.id !== source.id && !x.details.some(r => r.label.trim().toLowerCase() === label.toLowerCase())
+    )
+    if (!targets.length) return alert(`Every package in this category already has "${label}".`)
+    const ids = new Set(targets.map(t => t.id))
+    setDoc(d => ({
+      ...d,
+      packages: d.packages.map(x => (ids.has(x.id) ? { ...x, details: [...x.details, { id: newId('row'), label, value: '' }] } : x)),
+    }))
+    alert(`Added "${label}" to ${targets.length} other package${targets.length > 1 ? 's' : ''}. Open each one to fill in its value.`)
+  }
+
   function addCategory() {
     const id = newId('cat')
     setDoc(d => ({ ...d, categories: [...d.categories, { id, slug: id, name: 'New service', tagline: '', description: '', hidden: true }] }))
@@ -45,7 +59,8 @@ export default function PackagesTab({ doc, setDoc }: { doc: SiteDoc; setDoc: Set
     const id = newId('pkg')
     const blank: Package = {
       id, categoryId, name: 'New package', tagline: '', summary: '', priceCents: 0, compareAtCents: null, badge: '', features: [],
-      specs: { filmingTime: '', locations: '', setups: '', videoLength: '', deliverables: '', revisions: '', turnaround: '' },
+      details: STARTER_LABELS.map(label => ({ id: newId('row'), label, value: '' })),
+      turnaround: '',
       hidden: true,
     }
     setDoc(d => ({ ...d, packages: [...d.packages, blank] }))
@@ -119,7 +134,7 @@ export default function PackagesTab({ doc, setDoc }: { doc: SiteDoc; setDoc: Set
                       onMove={dir => setDoc(d => ({ ...d, packages: moveInCategory(d.packages, p.id, dir) }))}
                       onToggleHidden={() => updPkg(p.id, { hidden: !p.hidden })}
                       onDuplicate={() => {
-                        const copy = { ...p, id: newId('pkg'), name: `${p.name} copy`, hidden: true, features: [...p.features], specs: { ...p.specs } }
+                        const copy = { ...p, id: newId('pkg'), name: `${p.name} copy`, hidden: true, features: [...p.features], details: p.details.map(r => ({ ...r, id: newId('row') })) }
                         setDoc(d => {
                           const idx = d.packages.findIndex(x => x.id === p.id)
                           const next = [...d.packages]
@@ -145,14 +160,14 @@ export default function PackagesTab({ doc, setDoc }: { doc: SiteDoc; setDoc: Set
                         </select>
                       </Field>
                       <Field label="Short description" className="md:col-span-2"><Text area rows={2} value={p.summary} onChange={v => updPkg(p.id, { summary: v })} /></Field>
-                      <div className="md:col-span-2 grid sm:grid-cols-2 lg:grid-cols-4 gap-3 rounded-xl bg-[var(--cr-tan)]/40 p-3">
-                        <div className="sm:col-span-2 lg:col-span-4 cr-label">What the client gets</div>
-                        {SPEC_FIELDS.map(f => (
-                          <Field key={f.key} label={f.label}>
-                            <Text value={p.specs[f.key]} placeholder={f.placeholder} onChange={v => updPkg(p.id, { specs: { ...p.specs, [f.key]: v } })} />
-                          </Field>
-                        ))}
-                      </div>
+                      <DetailsEditor
+                        pkg={p}
+                        categoryName={c.name}
+                        labelSuggestions={allLabels}
+                        onChange={details => updPkg(p.id, { details })}
+                        onTurnaround={v => updPkg(p.id, { turnaround: v })}
+                        onAddToCategory={row => addRowToCategory(p, row)}
+                      />
                       <Field label="Extra bullet points" className="md:col-span-2">
                         <StringList items={p.features} onChange={v => updPkg(p.id, { features: v })} placeholder="e.g. Basic color correction and transitions" addLabel="Add bullet" />
                       </Field>
@@ -171,6 +186,62 @@ export default function PackagesTab({ doc, setDoc }: { doc: SiteDoc; setDoc: Set
       <Panel title="Tip">
         <p className="text-sm">Bundle deals are just packages: put them in the Bundles category with a <b>Was price</b> and a badge like <i>Save $40</i>. Time limited discounts live under <b>Promos</b>.</p>
       </Panel>
+    </div>
+  )
+}
+
+// "What the client gets": free-form label/value rows the admin fully controls
+// (rename, reword, reorder, delete, add new ones like "How many songs").
+function DetailsEditor({
+  pkg, categoryName, labelSuggestions, onChange, onTurnaround, onAddToCategory,
+}: {
+  pkg: Package
+  categoryName: string
+  labelSuggestions: string[]
+  onChange: (rows: DetailRow[]) => void
+  onTurnaround: (v: string) => void
+  onAddToCategory: (row: DetailRow) => void
+}) {
+  const rows = pkg.details
+  const listId = `labels-${pkg.id}`
+  const set = (i: number, patch: Partial<DetailRow>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const btn = 'w-8 h-8 shrink-0 rounded-md border-2 border-[var(--cr-ink)] bg-[var(--cr-paper)] flex items-center justify-center disabled:opacity-30 hover:bg-[var(--cr-tan)]'
+
+  return (
+    <div className="md:col-span-2 rounded-xl bg-[var(--cr-tan)]/40 p-3 space-y-3">
+      <div>
+        <div className="cr-label">What the client gets</div>
+        <p className="text-xs text-[var(--cr-muted)] mt-1">Name each detail anything you want. Rows with an empty value are hidden on the site.</p>
+      </div>
+      <datalist id={listId}>{labelSuggestions.map(l => <option key={l} value={l} />)}</datalist>
+
+      <div className="hidden sm:grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] gap-2 text-[11px] font-black uppercase tracking-[0.1em] px-0.5">
+        <span>Label</span><span>What they get</span><span className="w-[148px]" />
+      </div>
+
+      {rows.map((r, i) => (
+        <div key={r.id} className="grid sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] gap-2 items-center rounded-lg sm:rounded-none bg-[var(--cr-paper)] sm:bg-transparent p-2 sm:p-0 border-2 sm:border-0 border-[var(--cr-ink)]/20">
+          <input className="cr-input !text-[15px] !py-2" list={listId} value={r.label} placeholder="Label, e.g. How many songs" onChange={e => set(i, { label: e.target.value })} aria-label="Detail label" />
+          <input className="cr-input !text-[15px] !py-2" value={r.value} placeholder="e.g. Up to 2 songs" onChange={e => set(i, { value: e.target.value })} aria-label="Detail value" />
+          <div className="flex gap-1.5 justify-end">
+            <button type="button" className={btn} disabled={i === 0} onClick={() => onChange(move(rows, i, -1))} title="Move up" aria-label="Move up"><ArrowUp size={14} /></button>
+            <button type="button" className={btn} disabled={i === rows.length - 1} onClick={() => onChange(move(rows, i, 1))} title="Move down" aria-label="Move down"><ArrowDown size={14} /></button>
+            <button type="button" className={btn} onClick={() => onAddToCategory(r)} title={`Add this detail to every package in ${categoryName}`} aria-label={`Add to all packages in ${categoryName}`}><CopyPlus size={14} /></button>
+            <button type="button" className={`${btn} hover:!bg-[var(--cr-red)] hover:text-[var(--cr-paper)]`} onClick={() => onChange(rows.filter((_, j) => j !== i))} title="Remove" aria-label="Remove detail"><X size={14} /></button>
+          </div>
+        </div>
+      ))}
+
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <button type="button" onClick={() => onChange([...rows, { id: newId('row'), label: '', value: '' }])} className="inline-flex items-center gap-1 text-sm font-black uppercase text-[var(--cr-red)]">
+          <Plus size={16} strokeWidth={3} /> Add detail
+        </button>
+        <span className="text-xs text-[var(--cr-muted)] inline-flex items-center gap-1"><CopyPlus size={12} /> copies that label to every {categoryName} package</span>
+      </div>
+
+      <Field label="Turnaround" hint={'Shown in the black "Delivered in" bar, the booking summary, and emails'}>
+        <Text value={pkg.turnaround} placeholder="3 to 5 business days" onChange={onTurnaround} />
+      </Field>
     </div>
   )
 }

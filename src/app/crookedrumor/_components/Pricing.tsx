@@ -2,18 +2,30 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Check, Clock, MapPin, Layers, Film, Package as Box, RotateCcw, Timer, ArrowRight } from 'lucide-react'
+import {
+  Check, Clock, MapPin, Layers, Film, Package as Box, RotateCcw, Timer, ArrowRight,
+  Music, Mic, Camera, Users, MessageSquare, Image as ImageIcon, Captions, Sparkles,
+} from 'lucide-react'
 import type { PublicSiteDoc, Package } from '@/lib/crooked/types'
 import { addonPriceLabel, addonsFor, formatMoney } from '@/lib/crooked/pricing'
 
-const SPEC_ROWS: { key: keyof Package['specs']; label: string; icon: typeof Clock }[] = [
-  { key: 'filmingTime', label: 'Filming', icon: Clock },
-  { key: 'locations', label: 'Locations', icon: MapPin },
-  { key: 'setups', label: 'Setups', icon: Layers },
-  { key: 'videoLength', label: 'Final length', icon: Film },
-  { key: 'deliverables', label: 'You get', icon: Box },
-  { key: 'revisions', label: 'Revisions', icon: RotateCcw },
+// Detail labels are free text, so pick an icon from keywords in the label.
+const ICON_RULES: [RegExp, typeof Clock][] = [
+  [/song|music|track|beat/i, Music],
+  [/question|interview/i, MessageSquare],
+  [/caption|subtitle/i, Captions],
+  [/mic|audio|sound/i, Mic],
+  [/camera|angle/i, Camera],
+  [/guest|people|person|talent|artist/i, Users],
+  [/photo|thumbnail|cover|still/i, ImageIcon],
+  [/revision|edit round/i, RotateCcw],
+  [/locat|venue|place|spot/i, MapPin],
+  [/setup|scene|outfit|look/i, Layers],
+  [/length|duration|runtime|second|minute long/i, Film],
+  [/film|shoot|time|hour|coverage/i, Clock],
+  [/get|deliver|clip|reel|video|edit/i, Box],
 ]
+const iconFor = (label: string) => ICON_RULES.find(([re]) => re.test(label))?.[1] || Sparkles
 
 export default function Pricing({ site }: { site: PublicSiteDoc }) {
   const cats = site.categories.filter(c => site.packages.some(p => p.categoryId === c.id))
@@ -113,19 +125,22 @@ function PackageCard({ p }: { p: Package }) {
       {p.summary ? <p className="mt-3 text-[15px] leading-relaxed text-[var(--cr-ink-soft)]">{p.summary}</p> : null}
 
       <dl className="mt-5 grid grid-cols-2 gap-x-3 gap-y-3 border-t-2 border-[var(--cr-tan)] pt-5">
-        {SPEC_ROWS.filter(r => p.specs[r.key]).map(({ key, label, icon: Icon }) => (
-          <div key={key} className="min-w-0">
-            <dt className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--cr-muted)]">
-              <Icon size={12} strokeWidth={2.5} /> {label}
-            </dt>
-            <dd className="text-[14px] font-bold leading-snug mt-0.5">{p.specs[key]}</dd>
-          </div>
-        ))}
+        {p.details.filter(d => d.label.trim() && d.value.trim()).map(d => {
+          const Icon = iconFor(d.label)
+          return (
+            <div key={d.id} className="min-w-0">
+              <dt className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--cr-muted)]">
+                <Icon size={12} strokeWidth={2.5} className="shrink-0" /> <span className="truncate">{d.label}</span>
+              </dt>
+              <dd className="text-[14px] font-bold leading-snug mt-0.5 break-words">{d.value}</dd>
+            </div>
+          )
+        })}
       </dl>
 
-      {p.specs.turnaround ? (
+      {p.turnaround ? (
         <div className="mt-4 flex items-center gap-2 rounded-lg bg-[var(--cr-ink)] text-[var(--cr-paper)] px-3 py-2 text-sm font-bold">
-          <Timer size={16} className="text-[var(--cr-red)]" strokeWidth={2.5} /> Delivered in {p.specs.turnaround}
+          <Timer size={16} className="text-[var(--cr-red)]" strokeWidth={2.5} /> Delivered in {p.turnaround}
         </div>
       ) : null}
 

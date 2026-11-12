@@ -1,6 +1,6 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { DEFAULT_SITE } from './defaults'
-import type { Booking, PublicSiteDoc, SiteDoc } from './types'
+import { DEFAULT_SITE, fromSpecs } from './defaults'
+import type { Booking, Package, PublicSiteDoc, SiteDoc } from './types'
 
 // Service-role client for Crooked Rumor. cr_* tables have RLS on with no
 // policies (see supabase-migration-crookedrumors.sql), so every read/write
@@ -15,6 +15,19 @@ export function getCrAdmin() {
 export const SITE_ROW_ID = 'main'
 export const MEDIA_BUCKET = 'crooked-rumors'
 
+// Packages saved before custom detail rows existed have a fixed `specs`
+// object instead; convert it so nothing visible changes.
+function normalizePackage(p: any): Package {
+  const { specs, ...rest } = p || {}
+  const legacy = fromSpecs(specs || {})
+  return {
+    ...rest,
+    features: Array.isArray(rest.features) ? rest.features : [],
+    details: Array.isArray(rest.details) ? rest.details : legacy.details,
+    turnaround: typeof rest.turnaround === 'string' ? rest.turnaround : legacy.turnaround,
+  }
+}
+
 // Fills in any settings keys added after the doc was first saved, so new
 // features never crash on an older stored doc.
 export function normalizeSite(raw: Partial<SiteDoc> | null | undefined): SiteDoc {
@@ -27,7 +40,7 @@ export function normalizeSite(raw: Partial<SiteDoc> | null | undefined): SiteDoc
       payment: { ...DEFAULT_SITE.settings.payment, ...(s.payment || {}) },
     },
     categories: Array.isArray(d.categories) ? d.categories : DEFAULT_SITE.categories,
-    packages: Array.isArray(d.packages) ? d.packages : DEFAULT_SITE.packages,
+    packages: (Array.isArray(d.packages) ? d.packages : DEFAULT_SITE.packages).map(normalizePackage),
     addons: Array.isArray(d.addons) ? d.addons : DEFAULT_SITE.addons,
     promos: Array.isArray(d.promos) ? d.promos : [],
     portfolio: Array.isArray(d.portfolio) ? d.portfolio : [],

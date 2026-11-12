@@ -208,7 +208,7 @@ export default function BookingFlow({
                                   <div className="cr-display text-3xl">{formatMoney(p.priceCents)}</div>
                                 </div>
                                 <div className={`mt-3 text-[13px] leading-snug ${p.id === packageId ? 'opacity-80' : 'text-[var(--cr-muted)]'}`}>
-                                  {[p.specs.deliverables, p.specs.filmingTime, p.specs.turnaround && `Ready in ${p.specs.turnaround}`].filter(Boolean).join(' · ')}
+                                  {[...p.details.filter(d => d.value).slice(0, 2).map(d => d.value), p.turnaround && `Ready in ${p.turnaround}`].filter(Boolean).join(' · ')}
                                 </div>
                               </button>
                             ))}
@@ -424,10 +424,10 @@ export default function BookingFlow({
             <span>Due today</span><span className="text-[var(--cr-red)]">{formatMoney(quote.dueNowCents, { always2: !Number.isInteger(quote.dueNowCents / 100) })}</span>
           </div>
         )}
-        {quote.pkg.specs.turnaround && (
+        {quote.pkg.turnaround && (
           <div className="mt-4 flex items-center gap-2 rounded-lg bg-[var(--cr-ink)] text-[var(--cr-paper)] px-3 py-2 text-sm font-bold">
             <Timer size={16} className="text-[var(--cr-red)]" />
-            {picked['rush'] ? '24 hour rush delivery' : `Ready in ${quote.pkg.specs.turnaround}`}
+            {picked['rush'] ? '24 hour rush delivery' : `Ready in ${quote.pkg.turnaround}`}
           </div>
         )}
         {step === 0 && (
