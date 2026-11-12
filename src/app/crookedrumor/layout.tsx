@@ -7,13 +7,13 @@ const body = Inter({ subsets: ['latin'], variable: '--cr-font-body', display: 's
 const serif = Fraunces({ subsets: ['latin'], style: ['italic', 'normal'], weight: ['600', '800'], variable: '--cr-font-serif', display: 'swap' })
 
 export const metadata: Metadata = {
-  title: 'Crooked Rumors | Video Production & Content Creation',
-  description: 'Interviews, event recaps, and Instagram reels with straight up pricing. Book a shoot online with Crooked Rumors.',
+  title: 'Crooked Rumor | Video Production & Content Creation',
+  description: 'Interviews, event recaps, and Instagram reels with straight up pricing. Book a shoot online with Crooked Rumor.',
   icons: { icon: '/crookedrumors/icon.png', apple: '/crookedrumors/icon.png' },
   manifest: null,
-  appleWebApp: { capable: false, title: 'Crooked Rumors' },
+  appleWebApp: { capable: false, title: 'Crooked Rumor' },
   openGraph: {
-    title: 'Crooked Rumors | Video Production & Content Creation',
+    title: 'Crooked Rumor | Video Production & Content Creation',
     description: 'Interviews, event recaps, and Instagram reels. Reels from $50. Book online.',
     images: ['/crookedrumors/badge.webp'],
   },

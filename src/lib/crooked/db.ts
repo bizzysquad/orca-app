@@ -2,7 +2,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { DEFAULT_SITE } from './defaults'
 import type { Booking, PublicSiteDoc, SiteDoc } from './types'
 
-// Service-role client for Crooked Rumors. cr_* tables have RLS on with no
+// Service-role client for Crooked Rumor. cr_* tables have RLS on with no
 // policies (see supabase-migration-crookedrumors.sql), so every read/write
 // goes through these server helpers. cache: 'no-store' keeps Next from
 // caching the site doc — admin edits must show up on the next page load.

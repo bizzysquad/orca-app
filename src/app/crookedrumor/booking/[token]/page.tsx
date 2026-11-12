@@ -4,7 +4,7 @@ import SiteHeader from '../../_components/SiteHeader'
 import BookingStatus from './BookingStatus'
 
 export const dynamic = 'force-dynamic'
-export const metadata: Metadata = { title: 'Your Booking | Crooked Rumors', robots: { index: false } }
+export const metadata: Metadata = { title: 'Your Booking | Crooked Rumor', robots: { index: false } }
 
 export default async function BookingPage({ params }: { params: { token: string } }) {
   const { site } = await loadSite()

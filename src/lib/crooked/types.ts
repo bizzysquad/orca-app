@@ -1,4 +1,4 @@
-// Crooked Rumors — public site + booking types.
+// Crooked Rumor — public site + booking types.
 // The whole editable site (content, packages, add-ons, promos, portfolio) is
 // one JSON document in cr_site so the admin can reorder anything just by
 // reordering arrays, and every save shows up on the public site immediately.

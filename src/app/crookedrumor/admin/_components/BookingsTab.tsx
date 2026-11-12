@@ -181,7 +181,7 @@ function BookingRow({
         <div className="border-t-2 border-[var(--cr-tan)] p-4 grid lg:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2 text-sm font-bold">
-              <a href={`mailto:${b.client_email}?subject=${encodeURIComponent(`Your Crooked Rumors booking ${b.ref}`)}`} className="cr-btn cr-btn-paper cr-btn-sm !normal-case"><Mail size={14} /> {b.client_email}</a>
+              <a href={`mailto:${b.client_email}?subject=${encodeURIComponent(`Your Crooked Rumor booking ${b.ref}`)}`} className="cr-btn cr-btn-paper cr-btn-sm !normal-case"><Mail size={14} /> {b.client_email}</a>
               {b.client_phone && <a href={`tel:${b.client_phone}`} className="cr-btn cr-btn-paper cr-btn-sm"><Phone size={14} /> {b.client_phone}</a>}
               {b.client_instagram && <a href={`https://instagram.com/${b.client_instagram.replace(/^@/, '')}`} target="_blank" rel="noreferrer" className="cr-btn cr-btn-paper cr-btn-sm !normal-case"><Instagram size={14} /> {b.client_instagram}</a>}
             </div>

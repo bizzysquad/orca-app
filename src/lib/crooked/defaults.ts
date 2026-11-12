@@ -371,7 +371,7 @@ const addons: Addon[] = [
 
 export const DEFAULT_SITE: SiteDoc = {
   settings: {
-    brandName: 'Crooked Rumors',
+    brandName: 'Crooked Rumor',
     announcement: '',
     heroEyebrow: 'Video Production + Content Creation',
     heroHeadline: 'Content that gets',
@@ -397,7 +397,7 @@ export const DEFAULT_SITE: SiteDoc = {
     ],
     aboutTitle: 'Who we are',
     aboutBody:
-      'Crooked Rumors is a video production and content creation brand built for the culture. We shoot fast, edit sharp, and keep prices fair so independent artists, local businesses, and event hosts can put out content that looks like it cost way more.',
+      'Crooked Rumor is a video production and content creation brand built for the culture. We shoot fast, edit sharp, and keep prices fair so independent artists, local businesses, and event hosts can put out content that looks like it cost way more.',
     serviceArea: 'Local shoots include travel within 25 miles. Travel outside the area is quoted separately.',
     faqs: [
       { q: 'How fast do I get my video?', a: 'Every package lists its turnaround in business days, counted from the day after your shoot. Need it sooner? Add 24 hour rush delivery, subject to availability.' },

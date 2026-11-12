@@ -2,9 +2,9 @@ import { formatMoney } from './pricing'
 import type { Booking, SiteSettings } from './types'
 
 // Booking emails through the same Resend account RSVP uses. rsvp.orcafin.app
-// is the verified sending domain; replies go to the Crooked Rumors contact.
+// is the verified sending domain; replies go to the Crooked Rumor contact.
 // Silently skipped when RESEND_API_KEY isn't set — bookings still work.
-const FROM = 'Crooked Rumors <bookings@rsvp.orcafin.app>'
+const FROM = 'Crooked Rumor <bookings@rsvp.orcafin.app>'
 
 function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -14,7 +14,7 @@ function wrap(heading: string, body: string, button?: { text: string; url: strin
   return `
   <div style="background:#F3E7CF;padding:32px 16px;font-family:-apple-system,Segoe UI,Roboto,sans-serif;">
     <div style="max-width:520px;margin:0 auto;background:#FFF9EE;border:3px solid #141210;border-radius:14px;overflow:hidden;">
-      <div style="background:#C4161C;padding:14px 24px;color:#FFF9EE;font-weight:900;letter-spacing:0.14em;font-size:12px;text-transform:uppercase;">Crooked Rumors</div>
+      <div style="background:#C4161C;padding:14px 24px;color:#FFF9EE;font-weight:900;letter-spacing:0.14em;font-size:12px;text-transform:uppercase;">Crooked Rumor</div>
       <div style="padding:24px;">
         <h1 style="font-size:22px;font-weight:900;color:#141210;margin:0 0 14px;text-transform:uppercase;">${heading}</h1>
         <div style="font-size:14px;line-height:1.7;color:#3A332B;">${body}</div>
@@ -56,7 +56,7 @@ export async function notifyNewBooking(b: Booking, settings: SiteSettings, booki
   await Promise.all([
     send(
       b.client_email,
-      isQuote ? `We got your quote request (${b.ref})` : `Your Crooked Rumors booking ${b.ref}`,
+      isQuote ? `We got your quote request (${b.ref})` : `Your Crooked Rumor booking ${b.ref}`,
       wrap(
         isQuote ? 'Quote request received' : 'Booking received',
         `Hey ${esc(b.client_name.split(' ')[0])}, thanks for reaching out. ${

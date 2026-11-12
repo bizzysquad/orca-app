@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(correctedUrl)
   }
 
-  // Same idea for Crooked Rumors: the canonical path is /crookedrumor. Old
+  // Same idea for Crooked Rumor: the canonical path is /crookedrumor. Old
   // /crookedrumors links (early emails, Stripe returns) and any casing or
   // dash variant redirect to it. Files (logos under /crookedrumors/*.webp)
   // are left alone.
@@ -54,7 +54,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Crooked Rumors admin has its own password session (see lib/crooked/session.ts).
+  // Crooked Rumor admin has its own password session (see lib/crooked/session.ts).
   if (pathname.startsWith('/crookedrumor/admin') && pathname !== '/crookedrumor/admin/login') {
     const ok = await verifyCrAdmin(request.cookies.get(CR_ADMIN_COOKIE)?.value)
     if (!ok) return NextResponse.redirect(new URL('/crookedrumor/admin/login', request.url))

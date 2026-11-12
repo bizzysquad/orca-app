@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         // package version's types (same pre-existing gap as bizzyplug/checkout.ts).
         const session = event.data.object as any
 
-        // Crooked Rumors bookings share this Stripe account + webhook endpoint.
+        // Crooked Rumor bookings share this Stripe account + webhook endpoint.
         if (session.metadata?.source === 'crookedrumors') {
           await handleCrookedRumorsPayment(session, req.nextUrl.origin)
           break

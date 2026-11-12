@@ -4,7 +4,7 @@ import SiteHeader from '../_components/SiteHeader'
 import BookingFlow from './BookingFlow'
 
 export const dynamic = 'force-dynamic'
-export const metadata: Metadata = { title: 'Book a Shoot | Crooked Rumors' }
+export const metadata: Metadata = { title: 'Book a Shoot | Crooked Rumor' }
 
 export default async function BookPage({ searchParams }: { searchParams: { package?: string; custom?: string } }) {
   const { site: full, dbReady } = await loadSite()

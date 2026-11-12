@@ -1,7 +1,7 @@
-// Crooked Rumors admin session. Reuses the RSVP module's HMAC token helpers
+// Crooked Rumor admin session. Reuses the RSVP module's HMAC token helpers
 // (Web Crypto only, so this stays Edge-safe for middleware.ts), but signs
 // with a derived secret and its own cookie, so an RSVP staff token can never
-// unlock the Crooked Rumors admin or vice versa.
+// unlock the Crooked Rumor admin or vice versa.
 import { signStaffSession, verifyStaffSession } from '@/lib/rsvp/session'
 
 export const CR_ADMIN_COOKIE = 'cr-admin-token'

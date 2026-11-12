@@ -43,7 +43,7 @@ export default async function CrookedRumorsHome() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={s.logoBadgeUrl}
-              alt="Crooked Rumors Media"
+              alt="Crooked Rumor Media"
               className="w-full aspect-square object-cover rounded-full border-[3px] border-[var(--cr-ink)] shadow-[10px_10px_0_var(--cr-ink)] mix-blend-multiply"
             />
             {s.startingAtText || lowest ? (
