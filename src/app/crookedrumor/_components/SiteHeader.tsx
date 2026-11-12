@@ -27,7 +27,7 @@ export default function SiteHeader({ wordmarkUrl, announcement }: { wordmarkUrl:
         <div className="mx-auto max-w-6xl px-4 h-16 md:h-[72px] flex items-center justify-between gap-4">
           <Link href="/crookedrumor" className="shrink-0" aria-label="Crooked Rumor home">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={wordmarkUrl} alt="Crooked Rumor" className="h-7 md:h-9 w-auto mix-blend-multiply" />
+            <img src={wordmarkUrl} alt="Crooked Rumor" className="h-7 md:h-9 w-auto" />
           </Link>
           <nav className="hidden md:flex items-center gap-7">
             {LINKS.map(l => (
