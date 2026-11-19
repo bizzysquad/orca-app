@@ -136,3 +136,36 @@ export async function notifyPayment(b: Booking, settings: SiteSettings, amountCe
     ),
   ])
 }
+
+// New "Join the Team" application → admin alert only. Applicants get the
+// on-screen thank you; no auto email to them, so a typo'd or spoofed address
+// can't be used to bounce mail off our domain. Reply-to is the applicant.
+export async function notifyNewApplication(
+  a: { full_name: string; email: string; social_handle: string; location: string; contribution: string; portfolio_url: string },
+  skills: string,
+  openness: string,
+  settings: SiteSettings,
+  adminUrl: string
+) {
+  const rows: [string, string][] = [
+    ['Email', a.email],
+    ['Location', a.location],
+    ['Does', skills],
+    ['Unpaid work', openness],
+    ...(a.social_handle ? [['Social', a.social_handle] as [string, string]] : []),
+    ...(a.portfolio_url ? [['Portfolio', a.portfolio_url] as [string, string]] : []),
+  ]
+  const table = `<table style="width:100%;border-collapse:collapse;margin-top:12px;">${rows
+    .map(([k, v]) => `<tr><td style="padding:7px 0;border-top:1px solid #E5D6B8;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#8A7B66;width:110px;">${k}</td><td style="padding:7px 0;border-top:1px solid #E5D6B8;font-size:14px;color:#141210;">${esc(v)}</td></tr>`)
+    .join('')}</table>`
+  await send(
+    settings.notifyEmail,
+    `New team application: ${a.full_name}`,
+    wrap(
+      'New team application',
+      `${esc(a.full_name)} wants to join the team.${table}<p style="margin-top:14px;white-space:pre-wrap;">${esc(a.contribution.slice(0, 800))}</p>`,
+      { text: 'Review in admin', url: adminUrl }
+    ),
+    a.email
+  )
+}

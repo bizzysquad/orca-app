@@ -9,6 +9,7 @@ const LINKS = [
   { href: '/crookedrumor#pricing', label: 'Pricing' },
   { href: '/crookedrumor#process', label: 'How it works' },
   { href: '/crookedrumor#faq', label: 'FAQ' },
+  { href: '/crookedrumor/join', label: 'Join the team', highlight: true },
 ]
 
 export default function SiteHeader({ wordmarkUrl, announcement }: { wordmarkUrl: string; announcement?: string }) {
@@ -29,9 +30,9 @@ export default function SiteHeader({ wordmarkUrl, announcement }: { wordmarkUrl:
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={wordmarkUrl} alt="Crooked Rumor" className="h-7 md:h-9 w-auto" />
           </Link>
-          <nav className="hidden md:flex items-center gap-7">
+          <nav className="hidden md:flex items-center gap-4 lg:gap-7">
             {LINKS.map(l => (
-              <a key={l.href} href={l.href} className="text-sm font-extrabold uppercase tracking-wide hover:text-[var(--cr-red)] transition-colors">
+              <a key={l.href} href={l.href} className={`text-sm font-extrabold uppercase tracking-wide hover:text-[var(--cr-red)] transition-colors ${l.highlight ? 'text-[var(--cr-red)] underline decoration-[3px] underline-offset-[6px]' : ''}`}>
                 {l.label}
               </a>
             ))}
@@ -51,7 +52,7 @@ export default function SiteHeader({ wordmarkUrl, announcement }: { wordmarkUrl:
           </div>
           <nav className="flex flex-col px-6 gap-2">
             {LINKS.map(l => (
-              <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="cr-display text-5xl py-2 hover:text-[var(--cr-red)]">
+              <a key={l.href} href={l.href} onClick={() => setOpen(false)} className={`cr-display text-5xl py-2 hover:text-[var(--cr-red)] ${l.highlight ? 'text-[var(--cr-red)]' : ''}`}>
                 {l.label}
               </a>
             ))}

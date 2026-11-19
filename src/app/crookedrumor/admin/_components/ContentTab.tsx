@@ -51,7 +51,7 @@ export default function ContentTab({ doc, setDoc }: { doc: SiteDoc; setDoc: SetD
 
       <Panel title="Contact & notifications">
         <div className="grid md:grid-cols-2 gap-3">
-          {t('notifyEmail', 'Send booking alerts to', { hint: 'Private. Where new bookings and payments get emailed.' })}
+          {t('notifyEmail', 'Send booking alerts to', { hint: 'Private. Where new bookings, payments, and team applications get emailed.' })}
           {t('contactEmail', 'Public contact email', { hint: 'Shown on the site. Client replies go here.' })}
           {t('contactPhone', 'Phone')}
           {t('instagram', 'Instagram URL')}

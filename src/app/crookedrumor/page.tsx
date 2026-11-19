@@ -157,6 +157,22 @@ export default async function CrookedRumorsHome() {
         </section>
       )}
 
+      {/* ── JOIN THE TEAM ──────────────────────────────────── */}
+      <section id="join" className="cr-grain border-t-[3px] border-[var(--cr-ink)] scroll-mt-16">
+        <div className="mx-auto max-w-6xl px-4 py-14 md:py-16 flex flex-col md:flex-row md:items-center gap-6 md:gap-12">
+          <div className="flex-1">
+            <span className="cr-stamp text-[var(--cr-red)] text-xs">Now recruiting</span>
+            <h2 className="cr-display text-4xl md:text-6xl mt-4">Join the Crooked Rumor team</h2>
+            <p className="mt-3 text-lg max-w-2xl text-[var(--cr-ink-soft)]">
+              Photographers, interviewers, videographers, editors, and creative minds. Got talent? Let&apos;s build something together.
+            </p>
+          </div>
+          <Link href="/crookedrumor/join" className="cr-btn cr-btn-red shrink-0 text-base">
+            Let&apos;s work! <ArrowRight size={18} strokeWidth={3} />
+          </Link>
+        </div>
+      </section>
+
       {/* ── FOOTER ─────────────────────────────────────────── */}
       <footer className="bg-[var(--cr-ink)] text-[var(--cr-paper)] border-t-[6px] border-[var(--cr-red)]">
         <div className="mx-auto max-w-6xl px-4 py-14 grid md:grid-cols-[1fr_auto] gap-10 items-center">
