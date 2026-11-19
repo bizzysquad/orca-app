@@ -3,32 +3,17 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import {
-  Menu, Settings2, LayoutDashboard, CreditCard,
-  TrendingUp, Mic2, Ticket, Briefcase, CheckSquare,
-  RefreshCw, Check, AlertCircle, CalendarDays, Shirt,
-} from 'lucide-react'
+import { Menu, Settings2, RefreshCw, Check, AlertCircle } from 'lucide-react'
 import SettingsSheet from './SettingsSheet'
 import SideSidebar from './SideSidebar'
+import NavList from './NavList'
+import { NAV_ITEMS, isNavActive } from './navConfig'
 import { useTheme } from '@/context/ThemeContext'
 import { QuickActions } from '@/components/QuickActions'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { createBrowserClient } from '@supabase/ssr'
 
-const BENTLEY_GOLD = '#F59E0B'
 const BENTLEY_INDIGO = '#6366F1'
-
-const SIDEBAR_NAV = [
-  { id: 'dashboard',  name: 'Home',        icon: LayoutDashboard, href: '/dashboard', accent: BENTLEY_INDIGO },
-  { id: 'planner',    name: 'Planner',      icon: CalendarDays,    href: '/planner',   accent: '#EC4899' },
-  { id: 'outfit',     name: 'Outfit',       icon: Shirt,           href: '/outfit',    accent: '#E0A96D' },
-  { id: 'bill-boss',  name: 'Bill Boss',   icon: CreditCard,      href: '/bill-boss', accent: '#10B981' },
-  { id: 'smart-stack',name: 'Smart Stack', icon: TrendingUp,      href: '/smart-stack', accent: '#10B981' },
-  { id: 'dj',         name: 'DJ Maskoff',  icon: Mic2,            href: '/dj',        accent: '#F43F5E' },
-  { id: 'rsvp',       name: 'RSVP',        icon: Ticket,          href: '/RSVP/admin', accent: '#D4AF37' },
-  { id: 'bizzplug',   name: 'BizzyPlug',  icon: Briefcase,       href: '/bizzplug',  accent: BENTLEY_GOLD },
-  { id: 'task-list',  name: 'Task List',   icon: CheckSquare,     href: '/task-list', accent: BENTLEY_INDIGO },
-]
 
 interface AppShellProps {
   children: React.ReactNode
@@ -70,15 +55,7 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
 
   const displayName = (data?.user?.name?.trim()) || userName
 
-  const isNavActive = (item: typeof SIDEBAR_NAV[0]) => {
-    if (item.href === '/dashboard') return pathname === '/dashboard' || pathname === '/'
-    if (item.href === '/dj') return pathname === '/dj' || pathname.startsWith('/dj/')
-    if (item.href === '/RSVP/admin') return pathname.startsWith('/RSVP')
-    if (item.href === '/bill-boss') return pathname.startsWith('/bill-boss')
-    return pathname.startsWith(item.href)
-  }
-
-  const activeItem = SIDEBAR_NAV.find(n => isNavActive(n))
+  const activeItem = NAV_ITEMS.find(n => isNavActive(n, pathname))
 
   return (
     <div
@@ -108,30 +85,9 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5">
-          {SIDEBAR_NAV.map(item => {
-            const active = isNavActive(item)
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.id}
-                href={item.href}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group"
-                style={{
-                  backgroundColor: active ? `${item.accent}18` : 'transparent',
-                  color: active ? item.accent : theme.subtext,
-                  fontWeight: active ? 600 : 400,
-                }}
-              >
-                <Icon size={18} strokeWidth={active ? 2.2 : 1.5} className="shrink-0" />
-                <span className="text-sm leading-none">{item.name}</span>
-                {active && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.accent }} />
-                )}
-              </Link>
-            )
-          })}
-        </nav>
+        <div className="flex-1 px-3 py-5 overflow-y-auto">
+          <NavList />
+        </div>
 
         {/* Settings footer */}
         <div className="px-3 py-3 shrink-0" style={{ borderTop: `1px solid ${theme.border}` }}>
