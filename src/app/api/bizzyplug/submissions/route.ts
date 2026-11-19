@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { requireUser } from '@/lib/supabase/requireUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,8 @@ function getAdmin() {
 
 export async function GET() {
   try {
+    const denied = await requireUser()
+    if (denied) return denied
     const supabase = getAdmin()
     const { data: rows, error } = await supabase
       .from('booking_requests')

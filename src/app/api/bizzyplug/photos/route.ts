@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { requireUser } from '@/lib/supabase/requireUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireUser()
+    if (denied) return denied
     const admin = getAdmin()
     const contentType = req.headers.get('content-type') || ''
 
@@ -95,6 +98,8 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
+    const denied = await requireUser()
+    if (denied) return denied
     const admin = getAdmin()
     const formData = await req.formData()
     const id = formData.get('id') as string
@@ -142,6 +147,8 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const denied = await requireUser()
+    if (denied) return denied
     const { id, purgeAll } = await req.json()
     const admin = getAdmin()
 

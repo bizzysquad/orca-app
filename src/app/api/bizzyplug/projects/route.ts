@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { requireUser } from '@/lib/supabase/requireUser'
 
 export const dynamic = 'force-dynamic'
+
 
 const TIMESTAMPS_KEY = '_orca-sync-timestamps'
 
@@ -20,6 +22,8 @@ function parseArr(v: any): any[] {
 
 export async function GET() {
   try {
+    const denied = await requireUser()
+    if (denied) return denied
     const admin = getAdmin()
     const { data: profiles } = await admin.from('profiles').select('local_data').limit(1)
     const localData = (profiles?.[0]?.local_data as Record<string, any>) || {}
@@ -35,6 +39,8 @@ export async function GET() {
 // Writes directly to Supabase with updated timestamps so the next GET returns the correct data.
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireUser()
+    if (denied) return denied
     const body = await req.json()
     const { projects, clientDb } = body
 

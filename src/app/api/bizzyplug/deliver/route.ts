@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
+import { requireUser } from '@/lib/supabase/requireUser'
 
 export const dynamic = 'force-dynamic'
+
 
 function createTransport() {
   return nodemailer.createTransport({
@@ -12,6 +14,8 @@ function createTransport() {
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireUser()
+    if (denied) return denied
     if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
       return NextResponse.json({ error: 'Email not configured' }, { status: 503 })
     }

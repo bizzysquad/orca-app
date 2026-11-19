@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { requireUser } from '@/lib/supabase/requireUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireUser()
+    if (denied) return denied
     const supabase = getAdmin()
     const settings = await req.json()
     const { data: profiles } = await supabase.from('profiles').select('id, local_data').limit(1)
