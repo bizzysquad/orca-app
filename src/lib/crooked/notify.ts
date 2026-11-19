@@ -169,3 +169,50 @@ export async function notifyNewApplication(
     a.email
   )
 }
+
+// "Deliver finished work" email from the Client Center. Unlike the booking
+// emails this reports failure, because the admin is waiting on the result.
+export async function sendDeliveryEmail(opts: {
+  to: string
+  clientName: string
+  subject: string
+  message: string
+  links: { label: string; url: string }[]
+  bookingUrl?: string | null
+  bookAgainUrl: string
+  settings: SiteSettings
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return { ok: false, error: 'Email is not configured (RESEND_API_KEY is missing).' }
+  const first = esc(opts.clientName.split(' ')[0] || 'there')
+  const buttons = opts.links
+    .map(
+      (l, i) =>
+        `<a href="${esc(l.url)}" style="display:block;margin-top:10px;padding:13px 22px;border-radius:8px;background:${i === 0 ? '#C4161C' : '#141210'};color:#FFF9EE;font-weight:800;font-size:14px;text-decoration:none;text-align:center;">${esc(l.label || 'Download your files')}</a>`
+    )
+    .join('')
+  const body = `
+    <p style="margin:0 0 12px;">Hey ${first},</p>
+    <p style="margin:0;white-space:pre-wrap;">${esc(opts.message)}</p>
+    ${buttons ? `<div style="margin-top:18px;">${buttons}</div>` : ''}
+    ${opts.links.length ? '<p style="margin-top:12px;font-size:12px;color:#8A7B66;">Download links can expire, so save your files somewhere safe.</p>' : ''}
+    ${opts.bookingUrl ? `<p style="margin-top:14px;font-size:13px;"><a href="${esc(opts.bookingUrl)}" style="color:#C4161C;font-weight:700;">View your booking</a></p>` : ''}
+    <div style="margin-top:22px;padding:16px;border:2px dashed #E5D6B8;border-radius:10px;text-align:center;">
+      <p style="margin:0 0 10px;font-weight:800;color:#141210;">Thank you for working with Crooked Rumor!</p>
+      <a href="${esc(opts.bookAgainUrl)}" style="display:inline-block;padding:10px 20px;border-radius:8px;background:#141210;color:#FFF9EE;font-weight:800;font-size:13px;text-decoration:none;">Book your next shoot</a>
+    </div>`
+  try {
+    const { Resend } = await import('resend')
+    const result = await new Resend(apiKey).emails.send({
+      from: FROM,
+      to: opts.to,
+      subject: opts.subject,
+      html: wrap(esc(opts.subject), body),
+      ...(opts.settings.contactEmail ? { replyTo: opts.settings.contactEmail } : {}),
+    })
+    if (result.error) return { ok: false, error: result.error.message }
+    return { ok: true, id: result.data?.id || '' }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Send failed' }
+  }
+}

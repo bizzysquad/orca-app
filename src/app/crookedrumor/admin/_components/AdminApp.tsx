@@ -1,10 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { CalendarCheck, Package, PlusSquare, Tag, Film, FileText, LogOut, ExternalLink, Loader2, Save, AlertTriangle, Users } from 'lucide-react'
+import { CalendarCheck, Package, PlusSquare, Tag, Film, FileText, LogOut, ExternalLink, Loader2, Save, AlertTriangle, Users, Contact } from 'lucide-react'
 import type { SiteDoc } from '@/lib/crooked/types'
 import BookingsTab from './BookingsTab'
 import ApplicationsTab from './ApplicationsTab'
+import ClientsTab from './ClientsTab'
 import PackagesTab from './PackagesTab'
 import AddonsTab from './AddonsTab'
 import PromosTab from './PromosTab'
@@ -13,6 +14,7 @@ import ContentTab from './ContentTab'
 
 const TABS = [
   { id: 'bookings', label: 'Bookings', icon: CalendarCheck },
+  { id: 'clients', label: 'Clients', icon: Contact },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'packages', label: 'Packages', icon: Package },
   { id: 'addons', label: 'Add ons', icon: PlusSquare },
@@ -90,9 +92,9 @@ export default function AdminApp() {
     window.location.href = '/crookedrumor/admin/login'
   }
 
-  // Tabs that edit the site doc (and use the Save bar). Bookings and Team
-  // save each change straight to their own tables.
-  const siteTab = tab !== 'bookings' && tab !== 'team'
+  // Tabs that edit the site doc (and use the Save bar). Bookings, Clients,
+  // and Team save each change straight to their own tables.
+  const siteTab = tab !== 'bookings' && tab !== 'team' && tab !== 'clients'
 
   return (
     <div className="min-h-screen pb-28">
@@ -141,6 +143,8 @@ export default function AdminApp() {
           <div className="py-24 flex justify-center"><Loader2 className="animate-spin" size={32} /></div>
         ) : tab === 'bookings' ? (
           <BookingsTab />
+        ) : tab === 'clients' ? (
+          <ClientsTab />
         ) : tab === 'team' ? (
           <ApplicationsTab />
         ) : tab === 'packages' ? (
