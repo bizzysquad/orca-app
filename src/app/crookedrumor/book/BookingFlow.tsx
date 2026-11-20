@@ -38,6 +38,8 @@ export default function BookingFlow({
   const [promoInput, setPromoInput] = useState('')
   const [promo, setPromo] = useState<Promo | null>(null)
   const [promoMsg, setPromoMsg] = useState('')
+  const [promoBusy, setPromoBusy] = useState(false)
+  const m = (c: number) => formatMoney(c, { always2: !Number.isInteger(c / 100) })
   const [agree, setAgree] = useState(false)
   const [honey, setHoney] = useState('')
   const [busy, setBusy] = useState(false)
@@ -81,20 +83,26 @@ export default function BookingFlow({
 
   async function applyPromo() {
     setPromoMsg('')
-    if (!promoInput.trim()) return
-    const res = await fetch('/api/crookedrumors/promo', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: promoInput.trim(), packageId, addons: selection.addons }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      setPromo(null)
-      setPromoMsg(data.error || 'That code is not valid')
-      return
+    if (!promoInput.trim() || promoBusy) return
+    setPromoBusy(true)
+    try {
+      const res = await fetch('/api/crookedrumors/promo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: promoInput.trim(), packageId, addons: selection.addons }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setPromo(null)
+        setPromoMsg(data.error || 'That code is not valid')
+        return
+      }
+      setPromo(data.promo)
+    } catch {
+      setPromoMsg('Could not check that code. Try again.')
+    } finally {
+      setPromoBusy(false)
     }
-    setPromo(data.promo)
-    setPromoMsg('')
   }
 
   async function submit() {
@@ -329,6 +337,41 @@ export default function BookingFlow({
                       <button onClick={() => go(2)} className="text-sm font-bold underline mt-2">Edit details</button>
                     </div>
 
+                    <div className="mt-6 cr-card-flat !border-[3px] p-5">
+                      <div className="cr-label mb-2">Promo code</div>
+                      {promo ? (
+                        <div className="inline-flex items-center gap-2 rounded-lg bg-[var(--cr-ink)] text-[var(--cr-paper)] px-3 py-2 font-bold text-sm">
+                          <Tag size={14} /> {promo.code}{promo.label ? ` · ${promo.label}` : ''}
+                          <button onClick={() => { setPromo(null); setPromoInput(''); setPromoMsg('') }} aria-label="Remove code" className="ml-1"><X size={16} /></button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 max-w-sm">
+                          <input className="cr-input uppercase" value={promoInput} onChange={e => { setPromoInput(e.target.value.toUpperCase()); setPromoMsg('') }} onKeyDown={e => e.key === 'Enter' && applyPromo()} placeholder="Enter code" aria-label="Promo code" />
+                          <button onClick={applyPromo} disabled={promoBusy || !promoInput.trim()} className="cr-btn cr-btn-ink cr-btn-sm shrink-0">
+                            {promoBusy ? <Loader2 size={14} className="animate-spin" /> : null} Apply
+                          </button>
+                        </div>
+                      )}
+                      {promoMsg && <p className="mt-2 text-sm font-bold text-[var(--cr-red)]">{promoMsg}</p>}
+                      {promo && quote.promoError && <p className="mt-2 text-sm font-bold text-[var(--cr-red)]">{quote.promoError}</p>}
+
+                      <div className="mt-4 pt-3 border-t-2 border-[var(--cr-tan)] space-y-1 text-[15px]">
+                        {quote.discountCents > 0 && (
+                          <>
+                            <div className="flex justify-between gap-3"><span>Subtotal</span><span className="font-bold line-through text-[var(--cr-muted)]">{m(quote.subtotalCents)}</span></div>
+                            <div className="flex justify-between gap-3 font-extrabold text-green-800"><span>Promo {quote.promo?.code}</span><span>-{m(quote.discountCents)}</span></div>
+                          </>
+                        )}
+                        <div className="flex justify-between gap-3 items-baseline"><span className="font-black uppercase">Total</span><span className="cr-display text-2xl">{m(quote.totalCents)}</span></div>
+                        {quote.dueNowCents !== quote.totalCents && (
+                          <div className="flex justify-between gap-3 text-sm font-bold"><span>Due today</span><span className="text-[var(--cr-red)]">{m(quote.dueNowCents)}</span></div>
+                        )}
+                        {quote.discountCents > 0 && (
+                          <p className="pt-1 text-sm font-black text-green-800">You save {m(quote.discountCents)}</p>
+                        )}
+                      </div>
+                    </div>
+
                     {quote.canPayDeposit && site.settings.payment.mode === 'choice' && (
                       <div className="mt-6">
                         <div className="cr-label mb-3">How do you want to pay?</div>
@@ -345,25 +388,6 @@ export default function BookingFlow({
                     )}
                     {quote.canPayDeposit && site.settings.payment.mode === 'deposit' && (
                       <p className="mt-6 font-semibold">A {site.settings.payment.depositPercent}% deposit locks your date. The rest is due before delivery.</p>
-                    )}
-
-                    {site.hasPromos && (
-                      <div className="mt-6">
-                        <div className="cr-label mb-2">Promo code</div>
-                        {promo ? (
-                          <div className="inline-flex items-center gap-2 rounded-lg bg-[var(--cr-ink)] text-[var(--cr-paper)] px-3 py-2 font-bold text-sm">
-                            <Tag size={14} /> {promo.code}{promo.label ? ` · ${promo.label}` : ''}
-                            <button onClick={() => { setPromo(null); setPromoInput('') }} aria-label="Remove code" className="ml-1"><X size={16} /></button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2 max-w-sm">
-                            <input className="cr-input uppercase" value={promoInput} onChange={e => setPromoInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && applyPromo()} placeholder="Enter code" />
-                            <button onClick={applyPromo} className="cr-btn cr-btn-ink cr-btn-sm shrink-0">Apply</button>
-                          </div>
-                        )}
-                        {promoMsg && <p className="mt-2 text-sm font-bold text-[var(--cr-red)]">{promoMsg}</p>}
-                        {promo && quote.promoError && <p className="mt-2 text-sm font-bold text-[var(--cr-red)]">{quote.promoError}</p>}
-                      </div>
                     )}
 
                     {site.settings.bookingTerms && (

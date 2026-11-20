@@ -14,7 +14,7 @@ export default function PromosTab({ doc, setDoc }: { doc: SiteDoc; setDoc: SetDo
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="cr-display text-3xl">Promo codes</h2>
-          <p className="text-sm text-[var(--cr-muted)] mt-1">Clients enter these at checkout. The promo box only appears when at least one code is active.</p>
+          <p className="text-sm text-[var(--cr-muted)] mt-1">Clients enter these on the Review &amp; pay step. Only codes switched to Active work.</p>
         </div>
         <button
           onClick={() =>
