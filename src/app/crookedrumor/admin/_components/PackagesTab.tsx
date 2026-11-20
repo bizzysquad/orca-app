@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, CopyPlus, Plus, X } from 'lucide-react'
 import type { Category, DetailRow, Package, SiteDoc } from '@/lib/crooked/types'
 import { formatMoney } from '@/lib/crooked/pricing'
+import { durationLabel } from '@/lib/crooked/availability'
 import type { SetDoc } from './AdminApp'
 import { Field, Money, Panel, RowActions, StringList, Text, move, newId } from './ui'
 import { dropFromScopes } from './ScopePicker'
@@ -158,6 +159,12 @@ export default function PackagesTab({ doc, setDoc }: { doc: SiteDoc; setDoc: Set
                       <Field label="Service category">
                         <select className="cr-input !text-[15px] !py-2.5" value={p.categoryId} onChange={e => updPkg(p.id, { categoryId: e.target.value })}>
                           {doc.categories.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Shoot length" hint="How much time this package holds on your calendar">
+                        <select className="cr-input !text-[15px] !py-2.5" value={p.durationMins ?? ''} onChange={e => updPkg(p.id, { durationMins: e.target.value ? Number(e.target.value) : null })}>
+                          <option value="">Calendar default ({durationLabel(doc.availability.defaultDurationMins)})</option>
+                          {[30, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600].map(m => <option key={m} value={m}>{durationLabel(m)}</option>)}
                         </select>
                       </Field>
                       <Field label="Short description" className="md:col-span-2"><Text area rows={2} value={p.summary} onChange={v => updPkg(p.id, { summary: v })} /></Field>

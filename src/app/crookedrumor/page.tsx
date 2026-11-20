@@ -5,6 +5,7 @@ import { formatMoney } from '@/lib/crooked/pricing'
 import SiteHeader from './_components/SiteHeader'
 import Portfolio from './_components/Portfolio'
 import Pricing from './_components/Pricing'
+import AvailabilitySection from './_components/AvailabilitySection'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,6 +93,20 @@ export default async function CrookedRumorsHome() {
           <Pricing site={site} />
         </div>
       </section>
+
+      {/* ── AVAILABILITY ───────────────────────────────────── */}
+      {site.availability.enabled && site.availability.showOnSite && (
+        <section id="availability" className="cr-grain border-t-[3px] border-[var(--cr-ink)] scroll-mt-16">
+          <div className="mx-auto max-w-6xl px-4 py-20 md:py-24">
+            <div className="text-center mb-10">
+              <span className="cr-stamp text-[var(--cr-red)] text-xs">Live calendar</span>
+              <h2 className="cr-display text-[clamp(44px,9vw,96px)] mt-4">{site.availability.title}</h2>
+              {site.availability.sub ? <p className="max-w-xl mx-auto mt-4 text-lg text-[var(--cr-ink-soft)]">{site.availability.sub}</p> : null}
+            </div>
+            <AvailabilitySection av={site.availability} />
+          </div>
+        </section>
+      )}
 
       {/* ── CUSTOM QUOTE ───────────────────────────────────── */}
       <section className="bg-[var(--cr-red)] text-[var(--cr-paper)] border-y-[3px] border-[var(--cr-ink)]">

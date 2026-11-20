@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Lock, Minus, Plus, Tag, Timer, X, Loader2 } from 'lucide-react'
 import type { Promo, PublicSiteDoc } from '@/lib/crooked/types'
 import { addonPriceLabel, addonsForPackage, computeQuote, formatMoney } from '@/lib/crooked/pricing'
+import { durationLabel } from '@/lib/crooked/availability'
+import AvailabilityCalendar from '../_components/AvailabilityCalendar'
 
 type Mode = 'package' | 'custom'
 const STEPS = ['Package', 'Add ons', 'Details', 'Review & pay'] as const
@@ -16,11 +18,13 @@ export default function BookingFlow({
   bookingOpen,
   initialPackageId,
   initialMode,
+  initialDate = '',
 }: {
   site: PublicSiteDoc
   bookingOpen: boolean
   initialPackageId: string
   initialMode: Mode
+  initialDate?: string
 }) {
   const validInitial = site.packages.some(p => p.id === initialPackageId)
   const [mode, setMode] = useState<Mode>(initialMode)
@@ -28,7 +32,8 @@ export default function BookingFlow({
   const [packageId, setPackageId] = useState(validInitial ? initialPackageId : '')
   const [picked, setPicked] = useState<Record<string, number>>({})
   const [client, setClient] = useState(emptyClient)
-  const [project, setProject] = useState(emptyProject)
+  const [project, setProject] = useState({ ...emptyProject, date: initialDate })
+  const av = site.availability
   const [paymentChoice, setPaymentChoice] = useState<'deposit' | 'full'>('deposit')
   const [promoInput, setPromoInput] = useState('')
   const [promo, setPromo] = useState<Promo | null>(null)
@@ -66,7 +71,8 @@ export default function BookingFlow({
     })
   const setQty = (id: string, qty: number) => setPicked(prev => ({ ...prev, [id]: Math.max(1, Math.min(20, qty)) }))
 
-  const detailsValid = client.name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client.email.trim()) && project.date
+  const shootLength = pkg?.durationMins || av.defaultDurationMins
+  const detailsValid = client.name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client.email.trim()) && project.date && (!av.enabled || project.time)
   const go = (n: number) => {
     setError('')
     setStep(n)
@@ -108,6 +114,12 @@ export default function BookingFlow({
         }),
       })
       const data = await res.json()
+      if (res.status === 409 && data.slotTaken) {
+        // Someone locked that slot while this client was filling in details.
+        setProject(prev => ({ ...prev, time: '' }))
+        setStep(2)
+        scrollTop()
+      }
       if (!res.ok) throw new Error(data.error || 'Something went wrong')
       if (data.checkoutUrl) window.location.href = data.checkoutUrl
       else window.location.href = `/crookedrumor/booking/${data.token}${data.paymentError ? '?canceled=1' : ''}`
@@ -273,8 +285,24 @@ export default function BookingFlow({
                       <Field label="Email *"><input className="cr-input" type="email" value={client.email} onChange={e => setClient({ ...client, email: e.target.value })} autoComplete="email" /></Field>
                       <Field label="Phone"><input className="cr-input" type="tel" value={client.phone} onChange={e => setClient({ ...client, phone: e.target.value })} autoComplete="tel" /></Field>
                       <Field label="Instagram"><input className="cr-input" value={client.instagram} placeholder="@yourhandle" onChange={e => setClient({ ...client, instagram: e.target.value })} /></Field>
-                      <Field label="Preferred shoot date *"><input className="cr-input" type="date" min={todayStr()} value={project.date} onChange={e => setProject({ ...project, date: e.target.value })} /></Field>
-                      <Field label="Preferred time"><input className="cr-input" value={project.time} placeholder="e.g. 2pm, evening, flexible" onChange={e => setProject({ ...project, time: e.target.value })} /></Field>
+                      {av.enabled ? (
+                        <Field group label="Shoot date and start time *" className="sm:col-span-2">
+                          <p className="text-sm text-[var(--cr-muted)] -mt-0.5 mb-2">Plan on about {durationLabel(shootLength)} of filming.</p>
+                          <AvailabilityCalendar
+                            av={av}
+                            durationMins={shootLength}
+                            value={project.date}
+                            onChange={date => setProject(prev => ({ ...prev, date }))}
+                            time={project.time}
+                            onTime={time => setProject(prev => ({ ...prev, time }))}
+                          />
+                        </Field>
+                      ) : (
+                        <>
+                          <Field label="Preferred shoot date *"><input className="cr-input" type="date" min={todayStr()} value={project.date} onChange={e => setProject({ ...project, date: e.target.value })} /></Field>
+                          <Field label="Preferred time"><input className="cr-input" value={project.time} placeholder="e.g. 2pm, evening, flexible" onChange={e => setProject({ ...project, time: e.target.value })} /></Field>
+                        </>
+                      )}
                       <Field label="Location / address" className="sm:col-span-2"><input className="cr-input" value={project.location} placeholder="Where are we filming?" onChange={e => setProject({ ...project, location: e.target.value })} /></Field>
                       <Field label="Project details" className="sm:col-span-2">
                         <textarea className="cr-input min-h-[120px]" value={project.details} placeholder="What are we making? Vibe, references, links, anything we should know." onChange={e => setProject({ ...project, details: e.target.value })} />
@@ -283,7 +311,8 @@ export default function BookingFlow({
                       <Field label="How did you hear about us?"><input className="cr-input" value={project.referral} onChange={e => setProject({ ...project, referral: e.target.value })} /></Field>
                     </div>
                     <input tabIndex={-1} autoComplete="off" className="hidden" value={honey} onChange={e => setHoney(e.target.value)} aria-hidden />
-                    <StepNav onBack={() => go(1)} onNext={() => go(3)} nextLabel="Review" nextDisabled={!detailsValid} hint={!detailsValid ? 'Name, email, and date are required' : ''} />
+                    <StepNav onBack={() => go(1)} onNext={() => go(3)} nextLabel="Review" nextDisabled={!detailsValid} hint={!detailsValid ? (av.enabled ? 'Name, email, date, and start time are required' : 'Name, email, and date are required') : ''} />
+                    {error && <p className="mt-3 font-bold text-[var(--cr-red)]">{error}</p>}
                   </div>
                 )}
 
@@ -471,7 +500,21 @@ function CustomQuoteForm({
           <Field label="Email *"><input className="cr-input" type="email" value={client.email} onChange={e => setClient({ ...client, email: e.target.value })} autoComplete="email" /></Field>
           <Field label="Phone"><input className="cr-input" type="tel" value={client.phone} onChange={e => setClient({ ...client, phone: e.target.value })} autoComplete="tel" /></Field>
           <Field label="Instagram"><input className="cr-input" value={client.instagram} placeholder="@yourhandle" onChange={e => setClient({ ...client, instagram: e.target.value })} /></Field>
-          <Field label="Target date"><input className="cr-input" type="date" min={todayStr()} value={project.date} onChange={e => setProject({ ...project, date: e.target.value })} /></Field>
+          {site.availability.enabled ? (
+            <Field group label="Target date (optional)" className="sm:col-span-2">
+              <AvailabilityCalendar
+                av={site.availability}
+                durationMins={site.availability.defaultDurationMins}
+                value={project.date}
+                onChange={date => setProject({ ...project, date })}
+                footer={() => (
+                  <button type="button" onClick={() => setProject({ ...project, date: '' })} className="mt-2 text-xs font-bold underline">Clear date</button>
+                )}
+              />
+            </Field>
+          ) : (
+            <Field label="Target date"><input className="cr-input" type="date" min={todayStr()} value={project.date} onChange={e => setProject({ ...project, date: e.target.value })} /></Field>
+          )}
           <Field label="Budget">
             <select className="cr-input" value={project.budget} onChange={e => setProject({ ...project, budget: e.target.value })}>
               <option value="">Not sure yet</option>
@@ -506,12 +549,15 @@ function CustomQuoteForm({
   )
 }
 
-function Field({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({ label, children, className = '', group }: { label: string; children: React.ReactNode; className?: string; group?: boolean }) {
+  // group: a wrapper for several controls (the calendar). A <label> there
+  // would forward clicks on empty space to its first button.
+  const Tag = group ? 'div' : 'label'
   return (
-    <label className={`block ${className}`}>
+    <Tag className={`block ${className}`}>
       <span className="block text-xs font-black uppercase tracking-[0.1em] mb-1.5">{label}</span>
       {children}
-    </label>
+    </Tag>
   )
 }
 

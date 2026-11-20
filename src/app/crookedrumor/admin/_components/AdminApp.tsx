@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { CalendarCheck, Package, PlusSquare, Tag, Film, FileText, LogOut, ExternalLink, Loader2, Save, AlertTriangle, Users, Contact } from 'lucide-react'
+import { CalendarCheck, Package, PlusSquare, Tag, Film, FileText, LogOut, ExternalLink, Loader2, Save, AlertTriangle, Users, Contact, CalendarDays } from 'lucide-react'
 import type { SiteDoc } from '@/lib/crooked/types'
 import BookingsTab from './BookingsTab'
 import ApplicationsTab from './ApplicationsTab'
@@ -11,9 +11,11 @@ import AddonsTab from './AddonsTab'
 import PromosTab from './PromosTab'
 import PortfolioTab from './PortfolioTab'
 import ContentTab from './ContentTab'
+import CalendarTab from './CalendarTab'
 
 const TABS = [
   { id: 'bookings', label: 'Bookings', icon: CalendarCheck },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'clients', label: 'Clients', icon: Contact },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'packages', label: 'Packages', icon: Package },
@@ -147,6 +149,8 @@ export default function AdminApp() {
           <ClientsTab />
         ) : tab === 'team' ? (
           <ApplicationsTab />
+        ) : tab === 'calendar' ? (
+          <CalendarTab doc={doc} setDoc={setDoc} />
         ) : tab === 'packages' ? (
           <PackagesTab doc={doc} setDoc={setDoc} />
         ) : tab === 'addons' ? (

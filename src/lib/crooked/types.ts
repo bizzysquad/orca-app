@@ -1,3 +1,5 @@
+import type { Availability } from './availability'
+
 // Crooked Rumor — public site + booking types.
 // The whole editable site (content, packages, add-ons, promos, portfolio) is
 // one JSON document in cr_site so the admin can reorder anything just by
@@ -46,6 +48,7 @@ export interface Package {
   features: string[]
   details: DetailRow[]
   turnaround: string // kept separate: booking summary, emails, and the client page use it
+  durationMins?: number | null // shoot length for the calendar; null = availability default
   hidden: boolean
 }
 
@@ -150,6 +153,7 @@ export interface SiteDoc {
   addons: Addon[]
   promos: Promo[]
   portfolio: PortfolioItem[]
+  availability: Availability
 }
 
 // What the public pages receive: hidden rows removed, promo codes stripped.

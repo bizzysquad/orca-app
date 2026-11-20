@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
-import { getCrAdmin, loadSite, promoUseCount } from '@/lib/crooked/db'
+import { getCrAdmin, loadBusy, loadSite, promoUseCount, shootMins } from '@/lib/crooked/db'
+import { dayState, nowIn, parseTimeLabel, startTimes, timeLabel } from '@/lib/crooked/availability'
 import { computeQuote } from '@/lib/crooked/pricing'
 import { createBookingCheckout } from '@/lib/crooked/stripe'
 import { notifyNewBooking } from '@/lib/crooked/notify'
@@ -82,6 +83,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Re-check the calendar server side so a stale page or a hand-made
+    // request can't land on blocked or already booked time.
+    let project_time = str(p.time, 40)
+    const av = site.availability
+    if (av.enabled && project_date) {
+      const now = nowIn(av.timezone)
+      const busy = await loadBusy(site, project_date, project_date)
+      const dur = shootMins(site, pricing.package_id)
+      if (kind === 'package') {
+        const start = parseTimeLabel(project_time)
+        if (start == null) return NextResponse.json({ error: 'Pick a start time' }, { status: 400 })
+        if (!startTimes(av, project_date, busy, dur, now).includes(start)) {
+          return NextResponse.json({ error: 'That time was just taken or is no longer open. Pick another time.', slotTaken: true }, { status: 409 })
+        }
+        project_time = timeLabel(start)
+      } else if (['past', 'closed'].includes(dayState(av, project_date, busy, dur, now))) {
+        return NextResponse.json({ error: 'We are not available that day. Pick another date.' }, { status: 400 })
+      }
+    }
+
     const status: Booking['status'] = kind === 'custom' ? 'quote_requested' : pricing.total_cents! > 0 ? 'pending_payment' : 'scheduled'
 
     const row = {
@@ -96,7 +117,7 @@ export async function POST(req: NextRequest) {
       client_instagram: str(c.instagram, 80),
       company: str(c.company, 120),
       project_date,
-      project_time: str(p.time, 40),
+      project_time,
       location: str(p.location, 300),
       details,
       budget: str(p.budget, 80),

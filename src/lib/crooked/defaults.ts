@@ -1,3 +1,4 @@
+import { DEFAULT_AVAILABILITY } from './availability'
 import type { Addon, Category, DetailRow, Package, PackageSpecs, SiteDoc } from './types'
 
 // Starter content. Used to seed cr_site the first time the admin saves, and
@@ -445,4 +446,5 @@ export const DEFAULT_SITE: SiteDoc = {
   addons,
   promos: [],
   portfolio: [],
+  availability: DEFAULT_AVAILABILITY,
 }

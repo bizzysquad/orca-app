@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { DEFAULT_SITE, fromSpecs } from './defaults'
 import type { Booking, Package, PublicSiteDoc, SiteDoc } from './types'
+import { BLOCKING_STATUSES, normalizeAvailability, parseTimeLabel, type BusySpan } from './availability'
 
 // Service-role client for Crooked Rumor. cr_* tables have RLS on with no
 // policies (see supabase-migration-crookedrumors.sql), so every read/write
@@ -25,6 +26,7 @@ function normalizePackage(p: any): Package {
     features: Array.isArray(rest.features) ? rest.features : [],
     details: Array.isArray(rest.details) ? rest.details : legacy.details,
     turnaround: typeof rest.turnaround === 'string' ? rest.turnaround : legacy.turnaround,
+    durationMins: typeof rest.durationMins === 'number' && rest.durationMins > 0 ? rest.durationMins : null,
   }
 }
 
@@ -49,6 +51,7 @@ export function normalizeSite(raw: Partial<SiteDoc> | null | undefined): SiteDoc
     addons: (Array.isArray(d.addons) ? d.addons : DEFAULT_SITE.addons).map(normalizeScope),
     promos: (Array.isArray(d.promos) ? d.promos : []).map(normalizeScope),
     portfolio: Array.isArray(d.portfolio) ? d.portfolio : [],
+    availability: normalizeAvailability(d.availability),
   }
 }
 
@@ -83,7 +86,37 @@ export function toPublicSite(site: SiteDoc): PublicSiteDoc {
     promos: [],
     hasPromos: site.promos.some(p => p.active),
     portfolio: site.portfolio.filter(p => !p.hidden),
+    availability: { ...site.availability, blocks: site.availability.blocks.map(b => ({ ...b, note: '' })) },
   }
+}
+
+export function shootMins(site: Pick<SiteDoc, 'packages' | 'availability'>, packageId: string | null | undefined): number {
+  const p = packageId ? site.packages.find(x => x.id === packageId) : null
+  return p?.durationMins || site.availability.defaultDurationMins || 120
+}
+
+// Time held by paid / scheduled bookings between two dates. A booking with
+// no readable start time holds its whole day. Pass excludeId to ignore one
+// booking (e.g. when the admin reschedules it).
+export async function loadBusy(site: SiteDoc, from: string, to: string, excludeId?: string): Promise<(BusySpan & { bookingId: string })[]> {
+  let q = getCrAdmin()
+    .from('cr_bookings')
+    .select('id, package_id, project_date, project_time, status')
+    .in('status', BLOCKING_STATUSES)
+    .gte('project_date', from)
+    .lte('project_date', to)
+    .limit(1000)
+  if (excludeId) q = q.neq('id', excludeId)
+  const { data, error } = await q
+  if (error || !data) return []
+  return data
+    .filter(b => b.project_date)
+    .map(b => {
+      const start = parseTimeLabel(b.project_time || '')
+      return start == null
+        ? { bookingId: b.id, date: b.project_date, start: 0, end: 1440 }
+        : { bookingId: b.id, date: b.project_date, start, end: Math.min(1440, start + shootMins(site, b.package_id)) }
+    })
 }
 
 export async function promoUseCount(code: string): Promise<number> {
