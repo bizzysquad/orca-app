@@ -3,7 +3,7 @@
 import { Plus } from 'lucide-react'
 import type { Promo, SiteDoc } from '@/lib/crooked/types'
 import type { SetDoc } from './AdminApp'
-import { Chip } from './AddonsTab'
+import ScopePicker from './ScopePicker'
 import { Field, Money, RowActions, Text, Toggle, move, newId } from './ui'
 
 export default function PromosTab({ doc, setDoc }: { doc: SiteDoc; setDoc: SetDoc }) {
@@ -20,7 +20,7 @@ export default function PromosTab({ doc, setDoc }: { doc: SiteDoc; setDoc: SetDo
           onClick={() =>
             setDoc(d => ({
               ...d,
-              promos: [...d.promos, { id: newId('promo'), code: '', label: '', kind: 'percent', amount: 10, active: false, expiresAt: null, minCents: 0, maxUses: null, categoryIds: [] }],
+              promos: [...d.promos, { id: newId('promo'), code: '', label: '', kind: 'percent', amount: 10, active: false, expiresAt: null, minCents: 0, maxUses: null, categoryIds: [], packageIds: [] }],
             }))
           }
           className="cr-btn cr-btn-ink cr-btn-sm"
@@ -65,14 +65,7 @@ export default function PromosTab({ doc, setDoc }: { doc: SiteDoc; setDoc: SetDo
             </Field>
           </div>
           <div className="mt-3">
-            <div className="text-[11px] font-black uppercase tracking-[0.1em] mb-1.5">Works on</div>
-            <div className="flex flex-wrap gap-2">
-              <Chip on={p.categoryIds.length === 0} onClick={() => upd(p.id, { categoryIds: [] })}>Everything</Chip>
-              {doc.categories.map(c => {
-                const on = p.categoryIds.includes(c.id)
-                return <Chip key={c.id} on={on} onClick={() => upd(p.id, { categoryIds: on ? p.categoryIds.filter(x => x !== c.id) : [...p.categoryIds, c.id] })}>{c.name}</Chip>
-              })}
-            </div>
+            <ScopePicker doc={doc} value={p} onChange={scope => upd(p.id, scope)} label="Works on" allLabel="Every package" />
           </div>
         </div>
       ))}

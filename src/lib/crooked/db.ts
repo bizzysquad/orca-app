@@ -28,6 +28,11 @@ function normalizePackage(p: any): Package {
   }
 }
 
+// Add ons and promos saved before package level targeting have no packageIds.
+function normalizeScope<T extends { categoryIds?: string[]; packageIds?: string[] }>(x: T): T & { categoryIds: string[]; packageIds: string[] } {
+  return { ...x, categoryIds: Array.isArray(x.categoryIds) ? x.categoryIds : [], packageIds: Array.isArray(x.packageIds) ? x.packageIds : [] }
+}
+
 // Fills in any settings keys added after the doc was first saved, so new
 // features never crash on an older stored doc.
 export function normalizeSite(raw: Partial<SiteDoc> | null | undefined): SiteDoc {
@@ -41,8 +46,8 @@ export function normalizeSite(raw: Partial<SiteDoc> | null | undefined): SiteDoc
     },
     categories: Array.isArray(d.categories) ? d.categories : DEFAULT_SITE.categories,
     packages: (Array.isArray(d.packages) ? d.packages : DEFAULT_SITE.packages).map(normalizePackage),
-    addons: Array.isArray(d.addons) ? d.addons : DEFAULT_SITE.addons,
-    promos: Array.isArray(d.promos) ? d.promos : [],
+    addons: (Array.isArray(d.addons) ? d.addons : DEFAULT_SITE.addons).map(normalizeScope),
+    promos: (Array.isArray(d.promos) ? d.promos : []).map(normalizeScope),
     portfolio: Array.isArray(d.portfolio) ? d.portfolio : [],
   }
 }

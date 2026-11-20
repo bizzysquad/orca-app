@@ -30,8 +30,27 @@ export function formatMoney(cents: number | null | undefined, opts: { always2?: 
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 })
 }
 
-export function addonsFor(site: Pick<SiteDoc, 'addons'>, categoryId: string): Addon[] {
-  return site.addons.filter(a => !a.hidden && (a.categoryIds.length === 0 || a.categoryIds.includes(categoryId)))
+export type Scope = { categoryIds: string[]; packageIds: string[] }
+
+export function isScoped(s: Scope): boolean {
+  return s.categoryIds.length > 0 || s.packageIds.length > 0
+}
+
+// Whether an add on / promo is offered on this exact package.
+export function scopeIncludes(s: Scope, pkg: Pick<Package, 'id' | 'categoryId'>): boolean {
+  return !isScoped(s) || s.categoryIds.includes(pkg.categoryId) || s.packageIds.includes(pkg.id)
+}
+
+// Add ons the client can pick for one package (booking flow + real charge).
+export function addonsForPackage(site: Pick<SiteDoc, 'addons'>, pkg: Pick<Package, 'id' | 'categoryId'>): Addon[] {
+  return site.addons.filter(a => !a.hidden && scopeIncludes(a, pkg))
+}
+
+// Add ons to list under a service tab: offered on the service or on at least
+// one of its packages.
+export function addonsForCategory(site: Pick<SiteDoc, 'addons' | 'packages'>, categoryId: string): Addon[] {
+  const pkgs = site.packages.filter(p => p.categoryId === categoryId)
+  return site.addons.filter(a => !a.hidden && (scopeIncludes(a, { id: '', categoryId }) || pkgs.some(p => a.packageIds.includes(p.id))))
 }
 
 export function addonPriceLabel(a: Addon): string {
@@ -40,10 +59,10 @@ export function addonPriceLabel(a: Addon): string {
 }
 
 // Returns an error message, or null when the promo applies.
-export function promoProblem(promo: Promo, categoryId: string, subtotalCents: number, usedCount = 0): string | null {
+export function promoProblem(promo: Promo, pkg: Pick<Package, 'id' | 'categoryId'>, subtotalCents: number, usedCount = 0): string | null {
   if (!promo.active) return 'That code is not active'
   if (promo.expiresAt && new Date(promo.expiresAt + 'T23:59:59') < new Date()) return 'That code has expired'
-  if (promo.categoryIds.length && !promo.categoryIds.includes(categoryId)) return 'That code does not apply to this package'
+  if (!scopeIncludes(promo, pkg)) return 'That code does not apply to this package'
   if (promo.minCents && subtotalCents < promo.minCents) return `That code needs an order of ${formatMoney(promo.minCents)} or more`
   if (promo.maxUses != null && usedCount >= promo.maxUses) return 'That code has been fully redeemed'
   return null
@@ -66,7 +85,7 @@ export function computeQuote(
   const pkg = site.packages.find(p => p.id === sel.packageId && !p.hidden)
   if (!pkg) return null
 
-  const allowed = addonsFor(site, pkg.categoryId)
+  const allowed = addonsForPackage(site, pkg)
   const items: LineItem[] = [{ label: pkg.name, unitCents: pkg.priceCents, qty: 1, totalCents: pkg.priceCents }]
   const customRequests: string[] = []
 
@@ -87,7 +106,7 @@ export function computeQuote(
   let promoError: string | null = null
   let appliedPromo: Promo | null = null
   if (promo) {
-    promoError = promoProblem(promo, pkg.categoryId, subtotalCents, promoUsedCount)
+    promoError = promoProblem(promo, pkg, subtotalCents, promoUsedCount)
     if (!promoError) {
       appliedPromo = promo
       discountCents =

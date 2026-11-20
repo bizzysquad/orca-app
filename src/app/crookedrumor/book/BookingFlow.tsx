@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Lock, Minus, Plus, Tag, Timer, X, Loader2 } from 'lucide-react'
 import type { Promo, PublicSiteDoc } from '@/lib/crooked/types'
-import { addonPriceLabel, addonsFor, computeQuote, formatMoney } from '@/lib/crooked/pricing'
+import { addonPriceLabel, addonsForPackage, computeQuote, formatMoney } from '@/lib/crooked/pricing'
 
 type Mode = 'package' | 'custom'
 const STEPS = ['Package', 'Add ons', 'Details', 'Review & pay'] as const
@@ -44,7 +44,7 @@ export default function BookingFlow({
   )
   const quote = useMemo(() => computeQuote(site, selection, promo), [site, selection, promo])
   const pkg = quote?.pkg
-  const addons = pkg ? addonsFor(site, pkg.categoryId) : []
+  const addons = pkg ? addonsForPackage(site, pkg) : []
 
   const choosePackage = (id: string) => {
     if (id !== packageId) {

@@ -6,6 +6,7 @@ import type { Category, DetailRow, Package, SiteDoc } from '@/lib/crooked/types'
 import { formatMoney } from '@/lib/crooked/pricing'
 import type { SetDoc } from './AdminApp'
 import { Field, Money, Panel, RowActions, StringList, Text, move, newId } from './ui'
+import { dropFromScopes } from './ScopePicker'
 
 // Rows a brand new package starts with. Empty values stay hidden on the site.
 const STARTER_LABELS = ['Filming', 'Locations', 'Setups', 'Final length', 'You get', 'Revisions']
@@ -74,7 +75,7 @@ export default function PackagesTab({ doc, setDoc }: { doc: SiteDoc; setDoc: Set
       ...d,
       categories: d.categories.filter(x => x.id !== c.id),
       packages: d.packages.filter(p => p.categoryId !== c.id),
-      addons: d.addons.map(a => ({ ...a, categoryIds: a.categoryIds.filter(id => id !== c.id) })),
+      ...dropFromScopes(d, { categoryIds: [c.id], packageIds: d.packages.filter(p => p.categoryId === c.id).map(p => p.id) }),
     }))
   }
 
@@ -143,7 +144,7 @@ export default function PackagesTab({ doc, setDoc }: { doc: SiteDoc; setDoc: Set
                         })
                         setOpen(copy.id)
                       }}
-                      onDelete={() => setDoc(d => ({ ...d, packages: d.packages.filter(x => x.id !== p.id) }))}
+                      onDelete={() => setDoc(d => ({ ...d, packages: d.packages.filter(x => x.id !== p.id), ...dropFromScopes(d, { packageIds: [p.id] }) }))}
                     />
                   </div>
 

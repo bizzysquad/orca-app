@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react'
 import type { Addon, SiteDoc } from '@/lib/crooked/types'
 import type { SetDoc } from './AdminApp'
 import { Field, Money, RowActions, Text, Toggle, move, newId } from './ui'
+import ScopePicker from './ScopePicker'
 
 export default function AddonsTab({ doc, setDoc }: { doc: SiteDoc; setDoc: SetDoc }) {
   const upd = (id: string, patch: Partial<Addon>) => setDoc(d => ({ ...d, addons: d.addons.map(a => (a.id === id ? { ...a, ...patch } : a)) }))
@@ -16,7 +17,7 @@ export default function AddonsTab({ doc, setDoc }: { doc: SiteDoc; setDoc: SetDo
           <p className="text-sm text-[var(--cr-muted)] mt-1">Leave the price empty for custom priced extras. Clients can request them, and you price them on the booking.</p>
         </div>
         <button
-          onClick={() => setDoc(d => ({ ...d, addons: [...d.addons, { id: newId('addon'), name: 'New add on', description: '', priceCents: 0, pricePrefix: '', unit: '', allowQty: false, categoryIds: [], hidden: true }] }))}
+          onClick={() => setDoc(d => ({ ...d, addons: [...d.addons, { id: newId('addon'), name: 'New add on', description: '', priceCents: 0, pricePrefix: '', unit: '', allowQty: false, categoryIds: [], packageIds: [], hidden: true }] }))}
           className="cr-btn cr-btn-ink cr-btn-sm"
         >
           <Plus size={14} strokeWidth={3} /> New add on
@@ -46,18 +47,7 @@ export default function AddonsTab({ doc, setDoc }: { doc: SiteDoc; setDoc: SetDo
             <div className="pt-5"><Toggle on={a.allowQty} onChange={v => upd(a.id, { allowQty: v })} label="Client can pick a quantity" /></div>
           </div>
           <div className="mt-3">
-            <div className="text-[11px] font-black uppercase tracking-[0.1em] mb-1.5">Offered on</div>
-            <div className="flex flex-wrap gap-2">
-              <Chip on={a.categoryIds.length === 0} onClick={() => upd(a.id, { categoryIds: [] })}>Every service</Chip>
-              {doc.categories.map(c => {
-                const on = a.categoryIds.includes(c.id)
-                return (
-                  <Chip key={c.id} on={on} onClick={() => upd(a.id, { categoryIds: on ? a.categoryIds.filter(x => x !== c.id) : [...a.categoryIds, c.id] })}>
-                    {c.name}
-                  </Chip>
-                )
-              })}
-            </div>
+            <ScopePicker doc={doc} value={a} onChange={scope => upd(a.id, scope)} label="Offered on" allLabel="Every package" />
           </div>
         </div>
       ))}

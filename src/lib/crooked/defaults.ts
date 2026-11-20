@@ -363,8 +363,9 @@ const packages: Package[] = [
   },
 ]
 
-const addon = (a: Omit<Addon, 'hidden' | 'description'> & { description?: string }): Addon => ({
+const addon = (a: Omit<Addon, 'hidden' | 'description' | 'packageIds'> & { description?: string; packageIds?: string[] }): Addon => ({
   description: '',
+  packageIds: [],
   hidden: false,
   ...a,
 })

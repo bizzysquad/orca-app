@@ -58,7 +58,10 @@ export interface Addon {
   pricePrefix: string // e.g. "Starting at", "+"
   unit: string // e.g. "per reel", "per hour"
   allowQty: boolean
-  categoryIds: string[] // empty = available on every category
+  // Where it's offered. Both empty = every package. Otherwise it applies to
+  // any package in a listed service OR any individually listed package.
+  categoryIds: string[]
+  packageIds: string[]
   hidden: boolean
 }
 
@@ -72,7 +75,8 @@ export interface Promo {
   expiresAt: string | null // yyyy-mm-dd
   minCents: number
   maxUses: number | null
-  categoryIds: string[] // empty = all
+  categoryIds: string[] // same rules as Addon: both empty = every package
+  packageIds: string[]
 }
 
 export interface PortfolioItem {

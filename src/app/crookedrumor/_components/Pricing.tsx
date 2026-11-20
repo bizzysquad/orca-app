@@ -6,8 +6,8 @@ import {
   Check, Clock, MapPin, Layers, Film, Package as Box, RotateCcw, Timer, ArrowRight,
   Music, Mic, Camera, Users, MessageSquare, Image as ImageIcon, Captions, Sparkles,
 } from 'lucide-react'
-import type { PublicSiteDoc, Package } from '@/lib/crooked/types'
-import { addonPriceLabel, addonsFor, formatMoney } from '@/lib/crooked/pricing'
+import type { Addon, PublicSiteDoc, Package } from '@/lib/crooked/types'
+import { addonPriceLabel, addonsForCategory, formatMoney, isScoped } from '@/lib/crooked/pricing'
 
 // Detail labels are free text, so pick an icon from keywords in the label.
 const ICON_RULES: [RegExp, typeof Clock][] = [
@@ -34,7 +34,12 @@ export default function Pricing({ site }: { site: PublicSiteDoc }) {
   if (!cat) return <p className="text-center opacity-70">Packages are being updated. Check back soon or request a custom quote.</p>
 
   const pkgs = site.packages.filter(p => p.categoryId === cat.id)
-  const addons = addonsFor(site, cat.id)
+  const addons = addonsForCategory(site, cat.id)
+  // When an add on covers only some packages in this service, say which.
+  const onlyOn = (a: Addon) => {
+    if (!isScoped(a) || a.categoryIds.includes(cat.id)) return ''
+    return pkgs.filter(p => a.packageIds.includes(p.id)).map(p => p.name).join(', ')
+  }
 
   return (
     <div>
@@ -91,6 +96,7 @@ export default function Pricing({ site }: { site: PublicSiteDoc }) {
                   <div>
                     <div className="font-extrabold">{a.name}</div>
                     {a.description ? <div className="text-[13px] text-[var(--cr-muted)] mt-0.5">{a.description}</div> : null}
+                    {onlyOn(a) ? <div className="text-[12px] font-bold uppercase tracking-wide text-[var(--cr-muted)] mt-1">Only with {onlyOn(a)}</div> : null}
                   </div>
                   <div className={`shrink-0 text-right font-black text-sm ${a.priceCents == null ? 'text-[var(--cr-muted)]' : 'text-[var(--cr-red)]'}`}>
                     {addonPriceLabel(a)}
