@@ -33,6 +33,8 @@ function BracketView() {
                 >
                   {e.name}
                   {e.status === 'live' && <span className="sp-chip sp-chip-live ml-2"><span className="sp-dot sp-dot-pulse" />Live</span>}
+                  {e.status !== 'live' && e.status !== 'completed' && !e.registrationOpen && <span className="sp-chip sp-chip-dim ml-2">Registration closed</span>}
+                  {e.registrationOpen && <span className="sp-chip sp-chip-warn ml-2">Registration open</span>}
                 </Link>
               ))}
             </div>

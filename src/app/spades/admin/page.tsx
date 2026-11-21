@@ -14,7 +14,7 @@ import { ErrorBox, Feedback, Loading, MatchTimer, Shell, StatusChip, fmtTime } f
 
 type Act = (action: string, payload?: Record<string, unknown>) => Promise<ActResult>
 type Msg = { ok: boolean; text: string } | null
-const TABS = ['Run', 'Teams', 'Events', 'Activity', 'Test Mode', 'Staff', 'Bracket', 'Disputes', 'Settings', 'Audit', 'Export'] as const
+const TABS = ['Activity', 'Events', 'Winners', 'Settings', 'Test Mode'] as const
 
 function useRun(act: Act) {
   const [busy, setBusy] = useState(false)
@@ -60,7 +60,7 @@ function Login() {
 function Admin() {
   const t = useSearchParams().get('t')
   const { data, error, status, loading, online, act, serverNow, reload } = useSpades<any>('admin', { t })
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Run')
+  const [tab, setTab] = useState<(typeof TABS)[number]>('Activity')
   useEffect(() => {
     try { const s = sessionStorage.getItem('sp-admin-tab'); if (s && (TABS as readonly string[]).includes(s)) setTab(s as any) } catch {}
   }, [])
@@ -98,20 +98,14 @@ function Admin() {
         <nav className="flex gap-1 overflow-x-auto p-1 rounded-xl" style={{ background: 'rgba(0,0,0,0.3)' }} role="tablist">
           {TABS.map(x => (
             <button key={x} role="tab" aria-selected={tab === x} className="px-3 py-2 rounded-lg text-sm font-bold whitespace-nowrap" style={tab === x ? { background: 'var(--sp-cream)', color: 'var(--sp-ink)' } : { color: 'var(--sp-muted)' }} onClick={() => setTab(x)}>
-              {x}{x === 'Disputes' && data.openDisputes ? ` (${data.openDisputes})` : ''}
+              {x}
             </button>
           ))}
         </nav>
-        {tab === 'Run' && <RunTab data={data} act={act} serverNow={serverNow} />}
-        {tab === 'Teams' && <TeamsTab data={data} act={act} />}
-        {tab === 'Staff' && <StaffTab data={data} act={act} />}
-        {tab === 'Bracket' && <BracketTab data={data} act={act} />}
-        {tab === 'Disputes' && <DisputesTab data={data} />}
-        {tab === 'Settings' && <SettingsTab data={data} act={act} />}
-        {tab === 'Audit' && <AuditTab data={data} />}
-        {tab === 'Export' && <ExportTab data={data} />}
+        {tab === 'Activity' && <ActivityHub data={data} act={act} serverNow={serverNow} />}
         {tab === 'Events' && <EventsTab data={data} act={act} />}
-        {tab === 'Activity' && <ActivityTab />}
+        {tab === 'Winners' && <WinnersTab data={data} />}
+        {tab === 'Settings' && <SettingsTab data={data} act={act} />}
         {tab === 'Test Mode' && <TestModeTab data={data} act={act} />}
       </div>
     </Shell>
@@ -132,7 +126,7 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
   return (
     <div className="grid gap-4">
       <section className="sp-card p-4 grid gap-3">
-        <h2 className="sp-display text-xl">Tonight, step by step</h2>
+        <h2 className="sp-display text-xl">Step by step</h2>
         <ol className="grid gap-2">
           {(open ? [
             `Teams: ${approved.length} of ${T.teamLimit} approved, ${checkedIn} checked in.`,
@@ -140,8 +134,7 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
             'Tap Begin on a game, or Begin all ready games. Finalize each game when it ends; the standings update.',
           ] : [
             `Teams: ${approved.length} of ${T.teamLimit} approved, ${checkedIn} checked in.`,
-            'Close registration and lock the roster. The bracket is drawn at random automatically.',
-            'Check the draw on the Bracket tab, then publish it.',
+            'Close registration. The bracket is drawn at random and shown to everyone.',
             'Tap Begin to start round 1. Teams wait on their phones until you do. Finalize each match when it completes to move winners forward.',
           ]).map((s, i) => (
             <li key={i} className="flex gap-3 p-3 rounded-lg" style={{ background: step === i + 1 ? 'rgba(224,173,79,0.15)' : 'rgba(0,0,0,0.2)', border: step === i + 1 ? '1px solid var(--sp-gold)' : '1px solid transparent' }}>
@@ -156,10 +149,11 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
             </button>
           )}
           {open ? null : !T.rosterLocked ? (
-            <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Lock the roster with ${approved.length} approved teams and draw a random bracket?`)) run('rosterLock', { tournamentId: T.id, locked: true }, 'Roster locked and bracket drawn. Review it on the Bracket tab.') }}>Lock roster and draw bracket</button>
+            <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Close registration with ${approved.length} teams and draw the bracket?`)) (async () => { const r = await run('rosterLock', { tournamentId: T.id, locked: true }, 'Registration closed and bracket drawn'); if (r.ok) await run('publishBracket', { tournamentId: T.id, published: true }, 'Registration closed. Bracket drawn and live.') })() }}>Close registration and draw bracket</button>
           ) : T.status !== 'live' && T.status !== 'completed' && (
-            <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { if (confirm('Unlock the roster? This deletes the unpublished bracket.')) run('rosterLock', { tournamentId: T.id, locked: false }, 'Roster unlocked') }}>Unlock roster</button>
+            <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { if (confirm('Reopen registration? This clears the bracket so it can be drawn again.')) run('rosterLock', { tournamentId: T.id, locked: false }, 'Roster unlocked') }}>Reopen registration</button>
           )}
+          {T.useBracket && T.rosterLocked && data.matches.length > 0 && !data.matches.some((m: any) => ['live', 'paused', 'completed'].includes(m.status) || (m.status === 'final' && m.resultKind !== 'bye')) && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={async () => { if (!confirm('Redraw the bracket at random?')) return; const r = await run('generateBracket', { tournamentId: T.id, mode: 'random' }, 'Redrawn'); if (r.ok) await run('publishBracket', { tournamentId: T.id, published: true }, 'Redrawn and live') }}>Redraw bracket</button>}
           {T.rosterLocked && data.matches.length > 0 && !T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => run('publishBracket', { tournamentId: T.id, published: true }, 'Bracket published')}>Publish bracket</button>}
           <Link href="/spades/display" target="_blank" className="sp-btn sp-btn-sm sp-btn-ghost">Open TV display</Link>
           <Link href="/spades/print?kind=scorecards" target="_blank" className="sp-btn sp-btn-sm sp-btn-ghost">Print backup scorecards</Link>
@@ -411,190 +405,9 @@ function EditTeam({ team, act, onDone }: { team: any; act: Act; onDone: () => vo
 
 // ─── Staff + tables ─────────────────────────────────────────────────────────
 
-function StaffTab({ data, act }: { data: any; act: Act }) {
-  const T = data.tournamentFull
-  const { busy, msg, run } = useRun(act)
-  const [name, setName] = useState('')
-  const [role, setRole] = useState('supervisor')
-  const [issued, setIssued] = useState<any | null>(null)
-  const [count, setCount] = useState(String(data.tables.length || 4))
-  const isOwner = data.viewer.kind === 'owner'
-  return (
-    <div className="grid gap-4">
-      {issued && <div className="grid gap-2 max-w-sm"><InviteCard inv={issued} /><button className="sp-btn sp-btn-sm sp-btn-ghost" onClick={() => setIssued(null)}>Done</button></div>}
-      <form className="sp-card p-4 grid gap-3" onSubmit={async e => { e.preventDefault(); const r = await run('addStaff', { tournamentId: T.id, name, role }, 'Staff added. Give them the code.'); if (r.ok) { setIssued(r.data.invite); setName('') } }}>
-        <h2 className="sp-display text-xl">Add a table supervisor</h2>
-        <div className="grid sm:grid-cols-3 gap-2">
-          <input className="sp-input" placeholder="Name" aria-label="Staff name" maxLength={40} value={name} onChange={e => setName(e.target.value)} />
-          <select className="sp-select" aria-label="Role" value={role} onChange={e => setRole(e.target.value)}>
-            <option value="supervisor">Table supervisor</option>
-            {isOwner && <option value="director">Co director</option>}
-          </select>
-          <button className="sp-btn sp-btn-gold" disabled={busy || !name.trim()}>Add and get code</button>
-        </div>
-      </form>
-      <Feedback msg={msg} />
-      <section className="sp-card p-4 grid gap-2">
-        <h2 className="sp-display text-xl">Staff</h2>
-        {data.staff.length === 0 && <p style={{ color: 'var(--sp-muted)' }}>No supervisors yet. You can run every table yourself as director.</p>}
-        {data.staff.map((s: any) => (
-          <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)', opacity: s.active ? 1 : 0.5 }}>
-            <div>
-              <div className="font-bold">{s.name} <span className="sp-chip sp-chip-info ml-1">{s.role}</span></div>
-              <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{s.active ? INVITE_LABEL[s.invite.status] : 'Deactivated'}</div>
-            </div>
-            {s.active && (
-              <div className="flex gap-2">
-                <button className="sp-btn sp-btn-sm" onClick={async () => { const r = await run('invite', { staffId: s.id, revokeSessions: s.invite.status === 'used' }, 'New code ready'); if (r.ok) setIssued(r.data) }}>New code</button>
-                <button className="sp-btn sp-btn-sm sp-btn-danger" onClick={() => { if (confirm(`Deactivate ${s.name}? They are signed out immediately.`)) run('updateStaff', { staffId: s.id, active: false }, 'Deactivated') }}>Deactivate</button>
-              </div>
-            )}
-          </div>
-        ))}
-      </section>
-      <section className="sp-card p-4 grid gap-3">
-        <h2 className="sp-display text-xl">Tables</h2>
-        <div className="flex items-end gap-2">
-          <label className="sp-field" style={{ maxWidth: 160 }}><span>Number of tables</span><input className="sp-input" inputMode="numeric" value={count} onChange={e => setCount(e.target.value.replace(/\D/g, ''))} /></label>
-          <button className="sp-btn sp-btn-sm" disabled={busy || !count} onClick={() => run('setTables', { tournamentId: T.id, count: Number(count) }, 'Tables updated')}>Save</button>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-2">
-          {data.tables.map((tb: any) => (
-            <label key={tb.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}>
-              <span className="sp-display text-2xl w-12">T{tb.number}</span>
-              <select className="sp-select" value={tb.supervisorId || ''} aria-label={`Supervisor for table ${tb.number}`} onChange={e => run('assignSupervisor', { tableId: tb.id, staffId: e.target.value || null }, `Table ${tb.number} updated`)}>
-                <option value="">Any supervisor</option>
-                {data.staff.filter((s: any) => s.active).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </label>
-          ))}
-        </div>
-        <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>A supervisor can act on tables assigned to them and on tables with no one assigned. You can act on every table.</p>
-      </section>
-    </div>
-  )
-}
-
 // ─── Bracket ────────────────────────────────────────────────────────────────
 
-function BracketTab({ data, act }: { data: any; act: Act }) {
-  const T = data.tournamentFull
-  const { busy, msg, run } = useRun(act)
-  const approved = data.allTeams.filter((x: any) => x.status === 'approved')
-  const [order, setOrder] = useState<string[]>(() => [...approved].sort((a: any, b: any) => (a.seed || 99) - (b.seed || 99)).map((x: any) => x.id))
-  const name = (id: string) => approved.find((x: any) => x.id === id)?.name || ''
-  const started = data.matches.some((m: any) => ['live', 'paused', 'completed'].includes(m.status) || (m.status === 'final' && m.resultKind !== 'bye'))
-  const move = (i: number, d: number) => setOrder(o => { const n = [...o]; const j = i + d; if (j < 0 || j >= n.length) return o; [n[i], n[j]] = [n[j], n[i]]; return n })
-  return (
-    <div className="grid gap-4">
-      {!T.useBracket && <div className="sp-banner sp-banner-info text-sm">This event does not use a bracket. Add games by hand on the Run tab, or turn the bracket on in the Events tab.</div>}
-      {T.useBracket && !T.rosterLocked && <div className="sp-banner sp-banner-info text-sm">Lock the roster on the Run tab to draw the bracket.</div>}
-      {T.rosterLocked && !started && (
-        <section className="sp-card p-4 grid gap-3">
-          <h2 className="sp-display text-xl">Draw</h2>
-          <div className="flex flex-wrap gap-2">
-            <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => { if (confirm('Redraw a new random bracket?')) run('generateBracket', { tournamentId: T.id, mode: 'random' }, 'New random draw') }}>Redraw at random</button>
-            {data.matches.length > 0 && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => run('publishBracket', { tournamentId: T.id, published: !T.bracketPublished }, T.bracketPublished ? 'Hidden' : 'Published')}>{T.bracketPublished ? 'Unpublish' : 'Publish bracket'}</button>}
-          </div>
-          <details>
-            <summary className="font-bold">Set seeds by hand</summary>
-            <ol className="grid gap-1 mt-2">
-              {order.map((id, i) => (
-                <li key={id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}>
-                  <span className="sp-num w-6 font-black" style={{ color: 'var(--sp-gold)' }}>{i + 1}</span>
-                  <span className="flex-1 font-bold">{name(id)}</span>
-                  <button className="sp-btn sp-btn-sm sp-btn-ghost" aria-label={`Move ${name(id)} up`} onClick={() => move(i, -1)}>Up</button>
-                  <button className="sp-btn sp-btn-sm sp-btn-ghost" aria-label={`Move ${name(id)} down`} onClick={() => move(i, 1)}>Down</button>
-                </li>
-              ))}
-            </ol>
-            <p className="text-xs mt-2" style={{ color: 'var(--sp-muted)' }}>Seed 1 plays seed 8, 4 plays 5, 2 plays 7, 3 plays 6.</p>
-            <button className="sp-btn sp-btn-sm sp-btn-gold mt-2" disabled={busy || order.length !== approved.length} onClick={() => run('generateBracket', { tournamentId: T.id, mode: 'manual', order }, 'Bracket set from your seeds')}>Use these seeds</button>
-          </details>
-          <Feedback msg={msg} />
-        </section>
-      )}
-      {data.matches.length > 0 ? (
-        <section>
-          <h2 className="sp-display text-xl mb-2">{T.bracketPublished ? 'Published bracket' : 'Preview (only you can see this)'}</h2>
-          <Bracket data={data} linkMatches />
-        </section>
-      ) : T.rosterLocked && <ErrorBox message="No bracket yet. Approve more than half the capacity, then redraw." />}
-    </div>
-  )
-}
-
 // ─── Disputes, audit, export ────────────────────────────────────────────────
-
-function DisputesTab({ data }: { data: any }) {
-  const open = data.disputes.filter((d: any) => d.status === 'open')
-  const closed = data.disputes.filter((d: any) => d.status !== 'open')
-  const row = (d: any) => (
-    <Link key={d.id} href={`/spades/match/${d.matchId}#staff`} className="sp-card p-3 grid gap-1 text-sm" style={d.status === 'open' ? { borderColor: 'var(--sp-red)' } : undefined}>
-      <div className="flex flex-wrap gap-2 items-center"><span className={`sp-chip ${d.status === 'open' ? 'sp-chip-bad' : 'sp-chip-dim'}`}>{d.status}</span><b>{d.kind.replace(/_/g, ' ')}</b><span>{d.matchLabel}{d.handNumber ? ` · hand ${d.handNumber}` : ''}</span><span style={{ color: 'var(--sp-muted)' }}>{fmtTime(d.createdAt)} by {d.raisedBy}</span></div>
-      <div>{d.reason}</div>
-      {d.resolution && <div style={{ color: 'var(--sp-muted)' }}>Ruling by {d.resolvedBy}: {d.resolution}</div>}
-    </Link>
-  )
-  return (
-    <div className="grid gap-4">
-      <section className="grid gap-2"><h2 className="sp-display text-xl">Open</h2>{open.length ? open.map(row) : <p style={{ color: 'var(--sp-muted)' }}>Nothing open.</p>}</section>
-      {closed.length > 0 && <section className="grid gap-2"><h2 className="sp-display text-xl">Closed</h2>{closed.map(row)}</section>}
-    </div>
-  )
-}
-
-function AuditTab({ data }: { data: any }) {
-  return (
-    <section className="sp-card p-4">
-      <h2 className="sp-display text-xl mb-2">Audit log (latest 300)</h2>
-      <div className="sp-scroll">
-        <table className="sp-table">
-          <thead><tr><th>Time</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>
-          <tbody>
-            {data.audit.map((a: any) => (
-              <tr key={a.id}>
-                <td className="sp-num whitespace-nowrap">{fmtTime(a.at)}</td>
-                <td>{a.actor || 'Public'}<div className="text-xs" style={{ color: 'var(--sp-dim)' }}>{a.role}</div></td>
-                <td className="font-bold whitespace-nowrap">{a.action}</td>
-                <td className="text-xs" style={{ color: 'var(--sp-muted)', maxWidth: 420 }}>
-                  {a.reason && <div style={{ color: 'var(--sp-cream)' }}>Reason: {a.reason}</div>}
-                  {a.before && <div>Before: {JSON.stringify(a.before)}</div>}
-                  {a.after && <div>After: {JSON.stringify(a.after)}</div>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
-}
-
-function ExportTab({ data }: { data: any }) {
-  const slug = data.tournamentFull.slug
-  const items = [
-    ['teams', 'Team registration'], ['matches', 'Match results'], ['hands', 'Hand by hand scoring'], ['standings', 'Final standings'], ['disputes', 'Disputes and corrections'],
-  ]
-  return (
-    <div className="grid gap-4">
-      <section className="sp-card p-4 grid gap-2">
-        <h2 className="sp-display text-xl">CSV exports</h2>
-        <div className="grid sm:grid-cols-2 gap-2">
-          {items.map(([k, label]) => <a key={k} className="sp-btn sp-btn-sm" href={`/api/spades/export?t=${slug}&kind=${k}`}>{label}</a>)}
-        </div>
-      </section>
-      <section className="sp-card p-4 grid gap-2">
-        <h2 className="sp-display text-xl">Print backups</h2>
-        <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>If the wifi drops, tables keep score on paper and a supervisor enters the hands once it is back.</p>
-        <div className="grid sm:grid-cols-2 gap-2">
-          <Link className="sp-btn sp-btn-sm" href={`/spades/print?kind=scorecards&t=${slug}`} target="_blank">Table scorecards</Link>
-          <Link className="sp-btn sp-btn-sm" href={`/spades/print?kind=bracket&t=${slug}`} target="_blank">Printable bracket</Link>
-        </div>
-      </section>
-    </div>
-  )
-}
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
@@ -639,6 +452,12 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
             <select className="sp-select" value={r.bidOrder} onChange={e => setR({ ...r, bidOrder: e.target.value })}>
               <option value="simultaneous">At the same time, hidden until locked</option>
               <option value="sequential">In seat order, earlier bids visible</option>
+            </select>
+          </label>
+          <label className="sp-field"><span>Who keeps score</span>
+            <select className="sp-select" value={r.scorekeeping} onChange={e => setR({ ...r, scorekeeping: e.target.value })}>
+              <option value="two">Each team captain enters their own team</option>
+              <option value="one">One scorekeeper enters everything</option>
             </select>
           </label>
           <label className="sp-field"><span>Match format</span>
@@ -805,12 +624,12 @@ function EventEditor({ ev, act, isCurrent }: { ev: any; act: Act; isCurrent: boo
   const r = ev.rules
   const [f, setF] = useState({
     name: ev.name, starts_at: toLocalInput(ev.startsAt), team_limit: String(ev.teamLimit), gamesToWin: String(r.gamesToWin),
-    targetDefault: String(r.targetDefault), targetFinal: String(r.targetFinal), useBracket: r.useBracket ? 'yes' : 'no',
+    targetDefault: String(r.targetDefault), targetFinal: String(r.targetFinal), useBracket: r.useBracket ? 'yes' : 'no', scorekeeping: r.scorekeeping,
   })
   const save = () => {
     const patch: Record<string, unknown> = {
       name: f.name, starts_at: f.starts_at ? new Date(f.starts_at).toISOString() : null,
-      rules: { gamesToWin: Number(f.gamesToWin), targetDefault: Number(f.targetDefault), targetFinal: Number(f.targetFinal), useBracket: f.useBracket === 'yes' },
+      rules: { gamesToWin: Number(f.gamesToWin), targetDefault: Number(f.targetDefault), targetFinal: Number(f.targetFinal), useBracket: f.useBracket === 'yes', scorekeeping: f.scorekeeping },
     }
     if (Number(f.team_limit) !== ev.teamLimit) patch.team_limit = Number(f.team_limit)
     run('updateTournament', { tournamentId: ev.id, patch }, 'Event saved')
@@ -822,6 +641,7 @@ function EventEditor({ ev, act, isCurrent }: { ev: any; act: Act; isCurrent: boo
         <label className="sp-field"><span>Starts</span><input type="datetime-local" className="sp-input" value={f.starts_at} onChange={e => setF({ ...f, starts_at: e.target.value })} /></label>
         <label className="sp-field"><span>Most teams</span><input className="sp-input" inputMode="numeric" value={f.team_limit} onChange={e => setF({ ...f, team_limit: e.target.value.replace(/\D/g, '') })} /></label>
         <label className="sp-field"><span>Bracket</span><select className="sp-select" value={f.useBracket} onChange={e => setF({ ...f, useBracket: e.target.value })}><option value="yes">Use a bracket</option><option value="no">No bracket, just keep score</option></select></label>
+        <label className="sp-field"><span>Who keeps score</span><select className="sp-select" value={f.scorekeeping} onChange={e => setF({ ...f, scorekeeping: e.target.value })}><option value="two">Each team captain</option><option value="one">One scorekeeper for both teams</option></select></label>
         <label className="sp-field"><span>Format</span><select className="sp-select" value={f.gamesToWin} onChange={e => setF({ ...f, gamesToWin: e.target.value })}><option value="1">Single game</option><option value="2">Best of 3</option><option value="3">Best of 5</option></select></label>
         <label className="sp-field"><span>Play to</span><input className="sp-input" inputMode="numeric" value={f.targetDefault} onChange={e => setF({ ...f, targetDefault: e.target.value.replace(/\D/g, '') })} /></label>
         {f.useBracket === 'yes' && <label className="sp-field"><span>Championship plays to</span><input className="sp-input" inputMode="numeric" value={f.targetFinal} onChange={e => setF({ ...f, targetFinal: e.target.value.replace(/\D/g, '') })} /></label>}
@@ -833,7 +653,7 @@ function EventEditor({ ev, act, isCurrent }: { ev: any; act: Act; isCurrent: boo
         {!isCurrent && <a className="sp-btn sp-btn-sm sp-btn-ghost" href={`/spades/admin?t=${ev.slug}`}>Run this event</a>}
         <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy || ev.status === 'archived'} onClick={() => { if (confirm(`Archive ${ev.name}? It stays in the records but becomes read only.`)) run('updateTournament', { tournamentId: ev.id, patch: { status: 'archived' } }, 'Archived') }}>Archive</button>
         <button className="sp-btn sp-btn-sm sp-btn-danger" disabled={busy} onClick={async () => {
-          if (!confirm(`Delete ${ev.name} completely? Teams, games and its history are removed. Events with played hands cannot be deleted, only archived.`)) return
+          if (!confirm(`Delete ${ev.name} completely? Teams, games and all history are removed for good. Add the winners on the Winners tab first if you want to keep them.`)) return
           const res = await run('deleteEvent', { tournamentId: ev.id }, 'Event deleted')
           if (res.ok && isCurrent) window.location.href = '/spades/admin'
         }}>Delete</button>
@@ -985,6 +805,115 @@ function ActivityTab() {
               </div>
             </div>
             {g.latestMatchId && <a className="sp-btn sp-btn-sm" href={`/spades/match/${g.latestMatchId}`}>Watch</a>}
+          </div>
+        ))}
+      </section>
+    </div>
+  )
+}
+
+// One place to run everything: pick an event, see and control every game,
+// see its teams. Self-started games from the home page have their own view.
+function ActivityHub({ data, act, serverNow }: { data: any; act: Act; serverNow: () => number }) {
+  const T = data.tournamentFull
+  const [view, setView] = useState<'event' | 'self'>('event')
+  const events = (data.tournaments || []).filter((x: any) => !x.isTest)
+  const teamCount = data.allTeams.filter((x: any) => x.status === 'approved').length
+  const { busy, msg, run } = useRun(act)
+  return (
+    <div className="grid gap-4">
+      <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Pick an event">
+        {events.map((e: any) => (
+          <a key={e.slug} role="tab" aria-selected={view === 'event' && e.slug === T.slug} href={`/spades/admin?t=${e.slug}`} onClick={ev => { if (e.slug === T.slug) { ev.preventDefault(); setView('event') } }}
+            className="px-4 py-3 rounded-xl font-bold whitespace-nowrap"
+            style={view === 'event' && e.slug === T.slug ? { background: 'var(--sp-cream)', color: 'var(--sp-ink)' } : { background: 'rgba(0,0,0,0.3)', color: 'var(--sp-muted)', border: '1px solid var(--sp-line)' }}>
+            {e.name}
+          </a>
+        ))}
+        <button role="tab" aria-selected={view === 'self'} onClick={() => setView('self')} className="px-4 py-3 rounded-xl font-bold whitespace-nowrap"
+          style={view === 'self' ? { background: 'var(--sp-cream)', color: 'var(--sp-ink)' } : { background: 'rgba(0,0,0,0.3)', color: 'var(--sp-muted)', border: '1px solid var(--sp-line)' }}>
+          Self-started games
+        </button>
+      </div>
+      {view === 'self' ? <ActivityTab /> : (
+        <>
+          <section className="sp-card p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-black text-lg">{T.name}</div>
+              <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>{teamCount} of {T.teamLimit} teams · {T.registrationOpen && !T.rosterLocked ? 'registration open' : 'registration closed'} · {T.useBracket ? 'bracket' : 'open play'}</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {!T.rosterLocked && <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { registration_open: !T.registrationOpen } }, T.registrationOpen ? 'Registration closed' : 'Registration open')}>{T.registrationOpen ? 'Close registration' : 'Open registration'}</button>}
+              <a className="sp-btn sp-btn-sm sp-btn-ghost" href={`/spades?t=${T.slug}`} target="_blank" rel="noreferrer">Public page</a>
+              <a className="sp-btn sp-btn-sm sp-btn-ghost" href={`/spades/display?t=${T.slug}`} target="_blank" rel="noreferrer">TV display</a>
+            </div>
+            <Feedback msg={msg} />
+          </section>
+          <RunTab data={data} act={act} serverNow={serverNow} />
+          <details className="sp-card p-4">
+            <summary className="sp-display text-xl">Teams ({data.allTeams.length})</summary>
+            <div className="mt-3"><TeamsTab data={data} act={act} /></div>
+          </details>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Weekly winners wall: upload the champions' trophy photo.
+function WinnersTab({ data }: { data: any }) {
+  const T = data.tournamentFull
+  const champ = T.championTeamId ? data.allTeams.find((x: any) => x.id === T.championTeamId) : null
+  const [list, setList] = useState<any[] | null>(null)
+  const [f, setF] = useState({ team: champ?.name || '', players: champ ? champ.players.map((p: any) => p.name).join(' & ') : '', event: T.name, week: new Date().toISOString().slice(0, 10) })
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<Msg>(null)
+  const load = () => fetch('/api/spades/winners', { cache: 'no-store' }).then(r => r.json()).then(j => setList(j.winners || [])).catch(() => setList([]))
+  useEffect(() => { load() }, [])
+  const post = (body: Record<string, unknown>) => fetch('/api/spades/winners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) }).then(async r => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
+  const save = async () => {
+    setBusy(true)
+    setMsg(null)
+    let photoUrl: string | null = null
+    if (file) {
+      const u = await post({ action: 'uploadUrl', filename: file.name })
+      if (!u.ok) { setBusy(false); setMsg({ ok: false, text: u.data.error || 'Upload failed' }); return }
+      const put = await fetch(u.data.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file })
+      if (!put.ok) { setBusy(false); setMsg({ ok: false, text: 'Photo upload failed. Try a smaller photo.' }); return }
+      photoUrl = u.data.publicUrl
+    }
+    const r = await post({ action: 'add', ...f, photoUrl })
+    setBusy(false)
+    if (!r.ok) { setMsg({ ok: false, text: r.data.error || 'Could not save' }); return }
+    setMsg({ ok: true, text: 'Added to the Winners page' })
+    setFile(null)
+    load()
+  }
+  return (
+    <div className="grid gap-4">
+      <section className="sp-card p-4 grid gap-3">
+        <h2 className="sp-display text-xl">Add this week&apos;s winners</h2>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="sp-field"><span>Team</span><input className="sp-input" value={f.team} maxLength={60} onChange={e => setF({ ...f, team: e.target.value })} /></label>
+          <label className="sp-field"><span>Players</span><input className="sp-input" value={f.players} maxLength={120} onChange={e => setF({ ...f, players: e.target.value })} /></label>
+          <label className="sp-field"><span>Event</span><input className="sp-input" value={f.event} maxLength={120} onChange={e => setF({ ...f, event: e.target.value })} /></label>
+          <label className="sp-field"><span>Week of</span><input type="date" className="sp-input" value={f.week} onChange={e => setF({ ...f, week: e.target.value })} /></label>
+          <label className="sp-field sm:col-span-2"><span>Photo with the trophy</span><input type="file" accept="image/*" className="sp-input" onChange={e => setFile(e.target.files?.[0] || null)} /></label>
+        </div>
+        <button className="sp-btn sp-btn-gold" disabled={busy || !f.team.trim()} onClick={save}>{busy ? 'Saving' : 'Add to Winners page'}</button>
+        <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Winners are the only thing kept long term. Once they are added you can delete the event on the Events tab.</p>
+        <Feedback msg={msg} />
+      </section>
+      <section className="sp-card p-4 grid gap-2">
+        <div className="flex items-center justify-between"><h2 className="sp-display text-xl">On the Winners page</h2><a className="sp-btn sp-btn-sm sp-btn-ghost" href="/spades/winners" target="_blank" rel="noreferrer">View page</a></div>
+        {list === null ? <Loading /> : list.length === 0 ? <p style={{ color: 'var(--sp-muted)' }}>No winners posted yet.</p> : list.map(w => (
+          <div key={w.id} className="flex items-center justify-between gap-3 p-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}>
+            <div className="flex items-center gap-3">
+              {w.photoUrl ? <img src={w.photoUrl} alt="" width={56} height={56} className="rounded-lg object-cover" style={{ width: 56, height: 56 }} /> : null}
+              <div><div className="font-bold">{w.team}</div><div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{w.week} · {w.event}</div></div>
+            </div>
+            <button className="sp-btn sp-btn-sm sp-btn-danger" onClick={async () => { if (confirm(`Remove ${w.team} from the Winners page?`)) { await post({ action: 'delete', id: w.id }); load() } }}>Remove</button>
           </div>
         ))}
       </section>

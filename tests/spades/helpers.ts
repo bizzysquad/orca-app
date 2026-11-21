@@ -5,7 +5,7 @@ import type { HandRow, MatchRow, PlayerRow, TeamRow } from '../../src/lib/spades
 
 export const owner: Actor = { kind: 'owner', name: 'Test Director' }
 // Classic 10-per-book scoring, used by the older flow tests.
-export const CLASSIC = { pointsPerBook: 10, bagValue: 1, setPenaltyPerBook: 10, targetDefault: 250, targetFinal: 350, bagsEnabled: true, requireCaptainApproval: true }
+export const CLASSIC = { pointsPerBook: 10, bagValue: 1, setPenaltyPerBook: 10, targetDefault: 250, targetFinal: 350, bagsEnabled: true, requireCaptainApproval: true, autoApprove: false }
 
 export async function setup(opts: { rules?: Record<string, unknown>; teams?: number; capacity?: number } = {}) {
   const store = new MemoryStore()

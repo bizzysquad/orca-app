@@ -35,7 +35,6 @@ const ACTIONS: Record<string, Handler> = {
   scheduleRound: (s, a, b) => S.scheduleRound(s, a, { tournamentId: b.tournamentId, round: Number(b.round), scheduledAt: b.scheduledAt ?? null, autoStart: b.autoStart }),
   endNow: (s, a, b) => S.endMatchNow(s, a, { matchId: b.matchId, reason: b.reason, winnerTeamId: b.winnerTeamId }),
   // One person per team enters bids and books: the captain. No switching.
-  partnerCode: (s, a) => S.issuePartnerCode(s, a),
   opponentCode: (s, a) => S.issueOpponentCode(s, a),
   rematch: (s, a) => S.requestRematch(s, a),
   createTest: (s, a, b) => S.createTestEvent(s, a, { gamesToWin: b.gamesToWin, target: b.target, control: b.control }),
@@ -96,7 +95,7 @@ export async function POST(req: NextRequest) {
       const key = clientKey(req)
       await S.rateLimit(s, key, 'startgame', 15, 60 * 60 * 1000)
       await S.recordAttempt(s, key, 'startgame')
-      const r = await S.createSelfServeGame(s, { teamA: body.teamA, captainA: body.captainA, partnerA: body.partnerA, teamB: body.teamB, captainB: body.captainB, partnerB: body.partnerB, target: body.target })
+      const r = await S.createSelfServeGame(s, { teamA: body.teamA, captainA: body.captainA, partnerA: body.partnerA, teamB: body.teamB, captainB: body.captainB, partnerB: body.partnerB, target: body.target, scorekeeping: body.scorekeeping === 'two' ? 'two' : 'one' })
       const sess = await S.createSession(s, { kind: 'player', tournamentId: r.tournamentId, playerId: r.captainPlayerId, staffId: null, invitationId: null, ttlMs: S.PLAYER_SESSION_MS })
       const res = json({ ok: true, slug: r.slug, myCode: r.myCode, otherCode: r.otherCode, otherCaptain: r.otherCaptain })
       setSessionCookie(res, sess.sessionToken, sess.expiresAt)

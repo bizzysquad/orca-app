@@ -84,7 +84,7 @@ function Register() {
             <label className="sp-field"><span>Your partner&apos;s name</span>
               <input className="sp-input" required maxLength={40} autoComplete="off" value={form.player2} onChange={e => set('player2', e.target.value)} />
             </label>
-            <div className="sp-banner sp-banner-info text-sm">You are the captain: this phone enters both bids and your books every hand. Your partner just plays.</div>
+            <div className="sp-banner sp-banner-info text-sm">{T.rules?.scorekeeping === 'one' ? 'One scorekeeper enters every bid and the books for the table. Your partner just plays.' : 'You are the captain: this phone enters both bids and your books every hand. Your partner just plays.'}</div>
             <label className="sp-field"><span>Phone or email (optional, only the director sees it)</span>
               <input className="sp-input" maxLength={120} autoComplete="off" value={form.contact} onChange={e => set('contact', e.target.value)} />
             </label>

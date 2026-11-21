@@ -55,7 +55,7 @@ function Landing() {
           </div>
           <p className="sp-label" style={{ color: 'var(--sp-gold)' }}>DJ Maskoff presents</p>
           <h1 className="sp-display mt-2" style={{ fontSize: 'clamp(40px, 9vw, 92px)', maxWidth: 760 }}>{T.name.replace(/^DJ Maskoff Presents\s*/i, '')}</h1>
-          {T.subtitle && <p className="sp-serif italic text-xl mt-3" style={{ color: 'var(--sp-cream)' }}>{T.subtitle}</p>}
+          <p className="sp-display text-lg mt-3 tracking-widest" style={{ color: 'var(--sp-gold)' }}>Powered by DJ MASKOFF</p>
           <div className="flex flex-wrap gap-2 mt-5">
             <span className="sp-chip sp-chip-live">Free to enter</span>
           </div>
@@ -73,7 +73,7 @@ function Landing() {
 
       {T.useBracket && (
       <section className="sp-wrap mt-6" aria-label="Winners" id="winners">
-        <h2 className="sp-display text-2xl mb-3">Winners</h2>
+        <div className="flex items-center justify-between gap-2 mb-3"><h2 className="sp-display text-2xl">Winners</h2><Link href="/spades/winners" className="sp-btn sp-btn-sm sp-btn-ghost">See all winners</Link></div>
         {W ? (
           <div className="grid md:grid-cols-3 gap-4">
             <div className="sp-card-paper p-6 text-center md:col-span-2">

@@ -38,6 +38,7 @@ export function MatchPanel({ d, act, serverNow }: { d: any; act: Act; serverNow:
           Match complete. {m.winner === d.teamA?.id ? names.a : names.b} wins {Math.max(m.scoreA, m.scoreB)} to {Math.min(m.scoreA, m.scoreB)}. Waiting for the tournament director to make it official.
         </div>
       )}
+      {m.status === 'final' && v.level !== 'staff' && <a href="/spades" className="sp-btn sp-btn-sm sp-btn-ghost justify-self-start">Back to home</a>}
       {m.status === 'final' && (
         <div className="sp-banner sp-banner-ok">
           Final: {m.winner === d.teamA?.id ? names.a : names.b} advances.{m.resultKind && m.resultKind !== 'played' ? ` (${m.resultKind === 'dq' ? 'disqualification' : m.resultKind})` : ''}{m.resultNote && m.resultKind !== 'played' ? ` ${m.resultNote}` : ''}
@@ -126,6 +127,8 @@ function HandPanel({ d, act, names }: { d: any; act: Act; names: { a: string; b:
   const v = d.viewer
   const m = d.match
   const live = m.status === 'live'
+  const oneMode = m.rules?.scorekeeping === 'one'
+  const keeper = oneMode && v.level === 'player' && v.isCaptain
   const readyCount = (side: 'a' | 'b') => c.seats.filter((s: any) => s.side === side && s.submitted).length
   return (
     <section className="sp-card p-4 grid gap-4" aria-label={`Hand ${c.handNumber}`} id="hand">
@@ -136,7 +139,7 @@ function HandPanel({ d, act, names }: { d: any; act: Act; names: { a: string; b:
         </span>
       </div>
       {c.status === 'bidding' && <SeatList c={c} names={names} />}
-      {c.status === 'bidding' && v.level === 'player' && live && (v.control === 'captain' ? <CaptainBid d={d} act={act} /> : <MyBid d={d} act={act} />)}
+      {c.status === 'bidding' && v.level === 'player' && live && (keeper ? <KeeperBids d={d} act={act} names={names} /> : oneMode ? <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>The scorekeeper enters every bid.</p> : v.control === 'captain' ? <CaptainBid d={d} act={act} /> : <MyBid d={d} act={act} />)}
       {c.status !== 'bidding' && <LockedBids d={d} names={names} />}
       {c.status === 'playing' && (
         <div className="sp-banner sp-banner-info text-sm">
@@ -153,9 +156,9 @@ function HandPanel({ d, act, names }: { d: any; act: Act; names: { a: string; b:
         </div>
       )}
       {c.status === 'review' && c.provisional && <Provisional d={d} names={names} />}
-      {['playing', 'disputed', 'review'].includes(c.status) && v.level === 'player' && v.isCaptain && live && <ReportBooks d={d} act={act} names={names} />}
+      {['playing', 'disputed', 'review'].includes(c.status) && v.level === 'player' && v.isCaptain && live && (keeper ? <KeeperBooks d={d} act={act} names={names} /> : <ReportBooks d={d} act={act} names={names} />)}
       {c.status === 'review' && v.level === 'player' && v.isCaptain && live && <ApproveHand d={d} act={act} />}
-      {v.level === 'player' && !v.isCaptain && c.status !== 'bidding' && (
+      {v.level === 'player' && !v.isCaptain && !oneMode && c.status !== 'bidding' && (
         <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Your captain reports books and confirms each hand.</p>
       )}
     </section>
@@ -769,7 +772,9 @@ export function GamePreview({ d, serverNow }: { d: any; serverNow: () => number 
           <span className="sp-chip sp-chip-dim">Locked until the game starts</span>
         </div>
         <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>
-          {v.control === 'captain'
+          {d.match.rules?.scorekeeping === 'one'
+            ? 'When the game starts, the scorekeeper enters both team bids here before every hand, and the books after it.'
+            : v.control === 'captain'
             ? `When the game starts, ${mineTeam?.players?.find((p: any) => p.isCaptain)?.name || 'your captain'} enters both of your bids here before every hand.`
             : 'When the game starts, you enter your own bid here before every hand. Your partner enters theirs.'}
         </p>
@@ -806,6 +811,59 @@ export function EndMatch({ d, act, names }: { d: any; act: Act; names: { a: stri
         </select>
         <button className="sp-btn sp-btn-sm sp-btn-danger" disabled={busy || !winnerId} onClick={() => { if (confirm(`End this match now with ${winnerName} as the winner?`)) run('endNow', { matchId: m.id, winnerTeamId: winnerId }, `Ended. ${winnerName} wins.`) }}>End match</button>
       </div>
+      <Feedback msg={msg} />
+    </div>
+  )
+}
+
+// One scorekeeper: enter each team's bid (as a team total) in one go.
+function KeeperBids({ d, act, names }: { d: any; act: Act; names: { a: string; b: string } }) {
+  const c = d.current
+  const rules = d.match.rules
+  const seatsOf = (side: 'a' | 'b') => c.seats.filter((s: any) => s.side === side)
+  const sum = (side: 'a' | 'b') => { const ss = seatsOf(side); return ss.every((s: any) => s.bid !== null) ? ss.reduce((t: number, s: any) => t + s.bid, 0) : null }
+  const [a, setA] = useState<number | null>(sum('a'))
+  const [b, setB] = useState<number | null>(sum('b'))
+  const { busy, msg, run } = useBusy(act)
+  useEffect(() => { setA(sum('a')); setB(sum('b')) }, [c.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const low = (n: number) => n < rules.minTeamBid
+  const bids = () => (['a', 'b'] as const).flatMap(side => {
+    const ss = seatsOf(side)
+    const total = side === 'a' ? a : b
+    return ss.map((s: any, i: number) => ({ playerId: s.playerId, bid: i === 0 ? total : 0 }))
+  })
+  return (
+    <div className="grid gap-4 p-3 rounded-xl" style={{ border: '2px solid var(--sp-gold)' }}>
+      <h3 className="font-black text-lg">Enter both team bids</h3>
+      {(['a', 'b'] as const).map(side => (
+        <div key={side} className="grid gap-2">
+          <div className="flex justify-between"><span className="font-bold">{names[side]}</span><span className="sp-display sp-num text-2xl">{(side === 'a' ? a : b) ?? '?'}</span></div>
+          <NumberPad label={`${names[side]} bid`} value={side === 'a' ? a : b} onChange={side === 'a' ? setA : setB} isDisabled={low} />
+        </div>
+      ))}
+      <button className="sp-btn sp-btn-gold sp-btn-block" disabled={busy || a === null || b === null} onClick={() => run('bid', { handId: c.id, bids: bids() }, 'Bids locked')}>
+        {busy ? 'Sending' : a === null || b === null ? 'Pick both bids' : `Lock in ${names.a} ${a}, ${names.b} ${b}`}
+      </button>
+      <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Each team bids at least {rules.minTeamBid}.</p>
+      <Feedback msg={msg} />
+    </div>
+  )
+}
+
+// One scorekeeper: after the hand, one number: books won by the first team.
+function KeeperBooks({ d, act, names }: { d: any; act: Act; names: { a: string; b: string } }) {
+  const c = d.current
+  const [val, setVal] = useState<number | null>(null)
+  const { busy, msg, run } = useBusy(act)
+  useEffect(() => { setVal(null) }, [c.id])
+  return (
+    <div className="grid gap-3 p-3 rounded-xl" style={{ border: '2px solid var(--sp-gold)' }}>
+      <h3 className="font-black text-lg">Hand over? Books won by {names.a}</h3>
+      <NumberPad label={`Books won by ${names.a}`} value={val} onChange={setVal} />
+      {val !== null && <p className="font-bold text-center">{names.a} {val} · {names.b} {13 - val}</p>}
+      <button className="sp-btn sp-btn-gold sp-btn-block" disabled={busy || val === null} onClick={() => run('report', { handId: c.id, booksA: val, booksB: 13 - (val as number) }, 'Hand scored')}>
+        {busy ? 'Sending' : val === null ? 'Pick a number' : 'Score this hand'}
+      </button>
       <Feedback msg={msg} />
     </div>
   )

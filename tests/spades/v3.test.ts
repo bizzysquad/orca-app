@@ -197,7 +197,7 @@ test('start all: only games where both teams tapped ready', async () => {
   assert.equal(r2.started, 3)
 })
 
-test('delete event: unplayed events go completely, played events must be archived', async () => {
+test('delete event: removes everything, played or not', async () => {
   const store = new MemoryStore()
   const a = await S.createTournament(store, owner, { name: 'Never Played' })
   await S.registerTeam(store, owner, { tournamentId: a.id, name: 'Z', player1: 'z1', player2: 'z2' })
@@ -207,7 +207,10 @@ test('delete event: unplayed events go completely, played events must be archive
   await lockAndStart(s2, tid)
   const [m] = await roundMatches(s2, tid, 1)
   await playHand(s2, m.id, [2, 2, 2, 2], 7)
-  await expectReject(S.deleteEvent(s2, owner, { tournamentId: tid }), 409, /Archive/)
+  await S.deleteEvent(s2, owner, { tournamentId: tid }) // played events delete completely too
+  assert.equal((await s2.select<any>('sp_tournaments', { id: tid })).length, 0)
+  assert.equal((await s2.select<any>('sp_audit', { tournament_id: tid })).length, 0)
+  assert.equal((await s2.select<any>('sp_hands', { tournament_id: tid })).length, 0)
 })
 
 test('default flow: each captain enters own books once; 13 total scores it with no confirm step', async () => {
@@ -292,9 +295,9 @@ test('self-serve: players create a game, both ready starts it, it finishes itsel
   const store = new MemoryStore()
   const real = await S.createTournament(store, owner, { name: 'Real Event' })
   await S.updateTournament(store, owner, { tournamentId: real.id, patch: { registration_open: true } })
-  const g = await S.createSelfServeGame(store, { teamA: 'Aces', captainA: 'Ann', partnerA: 'Al', teamB: 'Kings', captainB: 'Kim', partnerB: 'Ken', target: 10 })
+  const g = await S.createSelfServeGame(store, { teamA: 'Aces', captainA: 'Ann', partnerA: 'Al', teamB: 'Kings', captainB: 'Kim', partnerB: 'Ken', target: 10, scorekeeping: 'two' })
   const ann = await S.resolveSession(store, (await S.createSession(store, { kind: 'player', tournamentId: g.tournamentId, playerId: g.captainPlayerId, staffId: null, invitationId: null, ttlMs: 1e7 })).sessionToken)
-  const kim = await S.resolveSession(store, (await S.redeemInvite(store, g.otherCode)).sessionToken)
+  const kim = await S.resolveSession(store, (await S.redeemInvite(store, g.otherCode!)).sessionToken)
   assert.equal(kim.kind === 'player' && kim.isCaptain, true)
   const [m] = await store.select<MatchRow>('sp_matches', { tournament_id: g.tournamentId })
   assert.equal(m.status, 'ready')
@@ -341,8 +344,50 @@ test('self-serve: players create a game, both ready starts it, it finishes itsel
   assert.equal(pv.record.losses, 1)
   // Lost code: captain makes a new one for the other captain, old one dies.
   const fresh = await S.issueOpponentCode(store, ann)
-  await expectReject(S.redeemInvite(store, g.otherCode), 410)
+  await expectReject(S.redeemInvite(store, g.otherCode!), 410)
   await S.redeemInvite(store, fresh.token)
   // Rate-limited creation input checks
   await expectReject(S.createSelfServeGame(store, { teamA: 'X', captainA: 'a', partnerA: 'b', teamB: 'x', captainB: 'c', partnerB: 'd' }), 400)
+})
+
+
+test('one scorekeeper: one phone readies, bids for all four, enters books once, game scores itself', async () => {
+  const store = new MemoryStore()
+  const g = await S.createSelfServeGame(store, { teamA: 'Hearts', captainA: 'Hal', partnerA: 'Hope', teamB: 'Clubs', captainB: 'Cal', partnerB: 'Cora', target: 8 })
+  assert.equal(g.otherCode, null) // nobody else gets a code
+  const hal = await S.resolveSession(store, (await S.createSession(store, { kind: 'player', tournamentId: g.tournamentId, playerId: g.captainPlayerId, staffId: null, invitationId: null, ttlMs: 1e7 })).sessionToken)
+  const [m] = await store.select<MatchRow>('sp_matches', { tournament_id: g.tournamentId })
+  const r = await S.setReady(store, hal, { matchId: m.id, ready: true })
+  assert.equal(r.started, true) // one tap starts it
+  const ps = await store.select<any>('sp_players', { tournament_id: g.tournamentId })
+  const seat1 = (team: string) => ps.find((p: any) => p.team_id === team && p.seat === 1).id
+  const seat2 = (team: string) => ps.find((p: any) => p.team_id === team && p.seat === 2).id
+  for (let i = 0; i < 2; i++) {
+    const h = await openHand(store, m.id)
+    await S.submitBids(store, hal, { handId: h.id, bids: [
+      { playerId: seat1(m.team_a_id!), bid: 5 }, { playerId: seat2(m.team_a_id!), bid: 0 },
+      { playerId: seat1(m.team_b_id!), bid: 4 }, { playerId: seat2(m.team_b_id!), bid: 0 },
+    ] })
+    assert.equal((await openHand(store, m.id)).status, 'playing')
+    await S.reportBooks(store, hal, { handId: h.id, booksA: 7, booksB: 6 })
+  }
+  const mm = await getMatch(store, m.id)
+  assert.equal(mm.score_a, 10)
+  assert.equal(mm.score_b, 8)
+  assert.equal(mm.status, 'final')
+  await expectReject(S.issueOpponentCode(store, hal), 409)
+  // Rematch starts at once with one scorekeeper.
+  await S.requestRematch(store, hal)
+  const games = await store.select<MatchRow>('sp_matches', { tournament_id: g.tournamentId })
+  assert.equal(games.find(x => x.id !== m.id)!.status, 'live')
+})
+
+test('public registrations are approved automatically up to the limit, then waitlist', async () => {
+  const store = new MemoryStore()
+  const ev = await S.createTournament(store, owner, { name: 'Auto', teamLimit: 2 })
+  await S.updateTournament(store, owner, { tournamentId: ev.id, patch: { registration_open: true } })
+  const r1 = await S.registerTeam(store, S.PUBLIC, { tournamentId: ev.id, name: 'A', player1: 'a1', player2: 'a2' })
+  const r2 = await S.registerTeam(store, S.PUBLIC, { tournamentId: ev.id, name: 'B', player1: 'b1', player2: 'b2' })
+  const r3 = await S.registerTeam(store, S.PUBLIC, { tournamentId: ev.id, name: 'C', player1: 'c1', player2: 'c2' })
+  assert.deepEqual([r1.status, r2.status, r3.status], ['approved', 'approved', 'waitlist'])
 })

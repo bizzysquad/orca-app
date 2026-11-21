@@ -35,6 +35,7 @@ export function MyTable({ data, act, serverNow, compact = false }: { data: any; 
           <p className="sp-label">Champions</p>
           <p className="sp-display text-4xl">{team.name}</p>
           <p className="sp-serif italic mt-2">Congratulations. See the director for the trophy.</p>
+          <a href="/spades" className="sp-btn sp-btn-sm sp-btn-wine mt-3">Back to home</a>
         </div>
       )}
 
@@ -47,20 +48,20 @@ export function MyTable({ data, act, serverNow, compact = false }: { data: any; 
         <MatchPanel d={am} act={act} serverNow={serverNow} />
       ) : am ? (
         <>
-          <WaitingCard d={am} act={act} serverNow={serverNow} selfServe={me?.selfServe} />
+          <WaitingCard d={am} act={act} serverNow={serverNow} selfServe={me?.selfServe} oneMode={T.rules?.scorekeeping === 'one'} />
           <GamePreview d={am} serverNow={serverNow} />
         </>
       ) : me?.rematchable && me?.lastGame ? (
         <ResultCard me={me} viewer={viewer} act={act} />
       ) : me?.eliminated ? (
-        <Empty title="Thanks for playing">Your run is over. Follow the rest of the bracket live.</Empty>
+        <Empty title="Thanks for playing">Your run is over. Follow the rest of the bracket live.<div className="mt-3"><a href="/spades" className="sp-btn sp-btn-sm">Back to home</a></div></Empty>
       ) : !T.bracketPublished ? (
         <Empty title="Waiting for the matchups">The director sets the matchups after registration closes. This screen updates by itself.</Empty>
       ) : (
         <Empty title="Waiting for your next match">Your next opponent is decided when the other match finishes. This screen updates by itself.</Empty>
       )}
 
-      {team && !started && <TeamSettings team={team} viewer={viewer} act={act} partner={partner} selfServe={me?.selfServe} opponentCaptain={opp?.players?.find((p: any) => p.isCaptain)?.name} />}
+      {team && !started && <TeamSettings team={team} viewer={viewer} act={act} partner={partner} selfServe={me?.selfServe} opponentCaptain={opp?.players?.find((p: any) => p.isCaptain)?.name} oneMode={T.rules?.scorekeeping === 'one'} />}
 
       {opp && !started && (
         <section className="sp-card p-4">
@@ -94,7 +95,7 @@ export function MyTable({ data, act, serverNow, compact = false }: { data: any; 
   )
 }
 
-function WaitingCard({ d, act, serverNow, selfServe }: { d: any; act: Act; serverNow: () => number; selfServe?: boolean }) {
+function WaitingCard({ d, act, serverNow, selfServe, oneMode }: { d: any; act: Act; serverNow: () => number; selfServe?: boolean; oneMode?: boolean }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
   const side = d.viewer.side
@@ -118,7 +119,7 @@ function WaitingCard({ d, act, serverNow, selfServe }: { d: any; act: Act; serve
           <Countdown at={d.match.scheduledAt} serverNow={serverNow} big />
           <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>{new Date(d.match.scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
         </div>
-      ) : <p style={{ color: 'var(--sp-muted)' }}>{selfServe ? 'The game begins as soon as both captains tap Ready.' : 'The director starts the game. This screen switches on by itself.'}</p>}
+      ) : <p style={{ color: 'var(--sp-muted)' }}>{selfServe ? (oneMode ? 'Tap Ready when all four players are seated and the game begins.' : 'The game begins as soon as both captains tap Ready.') : 'The director starts the game. This screen switches on by itself.'}</p>}
       {d.table && <p className="text-lg font-bold">Sit at table {d.table.number}</p>}
       {ready && (
         <>
@@ -127,7 +128,7 @@ function WaitingCard({ d, act, serverNow, selfServe }: { d: any; act: Act; serve
             <div className="p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}><div className="sp-label">{opp}</div><div className={`sp-chip mt-1 ${theirs ? 'sp-chip-live' : 'sp-chip-dim'}`}>{theirs ? 'Ready' : 'Not ready'}</div></div>
           </div>
           {d.viewer.isCaptain
-            ? <button className={`sp-btn sp-btn-block ${mine ? 'sp-btn-ghost' : 'sp-btn-gold'}`} disabled={busy} onClick={tap} style={{ minHeight: 60, fontSize: 18 }}>{busy ? 'Sending' : mine ? 'Not ready yet' : 'We are seated and ready'}</button>
+            ? <button className={`sp-btn sp-btn-block ${mine ? 'sp-btn-ghost' : 'sp-btn-gold'}`} disabled={busy} onClick={tap} style={{ minHeight: 60, fontSize: 18 }}>{busy ? 'Sending' : mine ? 'Not ready yet' : oneMode ? 'Everyone is seated: ready' : 'We are seated and ready'}</button>
             : <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Your captain taps Ready.</p>}
         </>
       )}
@@ -136,24 +137,16 @@ function WaitingCard({ d, act, serverNow, selfServe }: { d: any; act: Act; serve
   )
 }
 
-function TeamSettings({ team, viewer, act, partner, selfServe, opponentCaptain }: { team: any; viewer: any; act: Act; partner: any; selfServe?: boolean; opponentCaptain?: string }) {
+function TeamSettings({ team, viewer, act, partner, selfServe, opponentCaptain, oneMode }: { team: any; viewer: any; act: Act; partner: any; selfServe?: boolean; opponentCaptain?: string; oneMode?: boolean }) {
   const [oppCode, setOppCode] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
-  const [code, setCode] = useState<string | null>(null)
   const captain = viewer.isCaptain
-  const invite = async () => {
-    setBusy(true)
-    const r = await act('partnerCode', {})
-    setBusy(false)
-    if (r.ok) setCode(r.data.token)
-    else setMsg({ ok: false, text: r.error || 'Failed' })
-  }
   return (
     <section className="sp-card p-4 grid gap-3">
       <h2 className="sp-display text-xl">Your team</h2>
-      <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>{captain ? 'You are the captain: you enter both bids and your books every hand.' : `Your captain enters both bids and the books. You just play.`}</p>
-      {captain && selfServe && (
+      <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>{oneMode ? (captain ? 'You keep score for both teams: every bid and the books.' : 'The scorekeeper enters everything. You just play.') : captain ? 'You are the captain: you enter both bids and your books every hand.' : 'Your captain enters both bids and the books. You just play.'}</p>
+      {captain && selfServe && !oneMode && (
         <div className="grid gap-2">
           <span className="sp-label">The other captain</span>
           {oppCode ? (
@@ -165,24 +158,6 @@ function TeamSettings({ team, viewer, act, partner, selfServe, opponentCaptain }
           ) : (
             <button className="sp-btn sp-btn-sm" disabled={busy} onClick={async () => { setBusy(true); const r = await act('opponentCode', {}); setBusy(false); if (r.ok) setOppCode(r.data.token); else setMsg({ ok: false, text: r.error || 'Failed' }) }}>Lost their code? Make a new one</button>
           )}
-        </div>
-      )}
-      {captain && partner && (
-        <div className="grid gap-2">
-          <span className="sp-label">Let your partner follow along (optional)</span>
-          {code ? (
-            <div className="p-3 rounded-xl text-center" style={{ border: '2px dashed var(--sp-gold)' }}>
-              <p className="text-sm">Code for {partner.name}</p>
-              <p className="sp-display sp-num" style={{ fontSize: 36, letterSpacing: '0.08em' }}>{code}</p>
-              <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>{partner.name} opens orcafin.app/spades/join on their phone and types this code.</p>
-              {typeof navigator !== 'undefined' && 'share' in navigator && (
-                <button className="sp-btn sp-btn-sm sp-btn-wine mt-2" onClick={() => navigator.share({ title: 'Spades HQ', text: `Join our team ${team.name} on Spades HQ. Code: ${code}. Go to ${window.location.origin}/spades/join` }).catch(() => {})}>Text it</button>
-              )}
-            </div>
-          ) : (
-            <button className="sp-btn sp-btn-sm" disabled={busy} onClick={invite}>Get a code for {partner.name}</button>
-          )}
-          <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Your partner can watch the scoreboard on their own phone. Only you enter bids and books. A new code replaces the old one.</p>
         </div>
       )}
       <Feedback msg={msg} />
@@ -228,6 +203,7 @@ function ResultCard({ me, viewer, act }: { me: any; viewer: any; act: Act }) {
         }}>{busy ? 'Sending' : 'Rematch'}</button>
       ) : <p className="text-sm">Your captain can start a rematch.</p>}
       <Feedback msg={msg} />
+      <a href="/spades" className="sp-btn sp-btn-ghost sp-btn-block" style={{ color: 'var(--sp-ink)' }}>Done, back to home</a>
     </section>
   )
 }

@@ -39,6 +39,11 @@ export interface Rules {
   // Started by players from the home page: no director, starts when both
   // captains are ready, results are final automatically.
   selfServe: boolean
+  // 'one' = a single scorekeeper (any captain at the table) enters every bid
+  // and the books for both teams. 'two' = each team's captain enters their own.
+  scorekeeping: 'one' | 'two'
+  // Registrations are approved automatically up to the team limit.
+  autoApprove: boolean
   renegePolicy: 'lose_bid_award_opponent'
   // Director written rules page. Empty means the page is generated from the
   // settings above (ruleSummary).
@@ -67,6 +72,8 @@ export const DEFAULT_RULES: Rules = {
   gamesToWin: 1,
   useBracket: true,
   selfServe: false,
+  scorekeeping: 'two',
+  autoApprove: true,
   renegePolicy: 'lose_bid_award_opponent',
   customSections: [],
 }
@@ -105,6 +112,8 @@ export function normalizeRules(raw: unknown): Rules {
     gamesToWin: int(r.gamesToWin, d.gamesToWin, 1, 3),
     useBracket: r.useBracket === false ? false : true,
     selfServe: r.selfServe === true,
+    scorekeeping: r.scorekeeping === 'one' ? 'one' : 'two',
+    autoApprove: r.autoApprove === false ? false : true,
     renegePolicy: 'lose_bid_award_opponent',
     customSections: cleanSections(r.customSections),
   }
@@ -154,7 +163,7 @@ export function ruleSummary(r: Rules): RuleSection[] {
         'Partners sit across from each other. Every player bids before every hand.',
         `Bids are whole numbers from 0 to ${r.maxBid}. Each team must bid at least ${r.minTeamBid} books combined.`,
         'No nil, no blind nil, no Boston, no special bid bonuses.',
-        'The team captain enters both partners bids in the app. Partners do not need a phone.',
+        r.scorekeeping === 'one' ? 'One scorekeeper enters every bid and the books for both teams. Nobody else needs a phone.' : 'Each team captain enters both partners bids and their own books. Partners do not need a phone.',
         r.bidOrder === 'sequential'
           ? 'Bids are entered in seat order starting left of the dealer, and earlier bids are visible.'
           : 'Bids are entered at the same time and stay hidden from the other team until all four are locked.',

@@ -257,7 +257,8 @@ export async function submitBids(store: Store, actor: Actor, input: { handId: st
 
   let mySide: Side | null = null
   let myControl: BidControl | null = null
-  if (!staff && actor.kind === 'player') {
+  const oneKeeper = rules.scorekeeping === 'one' && actor.kind === 'player' && actor.isCaptain
+  if (!staff && actor.kind === 'player' && !oneKeeper) {
     mySide = sideOfTeam(match, actor.teamId)
     myControl = teamControl(teams.find(t => t.id === actor.teamId), rules)
     const mine = seats.filter(s => s.teamId === actor.teamId).map(s => s.playerId)
@@ -275,7 +276,7 @@ export async function submitBids(store: Store, actor: Actor, input: { handId: st
   const after = new Map(current.map(b => [b.player_id, b.bid]))
   for (const e of entries) after.set(e.playerId, e.bid)
 
-  if (rules.bidOrder === 'sequential' && !staff) {
+  if (rules.bidOrder === 'sequential' && !staff && !oneKeeper) {
     const order = biddingOrder(hand.dealer_pos)
     const has = (pos: number) => after.has(seats[pos].playerId)
     const hadBefore = (pos: number) => current.some(b => b.player_id === seats[pos].playerId)
@@ -386,7 +387,8 @@ export async function reportBooks(store: Store, actor: Actor, input: { handId: s
     else fail(400, 'Choose which team this report is for')
   } else {
     if (actor.kind !== 'player' || !actor.isCaptain) fail(403, 'Only the team captain reports books')
-    teams = [actor.teamId]
+    // One scorekeeper enters the books for both teams at once.
+    teams = rules.scorekeeping === 'one' ? [match.team_a_id!, match.team_b_id!] : [actor.teamId]
   }
 
   const current = await store.select<ReportRow>('sp_book_reports', { hand_id: hand.id, active: true })
@@ -491,7 +493,7 @@ export async function approveHand(store: Store, actor: Actor, input: { handId: s
 
   let teams: string[]
   if (staff && actor.kind !== 'player') teams = [match.team_a_id!, match.team_b_id!]
-  else if (actor.kind === 'player' && actor.isCaptain) teams = [actor.teamId]
+  else if (actor.kind === 'player' && actor.isCaptain) teams = normalizeRules(match.rules).scorekeeping === 'one' ? [match.team_a_id!, match.team_b_id!] : [actor.teamId]
   else fail(403, 'Only the team captain confirms the hand')
 
   for (const teamId of teams) {
@@ -1001,8 +1003,10 @@ export async function setReady(store: Store, actor: Actor, input: { matchId: str
   }
   if (match.status !== 'ready') fail(409, match.status === 'pending' ? 'Your opponent is not decided yet' : 'This game already began')
   const col = side === 'a' ? 'ready_a_at' : 'ready_b_at'
+  const evRules = normalizeRules((await one<TournamentRow>(store, 'sp_tournaments', { id: match.tournament_id })).rules)
+  const stamp = input.ready ? nowIso(store) : null
   try {
-    await store.update('sp_matches', { id: match.id, status: 'ready' }, { [col]: input.ready ? nowIso(store) : null })
+    await store.update('sp_matches', { id: match.id, status: 'ready' }, evRules.scorekeeping === 'one' && actor.kind === 'player' ? { ready_a_at: stamp, ready_b_at: stamp } : { [col]: stamp })
   } catch (err) {
     if (err instanceof StoreError) fail(503, 'The Ready button needs supabase-migration-spades-ready.sql. Ask the director.')
     throw err
@@ -1411,7 +1415,7 @@ export async function registerTeam(store: Store, actor: Actor, input: { tourname
   const limit = limitOf(t)
   let status: TeamStatus
   if (director) status = approved < limit ? 'approved' : t.waitlist_enabled ? 'waitlist' : fail(409, 'The event is full')
-  else status = approved + pending < limit ? 'pending' : t.waitlist_enabled ? 'waitlist' : fail(409, 'Registration is full')
+  else status = approved + pending < limit ? (normalizeRules(t.rules).autoApprove ? 'approved' : 'pending') : t.waitlist_enabled ? 'waitlist' : fail(409, 'Registration is full')
   const bidControl: BidControl = input.bidControl === 'individual' || input.bidControl === 'captain'
     ? input.bidControl : normalizeRules(t.rules).biddingMode === 'individual' ? 'individual' : 'captain'
 
@@ -2055,14 +2059,12 @@ export async function startAllReady(store: Store, actor: Actor, input: { tournam
   return { ok: true, started: started.length, skipped }
 }
 
-// Removes an event completely if it never played a hand. Events with played
-// hands keep their records: archive those instead. The event is first marked
-// disposable (is_test) so the audit trigger allows removing its log.
+// Removes an event and everything in it, played or not (the director keeps
+// only weekly winners, on the Winners page). It is first marked disposable
+// (is_test) so the audit trigger allows removing its log.
 export async function deleteEvent(store: Store, actor: Actor, input: { tournamentId: string }) {
   if (actor.kind !== 'owner') fail(403, 'Only the site owner can delete events')
   const t = await one<TournamentRow>(store, 'sp_tournaments', { id: input.tournamentId }, 'Event not found')
-  const played = await store.count('sp_hands', { tournament_id: t.id, status: 'verified' })
-  if (played && !t.is_test) fail(409, 'This event has played hands, so its records are kept. Archive it instead.')
   if (!t.is_test) await store.update('sp_tournaments', { id: t.id }, { is_test: true, is_featured: false })
   return deleteTestEvent(store, actor, { tournamentId: t.id })
 }
@@ -2082,7 +2084,7 @@ export function isRematchable(t: TournamentRow): boolean {
 // of the first team and gets a code to send the other captain. The game
 // begins when both captains tap Ready and scores itself.
 export async function createSelfServeGame(store: Store, input: {
-  teamA: string; captainA: string; partnerA: string; teamB: string; captainB: string; partnerB: string; target?: number
+  teamA: string; captainA: string; partnerA: string; teamB: string; captainB: string; partnerB: string; target?: number; scorekeeping?: 'one' | 'two'
 }) {
   const teamA = cleanText(input.teamA, 'Your team name', 40)
   const teamB = cleanText(input.teamB, 'Other team name', 40)
@@ -2095,7 +2097,7 @@ export async function createSelfServeGame(store: Store, input: {
   })
   const t0 = await one<TournamentRow>(store, 'sp_tournaments', { id: ev.id })
   await store.update('sp_tournaments', { id: ev.id }, {
-    rules: normalizeRules({ ...normalizeRules(t0.rules), selfServe: true, timeDefaultMin: 0, timeFinalMin: 0, biddingMode: 'captain' }),
+    rules: normalizeRules({ ...normalizeRules(t0.rules), selfServe: true, timeDefaultMin: 0, timeFinalMin: 0, biddingMode: 'captain', scorekeeping: input.scorekeeping === 'two' ? 'two' : 'one' }),
     status: 'registration', waitlist_enabled: false,
   })
   const a = await registerTeam(store, SELF_SERVE, { tournamentId: ev.id, name: teamA, player1: input.captainA, player2: input.partnerA, bidControl: 'captain' })
@@ -2103,9 +2105,11 @@ export async function createSelfServeGame(store: Store, input: {
   const t = await one<TournamentRow>(store, 'sp_tournaments', { id: ev.id })
   await insertGame(store, t, a.teamId, b.teamId, null, null)
   const codeA = await mintAccessCode(store, SELF_SERVE, { tournamentId: ev.id, kind: 'player', name: cleanText(input.captainA, 'Your name', 40), playerId: a.captainPlayerId, staffId: null, revokeSessions: false })
-  const codeB = await mintAccessCode(store, SELF_SERVE, { tournamentId: ev.id, kind: 'player', name: cleanText(input.captainB, 'Other captain name', 40), playerId: b.captainPlayerId, staffId: null, revokeSessions: false })
+  const codeB = input.scorekeeping === 'two'
+    ? await mintAccessCode(store, SELF_SERVE, { tournamentId: ev.id, kind: 'player', name: cleanText(input.captainB, 'Other captain name', 40), playerId: b.captainPlayerId, staffId: null, revokeSessions: false })
+    : null
   await audit(store, SELF_SERVE, { tournamentId: ev.id, action: 'selfserve.create', after: { teamA, teamB, target } })
-  return { ok: true, tournamentId: ev.id, slug: ev.slug, captainPlayerId: a.captainPlayerId, myCode: codeA.token, otherCode: codeB.token, otherCaptain: codeB.name }
+  return { ok: true, tournamentId: ev.id, slug: ev.slug, captainPlayerId: a.captainPlayerId, myCode: codeA.token, otherCode: codeB?.token || null, otherCaptain: codeB?.name || null }
 }
 
 // A captain in a self-serve game makes a fresh code for the other captain
@@ -2114,6 +2118,7 @@ export async function issueOpponentCode(store: Store, actor: Actor) {
   if (actor.kind !== 'player' || !actor.isCaptain) fail(403, 'Only a captain can do this')
   const t = await one<TournamentRow>(store, 'sp_tournaments', { id: actor.tournamentId })
   if (!normalizeRules(t.rules).selfServe) fail(403, 'Ask the tournament director for codes in this event')
+  if (normalizeRules(t.rules).scorekeeping === 'one') fail(409, 'You keep score for both teams in this game')
   const caps = await store.select<PlayerRow>('sp_players', { tournament_id: t.id, is_captain: true })
   const other = caps.find(p => p.team_id !== actor.teamId)
   if (!other) fail(404, 'Other captain not found')
