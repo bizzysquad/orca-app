@@ -47,7 +47,7 @@ export function MatchPanel({ d, act, serverNow }: { d: any; act: Act; serverNow:
       {v.canSupervise && <StaffTools d={d} act={act} names={names} />}
       <History d={d} names={names} />
       {d.disputes?.length > 0 && <DisputeList d={d} />}
-      {v.level === 'player' && m.status !== 'final' && <RaiseDispute d={d} act={act} />}
+      {v.level === 'player' && m.status !== 'final' && !m.rules?.selfServe && <RaiseDispute d={d} act={act} />}
     </div>
   )
 }
@@ -468,7 +468,7 @@ function StaffTools({ d, act, names }: { d: any; act: Act; names: { a: string; b
           Verify hand {c.handNumber} for both teams
         </button>
       )}
-      {c && <ReasonAction label={`Void hand ${c.handNumber} and redeal`} action="voidHand" payload={{ handId: c.id }} act={act} danger />}
+      {c && <ReasonAction label={`Redeal hand ${c.handNumber}`} action="voidHand" payload={{ handId: c.id }} act={act} danger skip={v.isDirector} />}
       {d.history?.length > 0 && <CorrectHand d={d} act={act} names={names} />}
       <div className="grid sm:grid-cols-2 gap-2">
         <ReasonAction label="Request the director" action="dispute" payload={{ matchId: m.id, handId: c?.id || null, kind: 'director_request' }} field="reason" act={act} />
@@ -566,13 +566,13 @@ function ResolveDispute({ x, d, act, names }: { x: any; d: any; act: Act; names:
               </select>
             </label>
           )}
-          <label className="sp-field"><span>Resolution (required, recorded in the audit log)</span>
+          <label className="sp-field"><span>{d.viewer.isDirector ? 'Note (optional)' : 'Resolution (required, recorded in the audit log)'}</span>
             <textarea className="sp-textarea" maxLength={500} value={resolution} onChange={e => setResolution(e.target.value)} />
           </label>
           <div className="flex flex-wrap gap-2">
             <button
               className="sp-btn sp-btn-gold"
-              disabled={busy || !resolution.trim() || (needsBooks && books === null)}
+              disabled={busy || (!resolution.trim() && !d.viewer.isDirector) || (needsBooks && books === null)}
               onClick={() => {
                 const payload: Record<string, unknown> = { disputeId: x.id, resolution }
                 if (books !== null) { payload.booksA = books; payload.booksB = 13 - books }
@@ -585,7 +585,7 @@ function ResolveDispute({ x, d, act, names }: { x: any; d: any; act: Act; names:
             >
               Record ruling
             </button>
-            {!needsBooks && x.kind !== 'renege' && <button className="sp-btn sp-btn-ghost" disabled={busy || !resolution.trim()} onClick={() => run('resolve', { disputeId: x.id, resolution, dismiss: true }, 'Dismissed')}>Dismiss</button>}
+            {!needsBooks && x.kind !== 'renege' && <button className="sp-btn sp-btn-ghost" disabled={busy || (!resolution.trim() && !d.viewer.isDirector)} onClick={() => run('resolve', { disputeId: x.id, resolution, dismiss: true }, 'Dismissed')}>Dismiss</button>}
           </div>
         </>
       )}
@@ -622,12 +622,12 @@ function CorrectHand({ d, act, names }: { d: any; act: Act; names: { a: string; 
               <option value={d.teamB?.id}>Renege by {names.b}</option>
             </select>
           </label>
-          <label className="sp-field"><span>Reason (required)</span>
+          <label className="sp-field"><span>{d.viewer.isDirector ? 'Note (optional)' : 'Reason (required)'}</span>
             <textarea className="sp-textarea" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} />
           </label>
           <button
             className="sp-btn sp-btn-wine"
-            disabled={busy || !reason.trim() || (books === null && renege === 'keep')}
+            disabled={busy || (!reason.trim() && !d.viewer.isDirector) || (books === null && renege === 'keep')}
             onClick={() => {
               if (!confirm('Change an official hand? Every later hand will be recalculated.')) return
               const payload: Record<string, unknown> = { handId: h.handId, reason }
@@ -645,10 +645,19 @@ function CorrectHand({ d, act, names }: { d: any; act: Act; names: { a: string; 
   )
 }
 
-function ReasonAction({ label, action, payload, act, danger = false, field = 'reason' }: { label: string; action: string; payload: Record<string, unknown>; act: Act; danger?: boolean; field?: string }) {
+function ReasonAction({ label, action, payload, act, danger = false, field = 'reason', skip = false }: { label: string; action: string; payload: Record<string, unknown>; act: Act; danger?: boolean; field?: string; skip?: boolean }) {
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const { busy, msg, run } = useBusy(act)
+  if (skip) {
+    // Director: one tap, no explanation needed.
+    return (
+      <div className="grid gap-2">
+        <button className={`sp-btn sp-btn-sm ${danger ? 'sp-btn-danger' : 'sp-btn-ghost'}`} disabled={busy} onClick={() => { if (confirm(`${label}?`)) run(action, { ...payload, [field]: '' }, 'Done') }}>{label}</button>
+        <Feedback msg={msg} />
+      </div>
+    )
+  }
   return (
     <div className="grid gap-2">
       {!open ? (
@@ -697,8 +706,8 @@ function DirectorMatchTools({ d, act, names }: { d: any; act: Act; names: { a: s
             <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('editMatch', { matchId: m.id, scheduledAt: when ? new Date(when).toISOString() : null }, when ? 'Start time saved' : 'Start time cleared')}>{when ? 'Save' : 'Clear'}</button>
           </div>
         )}
-        {['live', 'paused'].includes(m.status) && (
-          <ReasonAction label="End game now (current leader wins)" action="endNow" payload={{ matchId: m.id }} act={act} />
+        {['ready', 'live', 'paused', 'completed'].includes(m.status) && d.teamA && d.teamB && (
+          <EndMatch d={d} act={act} names={names} />
         )}
         {['ready', 'live', 'paused', 'completed'].includes(m.status) && (
           <div className="grid gap-2">
@@ -712,12 +721,12 @@ function DirectorMatchTools({ d, act, names }: { d: any; act: Act; names: { a: s
               <option value="forfeit">Forfeit / no show</option>
               <option value="dq">Disqualification</option>
             </select>
-            <textarea className="sp-textarea" placeholder="Reason (required)" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} />
-            <button className="sp-btn sp-btn-danger" disabled={busy || !winner || !reason.trim()} onClick={() => { if (confirm('End this match by forfeit and advance the chosen team?')) run('forfeit', { matchId: m.id, winnerTeamId: winner, kind, reason }, 'Recorded and advanced') }}>Record and advance</button>
+            <textarea className="sp-textarea" placeholder="Note (optional)" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} />
+            <button className="sp-btn sp-btn-danger" disabled={busy || !winner} onClick={() => { if (confirm('End this match by forfeit and advance the chosen team?')) run('forfeit', { matchId: m.id, winnerTeamId: winner, kind, reason }, 'Recorded and advanced') }}>Record and advance</button>
           </div>
         )}
         {!['pending', 'ready'].includes(m.status) && m.resultKind !== 'bye' && (
-          <ReasonAction label="Restart this game from zero (voids every hand)" action="resetMatch" payload={{ matchId: m.id }} act={act} danger />
+          <ReasonAction label="Restart this game from zero" action="resetMatch" payload={{ matchId: m.id }} act={act} danger skip />
         )}
         <Feedback msg={msg} />
       </div>
@@ -774,6 +783,30 @@ export function GamePreview({ d, serverNow }: { d: any; serverNow: () => number 
           <li>If the two add up to 13 the hand scores itself and every phone updates.</li>
         </ol>
       </section>
+    </div>
+  )
+}
+
+// Director: end this match now. Leader wins by default; pick a team to override
+// (required when tied). Final immediately; winner advances in a bracket.
+export function EndMatch({ d, act, names }: { d: any; act: Act; names: { a: string; b: string } }) {
+  const m = d.match
+  const leader = m.gamesToWin > 1 && m.gamesA !== m.gamesB ? (m.gamesA > m.gamesB ? 'a' : 'b') : m.scoreA !== m.scoreB ? (m.scoreA > m.scoreB ? 'a' : 'b') : null
+  const [pick, setPick] = useState('')
+  const { busy, msg, run } = useBusy(act)
+  const winnerId = pick || (leader ? (leader === 'a' ? d.teamA?.id : d.teamB?.id) : '')
+  const winnerName = winnerId === d.teamA?.id ? names.a : winnerId === d.teamB?.id ? names.b : ''
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <select className="sp-select" style={{ maxWidth: 260, minHeight: 40, padding: '6px 10px' }} value={pick} onChange={e => setPick(e.target.value)} aria-label="Winner">
+          <option value="">{leader ? `Leader wins (${leader === 'a' ? names.a : names.b})` : 'Pick the winner'}</option>
+          <option value={d.teamA?.id}>{names.a} wins</option>
+          <option value={d.teamB?.id}>{names.b} wins</option>
+        </select>
+        <button className="sp-btn sp-btn-sm sp-btn-danger" disabled={busy || !winnerId} onClick={() => { if (confirm(`End this match now with ${winnerName} as the winner?`)) run('endNow', { matchId: m.id, winnerTeamId: winnerId }, `Ended. ${winnerName} wins.`) }}>End match</button>
+      </div>
+      <Feedback msg={msg} />
     </div>
   )
 }

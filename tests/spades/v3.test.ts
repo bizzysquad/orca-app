@@ -4,7 +4,7 @@ import * as S from '../../src/lib/spades/service.ts'
 import * as V from '../../src/lib/spades/views.ts'
 import { MemoryStore } from '../../src/lib/spades/store.ts'
 import type { MatchRow, TeamRow, TournamentRow } from '../../src/lib/spades/types.ts'
-import { expectReject, getMatch, lockAndStart, openHand, owner, playHand, roundMatches, setup } from './helpers.ts'
+import { CLASSIC, expectReject, getMatch, lockAndStart, openHand, owner, playHand, roundMatches, setup } from './helpers.ts'
 
 async function bundle(store: MemoryStore, tid: string) {
   const [t] = await store.select<TournamentRow>('sp_tournaments', { id: tid })
@@ -116,9 +116,9 @@ test('director can end a game early: leader wins, a tie is refused', async () =>
   await playHand(store, m.id, [2, 2, 2, 2], 7)
   await S.endMatchNow(store, owner, { matchId: m.id, reason: 'curfew' })
   const mm = await getMatch(store, m.id)
-  assert.equal(mm.status, 'completed')
+  assert.equal(mm.status, 'final')
   assert.equal(mm.winner_team_id, mm.team_a_id)
-  await S.finalizeMatch(store, owner, { matchId: m.id })
+  await S.finalizeMatch(store, owner, { matchId: m.id }) // harmless repeat
 })
 
 test('test mode: create, act as each simulated player, play, delete without touching real events', async () => {
@@ -151,6 +151,7 @@ test('test mode: create, act as each simulated player, play, delete without touc
 test('open play without a bracket: director pairs games, teams replay, no advancement, standings', async () => {
   const store = new MemoryStore()
   const ev = await S.createTournament(store, owner, { name: 'Open Night', eventType: 'custom', teamLimit: 4, useBracket: false, targetDefault: 100 })
+  await S.updateTournament(store, owner, { tournamentId: ev.id, patch: { rules: { ...CLASSIC, targetDefault: 100, requireCaptainApproval: false, bagsEnabled: false } } })
   await S.setTableCount(store, owner, { tournamentId: ev.id, count: 2 })
   const ids: string[] = []
   for (let i = 1; i <= 4; i++) ids.push((await S.registerTeam(store, owner, { tournamentId: ev.id, name: `O${i}`, player1: `o${i}a`, player2: `o${i}b`, bidControl: "individual" })).teamId)
@@ -232,4 +233,116 @@ test('default flow: each captain enters own books once; 13 total scores it with 
   assert.equal(mm.score_a, 43)
   assert.equal(mm.score_b, 42)
   assert.equal(mm.bags_a, 0)
+})
+
+test('clearing a practice run: restart the game, unlock, remove the test teams', async () => {
+  const { store, tid } = await setup({ teams: 2 })
+  await lockAndStart(store, tid)
+  const [m] = await roundMatches(store, tid, 1)
+  const h = await openHand(store, m.id)
+  await expectReject(S.setRosterLock(store, owner, { tournamentId: tid, locked: false }), 409, /Restart/)
+  await S.resetMatch(store, owner, { matchId: m.id, reason: 'practice over' })
+  await S.setRosterLock(store, owner, { tournamentId: tid, locked: false })
+  assert.equal((await store.select<any>('sp_hands', { id: h.id })).length, 0)
+  for (const t of await store.select<TeamRow>('sp_teams', { tournament_id: tid })) await S.removeTeam(store, owner, { teamId: t.id })
+  assert.equal((await store.select<TeamRow>('sp_teams', { tournament_id: tid })).length, 0)
+  const [tt] = await store.select<TournamentRow>('sp_tournaments', { id: tid })
+  assert.equal(tt.status, 'registration')
+})
+
+
+test('director ends any match any time without a reason, picks a winner on a tie, redeals and restarts freely', async () => {
+  const { store, tid } = await setup()
+  await S.setRosterLock(store, owner, { tournamentId: tid, locked: true })
+  await S.publishBracket(store, owner, { tournamentId: tid, published: true })
+  const [m1, m2] = await roundMatches(store, tid, 1)
+  // Before it starts: end it, chosen team advances.
+  await S.endMatchNow(store, owner, { matchId: m1.id, winnerTeamId: m1.team_b_id })
+  let mm = await getMatch(store, m1.id)
+  assert.equal(mm.status, 'final')
+  assert.equal(mm.result_kind, 'forfeit')
+  const sf = (await roundMatches(store, tid, 2))[0]
+  assert.equal(sf.team_a_id, m1.team_b_id)
+  // Live and tied: needs a pick.
+  await S.startMatch(store, owner, { matchId: m2.id })
+  await expectReject(S.endMatchNow(store, owner, { matchId: m2.id }), 409, /Pick/)
+  // Redeal (void) and restart without reasons.
+  const h = await openHand(store, m2.id)
+  await S.voidHand(store, owner, { handId: h.id, reason: '' })
+  assert.notEqual((await openHand(store, m2.id)).id, h.id)
+  await S.resetMatch(store, owner, { matchId: m2.id, reason: '' })
+  assert.equal((await getMatch(store, m2.id)).status, 'ready')
+  await S.startMatch(store, owner, { matchId: m2.id })
+  await playHand(store, m2.id, [2, 2, 2, 2], 7)
+  await S.correctHand(store, owner, { handId: (await store.select<any>('sp_hands', { match_id: m2.id, status: 'verified' }))[0].id, reason: '', booksA: 6, booksB: 7 })
+  await S.endMatchNow(store, owner, { matchId: m2.id })
+  mm = await getMatch(store, m2.id)
+  assert.equal(mm.winner_team_id, mm.team_b_id)
+  const audits = await store.select<any>('sp_audit', { match_id: m2.id, action: 'hand.void' })
+  assert.equal(audits[0].reason, 'Director decision')
+  // Supervisors still need a reason.
+  const st = await S.addStaff(store, owner, { tournamentId: tid, name: 'Sup', role: 'supervisor' })
+  const sup = await S.resolveSession(store, (await S.redeemInvite(store, st.invite.token)).sessionToken)
+  const [m3] = (await roundMatches(store, tid, 1)).slice(2)
+  await S.startMatch(store, owner, { matchId: m3.id })
+  await expectReject(S.voidHand(store, sup, { handId: (await openHand(store, m3.id)).id, reason: '' }), 400)
+})
+
+test('self-serve: players create a game, both ready starts it, it finishes itself, rematch, owner sees activity', async () => {
+  const store = new MemoryStore()
+  const real = await S.createTournament(store, owner, { name: 'Real Event' })
+  await S.updateTournament(store, owner, { tournamentId: real.id, patch: { registration_open: true } })
+  const g = await S.createSelfServeGame(store, { teamA: 'Aces', captainA: 'Ann', partnerA: 'Al', teamB: 'Kings', captainB: 'Kim', partnerB: 'Ken', target: 10 })
+  const ann = await S.resolveSession(store, (await S.createSession(store, { kind: 'player', tournamentId: g.tournamentId, playerId: g.captainPlayerId, staffId: null, invitationId: null, ttlMs: 1e7 })).sessionToken)
+  const kim = await S.resolveSession(store, (await S.redeemInvite(store, g.otherCode)).sessionToken)
+  assert.equal(kim.kind === 'player' && kim.isCaptain, true)
+  const [m] = await store.select<MatchRow>('sp_matches', { tournament_id: g.tournamentId })
+  assert.equal(m.status, 'ready')
+  await S.setReady(store, ann, { matchId: m.id, ready: true })
+  assert.equal((await getMatch(store, m.id)).status, 'ready')
+  const r = await S.setReady(store, kim, { matchId: m.id, ready: true })
+  assert.equal(r.started, true)
+  assert.equal((await getMatch(store, m.id)).time_limit_min, 0)
+  const ps = await store.select<any>('sp_players', { tournament_id: g.tournamentId })
+  const ids = (team: string) => ps.filter((p: any) => p.team_id === team).map((p: any) => p.id)
+  const hand = async (bidA: number, bidB: number, booksA: number) => {
+    const h = await openHand(store, m.id)
+    await S.submitBids(store, ann, { handId: h.id, bids: ids(m.team_a_id!).map((id: string, i: number) => ({ playerId: id, bid: i ? 2 : bidA - 2 })) })
+    await S.submitBids(store, kim, { handId: h.id, bids: ids(m.team_b_id!).map((id: string, i: number) => ({ playerId: id, bid: i ? 2 : bidB - 2 })) })
+    await S.reportBooks(store, ann, { handId: h.id, booksA, booksB: 13 - booksA })
+    await S.reportBooks(store, kim, { handId: h.id, booksA, booksB: 13 - booksA })
+  }
+  await hand(6, 4, 8) // Ann 6, Kim 4 (5 books, bid 4 -> 4)
+  await hand(6, 4, 8) // Ann 12 -> past 10, wins
+  let mm = await getMatch(store, m.id)
+  assert.equal(mm.status, 'final') // no director needed
+  assert.equal(mm.winner_team_id, m.team_a_id)
+  const [t] = await store.select<TournamentRow>('sp_tournaments', { id: g.tournamentId })
+  assert.equal(t.champion_team_id, null)
+  // Rematch: Kim asks, Ann taps Ready, it starts.
+  await S.requestRematch(store, kim)
+  const games = await store.select<MatchRow>('sp_matches', { tournament_id: g.tournamentId })
+  const re = games.find(x => x.id !== m.id)!
+  assert.equal(re.status, 'ready')
+  await S.setReady(store, ann, { matchId: re.id, ready: true })
+  assert.equal((await getMatch(store, re.id)).status, 'live')
+  // Private: not on the public events list; owner sees it in activity.
+  const pubEvents = await V.publicEvents(store)
+  assert.ok(pubEvents.every((e: any) => e.slug !== g.slug))
+  assert.ok(pubEvents.some((e: any) => e.name === 'Real Event'))
+  const act = await V.activityState(store, store.now())
+  assert.equal(act.totals.events, 1)
+  assert.equal(act.totals.live, 1)
+  assert.equal(act.totals.gamesPlayed, 1)
+  // Player view: record and rematch flag
+  const b = await V.loadBundle(store, t)
+  const pv = V.playerState(b, kim, store.now())!
+  assert.equal(pv.rematchable, true)
+  assert.equal(pv.record.losses, 1)
+  // Lost code: captain makes a new one for the other captain, old one dies.
+  const fresh = await S.issueOpponentCode(store, ann)
+  await expectReject(S.redeemInvite(store, g.otherCode), 410)
+  await S.redeemInvite(store, fresh.token)
+  // Rate-limited creation input checks
+  await expectReject(S.createSelfServeGame(store, { teamA: 'X', captainA: 'a', partnerA: 'b', teamB: 'x', captainB: 'c', partnerB: 'd' }), 400)
 })

@@ -39,7 +39,7 @@ export function scoreTeamHand(bid: number, books: number, bagsBefore: number, ru
     const points = rules.pointsPerBook * bid + rules.bagValue * extra - penalty
     return { bid, books, made: true, points, bagsEarned: extra, bagPenalty: penalty, bagsAfter: bags }
   }
-  return { bid, books, made: false, points: -rules.pointsPerBook * bid, bagsEarned: 0, bagPenalty: 0, bagsAfter: bagsBefore }
+  return { bid, books, made: false, points: rules.setPenaltyPerBook ? -rules.setPenaltyPerBook * bid : 0, bagsEarned: 0, bagPenalty: 0, bagsAfter: bagsBefore }
 }
 
 export interface HandInput {
@@ -59,7 +59,7 @@ export function scoreHand(h: HandInput, before: { a: TeamTotals; b: TeamTotals }
       const bid = side === 'a' ? h.bidA : h.bidB
       const books = side === 'a' ? h.booksA : h.booksB
       const prev = before[side]
-      const points = side === off ? -rules.pointsPerBook * bid : rules.pointsPerBook * bid
+      const points = side === off ? (rules.setPenaltyPerBook ? -rules.setPenaltyPerBook * bid : 0) : rules.pointsPerBook * bid
       return {
         bid, books, made: side !== off, renege: side === off, points,
         bagsEarned: 0, bagPenalty: 0, totalAfter: prev.total + points, bagsAfter: prev.bags,

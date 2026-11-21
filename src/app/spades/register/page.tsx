@@ -9,7 +9,7 @@ import { ErrorBox, Feedback, Loading, Shell } from '../_components/ui'
 function Register() {
   const t = useSearchParams().get('t')
   const { data, error, loading, online, act, reload } = useSpades<any>('public', { t, events: '1' })
-  const [form, setForm] = useState({ name: '', player1: '', player2: '', captainSeat: 1, contact: '', bidControl: 'captain' })
+  const [form, setForm] = useState({ name: '', player1: '', player2: '', captainSeat: 1, contact: '' })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [done, setDone] = useState<string | null>(null)
@@ -55,7 +55,7 @@ function Register() {
             <p>
               {done === 'waitlist'
                 ? 'The bracket is full right now. The tournament director will call teams from the waitlist in order if a spot opens. The waitlist does not enter the bracket on its own.'
-                : form.bidControl === 'individual' ? 'This phone is signed in as your team captain. Open My Table to get an access code for your partner so they can join on their own phone.' : 'This phone is signed in as your team captain. You enter both bids and the books once the game begins.'}
+                : 'This phone is signed in as your team captain. You enter both bids and the books once the game begins.'}
             </p>
             {code && (
               <div className="p-4 rounded-xl text-center" style={{ border: '3px dashed var(--sp-wine)' }}>
@@ -84,17 +84,7 @@ function Register() {
             <label className="sp-field"><span>Your partner&apos;s name</span>
               <input className="sp-input" required maxLength={40} autoComplete="off" value={form.player2} onChange={e => set('player2', e.target.value)} />
             </label>
-            <fieldset className="grid gap-2">
-              <legend className="text-sm font-bold mb-1" style={{ color: 'var(--sp-muted)' }}>Who enters bids during the game? You can change this until the game begins.</legend>
-              <div className="grid sm:grid-cols-2 gap-2">
-                {[{ k: 'captain', t: 'Captain controls', d: 'You enter both bids and the books on this phone. Easiest.' }, { k: 'individual', t: 'Each player', d: 'Your partner joins with a code and enters their own bid.' }].map(o => (
-                  <button key={o.k} type="button" aria-pressed={form.bidControl === o.k} onClick={() => set('bidControl', o.k)} className="p-3 rounded-xl text-left" style={{ background: form.bidControl === o.k ? 'rgba(224,173,79,0.18)' : 'rgba(0,0,0,0.22)', border: `2px solid ${form.bidControl === o.k ? 'var(--sp-gold)' : 'transparent'}` }}>
-                    <div className="font-black">{o.t}</div>
-                    <div className="text-xs mt-1" style={{ color: 'var(--sp-muted)' }}>{o.d}</div>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+            <div className="sp-banner sp-banner-info text-sm">You are the captain: this phone enters both bids and your books every hand. Your partner just plays.</div>
             <label className="sp-field"><span>Phone or email (optional, only the director sees it)</span>
               <input className="sp-input" maxLength={120} autoComplete="off" value={form.contact} onChange={e => set('contact', e.target.value)} />
             </label>

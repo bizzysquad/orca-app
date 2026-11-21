@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 import { Bracket } from '../_components/Bracket'
+import { EndMatch } from '../_components/MatchPanel'
 import { postAuth, useSpades, type ActResult } from '../_components/useSpades'
 import { normalizeRules, ruleSummary } from '@/lib/spades/rules'
 
@@ -13,7 +14,7 @@ import { ErrorBox, Feedback, Loading, MatchTimer, Shell, StatusChip, fmtTime } f
 
 type Act = (action: string, payload?: Record<string, unknown>) => Promise<ActResult>
 type Msg = { ok: boolean; text: string } | null
-const TABS = ['Run', 'Teams', 'Events', 'Test Mode', 'Staff', 'Bracket', 'Disputes', 'Settings', 'Audit', 'Export'] as const
+const TABS = ['Run', 'Teams', 'Events', 'Activity', 'Test Mode', 'Staff', 'Bracket', 'Disputes', 'Settings', 'Audit', 'Export'] as const
 
 function useRun(act: Act) {
   const [busy, setBusy] = useState(false)
@@ -110,6 +111,7 @@ function Admin() {
         {tab === 'Audit' && <AuditTab data={data} />}
         {tab === 'Export' && <ExportTab data={data} />}
         {tab === 'Events' && <EventsTab data={data} act={act} />}
+        {tab === 'Activity' && <ActivityTab />}
         {tab === 'Test Mode' && <TestModeTab data={data} act={act} />}
       </div>
     </Shell>
@@ -214,6 +216,7 @@ function MatchRow({ m, data, act, teams, serverNow }: { m: any; data: any; act: 
         </div>
       )}
       {card?.pending?.length > 0 && <div className="text-xs" style={{ color: 'var(--sp-gold)' }}>{card.pending.join(' · ')}</div>}
+      {card && ['ready', 'live', 'paused', 'completed'].includes(m.status) && <EndMatch d={card} act={act} names={{ a: teams.get(m.teamA) || 'Team A', b: teams.get(m.teamB) || 'Team B' }} />}
       <div className="flex flex-wrap items-center gap-2">
         {['pending', 'ready'].includes(m.status) && (
           <select className="sp-select" style={{ maxWidth: 150, minHeight: 40, padding: '6px 10px' }} value={tableId} aria-label="Table" onChange={e => run('editMatch', { matchId: m.id, tableId: e.target.value || null }, 'Table set')}>
@@ -235,6 +238,8 @@ function MatchRow({ m, data, act, teams, serverNow }: { m: any; data: any; act: 
         {m.status === 'ready' && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => run('startMatch', { matchId: m.id }, 'Game on')}>Begin game</button>}
         {m.status === 'completed' && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Finalize: ${teams.get(m.winner)} wins ${Math.max(m.scoreA, m.scoreB)} to ${Math.min(m.scoreA, m.scoreB)}?`)) run('finalize', { matchId: m.id }, 'Finalized, winner advanced') }}>Finalize {teams.get(m.winner)}</button>}
         {m.status === 'live' && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => run('pause', { matchId: m.id }, 'Paused')}>Pause</button>}
+        {card?.current && ['live', 'paused'].includes(m.status) && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { if (confirm(`Redeal hand ${card.current.handNumber}?`)) run('voidHand', { handId: card.current.id, reason: '' }, 'Redealt') }}>Redeal</button>}
+        {['live', 'paused', 'completed', 'final'].includes(m.status) && m.resultKind !== 'bye' && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { if (confirm('Restart this game from zero?')) run('resetMatch', { matchId: m.id, reason: '' }, 'Restarted') }}>Restart</button>}
         {m.status === 'paused' && <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('resume', { matchId: m.id }, 'Resumed')}>Resume</button>}
         {m.teamA && m.teamB && <Link href={`/spades/match/${m.id}`} className="sp-btn sp-btn-sm sp-btn-ghost">Open match</Link>}
         {['pending', 'ready'].includes(m.status) && <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>To {m.target}{m.gamesToWin > 1 ? ` · first to ${m.gamesToWin} games` : ` · ${m.timeLimitMin} min`}{m.scheduledAt ? ` · starts ${new Date(m.scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}${T.autoStart ? ' (auto)' : ''}` : ''}</span>}
@@ -337,7 +342,6 @@ function TeamsTab({ data, act }: { data: any; act: Act }) {
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <div className="text-xs mb-1"><button className="sp-chip sp-chip-info" title="Change who enters bids" onClick={() => run('bidControl', { teamId: team.id, control: team.bidControl === 'individual' ? 'captain' : 'individual' }, 'Bid control changed')}>{team.bidControl === 'individual' ? 'Each player bids' : 'Captain controls'} (tap to switch)</button></div>
                       <div className="font-black text-lg">{team.seed ? <span className="sp-num mr-2" style={{ color: 'var(--sp-gold)' }}>#{team.seed}</span> : null}{team.name}</div>
                       {team.contact && <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{team.contact}</div>}
                     </div>
@@ -609,7 +613,7 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
   const [limit, setLimit] = useState(String(T.teamLimit))
   const live = data.matches.some((m: any) => ['live', 'paused'].includes(m.status))
   const num = (k: string) => (
-    <label className="sp-field"><span>{({ minTeamBid: 'Minimum team bid', targetDefault: 'Target, opening rounds', targetFinal: 'Target, championship', timeDefaultMin: 'Minutes, opening rounds', timeFinalMin: 'Minutes, championship', initialBags: 'Starting bags', bagLimit: 'Bags per penalty', bagPenalty: 'Bag penalty points' } as any)[k]}</span>
+    <label className="sp-field"><span>{({ minTeamBid: 'Minimum team bid', targetDefault: 'Target, opening rounds', targetFinal: 'Target, championship', timeDefaultMin: 'Minutes, opening rounds', timeFinalMin: 'Minutes, championship', initialBags: 'Starting bags', pointsPerBook: 'Points per book bid', setPenaltyPerBook: 'Points lost per book when set (0 = none)', bagValue: 'Points per extra book (0 = none)', bagLimit: 'Bags per penalty', bagPenalty: 'Bag penalty points' } as any)[k]}</span>
       <input className="sp-input" inputMode="numeric" value={r[k]} onChange={e => setR({ ...r, [k]: e.target.value.replace(/\D/g, '') })} />
     </label>
   )
@@ -631,12 +635,6 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
         <h2 className="sp-display text-xl">House rules</h2>
         {live && <div className="sp-banner sp-banner-warn text-sm">Running matches keep the rules they started with. Changes apply to matches started after you save.</div>}
         <div className="grid sm:grid-cols-2 gap-3">
-          <label className="sp-field"><span>Bidding mode</span>
-            <select className="sp-select" value={r.biddingMode} onChange={e => setR({ ...r, biddingMode: e.target.value })}>
-              <option value="individual">Individual: every player enters their own bid</option>
-              <option value="captain">Team captain enters both partner bids</option>
-            </select>
-          </label>
           <label className="sp-field"><span>Bid order</span>
             <select className="sp-select" value={r.bidOrder} onChange={e => setR({ ...r, bidOrder: e.target.value })}>
               <option value="simultaneous">At the same time, hidden until locked</option>
@@ -650,7 +648,7 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
               <option value={3}>Best of 5 (first to 3 games)</option>
             </select>
           </label>
-          {num('minTeamBid')}{num('initialBags')}{num('targetDefault')}{num('targetFinal')}{num('timeDefaultMin')}{num('timeFinalMin')}{r.bagsEnabled && num('bagLimit')}{r.bagsEnabled && num('bagPenalty')}
+          {num('pointsPerBook')}{num('setPenaltyPerBook')}{num('bagValue')}{num('minTeamBid')}{r.bagsEnabled && num('initialBags')}{num('targetDefault')}{num('targetFinal')}{num('timeDefaultMin')}{num('timeFinalMin')}{r.bagsEnabled && num('bagLimit')}{r.bagsEnabled && num('bagPenalty')}
           <label className="flex items-center gap-3 font-bold"><input type="checkbox" className="w-6 h-6" checked={r.bagsEnabled} onChange={e => setR({ ...r, bagsEnabled: e.target.checked })} /> Count bags (10 extra books costs 100 points)</label>
           <label className="flex items-center gap-3 font-bold"><input type="checkbox" className="w-6 h-6" checked={r.requireCaptainApproval} onChange={e => setR({ ...r, requireCaptainApproval: e.target.checked })} /> Extra step: both captains confirm every hand</label>
         </div>
@@ -853,7 +851,7 @@ function EventsTab({ data, act }: { data: any; act: Act }) {
   const [teams, setTeams] = useState('8')
   const [small, setSmall] = useState('4')
   const [games, setGames] = useState('1')
-  const [target, setTarget] = useState('250')
+  const [target, setTarget] = useState('25')
   const [bracket, setBracket] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
   if (data.viewer.kind !== 'owner') return <div className="sp-banner sp-banner-info text-sm">Only the site owner can create and edit events.</div>
@@ -924,8 +922,7 @@ function EventsTab({ data, act }: { data: any; act: Act }) {
 function TestModeTab({ data, act }: { data: any; act: Act }) {
   const { busy, msg, run } = useRun(act)
   const [games, setGames] = useState('1')
-  const [target, setTarget] = useState('100')
-  const [control, setControl] = useState('captain')
+  const [target, setTarget] = useState('15')
   if (data.viewer.kind !== 'owner') return <div className="sp-banner sp-banner-info text-sm">Only the site owner can use Test Mode.</div>
   const tests = (data.tournaments || []).filter((x: any) => x.isTest)
   return (
@@ -936,10 +933,9 @@ function TestModeTab({ data, act }: { data: any; act: Act }) {
         <div className="grid sm:grid-cols-3 gap-2">
           <label className="sp-field"><span>Format</span><select className="sp-select" value={games} onChange={e => setGames(e.target.value)}><option value="1">Single game</option><option value="2">Best of 3</option></select></label>
           <label className="sp-field"><span>Play to (low = quick test)</span><input className="sp-input" inputMode="numeric" value={target} onChange={e => setTarget(e.target.value.replace(/\D/g, ''))} /></label>
-          <label className="sp-field"><span>Who enters bids</span><select className="sp-select" value={control} onChange={e => setControl(e.target.value)}><option value="captain">Captain controls</option><option value="individual">Each player</option></select></label>
         </div>
         <button className="sp-btn sp-btn-gold" disabled={busy || !target} onClick={async () => {
-          const r = await run('createTest', { gamesToWin: Number(games), target: Number(target), control }, 'Test match ready')
+          const r = await run('createTest', { gamesToWin: Number(games), target: Number(target) }, 'Test match ready')
           if (r.ok) window.location.href = `/spades/admin/test?t=${r.data.slug}`
         }}>Create test match</button>
         <Feedback msg={msg} />
@@ -958,6 +954,40 @@ function TestModeTab({ data, act }: { data: any; act: Act }) {
           ))}
         </section>
       )}
+    </div>
+  )
+}
+
+// Owner only: every game players started from the home page.
+function ActivityTab() {
+  const { data, error, loading } = useSpades<any>('activity')
+  if (loading && !data) return <Loading label="Loading activity" />
+  if (error) return <ErrorBox message={error} />
+  const T = data.totals
+  const stat = (label: string, n: number) => (
+    <div className="sp-card p-4"><div className="sp-label">{label}</div><div className="sp-display sp-num text-4xl mt-1">{n}</div></div>
+  )
+  return (
+    <div className="grid gap-4">
+      <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Games people started themselves from the home page. These are private: they never show on the public pages or in your events.</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {stat('Live now', T.live)}{stat('New today', T.today)}{stat('All games', T.events)}{stat('Games finished', T.gamesPlayed)}{stat('Hands played', T.hands)}{stat('Players', T.players)}
+      </div>
+      <section className="sp-card p-4 grid gap-2">
+        <h2 className="sp-display text-xl">Games</h2>
+        {data.games.length === 0 && <p style={{ color: 'var(--sp-muted)' }}>No one has started a game yet.</p>}
+        {data.games.map((g: any) => (
+          <div key={g.slug} className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)', border: g.liveMatchId ? '1px solid var(--sp-green)' : '1px solid transparent' }}>
+            <div>
+              <div className="font-bold">{g.name}{g.liveMatchId && <span className="sp-chip sp-chip-live ml-2"><span className="sp-dot sp-dot-pulse" />Live</span>}</div>
+              <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>
+                {g.score ? `${g.score} · ` : ''}{g.gamesPlayed} finished · {g.hands} hands · to {g.target} · started {new Date(g.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </div>
+            </div>
+            {g.latestMatchId && <a className="sp-btn sp-btn-sm" href={`/spades/match/${g.latestMatchId}`}>Watch</a>}
+          </div>
+        ))}
+      </section>
     </div>
   )
 }

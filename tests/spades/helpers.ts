@@ -4,11 +4,13 @@ import type { Actor } from '../../src/lib/spades/service.ts'
 import type { HandRow, MatchRow, PlayerRow, TeamRow } from '../../src/lib/spades/types.ts'
 
 export const owner: Actor = { kind: 'owner', name: 'Test Director' }
+// Classic 10-per-book scoring, used by the older flow tests.
+export const CLASSIC = { pointsPerBook: 10, bagValue: 1, setPenaltyPerBook: 10, targetDefault: 250, targetFinal: 350, bagsEnabled: true, requireCaptainApproval: true }
 
 export async function setup(opts: { rules?: Record<string, unknown>; teams?: number; capacity?: number } = {}) {
   const store = new MemoryStore()
   const { id: tid } = await S.createTournament(store, owner, { name: `Test Spades ${Math.random()}`, capacity: opts.capacity ?? 8 })
-  await S.updateTournament(store, owner, { tournamentId: tid, patch: { registration_open: true, rules: { biddingMode: 'individual', bagsEnabled: true, requireCaptainApproval: true, ...(opts.rules || {}) } } })
+  await S.updateTournament(store, owner, { tournamentId: tid, patch: { registration_open: true, rules: { biddingMode: 'individual', ...CLASSIC, ...(opts.rules || {}) } } })
   await S.setTableCount(store, owner, { tournamentId: tid, count: 4 })
   const n = opts.teams ?? 8
   for (let i = 1; i <= n; i++) {

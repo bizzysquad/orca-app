@@ -10,6 +10,22 @@ A live tournament manager for in-person Joker Spades. Players use real cards at 
    - Director password: `SPADES_DIRECTOR_PASSWORD` if set, otherwise it falls back to `RSVP_OWNER_PASSWORD`. Set a dedicated one in Vercel if you want them separate.
 3. Deploy ORCA as usual (see DEPLOY.md / the ORCA deploy flow).
 
+## Scoring (defaults, editable under Settings → House rules)
+
+- Make your bid: 1 point per book bid. Extra books earn nothing. Bid 5, win 7 = 5.
+- Get set: 0 for the hand. Bid 5, win 4 = 0.
+- No bags. Games play to 25 by default.
+- Before each hand the captain enters both partners' bids. After all 13 books, each captain enters the books on their side. When the two add up to 13, the hand scores itself.
+- Classic 10-per-book scoring with bags is still available: set points per book, set penalty and extra-book points, and check Count bags.
+
+## Start your own game (self-serve)
+
+Anyone can tap **Start your own game** on the home page and enter both teams and a target score. The creator is captain of their team and gets a code for the other captain, who types it at `/spades/join`. When both captains tap Ready, the game begins. It scores itself and becomes final automatically, with no director. Either captain can tap **Rematch**, and the rematch begins when the other captain taps Ready. These games never appear on public pages. You can see all of them, with live and usage counts and a Watch button, under **Director → Activity**.
+
+## Director decisions
+
+From the Run tab or a match page you can **Redeal** the current hand, **Restart** a game from zero, or **End match**. End match uses the leader by default, or you pick the winner; it is final immediately and the winner advances. Your corrections and rulings never require a reason (the log records "Director decision"). Supervisors still give one.
+
 ## Event types (Director → Events tab)
 
 - **Full tournament**: up to 8 teams by default, single elimination. The limit can be raised before the draw.

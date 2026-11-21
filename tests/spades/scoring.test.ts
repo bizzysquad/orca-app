@@ -4,7 +4,7 @@ import { DEFAULT_RULES, normalizeRules } from '../../src/lib/spades/rules.ts'
 import { computeMatch, matchOutcome, scoreHand, scoreTeamHand, validBooks, elapsedMs } from '../../src/lib/spades/scoring.ts'
 import { generateBracket, nextSlot, seedPositions, roundName } from '../../src/lib/spades/bracket.ts'
 
-const R = { ...DEFAULT_RULES, bagsEnabled: true } // classic bag scoring
+const R = normalizeRules({ pointsPerBook: 10, bagValue: 1, setPenaltyPerBook: 10, targetDefault: 250, targetFinal: 350, bagsEnabled: true }) // classic bag scoring
 
 test('9. made bid: bid 5 win 7 = +52 and 2 bags', () => {
   const r = scoreTeamHand(5, 7, 0, R)
@@ -44,7 +44,7 @@ test('12. bag penalty: every 10 bags costs 100, leftovers carry', () => {
 })
 
 test('12b. configurable initial bags', () => {
-  const rules = normalizeRules({ initialBags: 8, bagsEnabled: true })
+  const rules = normalizeRules({ pointsPerBook: 10, bagValue: 1, setPenaltyPerBook: 10, targetDefault: 250, targetFinal: 350, initialBags: 8, bagsEnabled: true })
   const c = computeMatch([{ id: 'h', handNumber: 1, bidA: 4, bidB: 4, booksA: 6, booksB: 7 }], rules)
   assert.equal(c.a.bags, 0) // 8 + 2 = 10 -> penalty
   assert.equal(c.a.total, 42 - 100)
@@ -113,10 +113,17 @@ test('bracket: 8 team seeding, advancement slots, byes', () => {
   assert.throws(() => generateBracket(['a', 'a'], 2))
 })
 
-test('no bags (default): extra books score 1 each, never counted, never penalized', () => {
+test('house scoring (default): 1 per book bid, extra books nothing, set scores 0, no bags, play to 25', () => {
   const r = normalizeRules({})
   assert.equal(r.bagsEnabled, false)
-  const c = computeMatch(Array.from({ length: 6 }, (_, i) => ({ id: `h${i}`, handNumber: i + 1, bidA: 4, bidB: 4, booksA: 9, booksB: 4 })), r)
-  assert.equal(c.a.total, 6 * 45) // 40 + 5 extra each hand, no penalty ever
-  assert.equal(c.a.bags, 0)
+  assert.equal(r.targetDefault, 25)
+  assert.equal(scoreTeamHand(5, 7, 0, r).points, 5)
+  assert.equal(scoreTeamHand(5, 4, 0, r).points, 0)
+  assert.equal(scoreTeamHand(5, 4, 0, r).made, false)
+  const c = computeMatch(Array.from({ length: 6 }, (_, i) => ({ id: `h${i}`, handNumber: i + 1, bidA: 4, bidB: 5, booksA: 9, booksB: 4 })), r)
+  assert.equal(c.a.total, 24)
+  assert.equal(c.b.total, 0)
+  assert.equal(matchOutcome(26, 10, r.targetDefault, false).winner, 'a')
+  // Older saved events keep classic sets.
+  assert.equal(normalizeRules({ pointsPerBook: 10 }).setPenaltyPerBook, 10)
 })

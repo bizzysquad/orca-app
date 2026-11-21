@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { actorFrom, errorResponse, json, store } from '@/lib/spades/http'
 import { actAsPlayer, isDirector, isStaff } from '@/lib/spades/service'
-import { adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicEvents, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
+import { activityState, adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicEvents, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
 import type { TournamentRow } from '@/lib/spades/types'
 import { normalizeRules } from '@/lib/spades/rules'
 
@@ -18,6 +18,10 @@ export async function GET(req: NextRequest) {
     const as = sp.get('as')
     if (as) actor = await actAsPlayer(s, actor, as)
     const view = sp.get('view') || 'public'
+    if (view === 'activity') {
+      if (actor.kind !== 'owner') return json({ error: 'Owner sign in required' }, 401)
+      return json({ serverNow: s.now().toISOString(), ...(await activityState(s, s.now())) })
+    }
     let slug = sp.get('t')
     let t: TournamentRow | null = null
     if (slug) t = await findTournament(s, slug)

@@ -47,9 +47,11 @@ export function MyTable({ data, act, serverNow, compact = false }: { data: any; 
         <MatchPanel d={am} act={act} serverNow={serverNow} />
       ) : am ? (
         <>
-          <WaitingCard d={am} act={act} serverNow={serverNow} />
+          <WaitingCard d={am} act={act} serverNow={serverNow} selfServe={me?.selfServe} />
           <GamePreview d={am} serverNow={serverNow} />
         </>
+      ) : me?.rematchable && me?.lastGame ? (
+        <ResultCard me={me} viewer={viewer} act={act} />
       ) : me?.eliminated ? (
         <Empty title="Thanks for playing">Your run is over. Follow the rest of the bracket live.</Empty>
       ) : !T.bracketPublished ? (
@@ -58,7 +60,7 @@ export function MyTable({ data, act, serverNow, compact = false }: { data: any; 
         <Empty title="Waiting for your next match">Your next opponent is decided when the other match finishes. This screen updates by itself.</Empty>
       )}
 
-      {team && !started && <TeamSettings team={team} viewer={viewer} act={act} partner={partner} />}
+      {team && !started && <TeamSettings team={team} viewer={viewer} act={act} partner={partner} selfServe={me?.selfServe} opponentCaptain={opp?.players?.find((p: any) => p.isCaptain)?.name} />}
 
       {opp && !started && (
         <section className="sp-card p-4">
@@ -92,7 +94,7 @@ export function MyTable({ data, act, serverNow, compact = false }: { data: any; 
   )
 }
 
-function WaitingCard({ d, act, serverNow }: { d: any; act: Act; serverNow: () => number }) {
+function WaitingCard({ d, act, serverNow, selfServe }: { d: any; act: Act; serverNow: () => number; selfServe?: boolean }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
   const side = d.viewer.side
@@ -116,7 +118,7 @@ function WaitingCard({ d, act, serverNow }: { d: any; act: Act; serverNow: () =>
           <Countdown at={d.match.scheduledAt} serverNow={serverNow} big />
           <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>{new Date(d.match.scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
         </div>
-      ) : <p style={{ color: 'var(--sp-muted)' }}>The director starts the game. This screen switches on by itself.</p>}
+      ) : <p style={{ color: 'var(--sp-muted)' }}>{selfServe ? 'The game begins as soon as both captains tap Ready.' : 'The director starts the game. This screen switches on by itself.'}</p>}
       {d.table && <p className="text-lg font-bold">Sit at table {d.table.number}</p>}
       {ready && (
         <>
@@ -134,17 +136,12 @@ function WaitingCard({ d, act, serverNow }: { d: any; act: Act; serverNow: () =>
   )
 }
 
-function TeamSettings({ team, viewer, act, partner }: { team: any; viewer: any; act: Act; partner: any }) {
+function TeamSettings({ team, viewer, act, partner, selfServe, opponentCaptain }: { team: any; viewer: any; act: Act; partner: any; selfServe?: boolean; opponentCaptain?: string }) {
+  const [oppCode, setOppCode] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
   const [code, setCode] = useState<string | null>(null)
   const captain = viewer.isCaptain
-  const setControl = async (control: string) => {
-    setBusy(true)
-    const r = await act('bidControl', { teamId: team.id, control })
-    setBusy(false)
-    setMsg(r.ok ? { ok: true, text: control === 'captain' ? 'You will enter both bids.' : 'Each player enters their own bid.' } : { ok: false, text: r.error || 'Failed' })
-  }
   const invite = async () => {
     setBusy(true)
     const r = await act('partnerCode', {})
@@ -154,33 +151,25 @@ function TeamSettings({ team, viewer, act, partner }: { team: any; viewer: any; 
   }
   return (
     <section className="sp-card p-4 grid gap-3">
-      <h2 className="sp-display text-xl">Team settings</h2>
-      <div className="grid gap-2">
-        <span className="sp-label">Who enters bids</span>
-        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Who enters bids">
-          {[
-            { k: 'captain', t: 'Captain controls', d: 'The captain enters both bids and the books.' },
-            { k: 'individual', t: 'Each player', d: 'Each partner enters their own bid on their own phone.' },
-          ].map(o => (
-            <button
-              key={o.k}
-              role="radio"
-              aria-checked={team.bidControl === o.k}
-              disabled={!captain || busy}
-              onClick={() => team.bidControl !== o.k && setControl(o.k)}
-              className="p-3 rounded-xl text-left"
-              style={{ background: team.bidControl === o.k ? 'rgba(224,173,79,0.18)' : 'rgba(0,0,0,0.22)', border: `2px solid ${team.bidControl === o.k ? 'var(--sp-gold)' : 'transparent'}`, opacity: !captain && team.bidControl !== o.k ? 0.5 : 1 }}
-            >
-              <div className="font-black">{o.t}</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--sp-muted)' }}>{o.d}</div>
-            </button>
-          ))}
+      <h2 className="sp-display text-xl">Your team</h2>
+      <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>{captain ? 'You are the captain: you enter both bids and your books every hand.' : `Your captain enters both bids and the books. You just play.`}</p>
+      {captain && selfServe && (
+        <div className="grid gap-2">
+          <span className="sp-label">The other captain</span>
+          {oppCode ? (
+            <div className="p-3 rounded-xl text-center" style={{ border: '2px dashed var(--sp-gold)' }}>
+              <p className="text-sm">New code for {opponentCaptain || 'the other captain'}</p>
+              <p className="sp-display sp-num" style={{ fontSize: 36, letterSpacing: '0.08em' }}>{oppCode}</p>
+              <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>They type it at orcafin.app/spades/join. The old code stops working.</p>
+            </div>
+          ) : (
+            <button className="sp-btn sp-btn-sm" disabled={busy} onClick={async () => { setBusy(true); const r = await act('opponentCode', {}); setBusy(false); if (r.ok) setOppCode(r.data.token); else setMsg({ ok: false, text: r.error || 'Failed' }) }}>Lost their code? Make a new one</button>
+          )}
         </div>
-        {!captain && <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Your captain chooses this before the game begins.</p>}
-      </div>
+      )}
       {captain && partner && (
         <div className="grid gap-2">
-          <span className="sp-label">Invite your partner</span>
+          <span className="sp-label">Let your partner follow along (optional)</span>
           {code ? (
             <div className="p-3 rounded-xl text-center" style={{ border: '2px dashed var(--sp-gold)' }}>
               <p className="text-sm">Code for {partner.name}</p>
@@ -193,7 +182,7 @@ function TeamSettings({ team, viewer, act, partner }: { team: any; viewer: any; 
           ) : (
             <button className="sp-btn sp-btn-sm" disabled={busy} onClick={invite}>Get a code for {partner.name}</button>
           )}
-          <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Optional. Only needed if your partner wants the scoreboard or enters their own bids. A new code replaces the old one.</p>
+          <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Your partner can watch the scoreboard on their own phone. Only you enter bids and books. A new code replaces the old one.</p>
         </div>
       )}
       <Feedback msg={msg} />
@@ -215,5 +204,30 @@ function RulesBox({ rules }: { rules: any }) {
         ))}
       </div>
     </details>
+  )
+}
+
+// Two-team and self-serve games: the last result, the running record, and a
+// rematch button. The rematch begins once the other captain taps Ready.
+function ResultCard({ me, viewer, act }: { me: any; viewer: any; act: Act }) {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<Msg>(null)
+  const g = me.lastGame
+  return (
+    <section className="sp-card-paper p-6 grid gap-3 text-center">
+      <p className="sp-label">{g.won ? 'You won' : 'You lost'}</p>
+      <p className="sp-display text-4xl">{g.myScore} to {g.theirScore}</p>
+      <p className="sp-serif italic">vs {g.opponent}{g.resultNote ? ` · ${g.resultNote}` : ''}</p>
+      <p className="font-bold">Record: {me.record.wins} won, {me.record.losses} lost</p>
+      {viewer.isCaptain ? (
+        <button className="sp-btn sp-btn-wine sp-btn-block" disabled={busy} style={{ minHeight: 60, fontSize: 18 }} onClick={async () => {
+          setBusy(true)
+          const r = await act('rematch', {})
+          setBusy(false)
+          setMsg(r.ok ? { ok: true, text: me.selfServe ? 'Rematch on. It starts when the other captain taps Ready.' : 'Rematch requested. The director begins it.' } : { ok: false, text: r.error || 'Failed' })
+        }}>{busy ? 'Sending' : 'Rematch'}</button>
+      ) : <p className="text-sm">Your captain can start a rematch.</p>}
+      <Feedback msg={msg} />
+    </section>
   )
 }

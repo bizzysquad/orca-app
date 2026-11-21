@@ -6,7 +6,7 @@ import { normalizeRules, type Rules } from './rules.ts'
 import { scoreHand, type Side } from './scoring.ts'
 import { roundName, totalRounds } from './bracket.ts'
 import type { Store } from './store.ts'
-import { biddingOrder, isDirector, isStaff, playerSide, supervisesTable, teamControl, type Actor } from './service.ts'
+import { biddingOrder, isDirector, isRematchable, isStaff, playerSide, supervisesTable, teamControl, type Actor } from './service.ts'
 import type {
   ApprovalRow, AuditRow, BidRow, DisputeRow, HandRow, InviteRow, LedgerRow, MatchRow, PlayerRow, ReportRow,
   SessionRow, StaffRow, TableRow, TeamRow, TournamentRow,
@@ -151,7 +151,7 @@ export function winners(b: Bundle) {
 // Every event people can see and join, for the home page list.
 export async function publicEvents(store: Store) {
   const ts = await store.select<TournamentRow>('sp_tournaments', { status: { in: ['draft', 'registration', 'locked', 'live', 'completed'] } }, { order: [{ col: 'created_at', asc: false }], limit: 50 })
-  const shown = ts.filter(t => !t.is_test && t.event_type !== 'test' && t.status !== 'draft' || (t.is_featured && !t.is_test))
+  const shown = ts.filter(t => !normalizeRules(t.rules).selfServe && (!t.is_test && t.event_type !== 'test' && t.status !== 'draft' || (t.is_featured && !t.is_test)))
   if (!shown.length) return []
   const teams = await store.select<TeamRow>('sp_teams', { tournament_id: { in: shown.map(t => t.id) }, status: 'approved' })
   return shown.map(t => ({
@@ -429,8 +429,22 @@ export function playerState(b: Bundle, actor: Actor, now: Date) {
     } : null,
     activeMatch: active && b.t.bracket_published ? matchDetail(b, actor, active.id, now) : null,
     finished: finished.map(m => publicMatch(b, m)),
-    eliminated,
-    champion: b.t.champion_team_id === actor.teamId,
+    eliminated: eliminated && !isRematchable(b.t),
+    champion: b.t.champion_team_id === actor.teamId && !isRematchable(b.t),
+    // Two-team and self-serve games: show the last result and a rematch
+    // button instead of "waiting for your next match".
+    rematchable: isRematchable(b.t),
+    selfServe: normalizeRules(b.t.rules).selfServe,
+    lastGame: (() => {
+      const f = mine.filter(m => m.status === 'final' && m.result_kind !== 'bye').sort((x, y) => (y.finalized_at || '').localeCompare(x.finalized_at || ''))[0]
+      if (!f) return null
+      const opp = b.teams.find(t => t.id === (f.team_a_id === actor.teamId ? f.team_b_id : f.team_a_id))
+      return { ...publicMatch(b, f), won: f.winner_team_id === actor.teamId, opponent: opp?.name || '', myScore: f.team_a_id === actor.teamId ? f.score_a : f.score_b, theirScore: f.team_a_id === actor.teamId ? f.score_b : f.score_a }
+    })(),
+    record: {
+      wins: mine.filter(m => m.status === 'final' && m.result_kind !== 'bye' && m.winner_team_id === actor.teamId).length,
+      losses: mine.filter(m => m.status === 'final' && m.result_kind !== 'bye' && m.winner_team_id && m.winner_team_id !== actor.teamId).length,
+    },
   }
 }
 
@@ -497,4 +511,43 @@ export function standings(b: Bundle) {
     for (const id of losers) out.push({ place: `${lo}-${hi}`, teamId: id, team: name(id), eliminatedIn: roundName(r, rounds) })
   }
   return out
+}
+
+
+// For the owner: every game players started themselves, to watch usage.
+export async function activityState(store: Store, now: Date) {
+  const ts = (await store.select<TournamentRow>('sp_tournaments', { event_type: 'exhibition' }, { order: [{ col: 'created_at', asc: false }], limit: 300 }))
+    .filter(t => normalizeRules(t.rules).selfServe)
+  if (!ts.length) return { games: [], totals: { events: 0, live: 0, today: 0, gamesPlayed: 0, hands: 0, players: 0 } }
+  const ids = ts.map(t => t.id)
+  const [matches, teams, players] = await Promise.all([
+    store.select<MatchRow>('sp_matches', { tournament_id: { in: ids } }),
+    store.select<TeamRow>('sp_teams', { tournament_id: { in: ids } }),
+    store.select<PlayerRow>('sp_players', { tournament_id: { in: ids } }),
+  ])
+  const dayAgo = new Date(now.getTime() - 24 * 3600 * 1000).toISOString()
+  const games = ts.map(t => {
+    const ms = matches.filter(m => m.tournament_id === t.id)
+    const live = ms.find(m => m.status === 'live' || m.status === 'paused')
+    const name = (id: string | null) => teams.find(x => x.id === id)?.name || ''
+    return {
+      slug: t.slug, name: t.name, createdAt: t.created_at, updatedAt: t.updated_at,
+      liveMatchId: live?.id || null, latestMatchId: (live || ms.sort((x, y) => y.slot - x.slot)[0])?.id || null,
+      score: live ? `${name(live.team_a_id)} ${live.score_a}, ${name(live.team_b_id)} ${live.score_b}` : null,
+      gamesPlayed: ms.filter(m => m.status === 'final').length,
+      hands: ms.reduce((n, m) => n + (m.hands_verified || 0), 0),
+      target: normalizeRules(t.rules).targetDefault,
+    }
+  })
+  return {
+    games,
+    totals: {
+      events: ts.length,
+      live: games.filter(g => g.liveMatchId).length,
+      today: ts.filter(t => t.created_at >= dayAgo).length,
+      gamesPlayed: games.reduce((n, g) => n + g.gamesPlayed, 0),
+      hands: games.reduce((n, g) => n + g.hands, 0),
+      players: players.length,
+    },
+  }
 }

@@ -91,14 +91,6 @@ function Console() {
               <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={startOver}>Start over</button>
               <button className="sp-btn sp-btn-sm sp-btn-danger" disabled={busy} onClick={async () => { if (confirm('Delete this test match?')) { const r = await go('deleteTest', { tournamentId: T.id }, 'Deleted'); if (r.ok) window.location.href = '/spades/admin' } }}>Delete</button>
             </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              {teams.map((tm: any) => (
-                <button key={tm.id} className="sp-chip sp-chip-info" disabled={busy || ['live', 'paused'].includes(m.status)} onClick={() => {
-                  const team = data.allTeams.find((x: any) => x.id === tm.id)
-                  go('bidControl', { teamId: tm.id, control: team?.bidControl === 'individual' ? 'captain' : 'individual' }, 'Switched')
-                }}>{tm.name}: {data.allTeams.find((x: any) => x.id === tm.id)?.bidControl === 'individual' ? 'each player bids' : 'captain controls'} (switch)</button>
-              ))}
-            </div>
             <Feedback msg={msg} />
           </section>
         )}

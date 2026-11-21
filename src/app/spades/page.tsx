@@ -60,6 +60,7 @@ function Landing() {
             <span className="sp-chip sp-chip-live">Free to enter</span>
           </div>
           <div className="flex flex-wrap gap-3 mt-7">
+            <Link href="/spades/start" className="sp-btn sp-btn-wine">Start your own game</Link>
             {T.registrationOpen && !T.rosterLocked
               ? <Link href={`/spades/register${q}`} className="sp-btn sp-btn-gold">{data.registration.full ? 'Join the waitlist' : 'Register a team'}</Link>
               : <span className="sp-btn sp-btn-gold" aria-disabled="true" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Registration closed</span>}

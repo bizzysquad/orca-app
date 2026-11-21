@@ -33,9 +33,11 @@ const ACTIONS: Record<string, Handler> = {
   resetMatch: (s, a, b) => S.resetMatch(s, a, { matchId: b.matchId, reason: b.reason }),
   editMatch: (s, a, b) => S.editMatch(s, a, { matchId: b.matchId, target: b.target, timeLimitMin: b.timeLimitMin, tableId: b.tableId, scheduledAt: b.scheduledAt }),
   scheduleRound: (s, a, b) => S.scheduleRound(s, a, { tournamentId: b.tournamentId, round: Number(b.round), scheduledAt: b.scheduledAt ?? null, autoStart: b.autoStart }),
-  endNow: (s, a, b) => S.endMatchNow(s, a, { matchId: b.matchId, reason: b.reason }),
-  bidControl: (s, a, b) => S.setBidControl(s, a, { teamId: b.teamId, control: b.control }),
+  endNow: (s, a, b) => S.endMatchNow(s, a, { matchId: b.matchId, reason: b.reason, winnerTeamId: b.winnerTeamId }),
+  // One person per team enters bids and books: the captain. No switching.
   partnerCode: (s, a) => S.issuePartnerCode(s, a),
+  opponentCode: (s, a) => S.issueOpponentCode(s, a),
+  rematch: (s, a) => S.requestRematch(s, a),
   createTest: (s, a, b) => S.createTestEvent(s, a, { gamesToWin: b.gamesToWin, target: b.target, control: b.control }),
   deleteTest: (s, a, b) => S.deleteTestEvent(s, a, { tournamentId: b.tournamentId }),
   deleteEvent: (s, a, b) => S.deleteEvent(s, a, { tournamentId: b.tournamentId }),
@@ -79,11 +81,24 @@ export async function POST(req: NextRequest) {
       await S.rateLimit(s, key, 'register', 30, 30 * 60 * 1000)
       await S.recordAttempt(s, key, 'register')
       const r = await S.registerTeam(s, S.PUBLIC, {
-        tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: 1, contact: body.contact, bidControl: body.bidControl,
+        tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: 1, contact: body.contact, bidControl: 'captain',
       })
       const sess = await S.createSession(s, { kind: 'player', tournamentId: body.tournamentId, playerId: r.captainPlayerId, staffId: null, invitationId: null, ttlMs: S.PLAYER_SESSION_MS })
       const code = await S.issueRegistrantCode(s, r.captainPlayerId)
       const res = json({ ok: true, status: r.status, accessCode: code.token, name: code.name })
+      setSessionCookie(res, sess.sessionToken, sess.expiresAt)
+      return res
+    }
+
+    // Anyone can start their own game. Rate limited per IP; the creator is
+    // signed in as their team captain.
+    if (name === 'startGame') {
+      const key = clientKey(req)
+      await S.rateLimit(s, key, 'startgame', 15, 60 * 60 * 1000)
+      await S.recordAttempt(s, key, 'startgame')
+      const r = await S.createSelfServeGame(s, { teamA: body.teamA, captainA: body.captainA, partnerA: body.partnerA, teamB: body.teamB, captainB: body.captainB, partnerB: body.partnerB, target: body.target })
+      const sess = await S.createSession(s, { kind: 'player', tournamentId: r.tournamentId, playerId: r.captainPlayerId, staffId: null, invitationId: null, ttlMs: S.PLAYER_SESSION_MS })
+      const res = json({ ok: true, slug: r.slug, myCode: r.myCode, otherCode: r.otherCode, otherCaptain: r.otherCaptain })
       setSessionCookie(res, sess.sessionToken, sess.expiresAt)
       return res
     }
