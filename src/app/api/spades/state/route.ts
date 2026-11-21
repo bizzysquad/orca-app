@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { actorFrom, errorResponse, json, store } from '@/lib/spades/http'
 import { isDirector, isStaff } from '@/lib/spades/service'
-import { adminState, findTournament, loadBundle, matchDetail, playerState, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
+import { adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
 import type { TournamentRow } from '@/lib/spades/types'
 
 export const dynamic = 'force-dynamic'
@@ -35,7 +35,10 @@ export async function GET(req: NextRequest) {
       ? (await s.select<TournamentRow>('sp_tournaments', {}, { order: [{ col: 'created_at', asc: false }], limit: 100 })).map(x => ({ slug: x.slug, name: x.name, status: x.status }))
       : undefined
 
-    if (view === 'public') return json({ ...publicState(b, now), viewer })
+    if (view === 'public') {
+      const past = sp.get('winners') === '1' ? await pastChampions(s, t.id) : undefined
+      return json({ ...publicState(b, now), viewer, pastChampions: past })
+    }
     if (view === 'play') return json({ ...publicState(b, now), viewer, me: playerState(b, actor, now) })
     if (view === 'match') {
       const id = sp.get('match') || ''

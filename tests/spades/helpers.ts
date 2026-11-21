@@ -8,7 +8,7 @@ export const owner: Actor = { kind: 'owner', name: 'Test Director' }
 export async function setup(opts: { rules?: Record<string, unknown>; teams?: number; capacity?: number } = {}) {
   const store = new MemoryStore()
   const { id: tid } = await S.createTournament(store, owner, { name: `Test Spades ${Math.random()}`, capacity: opts.capacity ?? 8 })
-  await S.updateTournament(store, owner, { tournamentId: tid, patch: { registration_open: true, rules: opts.rules || {} } })
+  await S.updateTournament(store, owner, { tournamentId: tid, patch: { registration_open: true, rules: { biddingMode: 'individual', ...(opts.rules || {}) } } })
   await S.setTableCount(store, owner, { tournamentId: tid, count: 4 })
   const n = opts.teams ?? 8
   for (let i = 1; i <= n; i++) {

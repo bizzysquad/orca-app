@@ -5,15 +5,16 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { Bracket } from './_components/Bracket'
 import { useSpades } from './_components/useSpades'
-import { ErrorBox, Loading, Shell, SpadeIcon, fmtDate, fmtTime } from './_components/ui'
+import { ErrorBox, Loading, Shell, SpadeIcon } from './_components/ui'
 
 function Landing() {
   const t = useSearchParams().get('t')
-  const { data, error, loading, online, reload } = useSpades<any>('public', { t })
+  const { data, error, loading, online, reload } = useSpades<any>('public', { t, winners: '1' })
   if (loading && !data) return <Shell active="home"><Loading /></Shell>
   if (!data?.tournament) return <Shell active="home" online={online}><div className="sp-wrap-narrow"><ErrorBox message={error || 'Tournament not found'} onRetry={reload} /></div></Shell>
   const T = data.tournament
-  const champ = T.championTeamId ? data.teams.find((x: any) => x.id === T.championTeamId) : null
+  const W = data.winners
+  const past: any[] = data.pastChampions || []
   const live = data.matches.filter((m: any) => m.status === 'live' || m.status === 'paused')
   const q = t ? `?t=${t}` : ''
   return (
@@ -28,14 +29,7 @@ function Landing() {
           <h1 className="sp-display mt-2" style={{ fontSize: 'clamp(40px, 9vw, 92px)', maxWidth: 760 }}>{T.name.replace(/^DJ Maskoff Presents\s*/i, '')}</h1>
           {T.subtitle && <p className="sp-serif italic text-xl mt-3" style={{ color: 'var(--sp-cream)' }}>{T.subtitle}</p>}
           <div className="flex flex-wrap gap-2 mt-5">
-            <span className="sp-chip sp-chip-warn">{fmtDate(T.startsAt, T.timezone)}</span>
-            {T.startsAt && <span className="sp-chip sp-chip-info">{fmtTime(T.startsAt, T.timezone)} to {fmtTime(T.endsAt, T.timezone)}</span>}
             <span className="sp-chip sp-chip-live">Free to enter</span>
-          </div>
-          <div className="mt-5 grid gap-1">
-            <div className="font-black text-lg">{T.venue}</div>
-            <div style={{ color: 'var(--sp-muted)' }}>{T.address}</div>
-            {T.scheduleNote && <div className="mt-1">{T.scheduleNote}</div>}
           </div>
           <div className="flex flex-wrap gap-3 mt-7">
             {T.registrationOpen && !T.rosterLocked && <Link href={`/spades/register${q}`} className="sp-btn sp-btn-gold">{data.registration.full ? 'Join the waitlist' : 'Register a team'}</Link>}
@@ -46,15 +40,42 @@ function Landing() {
         </div>
       </section>
 
-      {champ && (
-        <section className="sp-wrap mt-6">
-          <div className="sp-card-paper p-6 text-center">
-            <p className="sp-label">Champions</p>
-            <h2 className="sp-display text-5xl mt-1">{champ.name}</h2>
-            <p className="sp-serif italic mt-2">{T.award || 'Championship trophy'}</p>
+      <section className="sp-wrap mt-6" aria-label="Winners" id="winners">
+        <h2 className="sp-display text-2xl mb-3">Winners</h2>
+        {W ? (
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="sp-card-paper p-6 text-center md:col-span-2">
+              <p className="sp-label">Champions</p>
+              <p className="sp-display mt-1" style={{ fontSize: 'clamp(36px, 7vw, 64px)' }}>{W.champion}</p>
+              {W.championPlayers?.length > 0 && <p className="font-bold mt-1">{W.championPlayers.join(' & ')}</p>}
+              <p className="sp-serif italic mt-2">{T.award || 'Championship trophy'}{W.score ? ` · won the final ${W.score}` : ''}</p>
+            </div>
+            <div className="sp-card p-6 text-center grid content-center">
+              <p className="sp-label">Runner up</p>
+              <p className="sp-display text-3xl mt-1">{W.runnerUp}</p>
+            </div>
           </div>
-        </section>
-      )}
+        ) : (
+          <div className="sp-card p-6 text-center">
+            <SpadeIcon size={32} className="mx-auto mb-2" />
+            <p className="sp-display text-2xl">Champion to be crowned</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>The winning team shows up here the moment the championship is final.</p>
+          </div>
+        )}
+        {past.length > 0 && (
+          <div className="mt-4">
+            <p className="sp-label mb-2">Past champions</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {past.map(p => (
+                <Link key={p.slug} href={`/spades/bracket?t=${p.slug}`} className="sp-card p-3 block">
+                  <div className="font-black">{p.champion}</div>
+                  <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{p.tournament}</div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="sp-wrap mt-6 grid md:grid-cols-3 gap-4">
         <div className="sp-card p-5">

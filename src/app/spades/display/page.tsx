@@ -83,7 +83,7 @@ function Display() {
         </section>
       )}
       <footer className="flex justify-between text-lg" style={{ color: 'var(--sp-dim)' }}>
-        <span>{T.venue} · orcafin.app/spades</span>
+        <span>orcafin.app/spades</span>
         <span>No gambling or wagering. Trophy for recognition only.</span>
       </footer>
     </div>

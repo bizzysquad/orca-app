@@ -44,10 +44,10 @@ function Register() {
             <p>
               {done === 'waitlist'
                 ? 'The bracket is full right now. The tournament director will call teams from the waitlist in order if a spot opens. The waitlist does not enter the bracket on its own.'
-                : 'The tournament director will confirm your team at check in. Each player then gets a private link or QR code to join their table.'}
+                : 'This phone is now signed in as your team scorekeeper. The tournament director approves your team, then your table shows up here when the game begins.'}
             </p>
-            <p className="font-bold">Check in at the venue between 8:00 and 8:30 PM.</p>
-            <Link href="/spades" className="sp-btn sp-btn-wine">Back to Spades HQ</Link>
+            <p className="font-bold">Check in with the tournament director when you arrive.</p>
+            <Link href="/spades/play" className="sp-btn sp-btn-wine">Go to my table</Link>
           </div>
         ) : !open ? (
           <div className="sp-card p-6">
@@ -60,22 +60,13 @@ function Register() {
             <label className="sp-field"><span>Team name</span>
               <input className="sp-input" required maxLength={40} autoComplete="off" value={form.name} onChange={e => set('name', e.target.value)} />
             </label>
-            <label className="sp-field"><span>Player 1 display name</span>
+            <label className="sp-field"><span>Your name (you keep score for your team on this phone)</span>
               <input className="sp-input" required maxLength={40} autoComplete="off" value={form.player1} onChange={e => set('player1', e.target.value)} />
             </label>
-            <label className="sp-field"><span>Player 2 display name</span>
+            <label className="sp-field"><span>Your partner&apos;s name</span>
               <input className="sp-input" required maxLength={40} autoComplete="off" value={form.player2} onChange={e => set('player2', e.target.value)} />
             </label>
-            <fieldset className="grid gap-2">
-              <legend className="text-sm font-bold mb-1" style={{ color: 'var(--sp-muted)' }}>Team captain (reports books and confirms each hand)</legend>
-              <div className="grid grid-cols-2 gap-2">
-                {[1, 2].map(n => (
-                  <button key={n} type="button" className={`sp-btn ${form.captainSeat === n ? 'sp-btn-gold' : 'sp-btn-ghost'}`} aria-pressed={form.captainSeat === n} onClick={() => set('captainSeat', n)}>
-                    {(n === 1 ? form.player1 : form.player2) || `Player ${n}`}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+            <div className="sp-banner sp-banner-info text-sm">Keep this phone with you. After you register, it is your team&apos;s scorekeeper: it enters both of your bids and your books every hand once the director begins the game.</div>
             <label className="sp-field"><span>Phone or email (optional, only the director sees it)</span>
               <input className="sp-input" maxLength={120} autoComplete="off" value={form.contact} onChange={e => set('contact', e.target.value)} />
             </label>

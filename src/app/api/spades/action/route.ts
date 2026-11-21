@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { actorFrom, checkWrite, clientKey, errorResponse, json, readJson, store } from '@/lib/spades/http'
+import { actorFrom, checkWrite, clientKey, errorResponse, json, readJson, setSessionCookie, store } from '@/lib/spades/http'
 import * as S from '@/lib/spades/service'
 import type { Store } from '@/lib/spades/store'
 
@@ -37,6 +37,7 @@ const ACTIONS: Record<string, Handler> = {
   addTeam: (s, a, b) => S.registerTeam(s, a, { tournamentId: b.tournamentId, name: b.name, player1: b.player1, player2: b.player2, captainSeat: b.captainSeat, contact: b.contact }),
   updateTeam: (s, a, b) => S.updateTeam(s, a, { teamId: b.teamId, name: b.name, player1: b.player1, player2: b.player2, captainSeat: b.captainSeat, contact: b.contact }),
   teamStatus: (s, a, b) => S.setTeamStatus(s, a, { teamId: b.teamId, status: b.status }),
+  approveAll: (s, a, b) => S.approveAllTeams(s, a, { tournamentId: b.tournamentId }),
   removeTeam: (s, a, b) => S.removeTeam(s, a, { teamId: b.teamId }),
   generateBracket: (s, a, b) => S.generateBracket(s, a, { tournamentId: b.tournamentId, mode: b.mode === 'manual' ? 'manual' : 'random', order: b.order }),
   publishBracket: (s, a, b) => S.publishBracket(s, a, { tournamentId: b.tournamentId, published: !!b.published }),
@@ -57,15 +58,21 @@ export async function POST(req: NextRequest) {
     const body = await readJson(req)
     const name = String(body.action || '')
 
-    // Public team sign up: rate limited per IP, lands as pending or waitlist.
+    // Public team sign up: rate limited per IP (venue wifi shares one IP, so
+    // the limit is generous), lands as pending or waitlist. The phone that
+    // registers is signed in as the team captain and becomes the team's
+    // scorekeeper: it enters bids and books once the director begins the game.
     if (name === 'register') {
       const key = clientKey(req)
-      await S.rateLimit(s, key, 'register', 5, 30 * 60 * 1000)
+      await S.rateLimit(s, key, 'register', 30, 30 * 60 * 1000)
       await S.recordAttempt(s, key, 'register')
       const r = await S.registerTeam(s, S.PUBLIC, {
-        tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: body.captainSeat, contact: body.contact,
+        tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: 1, contact: body.contact,
       })
-      return json({ ok: true, status: r.status })
+      const sess = await S.createSession(s, { kind: 'player', tournamentId: body.tournamentId, playerId: r.captainPlayerId, staffId: null, invitationId: null, ttlMs: S.PLAYER_SESSION_MS })
+      const res = json({ ok: true, status: r.status })
+      setSessionCookie(res, sess.sessionToken, sess.expiresAt)
+      return res
     }
 
     const handler = Object.prototype.hasOwnProperty.call(ACTIONS, name) ? ACTIONS[name] : null

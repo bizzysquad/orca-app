@@ -124,6 +124,33 @@ export function publicMatch(b: Bundle, m: MatchRow) {
   }
 }
 
+// Champion and runner up of this tournament, once the final is decided.
+export function winners(b: Bundle) {
+  const rounds = totalRounds(b.t.capacity)
+  const final = b.matches.find(m => m.round === rounds && m.status === 'final' && m.winner_team_id)
+  if (!final) return null
+  const name = (id: string | null) => b.teams.find(t => t.id === id)?.name || null
+  const ru = final.team_a_id === final.winner_team_id ? final.team_b_id : final.team_a_id
+  return {
+    champion: name(final.winner_team_id),
+    championPlayers: b.players.filter(p => p.team_id === final.winner_team_id).sort((x, y) => x.seat - y.seat).map(p => p.display_name),
+    runnerUp: name(ru),
+    score: final.result_kind === 'played' ? `${Math.max(final.score_a, final.score_b)} to ${Math.min(final.score_a, final.score_b)}` : null,
+  }
+}
+
+// Champions of other finished tournaments, newest first, for the winners wall.
+export async function pastChampions(store: Store, currentId: string) {
+  const ts = await store.select<TournamentRow>('sp_tournaments', { status: { in: ['completed', 'archived'] } }, { order: [{ col: 'created_at', asc: false }], limit: 20 })
+  const out: { tournament: string; slug: string; champion: string; date: string | null }[] = []
+  for (const t of ts) {
+    if (t.id === currentId || !t.champion_team_id) continue
+    const team = (await store.select<TeamRow>('sp_teams', { id: t.champion_team_id }, { limit: 1 }))[0]
+    if (team) out.push({ tournament: t.name, slug: t.slug, champion: team.name, date: t.starts_at })
+  }
+  return out
+}
+
 export function publicState(b: Bundle, now: Date) {
   const approved = b.teams.filter(t => t.status === 'approved')
   const pending = b.teams.filter(t => t.status === 'pending').length
@@ -137,6 +164,7 @@ export function publicState(b: Bundle, now: Date) {
     },
     teams: approved.map(t => ({ id: t.id, name: t.name, seed: t.seed, checkedIn: !!t.checked_in_at })),
     matches: b.t.bracket_published ? b.matches.map(m => publicMatch(b, m)) : [],
+    winners: b.t.bracket_published ? winners(b) : null,
   }
 }
 
@@ -347,7 +375,7 @@ export function playerState(b: Bundle, actor: Actor, now: Date) {
   const eliminated = mine.some(m => m.status === 'final' && m.winner_team_id && m.winner_team_id !== actor.teamId)
   return {
     team: team ? {
-      id: team.id, name: team.name, seed: team.seed, checkedIn: !!team.checked_in_at,
+      id: team.id, name: team.name, seed: team.seed, checkedIn: !!team.checked_in_at, status: team.status,
       players: b.players.filter(p => p.team_id === team.id).sort((x, y) => x.seat - y.seat).map(p => ({ id: p.id, name: p.display_name, isCaptain: p.is_captain })),
     } : null,
     activeMatch: active && b.t.bracket_published ? matchDetail(b, actor, active.id, now) : null,

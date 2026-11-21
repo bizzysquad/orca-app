@@ -7,6 +7,7 @@
 
 export type BiddingMode = 'individual' | 'captain'
 export type BidOrder = 'simultaneous' | 'sequential'
+export interface RuleSection { title: string; items: string[] }
 
 export interface Rules {
   biddingMode: BiddingMode
@@ -26,10 +27,13 @@ export interface Rules {
   timeFinalMin: number
   requireCaptainApproval: boolean
   renegePolicy: 'lose_bid_award_opponent'
+  // Director written rules page. Empty means the page is generated from the
+  // settings above (ruleSummary).
+  customSections: RuleSection[]
 }
 
 export const DEFAULT_RULES: Rules = {
-  biddingMode: 'individual',
+  biddingMode: 'captain',
   bidOrder: 'simultaneous',
   minTeamBid: 4,
   maxBid: 13,
@@ -46,6 +50,7 @@ export const DEFAULT_RULES: Rules = {
   timeFinalMin: 70,
   requireCaptainApproval: true,
   renegePolicy: 'lose_bid_award_opponent',
+  customSections: [],
 }
 
 function int(v: unknown, fallback: number, min: number, max: number): number {
@@ -58,7 +63,7 @@ export function normalizeRules(raw: unknown): Rules {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof Rules, unknown>>
   const d = DEFAULT_RULES
   return {
-    biddingMode: r.biddingMode === 'captain' ? 'captain' : 'individual',
+    biddingMode: r.biddingMode === 'individual' ? 'individual' : 'captain',
     bidOrder: r.bidOrder === 'sequential' ? 'sequential' : 'simultaneous',
     minTeamBid: int(r.minTeamBid, d.minTeamBid, 0, 13),
     maxBid: 13,
@@ -76,11 +81,32 @@ export function normalizeRules(raw: unknown): Rules {
     timeFinalMin: int(r.timeFinalMin, d.timeFinalMin, 0, 600),
     requireCaptainApproval: r.requireCaptainApproval === false ? false : true,
     renegePolicy: 'lose_bid_award_opponent',
+    customSections: cleanSections(r.customSections),
   }
 }
 
+function cleanSections(raw: unknown): RuleSection[] {
+  if (!Array.isArray(raw)) return []
+  const out: RuleSection[] = []
+  for (const sec of raw.slice(0, 20)) {
+    if (!sec || typeof sec !== 'object') continue
+    const title = typeof (sec as any).title === 'string' ? (sec as any).title.trim().slice(0, 80) : ''
+    const items = Array.isArray((sec as any).items)
+      ? (sec as any).items.filter((i: unknown) => typeof i === 'string').map((i: string) => i.trim().slice(0, 300)).filter(Boolean).slice(0, 30)
+      : []
+    if (title || items.length) out.push({ title: title || 'Rules', items })
+  }
+  return out
+}
+
+// What /spades/rules shows: the director's own text if set, otherwise the
+// generated summary of the scoring settings.
+export function displayRules(r: Rules): RuleSection[] {
+  return r.customSections.length ? r.customSections : ruleSummary(r)
+}
+
 // Human readable rule list, shared by /spades/rules and the print sheets.
-export function ruleSummary(r: Rules): { title: string; items: string[] }[] {
+export function ruleSummary(r: Rules): RuleSection[] {
   return [
     {
       title: 'The Deck',

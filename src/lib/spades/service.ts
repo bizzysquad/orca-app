@@ -1155,6 +1155,8 @@ export async function registerTeam(store: Store, actor: Actor, input: { tourname
   else status = approved + pending < t.capacity ? 'pending' : t.waitlist_enabled ? 'waitlist' : fail(409, 'Registration is full')
 
   const teamId = uid()
+  const p1Id = uid()
+  const p2Id = uid()
   try {
     await store.insert('sp_teams', { id: teamId, tournament_id: t.id, name, name_key: nameKey(name), status, seed: null, contact, checked_in_at: null, created_at: nowIso(store) })
   } catch (err) {
@@ -1163,8 +1165,8 @@ export async function registerTeam(store: Store, actor: Actor, input: { tourname
   }
   try {
     await store.insert('sp_players', [
-      { id: uid(), tournament_id: t.id, team_id: teamId, seat: 1, display_name: p1, name_key: nameKey(p1), is_captain: captainSeat === 1, contact: null, created_at: nowIso(store) },
-      { id: uid(), tournament_id: t.id, team_id: teamId, seat: 2, display_name: p2, name_key: nameKey(p2), is_captain: captainSeat === 2, contact: null, created_at: nowIso(store) },
+      { id: p1Id, tournament_id: t.id, team_id: teamId, seat: 1, display_name: p1, name_key: nameKey(p1), is_captain: captainSeat === 1, contact: null, created_at: nowIso(store) },
+      { id: p2Id, tournament_id: t.id, team_id: teamId, seat: 2, display_name: p2, name_key: nameKey(p2), is_captain: captainSeat === 2, contact: null, created_at: nowIso(store) },
     ])
   } catch (err) {
     await store.remove('sp_players', { team_id: teamId })
@@ -1174,7 +1176,7 @@ export async function registerTeam(store: Store, actor: Actor, input: { tourname
   }
   await audit(store, actor, { tournamentId: t.id, action: director ? 'team.add' : 'team.register', after: { name, players: [p1, p2], captainSeat, status } })
   await touch(store, t.id)
-  return { ok: true, teamId, status }
+  return { ok: true, teamId, status, captainPlayerId: captainSeat === 1 ? p1Id : p2Id }
 }
 
 async function teamHasStarted(store: Store, teamId: string): Promise<boolean> {
@@ -1235,6 +1237,29 @@ export async function setTeamStatus(store: Store, actor: Actor, input: { teamId:
   await audit(store, actor, { tournamentId: t.id, action: 'team.status', before: { status: team.status }, after: { status: input.status, team: team.name } })
   await touch(store, t.id)
   return { ok: true }
+}
+
+// Approves pending teams in sign up order until the bracket is full. Anything
+// left over stays pending so the director can waitlist or reject it.
+export async function approveAllTeams(store: Store, actor: Actor, input: { tournamentId: string }) {
+  const t = await one<TournamentRow>(store, 'sp_tournaments', { id: input.tournamentId }, 'Tournament not found')
+  requireDirector(actor, t.id)
+  if (t.roster_locked) fail(409, 'The roster is locked')
+  const teams = await store.select<TeamRow>('sp_teams', { tournament_id: t.id }, { order: [{ col: 'created_at' }] })
+  let open = t.capacity - teams.filter(x => x.status === 'approved').length
+  const pending = teams.filter(x => x.status === 'pending')
+  if (!pending.length) fail(409, 'No pending teams to approve')
+  if (open <= 0) fail(409, `Already ${t.capacity} approved teams. The bracket is full.`)
+  const approved: string[] = []
+  for (const team of pending) {
+    if (open <= 0) break
+    await store.update('sp_teams', { id: team.id, status: 'pending' }, { status: 'approved' })
+    approved.push(team.name)
+    open--
+  }
+  await audit(store, actor, { tournamentId: t.id, action: 'team.approve_all', after: { approved } })
+  await touch(store, t.id)
+  return { ok: true, approved: approved.length, leftPending: pending.length - approved.length }
 }
 
 export async function removeTeam(store: Store, actor: Actor, input: { teamId: string }) {

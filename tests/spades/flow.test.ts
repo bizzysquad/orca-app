@@ -493,3 +493,63 @@ test('public view never exposes unrevealed bids, reports or player names', async
   assert.equal(opp.current.seats[0].bid, null)
   assert.equal(opp.current.seats[0].submitted, true)
 })
+
+test('approve all fills open spots in sign up order and leaves the rest pending', async () => {
+  const { store, tid } = await setup({ teams: 6 })
+  for (let i = 1; i <= 4; i++) await S.registerTeam(store, S.PUBLIC, { tournamentId: tid, name: `Walk ${i}`, player1: `W${i}a`, player2: `W${i}b` })
+  const pendingBefore = await store.select<TeamRow>('sp_teams', { tournament_id: tid, status: 'pending' })
+  assert.equal(pendingBefore.length, 2) // 6 approved + 2 pending fill 8, the rest waitlist
+  const r = await S.approveAllTeams(store, owner, { tournamentId: tid })
+  assert.equal(r.approved, 2)
+  assert.equal((await store.select<TeamRow>('sp_teams', { tournament_id: tid, status: 'approved' })).length, 8)
+  await expectReject(S.approveAllTeams(store, owner, { tournamentId: tid }), 409)
+  const mp = await S.addStaff(store, owner, { tournamentId: tid, name: 'Sup', role: 'supervisor' })
+  const sup = await S.resolveSession(store, (await S.redeemInvite(store, mp.invite.token)).sessionToken)
+  await expectReject(S.approveAllTeams(store, sup, { tournamentId: tid }), 403)
+})
+
+test('custom rules text is saved, sanitized, and does not change scoring settings', async () => {
+  const { store, tid } = await setup({ teams: 2 })
+  await S.updateTournament(store, owner, { tournamentId: tid, patch: { rules: { customSections: [{ title: 'House', items: ['No phones on the table', '', 42] }, { title: '', items: [] }] } } })
+  const [t] = await store.select<TournamentRow>('sp_tournaments', { id: tid })
+  const { normalizeRules, displayRules } = await import('../../src/lib/spades/rules.ts')
+  const r = normalizeRules(t.rules)
+  assert.deepEqual(r.customSections, [{ title: 'House', items: ['No phones on the table'] }])
+  assert.equal(displayRules(r)[0].title, 'House')
+  assert.equal(r.targetDefault, 250)
+  await S.updateTournament(store, owner, { tournamentId: tid, patch: { rules: { customSections: [] } } })
+  const [t2] = await store.select<TournamentRow>('sp_tournaments', { id: tid })
+  assert.ok(displayRules(normalizeRules(t2.rules)).length > 3)
+})
+
+test('the registering player is the captain scorekeeper and can run a captain-mode hand', async () => {
+  const { store, tid } = await setup({ teams: 0, rules: { biddingMode: 'captain' } })
+  const caps: S.Actor[] = []
+  for (let i = 1; i <= 8; i++) {
+    const r = await S.registerTeam(store, S.PUBLIC, { tournamentId: tid, name: `Reg ${i}`, player1: `R${i}a`, player2: `R${i}b` })
+    assert.equal(r.status, 'pending')
+    const sess = await S.createSession(store, { kind: 'player', tournamentId: tid, playerId: r.captainPlayerId, staffId: null, invitationId: null, ttlMs: S.PLAYER_SESSION_MS })
+    const a = await S.resolveSession(store, sess.sessionToken)
+    assert.equal(a.kind === 'player' && a.isCaptain, true)
+    caps.push(a)
+  }
+  await S.approveAllTeams(store, owner, { tournamentId: tid })
+  await S.setRosterLock(store, owner, { tournamentId: tid, locked: true })
+  await S.publishBracket(store, owner, { tournamentId: tid, published: true })
+  await S.startRound(store, owner, { tournamentId: tid, round: 1 })
+  const [m] = await store.select<MatchRow>('sp_matches', { tournament_id: tid, round: 1, slot: 0 })
+  const capOf = (teamId: string) => caps.find(c => c.kind === 'player' && c.teamId === teamId)!
+  const ca = capOf(m.team_a_id!), cb = capOf(m.team_b_id!)
+  const pa = await store.select<any>('sp_players', { team_id: m.team_a_id! })
+  const pb = await store.select<any>('sp_players', { team_id: m.team_b_id! })
+  const [h] = await store.select<HandRow>('sp_hands', { match_id: m.id, status: 'bidding' })
+  await S.submitBids(store, ca, { handId: h.id, bids: pa.map((p: any) => ({ playerId: p.id, bid: 3 })) })
+  await S.submitBids(store, cb, { handId: h.id, bids: pb.map((p: any) => ({ playerId: p.id, bid: 2 })) })
+  await S.reportBooks(store, ca, { handId: h.id, booksA: 8, booksB: 5 })
+  await S.reportBooks(store, cb, { handId: h.id, booksA: 8, booksB: 5 })
+  await S.approveHand(store, ca, { handId: h.id })
+  await S.approveHand(store, cb, { handId: h.id })
+  const mm = (await store.select<MatchRow>('sp_matches', { id: m.id }))[0]
+  assert.equal(mm.score_a, 62)
+  assert.equal(mm.score_b, 41)
+})

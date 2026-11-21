@@ -6,6 +6,10 @@ import { Suspense, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { Bracket } from '../_components/Bracket'
 import { postAuth, useSpades, type ActResult } from '../_components/useSpades'
+import { normalizeRules, ruleSummary } from '@/lib/spades/rules'
+
+const defaultSections = (r: any) => ruleSummary(normalizeRules(r))
+const NL = String.fromCharCode(10)
 import { ErrorBox, Feedback, Loading, MatchTimer, Shell, StatusChip, fmtTime } from '../_components/ui'
 
 type Act = (action: string, payload?: Record<string, unknown>) => Promise<ActResult>
@@ -128,7 +132,7 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
             `Teams: ${approved.length} of ${T.capacity} approved, ${checkedIn} checked in. Send invitations from the Teams tab.`,
             'Close registration and lock the roster. The bracket is drawn at random automatically.',
             'Check the draw on the Bracket tab, then publish it.',
-            'Start round 1. Finalize each match when it completes to move winners forward.',
+            'Tap Begin to start round 1. Teams wait on their phones until you do. Finalize each match when it completes to move winners forward.',
           ].map((s, i) => (
             <li key={i} className="flex gap-3 p-3 rounded-lg" style={{ background: step === i + 1 ? 'rgba(224,173,79,0.15)' : 'rgba(0,0,0,0.2)', border: step === i + 1 ? '1px solid var(--sp-gold)' : '1px solid transparent' }}>
               <span className="sp-display text-xl" style={{ color: step > i + 1 ? 'var(--sp-green)' : 'var(--sp-gold)' }}>{step > i + 1 ? '✓' : i + 1}</span><span>{s}</span>
@@ -163,7 +167,7 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
               <div key={r} className="grid gap-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="font-black" style={{ color: 'var(--sp-gold)' }}>{ms[0]?.roundName}</h3>
-                  {readyCount > 0 && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Start ${readyCount} ${ms[0]?.roundName} match${readyCount > 1 ? 'es' : ''} now? The clocks start.`)) run('startRound', { tournamentId: T.id, round: r }, 'Round started') }}>Start {ms[0]?.roundName}</button>}
+                  {readyCount > 0 && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Start ${readyCount} ${ms[0]?.roundName} match${readyCount > 1 ? 'es' : ''} now? Every team at those tables sees their game begin and the clocks start.`)) run('startRound', { tournamentId: T.id, round: r }, 'Game on') }}>Begin {ms[0]?.roundName}</button>}
                 </div>
                 {ms.map((m: any) => <MatchRow key={m.id} m={m} data={data} act={act} teams={teams} serverNow={serverNow} />)}
               </div>
@@ -195,7 +199,7 @@ function MatchRow({ m, data, act, teams, serverNow }: { m: any; data: any; act: 
             {data.tables.map((x: any) => <option key={x.id} value={x.id}>Table {x.number}</option>)}
           </select>
         )}
-        {m.status === 'ready' && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => run('startMatch', { matchId: m.id }, 'Match started')}>Start</button>}
+        {m.status === 'ready' && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => run('startMatch', { matchId: m.id }, 'Game on')}>Begin game</button>}
         {m.status === 'completed' && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Finalize: ${teams.get(m.winner)} wins ${Math.max(m.scoreA, m.scoreB)} to ${Math.min(m.scoreA, m.scoreB)}?`)) run('finalize', { matchId: m.id }, 'Finalized, winner advanced') }}>Finalize {teams.get(m.winner)}</button>}
         {m.status === 'live' && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => run('pause', { matchId: m.id }, 'Paused')}>Pause</button>}
         {m.status === 'paused' && <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('resume', { matchId: m.id }, 'Resumed')}>Resume</button>}
@@ -278,6 +282,18 @@ function TeamsTab({ data, act }: { data: any; act: Act }) {
         </form>
       )}
       <Feedback msg={msg} />
+      {!T.rosterLocked && data.allTeams.some((x: any) => x.status === 'pending') && (
+        <div className="sp-card p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-black">{data.allTeams.filter((x: any) => x.status === 'pending').length} teams waiting for approval</div>
+            <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>{T.capacity - data.allTeams.filter((x: any) => x.status === 'approved').length} spots left. Teams are approved in the order they signed up.</div>
+          </div>
+          <button className="sp-btn sp-btn-gold" disabled={busy} onClick={async () => {
+            const r = await run('approveAll', { tournamentId: T.id }, 'Approved')
+            if (r.ok && r.data?.leftPending) alert(`${r.data.approved} approved. ${r.data.leftPending} still pending because the bracket is full. Waitlist or reject them.`)
+          }}>Approve all</button>
+        </div>
+      )}
       {groups.filter(([, list]) => list.length).map(([label, list]) => (
         <section key={label} className="grid gap-2">
           <h2 className="sp-display text-xl">{label} <span className="sp-num" style={{ color: 'var(--sp-dim)' }}>{list.length}{label === 'Approved' ? `/${T.capacity}` : ''}</span></h2>
@@ -306,7 +322,7 @@ function TeamsTab({ data, act }: { data: any; act: Act }) {
                       <div key={p.id} className="p-3 rounded-lg flex flex-wrap items-center justify-between gap-2" style={{ background: 'rgba(0,0,0,0.22)' }}>
                         <div>
                           <div className="font-bold">{p.name}{p.isCaptain ? ' (Captain)' : ''}</div>
-                          <div className="text-xs" style={{ color: p.invite.status === 'used' ? 'var(--sp-green)' : 'var(--sp-muted)' }}>{INVITE_LABEL[p.invite.status]}{p.invite.activeSessions ? ` · ${p.invite.activeSessions} device` : ''}</div>
+                          <div className="text-xs" style={{ color: p.invite.activeSessions ? 'var(--sp-green)' : 'var(--sp-muted)' }}>{p.invite.activeSessions ? `Signed in on ${p.invite.activeSessions} phone${p.invite.activeSessions > 1 ? 's' : ''}` : INVITE_LABEL[p.invite.status]}</div>
                         </div>
                         {team.status === 'approved' && (
                           <div className="flex gap-2">
@@ -578,7 +594,7 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
         <button className="sp-btn sp-btn-gold" disabled={busy}>Save details</button>
       </form>
 
-      <form className="sp-card p-4 grid gap-3" onSubmit={e => { e.preventDefault(); const patch: any = { ...r }; for (const k of Object.keys(patch)) if (typeof patch[k] === 'string' && /^\d+$/.test(patch[k])) patch[k] = Number(patch[k]); run('updateTournament', { tournamentId: T.id, patch: { rules: patch } }, 'Rules saved. They apply to matches that start from now on.') }}>
+      <form className="sp-card p-4 grid gap-3" onSubmit={e => { e.preventDefault(); const patch: any = { ...r }; delete patch.customSections; for (const k of Object.keys(patch)) if (typeof patch[k] === 'string' && /^\d+$/.test(patch[k])) patch[k] = Number(patch[k]); run('updateTournament', { tournamentId: T.id, patch: { rules: patch } }, 'Rules saved. They apply to matches that start from now on.') }}>
         <h2 className="sp-display text-xl">House rules</h2>
         {live && <div className="sp-banner sp-banner-warn text-sm">Running matches keep the rules they started with. Changes apply to matches started after you save.</div>}
         <div className="grid sm:grid-cols-2 gap-3">
@@ -600,6 +616,8 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
         <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Nil and blind nil are off for this engine. Targets and time limits are copied onto each match when the bracket is drawn; adjust a single match from its match page.</p>
         <button className="sp-btn sp-btn-gold" disabled={busy}>Save rules</button>
       </form>
+
+      <RulesTextEditor T={T} act={act} />
 
       <section className="sp-card p-4 grid gap-3">
         <h2 className="sp-display text-xl">Capacity and waitlist</h2>
@@ -630,6 +648,41 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
       )}
       <Feedback msg={msg} />
     </div>
+  )
+}
+
+// Edit the text players see on /spades/rules. One rule per line.
+function RulesTextEditor({ T, act }: { T: any; act: Act }) {
+  const { busy, msg, run } = useRun(act)
+  const custom = T.rules.customSections?.length > 0
+  const start = () => (custom ? T.rules.customSections : defaultSections(T.rules)).map((s: any) => ({ title: s.title, text: s.items.join(NL) }))
+  const [secs, setSecs] = useState<{ title: string; text: string }[]>(start)
+  const set = (i: number, k: 'title' | 'text', v: string) => setSecs(xs => xs.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
+  const save = (sections: { title: string; items: string[] }[], ok: string) => run('updateTournament', { tournamentId: T.id, patch: { rules: { customSections: sections } } }, ok)
+  return (
+    <section className="sp-card p-4 grid gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="sp-display text-xl">Rules page text</h2>
+        <span className={`sp-chip ${custom ? 'sp-chip-warn' : 'sp-chip-dim'}`}>{custom ? 'Your custom text' : 'Generated from the settings above'}</span>
+      </div>
+      <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>This is what players read on the Rules page. One rule per line. Scoring itself always follows the House rules settings above, so keep the two in agreement.</p>
+      {secs.map((s, i) => (
+        <div key={i} className="grid gap-2 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}>
+          <div className="flex gap-2">
+            <input className="sp-input" aria-label={`Section ${i + 1} title`} value={s.title} maxLength={80} onChange={e => set(i, 'title', e.target.value)} />
+            <button type="button" className="sp-btn sp-btn-sm sp-btn-ghost" onClick={() => setSecs(xs => xs.filter((_, j) => j !== i))} aria-label={`Remove section ${s.title}`}>Remove</button>
+          </div>
+          <textarea className="sp-textarea" aria-label={`${s.title} rules`} rows={Math.max(3, s.text.split(NL).length + 1)} value={s.text} onChange={e => set(i, 'text', e.target.value)} />
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="sp-btn sp-btn-sm sp-btn-ghost" onClick={() => setSecs(xs => [...xs, { title: 'New section', text: '' }])}>Add section</button>
+        <button type="button" className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => save(secs.map(s => ({ title: s.title.trim(), items: s.text.split(NL).map(x => x.trim()).filter(Boolean) })).filter(s => s.title || s.items.length), 'Rules page saved')}>Save rules page</button>
+        {custom && <button type="button" className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={async () => { if (!confirm('Go back to the generated rules text?')) return; const r = await save([], 'Back to generated text'); if (r.ok) setSecs(defaultSections({ ...T.rules, customSections: [] }).map((s: any) => ({ title: s.title, text: s.items.join(NL) }))) }}>Reset to generated text</button>}
+        <Link href={`/spades/rules?t=${T.slug}`} target="_blank" className="sp-btn sp-btn-sm sp-btn-ghost">View rules page</Link>
+      </div>
+      <Feedback msg={msg} />
+    </section>
   )
 }
 

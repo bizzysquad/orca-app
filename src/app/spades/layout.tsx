@@ -8,12 +8,12 @@ const serif = Fraunces({ subsets: ['latin'], style: ['italic', 'normal'], weight
 
 export const metadata: Metadata = {
   title: 'Spades HQ | DJ Maskoff Presents R&B Spades',
-  description: 'Live bracket, scores and table check in for the DJ Maskoff Presents R&B Spades Tournament at Korner Pocket, Raleigh.',
+  description: 'Live bracket, scores and table check in for DJ Maskoff Presents R&B Spades.',
   manifest: null,
   appleWebApp: { capable: false, title: 'Spades HQ' },
   openGraph: {
-    title: 'DJ Maskoff Presents R&B Spades Tournament',
-    description: 'Joker spades. Eight teams. One trophy. Follow the live bracket.',
+    title: 'DJ Maskoff Presents R&B Spades',
+    description: 'Joker spades. One trophy. Follow the live bracket.',
   },
 }
 

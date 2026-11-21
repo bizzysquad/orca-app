@@ -28,7 +28,7 @@ function Print() {
       {kind === 'bracket' ? (
         <div>
           <h1 className="sp-display text-3xl mb-1">{T.name}</h1>
-          <p className="mb-6">{T.venue} · {T.address}</p>
+          <div className="mb-6" />
           <div className="grid gap-6" style={{ gridTemplateColumns: `repeat(${T.rounds}, minmax(0, 1fr))` }}>
             {rounds.map(r => (
               <div key={r} className="grid gap-4 content-around">
