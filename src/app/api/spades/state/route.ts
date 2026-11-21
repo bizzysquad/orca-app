@@ -3,6 +3,7 @@ import { actorFrom, errorResponse, json, store } from '@/lib/spades/http'
 import { actAsPlayer, isDirector, isStaff } from '@/lib/spades/service'
 import { adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
 import type { TournamentRow } from '@/lib/spades/types'
+import { normalizeRules } from '@/lib/spades/rules'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
     const b = await loadBundle(s, t)
     const viewer = viewerInfo(actor, b)
     const tournaments = actor.kind === 'owner'
-      ? (await s.select<TournamentRow>('sp_tournaments', {}, { order: [{ col: 'created_at', asc: false }], limit: 100 })).map(x => ({ id: x.id, slug: x.slug, name: x.name, status: x.status, eventType: x.event_type || 'tournament', isTest: !!x.is_test, isFeatured: x.is_featured }))
+      ? (await s.select<TournamentRow>('sp_tournaments', {}, { order: [{ col: 'created_at', asc: false }], limit: 100 })).map(x => ({ id: x.id, slug: x.slug, name: x.name, status: x.status, eventType: x.event_type || 'tournament', isTest: !!x.is_test, isFeatured: x.is_featured, startsAt: x.starts_at, teamLimit: x.team_limit || x.capacity, registrationOpen: x.registration_open, rosterLocked: x.roster_locked, rules: normalizeRules(x.rules) }))
       : undefined
 
     if (view === 'public') {

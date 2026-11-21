@@ -20,12 +20,12 @@ function BracketView() {
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <p className="sp-label" style={{ color: 'var(--sp-gold)' }}>{T.name}</p>
-            <h1 className="sp-display text-4xl mt-1">Live bracket</h1>
+            <h1 className="sp-display text-4xl mt-1">{T.useBracket ? 'Live bracket' : 'Games'}</h1>
           </div>
           <Link href={`/spades/display${t ? `?t=${t}` : ''}`} className="sp-btn sp-btn-sm sp-btn-ghost">TV mode</Link>
         </div>
         {champ && <div className="sp-card-paper p-5 text-center"><p className="sp-label">Champions</p><p className="sp-display text-4xl">{champ.name}</p></div>}
-        {T.bracketPublished && data.matches.length ? <Bracket data={data} /> : <><div className="sp-banner sp-banner-info text-sm mb-3">Preliminary bracket: teams appear as they register. The real matchups are drawn at random when registration closes.</div><Bracket data={provisionalData(data)} linkMatches={false} /></>}
+        {T.bracketPublished && data.matches.length ? <Bracket data={data} /> : <Bracket data={provisionalData(data)} linkMatches={false} />}
         <p className="text-xs" style={{ color: 'var(--sp-dim)' }}>Scores update live as hands are verified. A winner advances only after the tournament director finalizes the result.</p>
       </div>
     </Shell>

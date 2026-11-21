@@ -125,18 +125,23 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
   const approved = data.allTeams.filter((x: any) => x.status === 'approved')
   const checkedIn = approved.filter((x: any) => x.checkedIn).length
   const rounds = Array.from({ length: T.rounds }, (_, i) => i + 1)
-  const step = !T.rosterLocked ? 1 : !data.matches.length ? 2 : !T.bracketPublished ? 3 : 4
+  const open = !T.useBracket
+  const step = open ? (approved.length < 2 ? 1 : !data.matches.length ? 2 : 3) : !T.rosterLocked ? 1 : !data.matches.length ? 2 : !T.bracketPublished ? 3 : 4
   return (
     <div className="grid gap-4">
       <section className="sp-card p-4 grid gap-3">
         <h2 className="sp-display text-xl">Tonight, step by step</h2>
         <ol className="grid gap-2">
-          {[
+          {(open ? [
+            `Teams: ${approved.length} of ${T.teamLimit} approved, ${checkedIn} checked in.`,
+            'Add games below: pick the two teams for each game. No bracket, so teams can play as many games as you set up.',
+            'Tap Begin on a game, or Begin all ready games. Finalize each game when it ends; the standings update.',
+          ] : [
             `Teams: ${approved.length} of ${T.teamLimit} approved, ${checkedIn} checked in.`,
             'Close registration and lock the roster. The bracket is drawn at random automatically.',
             'Check the draw on the Bracket tab, then publish it.',
             'Tap Begin to start round 1. Teams wait on their phones until you do. Finalize each match when it completes to move winners forward.',
-          ].map((s, i) => (
+          ]).map((s, i) => (
             <li key={i} className="flex gap-3 p-3 rounded-lg" style={{ background: step === i + 1 ? 'rgba(224,173,79,0.15)' : 'rgba(0,0,0,0.2)', border: step === i + 1 ? '1px solid var(--sp-gold)' : '1px solid transparent' }}>
               <span className="sp-display text-xl" style={{ color: step > i + 1 ? 'var(--sp-green)' : 'var(--sp-gold)' }}>{step > i + 1 ? '✓' : i + 1}</span><span>{s}</span>
             </li>
@@ -148,7 +153,7 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
               {T.registrationOpen ? 'Close registration' : 'Open registration'}
             </button>
           )}
-          {!T.rosterLocked ? (
+          {open ? null : !T.rosterLocked ? (
             <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Lock the roster with ${approved.length} approved teams and draw a random bracket?`)) run('rosterLock', { tournamentId: T.id, locked: true }, 'Roster locked and bracket drawn. Review it on the Bracket tab.') }}>Lock roster and draw bracket</button>
           ) : T.status !== 'live' && T.status !== 'completed' && (
             <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { if (confirm('Unlock the roster? This deletes the unpublished bracket.')) run('rosterLock', { tournamentId: T.id, locked: false }, 'Roster unlocked') }}>Unlock roster</button>
@@ -160,19 +165,24 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
         <Feedback msg={msg} />
       </section>
 
+      {open && <AddGame data={data} act={act} />}
+
       {data.matches.length > 0 && (
         <section className="sp-card p-4 grid gap-3">
-          <h2 className="sp-display text-xl">Matches</h2>
-          {rounds.map(r => {
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="sp-display text-xl">{open ? 'Games' : 'Matches'}</h2>
+            <BulkStart T={T} data={data} act={act} />
+          </div>
+          {(open ? [1] : rounds).map(r => {
             const ms = data.matches.filter((m: any) => m.round === r)
             const readyCount = ms.filter((m: any) => m.status === 'ready').length
             return (
               <div key={r} className="grid gap-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-black" style={{ color: 'var(--sp-gold)' }}>{ms[0]?.roundName}</h3>
+                  <h3 className="font-black" style={{ color: 'var(--sp-gold)' }}>{open ? `${ms.length} game${ms.length === 1 ? '' : 's'}` : ms[0]?.roundName}</h3>
                   {readyCount > 0 && <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>{ms.filter((m: any) => m.status === 'ready' && m.readyA && m.readyB).length} of {readyCount} tables ready</span>}
                   {ms.some((m: any) => ['pending', 'ready'].includes(m.status) && m.resultKind !== 'bye') && <ScheduleRound T={T} round={r} ms={ms} act={act} />}
-                  {readyCount > 0 && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Start ${readyCount} ${ms[0]?.roundName} match${readyCount > 1 ? 'es' : ''} now? Every team at those tables sees their game begin and the clocks start.`)) run('startRound', { tournamentId: T.id, round: r }, 'Game on') }}>Begin {ms[0]?.roundName}</button>}
+                  {readyCount > 0 && T.bracketPublished && !open && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Start ${readyCount} ${ms[0]?.roundName} match${readyCount > 1 ? 'es' : ''} now? Every team at those tables sees their game begin and the clocks start.`)) run('startRound', { tournamentId: T.id, round: r }, 'Game on') }}>Begin {ms[0]?.roundName}</button>}
                 </div>
                 {ms.map((m: any) => <MatchRow key={m.id} m={m} data={data} act={act} teams={teams} serverNow={serverNow} />)}
               </div>
@@ -210,6 +220,17 @@ function MatchRow({ m, data, act, teams, serverNow }: { m: any; data: any; act: 
             <option value="">No table</option>
             {data.tables.map((x: any) => <option key={x.id} value={x.id}>Table {x.number}</option>)}
           </select>
+        )}
+        {!T.useBracket && ['ready', 'pending'].includes(m.status) && (
+          <>
+            {(['teamA', 'teamB'] as const).map(k => (
+              <select key={k} className="sp-select" style={{ maxWidth: 170, minHeight: 40, padding: '6px 10px' }} aria-label={k === 'teamA' ? 'Team A' : 'Team B'} value={m[k] || ''}
+                onChange={e => run('gameTeams', { matchId: m.id, teamAId: k === 'teamA' ? e.target.value : m.teamA, teamBId: k === 'teamB' ? e.target.value : m.teamB }, 'Matchup changed')}>
+                {data.allTeams.filter((x: any) => x.status === 'approved').map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            ))}
+            <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { if (confirm('Delete this game?')) run('deleteGame', { matchId: m.id }, 'Game deleted') }}>Delete</button>
+          </>
         )}
         {m.status === 'ready' && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => run('startMatch', { matchId: m.id }, 'Game on')}>Begin game</button>}
         {m.status === 'completed' && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Finalize: ${teams.get(m.winner)} wins ${Math.max(m.scoreA, m.scoreB)} to ${Math.min(m.scoreA, m.scoreB)}?`)) run('finalize', { matchId: m.id }, 'Finalized, winner advanced') }}>Finalize {teams.get(m.winner)}</button>}
@@ -462,7 +483,8 @@ function BracketTab({ data, act }: { data: any; act: Act }) {
   const move = (i: number, d: number) => setOrder(o => { const n = [...o]; const j = i + d; if (j < 0 || j >= n.length) return o; [n[i], n[j]] = [n[j], n[i]]; return n })
   return (
     <div className="grid gap-4">
-      {!T.rosterLocked && <div className="sp-banner sp-banner-info text-sm">Lock the roster on the Run tab to draw the bracket.</div>}
+      {!T.useBracket && <div className="sp-banner sp-banner-info text-sm">This event does not use a bracket. Add games by hand on the Run tab, or turn the bracket on in the Events tab.</div>}
+      {T.useBracket && !T.rosterLocked && <div className="sp-banner sp-banner-info text-sm">Lock the roster on the Run tab to draw the bracket.</div>}
       {T.rosterLocked && !started && (
         <section className="sp-card p-4 grid gap-3">
           <h2 className="sp-display text-xl">Draw</h2>
@@ -728,6 +750,101 @@ const EVENT_TYPES = [
   { k: 'custom', t: 'Custom', d: 'Pick the number of teams, the format and the target score.' },
 ]
 
+function AddGame({ data, act }: { data: any; act: Act }) {
+  const T = data.tournamentFull
+  const { busy, msg, run } = useRun(act)
+  const teams = data.allTeams.filter((x: any) => x.status === 'approved')
+  const [a, setA] = useState('')
+  const [b, setB] = useState('')
+  const [table, setTable] = useState('')
+  const [when, setWhen] = useState('')
+  return (
+    <section className="sp-card p-4 grid gap-3">
+      <h2 className="sp-display text-xl">Add a game</h2>
+      {teams.length < 2 ? <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Approve at least two teams on the Teams tab first.</p> : (
+        <>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <select className="sp-select" aria-label="Team A" value={a} onChange={e => setA(e.target.value)}><option value="">Team A</option>{teams.map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+            <select className="sp-select" aria-label="Team B" value={b} onChange={e => setB(e.target.value)}><option value="">Team B</option>{teams.filter((x: any) => x.id !== a).map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+            <select className="sp-select" aria-label="Table" value={table} onChange={e => setTable(e.target.value)}><option value="">Any free table</option>{data.tables.map((x: any) => <option key={x.id} value={x.id}>Table {x.number}</option>)}</select>
+            <input type="datetime-local" className="sp-input" aria-label="Start time (optional)" value={when} onChange={e => setWhen(e.target.value)} />
+          </div>
+          <button className="sp-btn sp-btn-gold" disabled={busy || !a || !b || a === b} onClick={async () => {
+            const r = await run('createGame', { tournamentId: T.id, teamAId: a, teamBId: b, tableId: table || null, scheduledAt: when ? new Date(when).toISOString() : null }, 'Game added')
+            if (r.ok) { setA(''); setB(''); setWhen('') }
+          }}>Add game</button>
+          <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>A start time is optional; players see a countdown. Use Schedule below to make games start on their own.</p>
+        </>
+      )}
+      <Feedback msg={msg} />
+    </section>
+  )
+}
+
+function BulkStart({ T, data, act }: { T: any; data: any; act: Act }) {
+  const { busy, msg, run } = useRun(act)
+  const ready = data.matches.filter((m: any) => m.status === 'ready' && m.teamA && m.teamB)
+  const both = ready.filter((m: any) => m.readyA && m.readyB)
+  if (!ready.length || (T.useBracket && !T.bracketPublished)) return null
+  const go = async (onlyBothReady: boolean) => {
+    const n = onlyBothReady ? both.length : ready.length
+    if (!confirm(`Begin ${n} game${n === 1 ? '' : 's'} now? Clocks start and bidding unlocks.`)) return
+    const r = await run('startAll', { tournamentId: T.id, onlyBothReady }, 'Started')
+    if (r.ok && r.data.skipped?.length) alert(`${r.data.started} started. ${r.data.skipped.length} could not start:\n${r.data.skipped.map((x: any) => x.reason).join('\n')}`)
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {both.length > 0 && <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => go(true)}>Begin {both.length} where both teams are ready</button>}
+      <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => go(false)}>Begin all {ready.length} ready game{ready.length === 1 ? '' : 's'}</button>
+      <Feedback msg={msg} />
+    </div>
+  )
+}
+
+function EventEditor({ ev, act, isCurrent }: { ev: any; act: Act; isCurrent: boolean }) {
+  const { busy, msg, run } = useRun(act)
+  const r = ev.rules
+  const [f, setF] = useState({
+    name: ev.name, starts_at: toLocalInput(ev.startsAt), team_limit: String(ev.teamLimit), gamesToWin: String(r.gamesToWin),
+    targetDefault: String(r.targetDefault), targetFinal: String(r.targetFinal), useBracket: r.useBracket ? 'yes' : 'no',
+  })
+  const save = () => {
+    const patch: Record<string, unknown> = {
+      name: f.name, starts_at: f.starts_at ? new Date(f.starts_at).toISOString() : null,
+      rules: { gamesToWin: Number(f.gamesToWin), targetDefault: Number(f.targetDefault), targetFinal: Number(f.targetFinal), useBracket: f.useBracket === 'yes' },
+    }
+    if (Number(f.team_limit) !== ev.teamLimit) patch.team_limit = Number(f.team_limit)
+    run('updateTournament', { tournamentId: ev.id, patch }, 'Event saved')
+  }
+  return (
+    <div className="grid gap-3 mt-3">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <label className="sp-field"><span>Name</span><input className="sp-input" value={f.name} maxLength={120} onChange={e => setF({ ...f, name: e.target.value })} /></label>
+        <label className="sp-field"><span>Starts</span><input type="datetime-local" className="sp-input" value={f.starts_at} onChange={e => setF({ ...f, starts_at: e.target.value })} /></label>
+        <label className="sp-field"><span>Most teams</span><input className="sp-input" inputMode="numeric" value={f.team_limit} onChange={e => setF({ ...f, team_limit: e.target.value.replace(/\D/g, '') })} /></label>
+        <label className="sp-field"><span>Bracket</span><select className="sp-select" value={f.useBracket} onChange={e => setF({ ...f, useBracket: e.target.value })}><option value="yes">Use a bracket</option><option value="no">No bracket, just keep score</option></select></label>
+        <label className="sp-field"><span>Format</span><select className="sp-select" value={f.gamesToWin} onChange={e => setF({ ...f, gamesToWin: e.target.value })}><option value="1">Single game</option><option value="2">Best of 3</option><option value="3">Best of 5</option></select></label>
+        <label className="sp-field"><span>Play to</span><input className="sp-input" inputMode="numeric" value={f.targetDefault} onChange={e => setF({ ...f, targetDefault: e.target.value.replace(/\D/g, '') })} /></label>
+        {f.useBracket === 'yes' && <label className="sp-field"><span>Championship plays to</span><input className="sp-input" inputMode="numeric" value={f.targetFinal} onChange={e => setF({ ...f, targetFinal: e.target.value.replace(/\D/g, '') })} /></label>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy || !f.name.trim()} onClick={save}>Save changes</button>
+        <button className="sp-btn sp-btn-sm" disabled={busy || ev.rosterLocked} onClick={() => run('updateTournament', { tournamentId: ev.id, patch: { registration_open: !ev.registrationOpen } }, ev.registrationOpen ? 'Registration closed' : 'Registration opened')}>{ev.registrationOpen ? 'Close registration' : 'Open registration'}</button>
+        {!ev.isFeatured && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => run('updateTournament', { tournamentId: ev.id, patch: { is_featured: true } }, 'Now the main /spades event')}>Make main /spades event</button>}
+        {!isCurrent && <a className="sp-btn sp-btn-sm sp-btn-ghost" href={`/spades/admin?t=${ev.slug}`}>Run this event</a>}
+        <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy || ev.status === 'archived'} onClick={() => { if (confirm(`Archive ${ev.name}? It stays in the records but becomes read only.`)) run('updateTournament', { tournamentId: ev.id, patch: { status: 'archived' } }, 'Archived') }}>Archive</button>
+        <button className="sp-btn sp-btn-sm sp-btn-danger" disabled={busy} onClick={async () => {
+          if (!confirm(`Delete ${ev.name} completely? Teams, games and its history are removed. Events with played hands cannot be deleted, only archived.`)) return
+          const res = await run('deleteEvent', { tournamentId: ev.id }, 'Event deleted')
+          if (res.ok && isCurrent) window.location.href = '/spades/admin'
+        }}>Delete</button>
+      </div>
+      <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Team limit and bracket on or off can only change before any matches exist. Format and targets apply to matches that have not started yet.</p>
+      <Feedback msg={msg} />
+    </div>
+  )
+}
+
 function EventsTab({ data, act }: { data: any; act: Act }) {
   const { busy, msg, run } = useRun(act)
   const [type, setType] = useState('tournament')
@@ -736,10 +853,13 @@ function EventsTab({ data, act }: { data: any; act: Act }) {
   const [small, setSmall] = useState('4')
   const [games, setGames] = useState('1')
   const [target, setTarget] = useState('250')
-  if (data.viewer.kind !== 'owner') return <div className="sp-banner sp-banner-info text-sm">Only the site owner can create events.</div>
+  const [bracket, setBracket] = useState(true)
+  const [openId, setOpenId] = useState<string | null>(null)
+  if (data.viewer.kind !== 'owner') return <div className="sp-banner sp-banner-info text-sm">Only the site owner can create and edit events.</div>
   const list = (data.tournaments || []).filter((x: any) => !x.isTest)
+  const twoTeam = type === 'exhibition' || type === 'series'
   const create = async () => {
-    const payload: Record<string, unknown> = { name, eventType: type }
+    const payload: Record<string, unknown> = { name, eventType: type, useBracket: twoTeam ? true : bracket }
     if (type === 'tournament') payload.teamLimit = Number(teams)
     if (type === 'small') payload.teamLimit = Number(small)
     if (type === 'series') payload.gamesToWin = 2
@@ -749,6 +869,29 @@ function EventsTab({ data, act }: { data: any; act: Act }) {
   }
   return (
     <div className="grid gap-4">
+      <section className="sp-card p-4 grid gap-2">
+        <h2 className="sp-display text-xl">Your events</h2>
+        {list.length === 0 && <p style={{ color: 'var(--sp-muted)' }}>No events yet.</p>}
+        {list.map((x: any) => (
+          <div key={x.slug} className="p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)', border: x.slug === data.tournamentFull.slug ? '1px solid var(--sp-gold)' : '1px solid transparent' }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="font-bold">{x.name}{x.slug === data.tournamentFull.slug ? ' (open now)' : ''}{x.isFeatured ? ' · main /spades event' : ''}</div>
+                <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>
+                  {EVENT_LABEL[x.eventType] || 'Tournament'} · {x.rules.useBracket ? 'bracket' : 'no bracket'} · {x.rules.gamesToWin > 1 ? `best of ${x.rules.gamesToWin * 2 - 1}` : 'single game'} · up to {x.teamLimit} teams · {x.status}
+                  {x.startsAt ? ` · ${new Date(x.startsAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button className="sp-btn sp-btn-sm" onClick={() => setOpenId(openId === x.id ? null : x.id)}>{openId === x.id ? 'Close' : 'Edit'}</button>
+                {x.slug !== data.tournamentFull.slug && <a className="sp-btn sp-btn-sm sp-btn-gold" href={`/spades/admin?t=${x.slug}`}>Run</a>}
+              </div>
+            </div>
+            {openId === x.id && <EventEditor ev={x} act={act} isCurrent={x.slug === data.tournamentFull.slug} />}
+          </div>
+        ))}
+      </section>
+
       <section className="sp-card p-4 grid gap-3">
         <h2 className="sp-display text-xl">Create an event</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2" role="radiogroup" aria-label="Event type">
@@ -765,22 +908,13 @@ function EventsTab({ data, act }: { data: any; act: Act }) {
           {type === 'small' && <label className="sp-field"><span>Teams</span><select className="sp-select" value={small} onChange={e => setSmall(e.target.value)}><option value="2">2 teams</option><option value="4">4 teams</option><option value="6">6 teams</option></select></label>}
           {type === 'custom' && <label className="sp-field"><span>Format</span><select className="sp-select" value={games} onChange={e => setGames(e.target.value)}><option value="1">Single game</option><option value="2">Best of 3</option><option value="3">Best of 5</option></select></label>}
           {type === 'custom' && <label className="sp-field"><span>Play to</span><input className="sp-input" inputMode="numeric" value={target} onChange={e => setTarget(e.target.value.replace(/\D/g, ''))} /></label>}
+          {!twoTeam && (
+            <label className="flex items-center gap-3 font-bold"><input type="checkbox" className="w-6 h-6" checked={bracket} onChange={e => setBracket(e.target.checked)} /> Use a bracket (off = just keep score for games you set up)</label>
+          )}
         </div>
         <button className="sp-btn sp-btn-gold" disabled={busy || !name.trim()} onClick={create}>Create event</button>
-        <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Each event has its own registration, teams, schedule, games and scoreboard. Rules, start times and the team limit can be changed afterward.</p>
+        <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Each event has its own registration, teams, schedule, games and scoreboard.</p>
         <Feedback msg={msg} />
-      </section>
-      <section className="sp-card p-4 grid gap-2">
-        <h2 className="sp-display text-xl">All events</h2>
-        {list.map((x: any) => (
-          <div key={x.slug} className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}>
-            <div>
-              <div className="font-bold">{x.name}{x.slug === data.tournamentFull.slug ? ' (open now)' : ''}{x.isFeatured ? ' · main /spades event' : ''}</div>
-              <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{EVENT_LABEL[x.eventType] || 'Tournament'} · {x.status}</div>
-            </div>
-            <a className="sp-btn sp-btn-sm" href={`/spades/admin?t=${x.slug}`}>Manage</a>
-          </div>
-        ))}
       </section>
     </div>
   )

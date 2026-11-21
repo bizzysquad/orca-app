@@ -887,12 +887,27 @@ export async function startMatch(store: Store, actor: Actor, input: { matchId: s
   const { match, players } = await loadMatchCtx(store, input.matchId)
   requireDirector(actor, match.tournament_id)
   const t = await one<TournamentRow>(store, 'sp_tournaments', { id: match.tournament_id })
-  if (!t.bracket_published) fail(409, 'Publish the bracket before starting matches')
+  const bracket = normalizeRules(t.rules).useBracket
+  if (bracket && !t.bracket_published) fail(409, 'Publish the bracket before starting matches')
   if (match.status !== 'ready') fail(409, match.status === 'pending' ? 'Both teams for this match are not set yet' : 'This match already started')
   if (!match.team_a_id || !match.team_b_id) fail(409, 'Both teams for this match are not set yet')
-  if (!match.table_id) fail(409, 'Assign a table before starting')
-  const busy = await store.select<MatchRow>('sp_matches', { table_id: match.table_id, status: { in: ['live', 'paused', 'completed'] } })
-  if (busy.some(m => m.id !== match.id)) fail(409, 'That table still has a match in progress or waiting to be finalized')
+  const running = await store.select<MatchRow>('sp_matches', { tournament_id: t.id, status: { in: ['live', 'paused'] } })
+  if (running.some(m => m.id !== match.id && [m.team_a_id, m.team_b_id].some(x => x === match.team_a_id || x === match.team_b_id))) {
+    fail(409, 'One of these teams is already playing another game')
+  }
+  if (!match.table_id) {
+    const tables = await store.select<TableRow>('sp_tables', { tournament_id: t.id }, { order: [{ col: 'number' }] })
+    const taken = new Set((await store.select<MatchRow>('sp_matches', { tournament_id: t.id, status: { in: ['live', 'paused', 'completed'] } })).map(x => x.table_id))
+    const free = tables.find(tb => !taken.has(tb.id))
+    if (free) {
+      await store.update('sp_matches', { id: match.id }, { table_id: free.id })
+      match.table_id = free.id
+    } else if (bracket) fail(409, 'Assign a table before starting')
+  }
+  if (match.table_id) {
+    const busy = await store.select<MatchRow>('sp_matches', { table_id: match.table_id, status: { in: ['live', 'paused', 'completed'] } })
+    if (busy.some(m => m.id !== match.id)) fail(409, 'That table still has a match in progress or waiting to be finalized')
+  }
   buildSeats(match, players)
   for (const teamId of [match.team_a_id, match.team_b_id]) {
     if (!players.some(p => p.team_id === teamId && p.is_captain)) fail(409, 'Each team needs a captain before starting')
@@ -1000,6 +1015,7 @@ export async function verifyCompletion(store: Store, actor: Actor, input: { matc
 
 async function placeInNext(store: Store, match: MatchRow, winner: string, previousWinner?: string | null) {
   const t = await one<TournamentRow>(store, 'sp_tournaments', { id: match.tournament_id })
+  if (!normalizeRules(t.rules).useBracket) return // open play: winners do not advance
   const ns = nextSlot(match.round, match.slot, totalRounds(t.capacity))
   if (!ns) {
     await store.update('sp_tournaments', { id: t.id }, { champion_team_id: winner, status: 'completed' })
@@ -1063,7 +1079,7 @@ export async function resetMatch(store: Store, actor: Actor, input: { matchId: s
   requireDirector(actor, match.tournament_id)
   if (match.status === 'pending' || match.status === 'ready') fail(409, 'This match has not started')
   if (match.result_kind === 'bye') fail(409, 'Byes cannot be reset')
-  if (match.status === 'final' && match.winner_team_id) {
+  if (match.status === 'final' && match.winner_team_id && await usesBracket(store, match.tournament_id)) {
     const ns = nextSlot(match.round, match.slot, await roundsOf(store, match.tournament_id))
     if (ns) {
       const next = await one<MatchRow>(store, 'sp_matches', { tournament_id: match.tournament_id, round: ns.round, slot: ns.slot })
@@ -1201,7 +1217,7 @@ const EVENT_TYPES: EventType[] = ['tournament', 'small', 'exhibition', 'series',
 
 export async function createTournament(store: Store, actor: Actor, input: {
   name: string; slug?: string; capacity?: number; teamLimit?: number; startsAt?: string; venue?: string; address?: string
-  eventType?: EventType; gamesToWin?: number; targetDefault?: number; targetFinal?: number
+  eventType?: EventType; gamesToWin?: number; targetDefault?: number; targetFinal?: number; useBracket?: boolean
 }) {
   if (actor.kind !== 'owner') fail(403, 'Only the site owner can create events')
   const name = cleanText(input.name, 'Event name', 120)
@@ -1219,6 +1235,7 @@ export async function createTournament(store: Store, actor: Actor, input: {
     gamesToWin: eventType === 'series' ? input.gamesToWin ?? 2 : eventType === 'custom' ? input.gamesToWin ?? 1 : 1,
     targetDefault: input.targetDefault ?? 250,
     targetFinal: input.targetFinal ?? (short ? input.targetDefault ?? 250 : 350),
+    useBracket: input.useBracket === false ? false : true,
   })
   const row = {
     id: uid(), slug, name, subtitle: null, venue: input.venue ? cleanText(input.venue, 'Venue', 120) : null,
@@ -1254,7 +1271,13 @@ export async function updateTournament(store: Store, actor: Actor, input: { tour
       patch[k] = p[k] || null
     } else patch[k] = p[k] === null || p[k] === '' ? (k === 'name' ? fail(400, 'Name is required') : null) : cleanText(p[k], k, k === 'name' ? 120 : 300)
   }
-  if (p.rules !== undefined) patch.rules = normalizeRules({ ...normalizeRules(t.rules), ...p.rules })
+  if (p.rules !== undefined) {
+    patch.rules = normalizeRules({ ...normalizeRules(t.rules), ...p.rules })
+    if (patch.rules.useBracket !== normalizeRules(t.rules).useBracket) {
+      const n = await store.count('sp_matches', { tournament_id: t.id })
+      if (n) fail(409, 'Clear the existing matches first (unlock the roster, or delete the games) before switching bracket on or off')
+    }
+  }
   const newLimit = p.team_limit ?? p.capacity
   if (newLimit !== undefined) {
     if (!Number.isInteger(newLimit) || newLimit < 2 || newLimit > 64) fail(400, 'Number of teams must be 2 to 64')
@@ -1310,7 +1333,7 @@ export async function setRosterLock(store: Store, actor: Actor, input: { tournam
   await audit(store, actor, { tournamentId: t.id, action: 'roster.lock' })
   let generated = false
   const existing = await store.count('sp_matches', { tournament_id: t.id })
-  if (!existing && input.generate !== false) {
+  if (!existing && input.generate !== false && normalizeRules(t.rules).useBracket) {
     const approved = await store.count('sp_teams', { tournament_id: t.id, status: 'approved' })
     if (approved >= 2) {
       await generateBracket(store, actor, { tournamentId: t.id, mode: 'random' })
@@ -1492,6 +1515,7 @@ export async function checkInTeam(store: Store, actor: Actor, input: { teamId: s
 export async function generateBracket(store: Store, actor: Actor, input: { tournamentId: string; mode: 'random' | 'manual'; order?: string[] }) {
   const t = await one<TournamentRow>(store, 'sp_tournaments', { id: input.tournamentId }, 'Tournament not found')
   requireDirector(actor, t.id)
+  if (!normalizeRules(t.rules).useBracket) fail(409, 'This event does not use a bracket. Add games on the Run tab instead.')
   if (!t.roster_locked) fail(409, 'Lock the roster before generating the bracket')
   const started = await store.count('sp_matches', { tournament_id: t.id, status: { in: ['live', 'paused', 'completed'] } })
   const finals = (await store.select<MatchRow>('sp_matches', { tournament_id: t.id, status: 'final' })).filter(m => m.result_kind !== 'bye')
@@ -1887,4 +1911,110 @@ export async function actAsPlayer(store: Store, actor: Actor, playerId: string):
   if (!t.is_test) fail(403, 'Acting as a player is only allowed in test matches')
   if (!isDirector(actor, t.id)) fail(403, 'Director access required')
   return { kind: 'player', playerId: p.id, teamId: p.team_id, tournamentId: p.tournament_id, isCaptain: p.is_captain, name: p.display_name }
+}
+
+
+// ─── open play (no bracket) + bulk start + event delete ─────────────────────
+
+async function usesBracket(store: Store, tournamentId: string): Promise<boolean> {
+  const t = await one<TournamentRow>(store, 'sp_tournaments', { id: tournamentId })
+  return normalizeRules(t.rules).useBracket
+}
+
+// Open play: the director pairs any two approved teams into a game.
+export async function createGame(store: Store, actor: Actor, input: { tournamentId: string; teamAId: string; teamBId: string; tableId?: string | null; scheduledAt?: string | null }) {
+  const t = await one<TournamentRow>(store, 'sp_tournaments', { id: input.tournamentId }, 'Event not found')
+  requireDirector(actor, t.id)
+  const rules = normalizeRules(t.rules)
+  if (rules.useBracket) fail(409, 'This event uses a bracket. Turn the bracket off in the event settings to add games by hand.')
+  if (!input.teamAId || !input.teamBId || input.teamAId === input.teamBId) fail(400, 'Pick two different teams')
+  for (const id of [input.teamAId, input.teamBId]) {
+    const team = await one<TeamRow>(store, 'sp_teams', { id }, 'Team not found')
+    if (team.tournament_id !== t.id || team.status !== 'approved') fail(400, 'Both teams must be approved teams in this event')
+  }
+  if (input.tableId) {
+    const tb = await one<TableRow>(store, 'sp_tables', { id: input.tableId }, 'Table not found')
+    if (tb.tournament_id !== t.id) fail(400, 'Table belongs to another event')
+  }
+  if (input.scheduledAt && Number.isNaN(Date.parse(input.scheduledAt))) fail(400, 'Start time is not a valid date')
+  const last = await store.select<MatchRow>('sp_matches', { tournament_id: t.id, round: 1 }, { order: [{ col: 'slot', asc: false }], limit: 1 })
+  const row = {
+    id: uid(), tournament_id: t.id, round: 1, slot: (last[0]?.slot ?? -1) + 1, team_a_id: input.teamAId, team_b_id: input.teamBId,
+    table_id: input.tableId || null, status: 'ready', winner_team_id: null, result_kind: null, result_note: null,
+    target: rules.targetDefault, time_limit_min: rules.gamesToWin > 1 ? 0 : rules.timeDefaultMin,
+    rules: null, started_at: null, paused_at: null, paused_ms: 0, completed_at: null, completion_verified_by: null, finalized_at: null,
+    score_a: 0, score_b: 0, bags_a: 0, bags_b: 0, hands_verified: 0, version: 1, created_at: nowIso(store),
+    ...(input.scheduledAt ? { scheduled_at: new Date(input.scheduledAt).toISOString() } : {}),
+  }
+  await store.insert('sp_matches', row)
+  if (!t.bracket_published) await store.update('sp_tournaments', { id: t.id }, { bracket_published: true })
+  await audit(store, actor, { tournamentId: t.id, matchId: row.id, action: 'game.create', after: { teamA: input.teamAId, teamB: input.teamBId, tableId: row.table_id, scheduledAt: input.scheduledAt || null } })
+  await touch(store, t.id)
+  return { ok: true, matchId: row.id }
+}
+
+// Open play: change who plays in a game that has not begun.
+export async function setGameTeams(store: Store, actor: Actor, input: { matchId: string; teamAId: string; teamBId: string }) {
+  const match = await one<MatchRow>(store, 'sp_matches', { id: input.matchId }, 'Game not found')
+  requireDirector(actor, match.tournament_id)
+  if (await usesBracket(store, match.tournament_id)) fail(409, 'Bracket events change matchups by redrawing or seeding the bracket')
+  if (!['ready', 'pending'].includes(match.status)) fail(409, 'This game already began')
+  if (!input.teamAId || input.teamAId === input.teamBId) fail(400, 'Pick two different teams')
+  for (const id of [input.teamAId, input.teamBId]) {
+    const team = await one<TeamRow>(store, 'sp_teams', { id }, 'Team not found')
+    if (team.tournament_id !== match.tournament_id || team.status !== 'approved') fail(400, 'Both teams must be approved teams in this event')
+  }
+  await store.update('sp_matches', { id: match.id }, { team_a_id: input.teamAId, team_b_id: input.teamBId, status: 'ready', version: match.version + 1 })
+  await clearReady(store, match.id)
+  await audit(store, actor, { tournamentId: match.tournament_id, matchId: match.id, action: 'game.teams', before: { teamA: match.team_a_id, teamB: match.team_b_id }, after: { teamA: input.teamAId, teamB: input.teamBId } })
+  await touch(store, match.tournament_id)
+  return { ok: true }
+}
+
+export async function deleteGame(store: Store, actor: Actor, input: { matchId: string }) {
+  const match = await one<MatchRow>(store, 'sp_matches', { id: input.matchId }, 'Game not found')
+  requireDirector(actor, match.tournament_id)
+  if (await usesBracket(store, match.tournament_id)) fail(409, 'Bracket games cannot be deleted one by one')
+  if (!['ready', 'pending'].includes(match.status)) fail(409, 'This game already began. Restart or end it instead.')
+  const hands = await store.count('sp_hands', { match_id: match.id })
+  if (hands) fail(409, 'This game has hand history. Restart or end it instead.')
+  await store.remove('sp_matches', { id: match.id })
+  await audit(store, actor, { tournamentId: match.tournament_id, matchId: match.id, action: 'game.delete', before: { teamA: match.team_a_id, teamB: match.team_b_id } })
+  await touch(store, match.tournament_id)
+  return { ok: true }
+}
+
+// Begin every game that is ready (optionally only those where both teams
+// tapped Ready). Games that cannot start (team busy, no table) are skipped
+// and reported, never half started.
+export async function startAllReady(store: Store, actor: Actor, input: { tournamentId: string; onlyBothReady?: boolean; matchIds?: string[] }) {
+  requireDirector(actor, input.tournamentId)
+  let ms = await store.select<MatchRow>('sp_matches', { tournament_id: input.tournamentId, status: 'ready' }, { order: [{ col: 'round' }, { col: 'slot' }] })
+  ms = ms.filter(m => m.team_a_id && m.team_b_id)
+  if (input.matchIds?.length) ms = ms.filter(m => input.matchIds!.includes(m.id))
+  if (input.onlyBothReady) ms = ms.filter(m => m.ready_a_at && m.ready_b_at)
+  if (!ms.length) fail(409, input.onlyBothReady ? 'No games where both teams tapped Ready' : 'No games are ready to begin')
+  const started: string[] = []
+  const skipped: { matchId: string; reason: string }[] = []
+  for (const m of ms) {
+    try {
+      await startMatch(store, actor, { matchId: m.id })
+      started.push(m.id)
+    } catch (err) {
+      skipped.push({ matchId: m.id, reason: err instanceof Error ? err.message : 'Could not start' })
+    }
+  }
+  return { ok: true, started: started.length, skipped }
+}
+
+// Removes an event completely if it never played a hand. Events with played
+// hands keep their records: archive those instead. The event is first marked
+// disposable (is_test) so the audit trigger allows removing its log.
+export async function deleteEvent(store: Store, actor: Actor, input: { tournamentId: string }) {
+  if (actor.kind !== 'owner') fail(403, 'Only the site owner can delete events')
+  const t = await one<TournamentRow>(store, 'sp_tournaments', { id: input.tournamentId }, 'Event not found')
+  const played = await store.count('sp_hands', { tournament_id: t.id, status: 'verified' })
+  if (played && !t.is_test) fail(409, 'This event has played hands, so its records are kept. Archive it instead.')
+  if (!t.is_test) await store.update('sp_tournaments', { id: t.id }, { is_test: true, is_featured: false })
+  return deleteTestEvent(store, actor, { tournamentId: t.id })
 }

@@ -74,6 +74,7 @@ export function publicTournament(t: TournamentRow) {
     rules: normalizeRules(t.rules), rounds: totalRounds(t.capacity),
     eventType: t.event_type || 'tournament', isTest: !!t.is_test, teamLimit: t.team_limit || t.capacity, autoStart: !!t.auto_start,
     gamesToWin: normalizeRules(t.rules).gamesToWin,
+    useBracket: normalizeRules(t.rules).useBracket,
   }
 }
 
@@ -110,7 +111,7 @@ export function publicMatch(b: Bundle, m: MatchRow) {
   const table = b.tables.find(x => x.id === m.table_id)
   const rounds = totalRounds(b.t.capacity)
   return {
-    id: m.id, round: m.round, roundName: roundName(m.round, rounds), slot: m.slot, status: m.status,
+    id: m.id, round: m.round, roundName: normalizeRules(b.t.rules).useBracket ? roundName(m.round, rounds) : `Game ${m.slot + 1}`, slot: m.slot, status: m.status,
     label: statusLabel(m, hand, b.reports),
     teamA: m.team_a_id, teamB: m.team_b_id, table: table ? table.number : null,
     scoreA: m.score_a, scoreB: m.score_b, bagsA: m.bags_a, bagsB: m.bags_b, winner: m.winner_team_id,
@@ -133,6 +134,7 @@ export function publicMatch(b: Bundle, m: MatchRow) {
 
 // Champion and runner up of this tournament, once the final is decided.
 export function winners(b: Bundle) {
+  if (!normalizeRules(b.t.rules).useBracket) return null
   const rounds = totalRounds(b.t.capacity)
   const final = b.matches.find(m => m.round === rounds && m.status === 'final' && m.winner_team_id)
   if (!final) return null
@@ -158,6 +160,23 @@ export async function pastChampions(store: Store, currentId: string) {
   return out
 }
 
+// Open play standings: wins and losses from finished games.
+export function results(b: Bundle) {
+  const rows = new Map<string, { teamId: string; team: string; played: number; wins: number; losses: number; points: number }>()
+  for (const t of b.teams.filter(x => x.status === 'approved')) rows.set(t.id, { teamId: t.id, team: t.name, played: 0, wins: 0, losses: 0, points: 0 })
+  for (const m of b.matches.filter(x => x.status === 'final' && x.winner_team_id && x.result_kind !== 'bye')) {
+    for (const [id, pts] of [[m.team_a_id, m.score_a], [m.team_b_id, m.score_b]] as [string | null, number][]) {
+      const r = id ? rows.get(id) : null
+      if (!r) continue
+      r.played++
+      r.points += pts
+      if (m.winner_team_id === id) r.wins++
+      else r.losses++
+    }
+  }
+  return Array.from(rows.values()).filter(r => r.played).sort((x, y) => y.wins - x.wins || x.losses - y.losses || y.points - x.points)
+}
+
 export function publicState(b: Bundle, now: Date) {
   const approved = b.teams.filter(t => t.status === 'approved')
   const pending = b.teams.filter(t => t.status === 'pending').length
@@ -175,6 +194,7 @@ export function publicState(b: Bundle, now: Date) {
     // bracket shown before the draw.
     registered: b.teams.filter(t => t.status === 'approved' || t.status === 'pending').map(t => ({ id: t.id, name: t.name, status: t.status })),
     winners: b.t.bracket_published ? winners(b) : null,
+    results: normalizeRules(b.t.rules).useBracket ? [] : results(b),
   }
 }
 
@@ -381,9 +401,13 @@ export function playerState(b: Bundle, actor: Actor, now: Date) {
   if (actor.kind !== 'player' || actor.tournamentId !== b.t.id) return null
   const team = b.teams.find(t => t.id === actor.teamId)
   const mine = b.matches.filter(m => m.team_a_id === actor.teamId || m.team_b_id === actor.teamId).sort((x, y) => y.round - x.round)
-  const active = mine.find(m => ['live', 'paused', 'completed', 'ready'].includes(m.status)) || null
+  // Live game first, then one waiting to be finalized, then the next one up.
+  const active = mine.find(m => m.status === 'live' || m.status === 'paused')
+    || mine.find(m => m.status === 'completed')
+    || [...mine].filter(m => m.status === 'ready').sort((x, y) => (x.scheduled_at || '9').localeCompare(y.scheduled_at || '9') || x.slot - y.slot)[0]
+    || null
   const finished = mine.filter(m => m.status === 'final' && m.result_kind !== 'bye')
-  const eliminated = mine.some(m => m.status === 'final' && m.winner_team_id && m.winner_team_id !== actor.teamId)
+  const eliminated = normalizeRules(b.t.rules).useBracket && mine.some(m => m.status === 'final' && m.winner_team_id && m.winner_team_id !== actor.teamId)
   return {
     team: team ? {
       id: team.id, name: team.name, seed: team.seed, checkedIn: !!team.checked_in_at, status: team.status, bidControl: teamControl(team, normalizeRules(b.t.rules)),

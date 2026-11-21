@@ -42,6 +42,7 @@ function Landing() {
         </div>
       </section>
 
+      {T.useBracket && (
       <section className="sp-wrap mt-6" aria-label="Winners" id="winners">
         <h2 className="sp-display text-2xl mb-3">Winners</h2>
         {W ? (
@@ -78,6 +79,7 @@ function Landing() {
           </div>
         )}
       </section>
+      )}
 
       <section className="sp-wrap mt-6 grid md:grid-cols-3 gap-4">
         <div className="sp-card p-5">
@@ -118,13 +120,12 @@ function Landing() {
 
       {T.bracketPublished && data.matches.length > 0 ? (
         <section className="sp-wrap mt-8">
-          <h2 className="sp-display text-2xl mb-3">Bracket</h2>
+          <h2 className="sp-display text-2xl mb-3">{T.useBracket ? 'Bracket' : 'Games'}</h2>
           <Bracket data={data} />
         </section>
       ) : (
         <section className="sp-wrap mt-8">
-          <h2 className="sp-display text-2xl mb-3">Live bracket</h2>
-          <div className="sp-banner sp-banner-info text-sm mb-3">Preliminary bracket: teams appear as they register. The real matchups are drawn at random when registration closes.</div>
+          <h2 className="sp-display text-2xl mb-3">{T.useBracket ? 'Live bracket' : 'Games'}</h2>
           <Bracket data={provisionalData(data)} linkMatches={false} />
         </section>
       )}

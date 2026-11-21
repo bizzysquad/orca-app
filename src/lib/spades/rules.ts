@@ -28,6 +28,9 @@ export interface Rules {
   requireCaptainApproval: boolean
   // Games a team must win to take the match. 1 = single game, 2 = best of 3.
   gamesToWin: number
+  // false = no bracket: the director pairs teams into individual games and
+  // just keeps score (open play). Winners do not advance.
+  useBracket: boolean
   renegePolicy: 'lose_bid_award_opponent'
   // Director written rules page. Empty means the page is generated from the
   // settings above (ruleSummary).
@@ -52,6 +55,7 @@ export const DEFAULT_RULES: Rules = {
   timeFinalMin: 70,
   requireCaptainApproval: true,
   gamesToWin: 1,
+  useBracket: true,
   renegePolicy: 'lose_bid_award_opponent',
   customSections: [],
 }
@@ -84,6 +88,7 @@ export function normalizeRules(raw: unknown): Rules {
     timeFinalMin: int(r.timeFinalMin, d.timeFinalMin, 0, 600),
     requireCaptainApproval: r.requireCaptainApproval === false ? false : true,
     gamesToWin: int(r.gamesToWin, d.gamesToWin, 1, 3),
+    useBracket: r.useBracket === false ? false : true,
     renegePolicy: 'lose_bid_award_opponent',
     customSections: cleanSections(r.customSections),
   }

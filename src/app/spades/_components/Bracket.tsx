@@ -25,7 +25,67 @@ export function provisionalData(data: any) {
   return { ...data, teams: reg.map(t => ({ id: t.id, name: t.name, seed: null })), matches, provisional: true }
 }
 
+// Events without a bracket: a list of games plus the standings.
+export function GamesList({ data, big = false, linkMatches = true }: { data: any; big?: boolean; linkMatches?: boolean }) {
+  const teams = new Map<string, any>((data.teams || []).map((t: any) => [t.id, t]))
+  const games = (data.provisional ? [] : data.matches || []).slice().sort((a: any, b: any) => {
+    const rank = (m: any) => (m.status === 'live' || m.status === 'paused' ? 0 : m.status === 'ready' ? 1 : m.status === 'completed' ? 2 : 3)
+    return rank(a) - rank(b) || a.slot - b.slot
+  })
+  const results: any[] = data.results || []
+  return (
+    <div className="grid gap-4">
+      {games.length === 0 ? (
+        <div className="sp-card p-5 text-center" style={{ color: 'var(--sp-muted)' }}>Games show up here as the director sets them up.</div>
+      ) : (
+        <div className={`grid gap-3 ${big ? '' : 'sm:grid-cols-2'}`}>
+          {games.map((m: any) => {
+            const card = (
+              <div className="sp-card p-3" style={m.status === 'live' ? { borderColor: 'var(--sp-green)' } : undefined}>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="sp-label">{m.roundName}{m.table ? ` · Table ${m.table}` : ''}</span>
+                  <StatusChip label={m.label} />
+                </div>
+                {(['a', 'b'] as const).map(side => {
+                  const id = side === 'a' ? m.teamA : m.teamB
+                  const won = m.winner && m.winner === id
+                  return (
+                    <div key={side} className="flex items-center justify-between gap-2 py-1" style={{ opacity: m.winner && !won ? 0.5 : 1 }}>
+                      <span className={`font-bold truncate ${big ? 'text-2xl' : ''}`} style={{ color: won ? 'var(--sp-gold)' : undefined }}>{teams.get(id)?.name || 'TBD'}</span>
+                      {!['pending', 'ready'].includes(m.status) && <span className={`sp-display sp-num ${big ? 'text-4xl' : 'text-xl'}`}>{side === 'a' ? m.scoreA : m.scoreB}</span>}
+                    </div>
+                  )
+                })}
+                {m.status === 'ready' && m.scheduledAt && <div className="text-xs mt-1" style={{ color: 'var(--sp-muted)' }}>Starts {new Date(m.scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>}
+                {m.gamesToWin > 1 && !['pending', 'ready'].includes(m.status) && <div className="text-xs mt-1" style={{ color: 'var(--sp-muted)' }}>Games {m.gamesA} to {m.gamesB}</div>}
+              </div>
+            )
+            return linkMatches && m.teamA && m.teamB ? <Link key={m.id} href={`/spades/match/${m.id}`}>{card}</Link> : <div key={m.id}>{card}</div>
+          })}
+        </div>
+      )}
+      {results.length > 0 && (
+        <section className="sp-card p-4">
+          <h3 className="sp-display text-xl mb-2">Standings</h3>
+          <div className="sp-scroll">
+            <table className="sp-table">
+              <thead><tr><th>Team</th><th>Won</th><th>Lost</th><th>Points</th></tr></thead>
+              <tbody>{results.map((r: any) => <tr key={r.teamId}><td className="font-bold">{r.team}</td><td className="sp-num">{r.wins}</td><td className="sp-num">{r.losses}</td><td className="sp-num">{r.points}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
 export function Bracket({ data, big = false, linkMatches = true }: { data: any; big?: boolean; linkMatches?: boolean }) {
+  if (data.tournament?.useBracket === false) return <GamesList data={data} big={big} linkMatches={linkMatches} />
+  if (data.provisional) return <><div className="sp-banner sp-banner-info text-sm mb-3">Preliminary bracket: teams appear as they register. The real matchups are drawn at random when registration closes.</div><BracketGrid data={data} big={big} linkMatches={linkMatches} /></>
+  return <BracketGrid data={data} big={big} linkMatches={linkMatches} />
+}
+
+function BracketGrid({ data, big = false, linkMatches = true }: { data: any; big?: boolean; linkMatches?: boolean }) {
   const teams = new Map<string, any>((data.teams || []).map((t: any) => [t.id, t]))
   const rounds: number = data.tournament.rounds
   const byRound = Array.from({ length: rounds }, (_, i) => (data.matches || []).filter((m: any) => m.round === i + 1).sort((a: any, b: any) => a.slot - b.slot))

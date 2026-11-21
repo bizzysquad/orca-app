@@ -147,3 +147,64 @@ test('test mode: create, act as each simulated player, play, delete without touc
   await expectReject(S.deleteTestEvent(store, owner, { tournamentId: real.id }), 403)
   await assert.rejects(store.remove('sp_audit', { tournament_id: real.id }))
 })
+
+test('open play without a bracket: director pairs games, teams replay, no advancement, standings', async () => {
+  const store = new MemoryStore()
+  const ev = await S.createTournament(store, owner, { name: 'Open Night', eventType: 'custom', teamLimit: 4, useBracket: false, targetDefault: 100 })
+  await S.setTableCount(store, owner, { tournamentId: ev.id, count: 2 })
+  const ids: string[] = []
+  for (let i = 1; i <= 4; i++) ids.push((await S.registerTeam(store, owner, { tournamentId: ev.id, name: `O${i}`, player1: `o${i}a`, player2: `o${i}b`, bidControl: "individual" })).teamId)
+  await S.setRosterLock(store, owner, { tournamentId: ev.id, locked: true })
+  assert.equal((await store.select<MatchRow>('sp_matches', { tournament_id: ev.id })).length, 0) // no auto bracket
+  await expectReject(S.generateBracket(store, owner, { tournamentId: ev.id, mode: 'random' }), 409)
+  const g1 = await S.createGame(store, owner, { tournamentId: ev.id, teamAId: ids[0], teamBId: ids[1] })
+  const g2 = await S.createGame(store, owner, { tournamentId: ev.id, teamAId: ids[0], teamBId: ids[2] })
+  await expectReject(S.createGame(store, owner, { tournamentId: ev.id, teamAId: ids[0], teamBId: ids[0] }), 400)
+  await S.setGameTeams(store, owner, { matchId: g2.matchId, teamAId: ids[2], teamBId: ids[3] })
+  const r = await S.startAllReady(store, owner, { tournamentId: ev.id })
+  assert.equal(r.started, 2)
+  // Team busy guard: a third game with a playing team cannot start.
+  const g3 = await S.createGame(store, owner, { tournamentId: ev.id, teamAId: ids[0], teamBId: ids[2] })
+  await expectReject(S.startMatch(store, owner, { matchId: g3.matchId }), 409, /already playing/)
+  await S.deleteGame(store, owner, { matchId: g3.matchId })
+  await playHand(store, g1.matchId, [3, 3, 2, 2], 8)
+  await playHand(store, g1.matchId, [3, 3, 2, 2], 8)
+  assert.equal((await getMatch(store, g1.matchId)).status, 'completed')
+  await S.finalizeMatch(store, owner, { matchId: g1.matchId })
+  const [t] = await store.select<TournamentRow>('sp_tournaments', { id: ev.id })
+  assert.equal(t.champion_team_id, null) // nobody advances, no champion
+  const pub = V.publicState(await bundle(store, ev.id), store.now())
+  assert.equal(pub.results[0].teamId, ids[0])
+  assert.equal(pub.results[0].wins, 1)
+  assert.equal(pub.matches[0].roundName, 'Game 1')
+})
+
+test('start all: only games where both teams tapped ready', async () => {
+  const { store, tid } = await setup()
+  await S.setRosterLock(store, owner, { tournamentId: tid, locked: true })
+  await S.publishBracket(store, owner, { tournamentId: tid, published: true })
+  const ms = await roundMatches(store, tid, 1)
+  const caps = await Promise.all([ms[0].team_a_id, ms[0].team_b_id].map(async id => {
+    const p = (await store.select<any>('sp_players', { team_id: id!, is_captain: true }))[0]
+    return S.actAsPlayer(store, owner, p.id).catch(() => null)
+  }))
+  assert.equal(caps[0], null) // not a test event: impersonation refused
+  await store.update('sp_matches', { id: ms[0].id }, { ready_a_at: store.now().toISOString(), ready_b_at: store.now().toISOString() })
+  const r = await S.startAllReady(store, owner, { tournamentId: tid, onlyBothReady: true })
+  assert.equal(r.started, 1)
+  const r2 = await S.startAllReady(store, owner, { tournamentId: tid })
+  assert.equal(r2.started, 3)
+})
+
+test('delete event: unplayed events go completely, played events must be archived', async () => {
+  const store = new MemoryStore()
+  const a = await S.createTournament(store, owner, { name: 'Never Played' })
+  await S.registerTeam(store, owner, { tournamentId: a.id, name: 'Z', player1: 'z1', player2: 'z2' })
+  await S.deleteEvent(store, owner, { tournamentId: a.id })
+  assert.equal((await store.select<any>('sp_tournaments', { id: a.id })).length, 0)
+  const { store: s2, tid } = await setup({ teams: 2 })
+  await lockAndStart(s2, tid)
+  const [m] = await roundMatches(s2, tid, 1)
+  await playHand(s2, m.id, [2, 2, 2, 2], 7)
+  await expectReject(S.deleteEvent(s2, owner, { tournamentId: tid }), 409, /Archive/)
+})
