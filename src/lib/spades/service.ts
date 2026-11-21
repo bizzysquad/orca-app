@@ -16,7 +16,7 @@ import { normalizeRules, type Rules } from './rules.ts'
 import { computeMatch, elapsedMs, matchOutcome, validBid, validBooks, type Side, type VerifiedHand } from './scoring.ts'
 import { generateBracket as buildBracket, isPowerOfTwo, nextSlot, shuffle, totalRounds } from './bracket.ts'
 import { StoreError, type Store } from './store.ts'
-import { cryptoRandom, hashToken, newToken } from './tokens.ts'
+import { cryptoRandom, formatCode, hashToken, isAccessCode, newAccessCode, newToken, normalizeCode } from './tokens.ts'
 import type {
   ApprovalRow, BidRow, DisputeKind, DisputeRow, HandRow, InviteRow, MatchRow, PlayerRow, ReportRow,
   SessionRow, StaffRow, TableRow, TeamRow, TeamStatus, TournamentRow,
@@ -891,6 +891,36 @@ export async function resumeMatch(store: Store, actor: Actor, input: { matchId: 
   return { ok: true }
 }
 
+// Team captains tap Ready at their table so the director knows both teams
+// are seated. Informational only: the director still taps Begin.
+export async function setReady(store: Store, actor: Actor, input: { matchId: string; ready: boolean; teamId?: string }) {
+  const { match, table } = await loadMatchCtx(store, input.matchId)
+  let side: Side | null
+  if (actor.kind === 'player') {
+    side = requirePlayerInMatch(actor, match)
+    if (!actor.isCaptain) fail(403, 'Your team scorekeeper taps Ready')
+  } else {
+    if (!supervisesTable(actor, match.tournament_id, table)) fail(403, 'You are not assigned to this table')
+    side = sideOfTeam(match, input.teamId || null)
+    if (!side) fail(400, 'Choose a team')
+  }
+  if (match.status !== 'ready') fail(409, match.status === 'pending' ? 'Your opponent is not decided yet' : 'This game already began')
+  const col = side === 'a' ? 'ready_a_at' : 'ready_b_at'
+  try {
+    await store.update('sp_matches', { id: match.id, status: 'ready' }, { [col]: input.ready ? nowIso(store) : null })
+  } catch (err) {
+    if (err instanceof StoreError) fail(503, 'The Ready button needs supabase-migration-spades-ready.sql. Ask the director.')
+    throw err
+  }
+  await audit(store, actor, { tournamentId: match.tournament_id, matchId: match.id, action: input.ready ? 'match.team_ready' : 'match.team_not_ready', after: { team: teamOfSide(match, side) } })
+  await touch(store, match.tournament_id)
+  return { ok: true }
+}
+
+async function clearReady(store: Store, matchId: string) {
+  try { await store.update('sp_matches', { id: matchId }, { ready_a_at: null, ready_b_at: null }) } catch { /* column not migrated yet */ }
+}
+
 export async function verifyCompletion(store: Store, actor: Actor, input: { matchId: string }) {
   const { match, table } = await loadMatchCtx(store, input.matchId)
   if (!supervisesTable(actor, match.tournament_id, table)) fail(403, 'You are not assigned to this table')
@@ -915,6 +945,7 @@ async function placeInNext(store: Store, match: MatchRow, winner: string, previo
   if (previousWinner && next[col] && next[col] !== previousWinner) fail(409, 'Bracket slot holds a different team. Reset the next match first.')
   const other = ns.side === 'a' ? next.team_b_id : next.team_a_id
   await store.update('sp_matches', { id: next.id }, { [col]: winner, status: other ? 'ready' : 'pending', version: next.version + 1 })
+  await clearReady(store, next.id)
 }
 
 export async function finalizeMatch(store: Store, actor: Actor, input: { matchId: string }) {
@@ -983,6 +1014,7 @@ export async function resetMatch(store: Store, actor: Actor, input: { matchId: s
     completed_at: null, completion_verified_by: null, finalized_at: null, version: match.version + 1,
   })
   await recomputeMatch(store, match.id)
+  await clearReady(store, match.id)
   await audit(store, actor, { tournamentId: match.tournament_id, matchId: match.id, action: 'match.reset', reason, before: { status: match.status, winner: match.winner_team_id, scoreA: match.score_a, scoreB: match.score_b } })
   await touch(store, match.tournament_id)
   return { ok: true }
@@ -1456,20 +1488,38 @@ export async function issueInvite(store: Store, actor: Actor, input: { playerId?
     kind = 'staff'
   } else fail(400, 'Choose a player or staff member')
   requireDirector(actor, tournamentId)
+  return mintAccessCode(store, actor, { tournamentId, kind, name, playerId: input.playerId || null, staffId: input.staffId || null, revokeSessions: !!input.revokeSessions })
+}
+
+// Access codes replace any earlier code for the same person and work until
+// they expire or the director issues a new one. They can be typed on more
+// than one phone (e.g. a scorekeeper switching phones), so the director
+// reissues a code to cut off a lost phone. Only the hash is stored.
+async function mintAccessCode(store: Store, actor: Actor, m: { tournamentId: string; kind: 'player' | 'staff'; name: string; playerId: string | null; staffId: string | null; revokeSessions: boolean }) {
   const now = nowIso(store)
-  const col = kind === 'player' ? 'player_id' : 'staff_id'
-  const id = (input.playerId || input.staffId) as string
-  await store.update('sp_invitations', { [col]: id, used_at: null, revoked_at: null }, { revoked_at: now })
-  if (input.revokeSessions) await store.update('sp_sessions', { [col]: id, revoked_at: null }, { revoked_at: now })
-  const token = newToken()
+  const col = m.kind === 'player' ? 'player_id' : 'staff_id'
+  const id = (m.playerId || m.staffId) as string
+  await store.update('sp_invitations', { [col]: id, revoked_at: null }, { revoked_at: now })
+  if (m.revokeSessions) await store.update('sp_sessions', { [col]: id, revoked_at: null }, { revoked_at: now })
+  const code = newAccessCode()
   const expiresAt = new Date(store.now().getTime() + INVITE_TTL_MS).toISOString()
   await store.insert('sp_invitations', {
-    id: uid(), tournament_id: tournamentId, kind, player_id: input.playerId || null, staff_id: input.staffId || null,
-    token_hash: hashToken(token), expires_at: expiresAt, used_at: null, revoked_at: null, created_at: now,
+    id: uid(), tournament_id: m.tournamentId, kind: m.kind, player_id: m.playerId, staff_id: m.staffId,
+    token_hash: hashToken(code), expires_at: expiresAt, used_at: null, revoked_at: null, created_at: now,
   })
-  await audit(store, actor, { tournamentId, action: input.revokeSessions ? 'invite.reissue' : 'invite.issue', after: { kind, name } })
-  await touch(store, tournamentId)
-  return { token, kind, name, expiresAt }
+  await audit(store, actor, { tournamentId: m.tournamentId, action: m.revokeSessions ? 'invite.reissue' : 'invite.issue', after: { kind: m.kind, name: m.name } })
+  await touch(store, m.tournamentId)
+  return { token: formatCode(code), kind: m.kind, name: m.name, expiresAt }
+}
+
+// Called right after a public registration so the scorekeeper can sign back
+// in with a typed code. Only for a captain of a team registered moments ago.
+export async function issueRegistrantCode(store: Store, playerId: string) {
+  const p = await one<PlayerRow>(store, 'sp_players', { id: playerId }, 'Player not found')
+  if (!p.is_captain) fail(403, 'Only the team scorekeeper gets an access code')
+  const existing = await store.count('sp_invitations', { player_id: p.id })
+  if (existing) fail(409, 'This player already has an access code. Ask the director for a new one.')
+  return mintAccessCode(store, PUBLIC, { tournamentId: p.tournament_id, kind: 'player', name: p.display_name, playerId: p.id, staffId: null, revokeSessions: false })
 }
 
 export async function issueTeamInvites(store: Store, actor: Actor, input: { teamId: string; revokeSessions?: boolean }) {
@@ -1505,9 +1555,19 @@ export interface InvitePreview {
   staffId?: string
 }
 
+// Accepts a typed access code (any case, with or without the dash) or an
+// older long link token.
+function inviteKey(token: unknown): string | null {
+  if (typeof token !== 'string') return null
+  if (isAccessCode(token)) return normalizeCode(token)
+  const t = token.trim()
+  return t.length >= 20 && t.length <= 100 ? t : null
+}
+
 export async function previewInvite(store: Store, token: string): Promise<InvitePreview> {
-  if (typeof token !== 'string' || token.length < 20 || token.length > 100) return { status: 'invalid' }
-  const inv = await maybe<InviteRow>(store, 'sp_invitations', { token_hash: hashToken(token) })
+  const key = inviteKey(token)
+  if (!key) return { status: 'invalid' }
+  const inv = await maybe<InviteRow>(store, 'sp_invitations', { token_hash: hashToken(key) })
   if (!inv) return { status: 'invalid' }
   const t = await one<TournamentRow>(store, 'sp_tournaments', { id: inv.tournament_id })
   const base: InvitePreview = { status: 'ok', kind: inv.kind, tournamentName: t.name, tournamentSlug: t.slug, playerId: inv.player_id || undefined, staffId: inv.staff_id || undefined }
@@ -1522,7 +1582,7 @@ export async function previewInvite(store: Store, token: string): Promise<Invite
     Object.assign(base, { name: s.display_name, role: s.role === 'director' ? 'Tournament Director' : 'Table Supervisor' })
   }
   if (inv.revoked_at) return { ...base, status: 'revoked' }
-  if (inv.used_at) return { ...base, status: 'used' }
+  if (inv.used_at && !isAccessCode(key)) return { ...base, status: 'used' }
   if (new Date(inv.expires_at).getTime() <= store.now().getTime()) return { ...base, status: 'expired' }
   return base
 }
@@ -1531,17 +1591,19 @@ export async function redeemInvite(store: Store, token: string) {
   const preview = await previewInvite(store, token)
   if (preview.status !== 'ok') {
     const msg = {
-      used: 'This invitation was already used. Ask the tournament director for a new one.',
-      expired: 'This invitation expired. Ask the tournament director for a new one.',
-      revoked: 'This invitation was replaced or cancelled. Ask the tournament director for a new one.',
-      invalid: 'This invitation link is not valid.',
+      used: 'This link was already used. Ask the tournament director for an access code.',
+      expired: 'This access code expired. Ask the tournament director for a new one.',
+      revoked: 'This access code was replaced. Ask the tournament director for the new one.',
+      invalid: 'That access code is not right. Check the letters and try again.',
       ok: '',
     }[preview.status]
     fail(preview.status === 'invalid' ? 404 : 410, msg)
   }
-  const inv = await one<InviteRow>(store, 'sp_invitations', { token_hash: hashToken(token) })
+  const key = inviteKey(token) as string
+  const inv = await one<InviteRow>(store, 'sp_invitations', { token_hash: hashToken(key) })
   const used = await store.update('sp_invitations', { id: inv.id, used_at: null, revoked_at: null }, { used_at: nowIso(store) })
-  if (!used.length) fail(410, 'This invitation was already used. Ask the tournament director for a new one.')
+  // Long links work once; typed access codes can be reused until replaced.
+  if (!used.length && !isAccessCode(key)) fail(410, 'This invitation was already used. Ask the tournament director for a new one.')
   const session = await createSession(store, {
     kind: inv.kind, tournamentId: inv.tournament_id, playerId: inv.player_id, staffId: inv.staff_id, invitationId: inv.id,
     ttlMs: inv.kind === 'player' ? PLAYER_SESSION_MS : STAFF_SESSION_MS,

@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
-import QRCode from 'qrcode'
 import { Bracket } from '../_components/Bracket'
 import { postAuth, useSpades, type ActResult } from '../_components/useSpades'
 import { normalizeRules, ruleSummary } from '@/lib/spades/rules'
@@ -52,7 +51,7 @@ function Login() {
       </label>
       {err && <div className="sp-banner sp-banner-bad text-sm" role="alert">{err}</div>}
       <button className="sp-btn sp-btn-gold" disabled={busy || !pw}>{busy ? 'Signing in' : 'Sign in'}</button>
-      <p className="text-xs" style={{ color: 'var(--sp-dim)' }}>Supervisors: open the staff invitation link from the director instead.</p>
+      <p className="text-xs" style={{ color: 'var(--sp-dim)' }}>Supervisors: sign in at /spades/join with the access code from the director.</p>
     </form>
   )
 }
@@ -167,6 +166,7 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
               <div key={r} className="grid gap-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="font-black" style={{ color: 'var(--sp-gold)' }}>{ms[0]?.roundName}</h3>
+                  {readyCount > 0 && <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>{ms.filter((m: any) => m.status === 'ready' && m.readyA && m.readyB).length} of {readyCount} tables ready</span>}
                   {readyCount > 0 && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Start ${readyCount} ${ms[0]?.roundName} match${readyCount > 1 ? 'es' : ''} now? Every team at those tables sees their game begin and the clocks start.`)) run('startRound', { tournamentId: T.id, round: r }, 'Game on') }}>Begin {ms[0]?.roundName}</button>}
                 </div>
                 {ms.map((m: any) => <MatchRow key={m.id} m={m} data={data} act={act} teams={teams} serverNow={serverNow} />)}
@@ -191,6 +191,13 @@ function MatchRow({ m, data, act, teams, serverNow }: { m: any; data: any; act: 
         <div className="font-bold">{teams.get(m.teamA) || 'TBD'} <span className="sp-num" style={{ color: 'var(--sp-gold)' }}>{m.status !== 'pending' && m.status !== 'ready' ? `${m.scoreA} to ${m.scoreB}` : 'vs'}</span> {teams.get(m.teamB) || 'TBD'}</div>
         <div className="flex items-center gap-2"><StatusChip label={m.label} />{m.startedAt && <MatchTimer m={m} serverNow={serverNow} />}</div>
       </div>
+      {m.status === 'ready' && m.teamA && m.teamB && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className={`sp-chip ${m.readyA ? 'sp-chip-live' : 'sp-chip-dim'}`}>{teams.get(m.teamA)}: {m.readyA ? 'ready' : 'not ready'}</span>
+          <span className={`sp-chip ${m.readyB ? 'sp-chip-live' : 'sp-chip-dim'}`}>{teams.get(m.teamB)}: {m.readyB ? 'ready' : 'not ready'}</span>
+          {m.readyA && m.readyB && <span className="sp-chip sp-chip-warn">Both ready, tap Begin</span>}
+        </div>
+      )}
       {card?.pending?.length > 0 && <div className="text-xs" style={{ color: 'var(--sp-gold)' }}>{card.pending.join(' · ')}</div>}
       <div className="flex flex-wrap items-center gap-2">
         {['pending', 'ready'].includes(m.status) && (
@@ -218,25 +225,23 @@ function inviteUrl(token: string) {
 }
 
 function InviteCard({ inv }: { inv: { name: string; token: string; kind: string; expiresAt: string } }) {
-  const [qr, setQr] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const url = inviteUrl(inv.token)
-  useEffect(() => { QRCode.toDataURL(url, { width: 360, margin: 1, color: { dark: '#14090b', light: '#fff9ee' } }).then(setQr).catch(() => setQr(null)) }, [url])
+  const text = `Spades HQ access code for ${inv.name}: ${inv.token}. Sign in at ${typeof window !== 'undefined' ? window.location.origin : ''}/spades/join`
   return (
-    <div className="sp-card-paper p-4 grid gap-2 justify-items-center text-center">
-      <p className="sp-label">{inv.kind === 'staff' ? 'Staff invitation' : 'Player invitation'}</p>
+    <div className="sp-card-paper p-5 grid gap-2 justify-items-center text-center">
+      <p className="sp-label">{inv.kind === 'staff' ? 'Staff access code' : 'Team access code'}</p>
       <p className="sp-display text-2xl">{inv.name}</p>
-      {qr ? <img src={qr} alt={`Invitation QR code for ${inv.name}`} width={220} height={220} /> : <div style={{ width: 220, height: 220 }} />}
-      <p className="text-xs">Scan with the phone camera. Works once. Expires {new Date(inv.expiresAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.</p>
+      <p className="sp-display sp-num" style={{ fontSize: 42, letterSpacing: '0.08em' }}>{inv.token}</p>
+      <p className="text-sm">Type it at <b>orcafin.app/spades/join</b>. Any older code for this person stops working. Expires {new Date(inv.expiresAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.</p>
       <div className="flex flex-wrap gap-2 justify-center">
-        <button className="sp-btn sp-btn-sm" onClick={async () => { try { await navigator.clipboard.writeText(url); setCopied(true) } catch { prompt('Copy this link', url) } }}>{copied ? 'Copied' : 'Copy link'}</button>
-        {typeof navigator !== 'undefined' && 'share' in navigator && <button className="sp-btn sp-btn-sm sp-btn-wine" onClick={() => navigator.share({ title: 'Spades HQ invitation', text: `Your Spades HQ link, ${inv.name}`, url }).catch(() => {})}>Text it</button>}
+        <button className="sp-btn sp-btn-sm" onClick={async () => { try { await navigator.clipboard.writeText(text); setCopied(true) } catch { prompt('Copy this', text) } }}>{copied ? 'Copied' : 'Copy'}</button>
+        {typeof navigator !== 'undefined' && 'share' in navigator && <button className="sp-btn sp-btn-sm sp-btn-wine" onClick={() => navigator.share({ title: 'Spades HQ access code', text }).catch(() => {})}>Text it</button>}
       </div>
     </div>
   )
 }
 
-const INVITE_LABEL: Record<string, string> = { none: 'No link yet', pending: 'Link sent', used: 'Signed in', revoked: 'Link replaced', expired: 'Link expired' }
+const INVITE_LABEL: Record<string, string> = { none: 'No code yet', pending: 'Code given, not used yet', used: 'Code used', revoked: 'Code replaced', expired: 'Code expired' }
 
 function TeamsTab({ data, act }: { data: any; act: Act }) {
   const T = data.tournamentFull
@@ -251,15 +256,15 @@ function TeamsTab({ data, act }: { data: any; act: Act }) {
     ['Rejected', data.allTeams.filter((x: any) => x.status === 'rejected')],
   ]
   const invite = async (action: string, payload: Record<string, unknown>) => {
-    const r = await run(action, payload, 'Invitation ready below')
+    const r = await run(action, payload, 'Access code ready above')
     if (r.ok) setIssued(r.data.invites ? r.data.invites : [r.data])
   }
   return (
     <div className="grid gap-4">
       {issued.length > 0 && (
         <section className="grid gap-3">
-          <div className="flex items-center justify-between"><h2 className="sp-display text-xl">New invitations</h2><button className="sp-btn sp-btn-sm sp-btn-ghost" onClick={() => setIssued([])}>Done</button></div>
-          <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>These links are shown once. Have each player scan their own code now, or text the link. Reissuing makes old links stop working.</p>
+          <div className="flex items-center justify-between"><h2 className="sp-display text-xl">New access codes</h2><button className="sp-btn sp-btn-sm sp-btn-ghost" onClick={() => setIssued([])}>Done</button></div>
+          <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Codes are shown once. Read the code to the player or text it. Making a new code stops the old one.</p>
           <div className="grid sm:grid-cols-2 gap-3">{issued.map(inv => <InviteCard key={inv.token} inv={inv} />)}</div>
         </section>
       )}
@@ -328,16 +333,16 @@ function TeamsTab({ data, act }: { data: any; act: Act }) {
                           <div className="flex gap-2">
                             <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => {
                               const lost = p.invite.status === 'used'
-                              if (lost && !confirm(`${p.name} is already signed in. Send a new link and sign out their old phone?`)) return
+                              if (lost && !confirm(`${p.name} is already signed in. Make a new code and sign out their old phone?`)) return
                               invite('invite', { playerId: p.id, revokeSessions: lost })
-                            }}>{p.invite.status === 'none' ? 'Get link' : 'New link'}</button>
+                            }}>{p.invite.status === 'none' ? 'Get code' : 'New code'}</button>
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
                   {team.status === 'approved' && team.players.some((p: any) => p.invite.status === 'none') && (
-                    <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => invite('teamInvites', { teamId: team.id })}>Make both invitations</button>
+                    <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => invite('teamInvites', { teamId: team.id })}>Make codes for both</button>
                   )}
                 </>
               )}
@@ -385,7 +390,7 @@ function StaffTab({ data, act }: { data: any; act: Act }) {
   return (
     <div className="grid gap-4">
       {issued && <div className="grid gap-2 max-w-sm"><InviteCard inv={issued} /><button className="sp-btn sp-btn-sm sp-btn-ghost" onClick={() => setIssued(null)}>Done</button></div>}
-      <form className="sp-card p-4 grid gap-3" onSubmit={async e => { e.preventDefault(); const r = await run('addStaff', { tournamentId: T.id, name, role }, 'Staff added. Have them scan the code.'); if (r.ok) { setIssued(r.data.invite); setName('') } }}>
+      <form className="sp-card p-4 grid gap-3" onSubmit={async e => { e.preventDefault(); const r = await run('addStaff', { tournamentId: T.id, name, role }, 'Staff added. Give them the code.'); if (r.ok) { setIssued(r.data.invite); setName('') } }}>
         <h2 className="sp-display text-xl">Add a table supervisor</h2>
         <div className="grid sm:grid-cols-3 gap-2">
           <input className="sp-input" placeholder="Name" aria-label="Staff name" maxLength={40} value={name} onChange={e => setName(e.target.value)} />
@@ -393,7 +398,7 @@ function StaffTab({ data, act }: { data: any; act: Act }) {
             <option value="supervisor">Table supervisor</option>
             {isOwner && <option value="director">Co director</option>}
           </select>
-          <button className="sp-btn sp-btn-gold" disabled={busy || !name.trim()}>Add and get link</button>
+          <button className="sp-btn sp-btn-gold" disabled={busy || !name.trim()}>Add and get code</button>
         </div>
       </form>
       <Feedback msg={msg} />
@@ -408,7 +413,7 @@ function StaffTab({ data, act }: { data: any; act: Act }) {
             </div>
             {s.active && (
               <div className="flex gap-2">
-                <button className="sp-btn sp-btn-sm" onClick={async () => { const r = await run('invite', { staffId: s.id, revokeSessions: s.invite.status === 'used' }, 'New link ready'); if (r.ok) setIssued(r.data) }}>New link</button>
+                <button className="sp-btn sp-btn-sm" onClick={async () => { const r = await run('invite', { staffId: s.id, revokeSessions: s.invite.status === 'used' }, 'New code ready'); if (r.ok) setIssued(r.data) }}>New code</button>
                 <button className="sp-btn sp-btn-sm sp-btn-danger" onClick={() => { if (confirm(`Deactivate ${s.name}? They are signed out immediately.`)) run('updateStaff', { staffId: s.id, active: false }, 'Deactivated') }}>Deactivate</button>
               </div>
             )}

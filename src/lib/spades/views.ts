@@ -115,6 +115,7 @@ export function publicMatch(b: Bundle, m: MatchRow) {
     resultKind: m.result_kind, target: m.target, timeLimitMin: m.time_limit_min,
     startedAt: m.started_at, pausedAt: m.paused_at, pausedMs: m.paused_ms, completedAt: m.completed_at,
     handsVerified: m.hands_verified,
+    readyA: !!m.ready_a_at, readyB: !!m.ready_b_at,
     current: hand ? {
       handNumber: hand.hand_number, status: hand.status, isTiebreak: hand.is_tiebreak,
       // Team bids become public only once every bid is locked.
@@ -164,6 +165,9 @@ export function publicState(b: Bundle, now: Date) {
     },
     teams: approved.map(t => ({ id: t.id, name: t.name, seed: t.seed, checkedIn: !!t.checked_in_at })),
     matches: b.t.bracket_published ? b.matches.map(m => publicMatch(b, m)) : [],
+    // Everyone signed up so far (in sign up order), for the preliminary
+    // bracket shown before the draw.
+    registered: b.teams.filter(t => t.status === 'approved' || t.status === 'pending').map(t => ({ id: t.id, name: t.name, status: t.status })),
     winners: b.t.bracket_published ? winners(b) : null,
   }
 }

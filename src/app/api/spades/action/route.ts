@@ -23,6 +23,7 @@ const ACTIONS: Record<string, Handler> = {
   pause: (s, a, b) => S.pauseMatch(s, a, { matchId: b.matchId, reason: b.reason }),
   resume: (s, a, b) => S.resumeMatch(s, a, { matchId: b.matchId }),
   verifyCompletion: (s, a, b) => S.verifyCompletion(s, a, { matchId: b.matchId }),
+  ready: (s, a, b) => S.setReady(s, a, { matchId: b.matchId, ready: !!b.ready, teamId: b.teamId }),
   checkIn: (s, a, b) => S.checkInTeam(s, a, { teamId: b.teamId, present: !!b.present }),
   // director
   startMatch: (s, a, b) => S.startMatch(s, a, { matchId: b.matchId }),
@@ -70,7 +71,8 @@ export async function POST(req: NextRequest) {
         tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: 1, contact: body.contact,
       })
       const sess = await S.createSession(s, { kind: 'player', tournamentId: body.tournamentId, playerId: r.captainPlayerId, staffId: null, invitationId: null, ttlMs: S.PLAYER_SESSION_MS })
-      const res = json({ ok: true, status: r.status })
+      const code = await S.issueRegistrantCode(s, r.captainPlayerId)
+      const res = json({ ok: true, status: r.status, accessCode: code.token, name: code.name })
       setSessionCookie(res, sess.sessionToken, sess.expiresAt)
       return res
     }

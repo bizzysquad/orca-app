@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { Bracket } from './_components/Bracket'
+import { Bracket, provisionalData } from './_components/Bracket'
 import { useSpades } from './_components/useSpades'
 import { ErrorBox, Loading, Shell, SpadeIcon } from './_components/ui'
 
@@ -32,7 +32,9 @@ function Landing() {
             <span className="sp-chip sp-chip-live">Free to enter</span>
           </div>
           <div className="flex flex-wrap gap-3 mt-7">
-            {T.registrationOpen && !T.rosterLocked && <Link href={`/spades/register${q}`} className="sp-btn sp-btn-gold">{data.registration.full ? 'Join the waitlist' : 'Register a team'}</Link>}
+            {T.registrationOpen && !T.rosterLocked
+              ? <Link href={`/spades/register${q}`} className="sp-btn sp-btn-gold">{data.registration.full ? 'Join the waitlist' : 'Register a team'}</Link>
+              : <span className="sp-btn sp-btn-gold" aria-disabled="true" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Registration closed</span>}
             <Link href={`/spades/bracket${q}`} className="sp-btn">Live bracket</Link>
             <Link href="/spades/play" className="sp-btn sp-btn-ghost">My table</Link>
             <Link href={`/spades/rules${q}`} className="sp-btn sp-btn-ghost">Rules</Link>
@@ -119,13 +121,11 @@ function Landing() {
           <h2 className="sp-display text-2xl mb-3">Bracket</h2>
           <Bracket data={data} />
         </section>
-      ) : data.teams.length > 0 && (
+      ) : (
         <section className="sp-wrap mt-8">
-          <h2 className="sp-display text-2xl mb-3">Registered teams</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {data.teams.map((x: any) => <div key={x.id} className="sp-card p-3 font-bold">{x.name}</div>)}
-          </div>
-          <p className="text-sm mt-3" style={{ color: 'var(--sp-muted)' }}>The bracket is drawn at random after registration closes.</p>
+          <h2 className="sp-display text-2xl mb-3">Live bracket</h2>
+          <div className="sp-banner sp-banner-info text-sm mb-3">Preliminary bracket: teams appear as they register. The real matchups are drawn at random when registration closes.</div>
+          <Bracket data={provisionalData(data)} linkMatches={false} />
         </section>
       )}
 

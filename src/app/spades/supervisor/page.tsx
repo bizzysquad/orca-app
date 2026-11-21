@@ -95,6 +95,12 @@ export default function SupervisorPage() {
                     <span>To {m.target}</span>
                     {d.history.length > 0 && (() => { const h = d.history[d.history.length - 1]; return <span>Last verified: hand {h.handNumber}, {h.a.points > 0 ? '+' : ''}{h.a.points} / {h.b.points > 0 ? '+' : ''}{h.b.points}</span> })()}
                   </div>
+                  {m.status === 'ready' && (
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className={`sp-chip ${m.readyA ? 'sp-chip-live' : 'sp-chip-dim'}`}>{d.teamA?.name}: {m.readyA ? 'ready' : 'not ready'}</span>
+                      <span className={`sp-chip ${m.readyB ? 'sp-chip-live' : 'sp-chip-dim'}`}>{d.teamB?.name}: {m.readyB ? 'ready' : 'not ready'}</span>
+                    </div>
+                  )}
                   {d.pending.length > 0 && (
                     <ul className="grid gap-1">
                       {d.pending.map((p: string) => <li key={p} className="sp-banner sp-banner-warn text-sm py-2">{p}</li>)}

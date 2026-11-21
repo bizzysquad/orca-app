@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { Bracket } from '../_components/Bracket'
+import { Bracket, provisionalData } from '../_components/Bracket'
 import { useSpades } from '../_components/useSpades'
-import { Empty, ErrorBox, Loading, Shell } from '../_components/ui'
+import { ErrorBox, Loading, Shell } from '../_components/ui'
 
 function BracketView() {
   const t = useSearchParams().get('t')
@@ -25,7 +25,7 @@ function BracketView() {
           <Link href={`/spades/display${t ? `?t=${t}` : ''}`} className="sp-btn sp-btn-sm sp-btn-ghost">TV mode</Link>
         </div>
         {champ && <div className="sp-card-paper p-5 text-center"><p className="sp-label">Champions</p><p className="sp-display text-4xl">{champ.name}</p></div>}
-        {T.bracketPublished && data.matches.length ? <Bracket data={data} /> : <Empty title="Bracket coming soon">The bracket is drawn at random once check in closes. This page updates live.</Empty>}
+        {T.bracketPublished && data.matches.length ? <Bracket data={data} /> : <><div className="sp-banner sp-banner-info text-sm mb-3">Preliminary bracket: teams appear as they register. The real matchups are drawn at random when registration closes.</div><Bracket data={provisionalData(data)} linkMatches={false} /></>}
         <p className="text-xs" style={{ color: 'var(--sp-dim)' }}>Scores update live as hands are verified. A winner advances only after the tournament director finalizes the result.</p>
       </div>
     </Shell>

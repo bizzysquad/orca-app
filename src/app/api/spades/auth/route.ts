@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === 'preview' || body.action === 'redeem') {
-      await rateLimit(s, key, 'invite', 40, 10 * 60 * 1000)
+      await rateLimit(s, key, 'invite', 120, 10 * 60 * 1000)
       await recordAttempt(s, key, 'invite')
       const token = typeof body.token === 'string' ? body.token.trim() : ''
       if (body.action === 'preview') {

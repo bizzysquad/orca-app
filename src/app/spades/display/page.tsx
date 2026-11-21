@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect } from 'react'
-import { Bracket } from '../_components/Bracket'
+import { Bracket, provisionalData } from '../_components/Bracket'
 import { useSpades } from '../_components/useSpades'
 import { ConnectionBadge, MatchTimer, SpadeIcon, StatusChip } from '../_components/ui'
 
@@ -79,7 +79,7 @@ function Display() {
               </div>
             )}
           </div>
-          <div className="lg:col-span-2">{T.bracketPublished && <Bracket data={data} linkMatches={false} />}</div>
+          <div className="lg:col-span-2">{T.bracketPublished ? <Bracket data={data} linkMatches={false} /> : <><p className="sp-label text-base mb-3">Preliminary bracket. Matchups drawn at random when registration closes.</p><Bracket data={provisionalData(data)} linkMatches={false} /></>}</div>
         </section>
       )}
       <footer className="flex justify-between text-lg" style={{ color: 'var(--sp-dim)' }}>

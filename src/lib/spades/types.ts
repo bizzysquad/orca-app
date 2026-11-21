@@ -96,6 +96,9 @@ export interface MatchRow {
   paused_ms: number
   completed_at: string | null
   completion_verified_by: string | null
+  // Added by supabase-migration-spades-ready.sql; undefined until it runs.
+  ready_a_at?: string | null
+  ready_b_at?: string | null
   finalized_at: string | null
   score_a: number
   score_b: number

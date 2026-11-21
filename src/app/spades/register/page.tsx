@@ -13,6 +13,7 @@ function Register() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [done, setDone] = useState<string | null>(null)
+  const [code, setCode] = useState<string | null>(null)
   if (loading && !data) return <Shell active="home"><Loading /></Shell>
   if (!data?.tournament) return <Shell online={online}><div className="sp-wrap-narrow"><ErrorBox message={error || 'Tournament not found'} onRetry={reload} /></div></Shell>
   const T = data.tournament
@@ -26,12 +27,12 @@ function Register() {
     setMsg(null)
     const r = await act('register', { tournamentId: T.id, ...form })
     setBusy(false)
-    if (r.ok) setDone(r.data?.status)
+    if (r.ok) { setDone(r.data?.status); setCode(r.data?.accessCode || null) }
     else setMsg({ ok: false, text: r.error || 'Could not register' })
   }
 
   return (
-    <Shell active="home" online={online} viewer={data.viewer}>
+    <Shell active="register" online={online} viewer={data.viewer}>
       <div className="sp-wrap-narrow grid gap-4">
         <div>
           <p className="sp-label" style={{ color: 'var(--sp-gold)' }}>{T.name}</p>
@@ -46,6 +47,13 @@ function Register() {
                 ? 'The bracket is full right now. The tournament director will call teams from the waitlist in order if a spot opens. The waitlist does not enter the bracket on its own.'
                 : 'This phone is now signed in as your team scorekeeper. The tournament director approves your team, then your table shows up here when the game begins.'}
             </p>
+            {code && (
+              <div className="p-4 rounded-xl text-center" style={{ border: '3px dashed var(--sp-wine)' }}>
+                <p className="sp-label">Your team access code</p>
+                <p className="sp-display sp-num mt-1" style={{ fontSize: 44, letterSpacing: '0.08em' }}>{code}</p>
+                <p className="text-sm mt-1">Screenshot this or write it down. If this phone signs out or you switch phones, open orcafin.app/spades/join and type this code to get back to your table.</p>
+              </div>
+            )}
             <p className="font-bold">Check in with the tournament director when you arrive.</p>
             <Link href="/spades/play" className="sp-btn sp-btn-wine">Go to my table</Link>
           </div>

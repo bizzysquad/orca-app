@@ -3,6 +3,28 @@
 import Link from 'next/link'
 import { StatusChip } from './ui'
 
+// Before the draw: a preliminary bracket filled in sign up order, so people
+// can follow along as teams register. The real matchups are drawn at random
+// when the director locks the roster.
+export function provisionalData(data: any) {
+  const T = data.tournament
+  const reg: any[] = data.registered || []
+  const rounds: number = T.rounds
+  const matches: any[] = []
+  for (let r = 1; r <= rounds; r++) {
+    const n = T.capacity / 2 ** r
+    const roundName = r === rounds ? 'Championship' : r === rounds - 1 ? 'Semifinals' : r === rounds - 2 ? 'Quarterfinals' : `Round ${r}`
+    for (let i = 0; i < n; i++) {
+      matches.push({
+        id: `prov-${r}-${i}`, round: r, slot: i, roundName, status: 'pending', label: 'Not set', table: null,
+        teamA: r === 1 ? reg[2 * i]?.id ?? null : null, teamB: r === 1 ? reg[2 * i + 1]?.id ?? null : null,
+        winner: null, resultKind: null, scoreA: 0, scoreB: 0, current: null,
+      })
+    }
+  }
+  return { ...data, teams: reg.map(t => ({ id: t.id, name: t.name, seed: null })), matches, provisional: true }
+}
+
 export function Bracket({ data, big = false, linkMatches = true }: { data: any; big?: boolean; linkMatches?: boolean }) {
   const teams = new Map<string, any>((data.teams || []).map((t: any) => [t.id, t]))
   const rounds: number = data.tournament.rounds
@@ -10,6 +32,7 @@ export function Bracket({ data, big = false, linkMatches = true }: { data: any; 
   const name = (id: string | null, m: any, side: 'a' | 'b') => {
     if (id) return teams.get(id)?.name || 'Team'
     if (m.resultKind === 'bye') return 'Bye'
+    if (data.provisional) return m.round === 1 ? 'Open spot' : 'Winner advances'
     return m.round === 1 ? 'Bye' : 'Winner advances'
   }
   return (
@@ -22,7 +45,7 @@ export function Bracket({ data, big = false, linkMatches = true }: { data: any; 
               <div className="sp-card p-3" style={m.status === 'live' ? { borderColor: 'var(--sp-green)' } : m.label === 'Disputed' ? { borderColor: 'var(--sp-red)' } : undefined}>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="sp-label">{m.table ? `Table ${m.table}` : `Match ${m.slot + 1}`}</span>
-                  {m.resultKind !== 'bye' && <StatusChip label={m.label} />}
+                  {m.resultKind !== 'bye' && !data.provisional && <StatusChip label={m.label} />}
                 </div>
                 {(['a', 'b'] as const).map(side => {
                   const id = side === 'a' ? m.teamA : m.teamB

@@ -269,28 +269,61 @@ test('23/24. duplicate taps and simultaneous devices never double count', async 
   await expectReject(S.reportBooks(store, mp.capA, { handId: h.id, booksA: 3, booksB: 10 }), 409, /closed/)
 })
 
-test('22. revoked, used and expired invitations', async () => {
+test('22. access codes: reusable until replaced, expired or wrong codes rejected', async () => {
   const { store, tid } = await setup()
   const [team] = await store.select<TeamRow>('sp_teams', { tournament_id: tid, name: 'Team 1' })
   const { invites } = await S.issueTeamInvites(store, owner, { teamId: team.id })
   const first = invites[0]
+  assert.match(first.token, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/)
   const { sessionToken } = await S.redeemInvite(store, first.token)
-  await expectReject(S.redeemInvite(store, first.token), 410, /already used/)
+  // Typing it again (lowercase, no dash) on another phone still works.
+  const again = await S.redeemInvite(store, first.token.toLowerCase().replace('-', ''))
+  assert.equal((await S.resolveSession(store, again.sessionToken)).kind, 'player')
   assert.equal((await S.resolveSession(store, sessionToken)).kind, 'player')
-  // Lost phone: reissue revokes the old session and the second pending invite.
+  // Lost phone: a new code signs out the old phones and kills the old code.
   const re = await S.issueInvite(store, owner, { playerId: first.playerId, revokeSessions: true })
   assert.equal((await S.resolveSession(store, sessionToken)).kind, 'public')
+  await expectReject(S.redeemInvite(store, first.token), 410, /replaced/)
   await S.redeemInvite(store, re.token)
-  const second = invites[1]
-  await S.issueInvite(store, owner, { playerId: second.playerId })
-  await expectReject(S.redeemInvite(store, second.token), 410, /replaced/)
-  const third = await S.issueInvite(store, owner, { playerId: second.playerId })
   store.advance(S.INVITE_TTL_MS + 1000)
-  await expectReject(S.redeemInvite(store, third.token), 410, /expired/)
-  await expectReject(S.redeemInvite(store, 'not-a-real-token-at-all-xxxxxxxx'), 404)
-  // Stored hashes only.
+  await expectReject(S.redeemInvite(store, re.token), 410, /expired/)
+  await expectReject(S.redeemInvite(store, 'ZZZZ-ZZZZ'), 404)
+  await expectReject(S.redeemInvite(store, 'nope'), 404)
   const rows = await store.select<any>('sp_invitations', { tournament_id: tid })
-  assert.ok(rows.every(r => r.token_hash && !JSON.stringify(r).includes(first.token)))
+  assert.ok(rows.every(r => r.token_hash && !JSON.stringify(r).includes(first.token.replace('-', ''))))
+})
+
+test('registrant gets one access code; only captains of new teams', async () => {
+  const { store, tid } = await setup({ teams: 0 })
+  const r = await S.registerTeam(store, S.PUBLIC, { tournamentId: tid, name: 'Coders', player1: 'Cee', player2: 'Dee' })
+  const code = await S.issueRegistrantCode(store, r.captainPlayerId)
+  await expectReject(S.issueRegistrantCode(store, r.captainPlayerId), 409)
+  const a = await S.resolveSession(store, (await S.redeemInvite(store, code.token)).sessionToken)
+  assert.equal(a.kind === 'player' && a.isCaptain, true)
+  const partner = (await store.select<any>('sp_players', { team_id: r.teamId, is_captain: false }))[0]
+  await expectReject(S.issueRegistrantCode(store, partner.id), 403)
+})
+
+test('captains tap ready before the director begins; others cannot', async () => {
+  const { store, tid } = await setup()
+  await S.setRosterLock(store, owner, { tournamentId: tid, locked: true })
+  await S.publishBracket(store, owner, { tournamentId: tid, published: true })
+  const [m] = await roundMatches(store, tid, 1)
+  const mp = await matchPlayers(store, m.id)
+  const nonCap = mp.a.find(a => a.kind === 'player' && !a.isCaptain)!
+  await expectReject(S.setReady(store, nonCap, { matchId: m.id, ready: true }), 403)
+  await expectReject(S.setReady(store, mp.capA, { matchId: (await roundMatches(store, tid, 1))[1].id, ready: true }), 403)
+  await S.setReady(store, mp.capA, { matchId: m.id, ready: true })
+  await S.setReady(store, mp.capB, { matchId: m.id, ready: true })
+  let mm = await getMatch(store, m.id)
+  assert.ok(mm.ready_a_at && mm.ready_b_at)
+  const pub = V.publicState(await bundle(store, tid), store.now())
+  assert.equal(pub.matches.find((x: any) => x.id === m.id)!.readyA, true)
+  await S.setReady(store, mp.capB, { matchId: m.id, ready: false })
+  mm = await getMatch(store, m.id)
+  assert.equal(mm.ready_b_at, null)
+  await S.startMatch(store, owner, { matchId: m.id })
+  await expectReject(S.setReady(store, mp.capA, { matchId: m.id, ready: false }), 409, /began/)
 })
 
 test('20. cross tournament authorization', async () => {
