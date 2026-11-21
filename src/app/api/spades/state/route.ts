@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { actorFrom, errorResponse, json, store } from '@/lib/spades/http'
 import { actAsPlayer, isDirector, isStaff } from '@/lib/spades/service'
-import { activityState, adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicEvents, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
+import { activityState, adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicEvents, publicLiveGames, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
 import type { TournamentRow } from '@/lib/spades/types'
 import { normalizeRules } from '@/lib/spades/rules'
 
@@ -34,7 +34,16 @@ export async function GET(req: NextRequest) {
       if (m[0]) t = (await s.select<TournamentRow>('sp_tournaments', { id: m[0].tournament_id }, { limit: 1 }))[0] || null
     }
     if (!t) t = await findTournament(s, null)
-    if (!t) return json({ error: 'No tournament found', viewer: viewerInfo(actor, null) }, 404)
+    if (!t) {
+      // No event posted yet: every screen still works (create one, start a game, winners).
+      if (view === 'match') return json({ error: 'Match not found', viewer: viewerInfo(actor, null) }, 404)
+      if (view === 'admin' && actor.kind !== 'owner') return json({ error: 'Director sign in required', viewer: viewerInfo(actor, null) }, 401)
+      const tournaments = actor.kind === 'owner'
+        ? (await s.select<TournamentRow>('sp_tournaments', {}, { order: [{ col: 'created_at', asc: false }], limit: 100 })).map(x => ({ id: x.id, slug: x.slug, name: x.name, status: x.status, eventType: x.event_type || 'tournament', isTest: !!x.is_test, isFeatured: x.is_featured, startsAt: x.starts_at, teamLimit: x.team_limit || x.capacity, registrationOpen: x.registration_open, rosterLocked: x.roster_locked, rules: normalizeRules(x.rules) }))
+        : undefined
+      const liveGames = sp.get('games') === '1' ? await publicLiveGames(s) : undefined
+      return json({ noEvent: true, serverNow: s.now().toISOString(), viewer: viewerInfo(actor, null), events: [], tournaments, liveGames })
+    }
 
     const now = s.now()
     const b = await loadBundle(s, t)
@@ -46,7 +55,8 @@ export async function GET(req: NextRequest) {
     if (view === 'public') {
       const past = sp.get('winners') === '1' ? await pastChampions(s, t.id) : undefined
       const events = sp.get('events') === '1' ? await publicEvents(s) : undefined
-      return json({ ...publicState(b, now), viewer, pastChampions: past, events })
+      const liveGames = sp.get('games') === '1' ? await publicLiveGames(s) : undefined
+      return json({ ...publicState(b, now), viewer, pastChampions: past, events, liveGames })
     }
     if (view === 'play') return json({ ...publicState(b, now), viewer, me: playerState(b, actor, now) })
     if (view === 'match') {

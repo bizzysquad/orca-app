@@ -34,7 +34,7 @@ export function ConnectionBadge({ online }: { online: boolean }) {
 const NAV = [
   { href: '/spades', label: 'Home', key: 'home' },
   { href: '/spades/register', label: 'Register', key: 'register' },
-  { href: '/spades/bracket', label: 'Bracket', key: 'bracket' },
+  { href: '/spades/bracket', label: 'Scores', key: 'bracket' },
   { href: '/spades/play', label: 'My Table', key: 'play' },
   { href: '/spades/winners', label: 'Winners', key: 'winners' },
   { href: '/spades/rules', label: 'Rules', key: 'rules' },
@@ -198,4 +198,21 @@ export function fmtTime(iso: string | null | undefined, tz = 'America/New_York')
 export function fmtDate(iso: string | null | undefined, tz = 'America/New_York') {
   if (!iso) return ''
   return new Date(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: tz })
+}
+
+// Shown when no event is posted yet. Players can still start their own game.
+export function NoEvents({ viewer }: { viewer?: any } = {}) {
+  return (
+    <div className="sp-wrap-narrow grid gap-4">
+      <div className="sp-card p-6 text-center grid gap-3">
+        <SpadeIcon size={40} className="mx-auto" />
+        <p className="sp-label" style={{ color: 'var(--sp-gold)' }}>Powered by DJ MASKOFF</p>
+        <h1 className="sp-display text-3xl">No events right now</h1>
+        <p style={{ color: 'var(--sp-muted)' }}>The next event shows up here as soon as it is posted. In the meantime, start your own game and keep score.</p>
+        {viewer?.kind === 'player' && <Link href="/spades/play" className="sp-btn sp-btn-wine">Back to my game</Link>}
+        <Link href="/spades/start" className="sp-btn sp-btn-gold">Start your own game</Link>
+        <Link href="/spades/winners" className="sp-btn sp-btn-ghost">See past winners</Link>
+      </div>
+    </div>
+  )
 }

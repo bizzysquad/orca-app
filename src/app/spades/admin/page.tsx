@@ -70,6 +70,7 @@ function Admin() {
   if (status === 401 || status === 403) {
     return <Shell active="admin" online={online} viewer={data?.viewer}><div className="sp-wrap-narrow grid gap-4"><h1 className="sp-display text-4xl">Director</h1>{data?.viewer?.kind === 'staff' && <div className="sp-banner sp-banner-warn text-sm">You are signed in as a supervisor. Director access needs the director password.</div>}<Login /></div></Shell>
   }
+  if (data?.noEvent) return <NoEventAdmin data={data} act={act} online={online} />
   if (!data?.tournamentFull) return <Shell active="admin" online={online}><div className="sp-wrap-narrow"><ErrorBox message={error || 'Could not load'} onRetry={reload} /></div></Shell>
   const T = data.tournamentFull
   return (
@@ -863,9 +864,9 @@ function ActivityHub({ data, act, serverNow }: { data: any; act: Act; serverNow:
 // Weekly winners wall: upload the champions' trophy photo.
 function WinnersTab({ data }: { data: any }) {
   const T = data.tournamentFull
-  const champ = T.championTeamId ? data.allTeams.find((x: any) => x.id === T.championTeamId) : null
+  const champ = T?.championTeamId ? data.allTeams.find((x: any) => x.id === T.championTeamId) : null
   const [list, setList] = useState<any[] | null>(null)
-  const [f, setF] = useState({ team: champ?.name || '', players: champ ? champ.players.map((p: any) => p.name).join(' & ') : '', event: T.name, week: new Date().toISOString().slice(0, 10) })
+  const [f, setF] = useState({ team: champ?.name || '', players: champ ? champ.players.map((p: any) => p.name).join(' & ') : '', event: T?.name || '', week: new Date().toISOString().slice(0, 10) })
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
@@ -918,6 +919,31 @@ function WinnersTab({ data }: { data: any }) {
         ))}
       </section>
     </div>
+  )
+}
+
+function NoEventAdmin({ data, act, online }: { data: any; act: Act; online: boolean }) {
+  const [tab, setTab] = useState<'Events' | 'Self-started games' | 'Winners' | 'Test Mode'>('Events')
+  const safe = { ...data, tournamentFull: { slug: null, name: '', championTeamId: null }, allTeams: [] }
+  return (
+    <Shell active="admin" online={online} viewer={data.viewer} wide>
+      <div className="sp-wrap grid gap-4">
+        <div>
+          <p className="sp-label" style={{ color: 'var(--sp-gold)' }}>Tournament director</p>
+          <h1 className="sp-display text-3xl mt-1">No events yet</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>Create an event to post it on the home page.</p>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto p-1 rounded-xl" style={{ background: 'rgba(0,0,0,0.3)' }} role="tablist">
+          {(['Events', 'Self-started games', 'Winners', 'Test Mode'] as const).map(x => (
+            <button key={x} role="tab" aria-selected={tab === x} className="px-3 py-2 rounded-lg text-sm font-bold whitespace-nowrap" style={tab === x ? { background: 'var(--sp-cream)', color: 'var(--sp-ink)' } : { color: 'var(--sp-muted)' }} onClick={() => setTab(x)}>{x}</button>
+          ))}
+        </nav>
+        {tab === 'Events' && <EventsTab data={safe} act={act} />}
+        {tab === 'Self-started games' && <ActivityTab />}
+        {tab === 'Winners' && <WinnersTab data={safe} />}
+        {tab === 'Test Mode' && <TestModeTab data={safe} act={act} />}
+      </div>
+    </Shell>
   )
 }
 

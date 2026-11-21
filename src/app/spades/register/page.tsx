@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useState } from 'react'
 import { useSpades } from '../_components/useSpades'
-import { ErrorBox, Feedback, Loading, Shell } from '../_components/ui'
+import { ErrorBox, Feedback, Loading, NoEvents, Shell } from '../_components/ui'
 
 function Register() {
   const t = useSearchParams().get('t')
@@ -15,6 +15,7 @@ function Register() {
   const [done, setDone] = useState<string | null>(null)
   const [code, setCode] = useState<string | null>(null)
   if (loading && !data) return <Shell active="home"><Loading /></Shell>
+  if (data?.noEvent) return <Shell active="register" online={online} viewer={data?.viewer}><NoEvents viewer={data?.viewer} /></Shell>
   if (!data?.tournament) return <Shell online={online}><div className="sp-wrap-narrow"><ErrorBox message={error || 'Tournament not found'} onRetry={reload} /></div></Shell>
   const T = data.tournament
   const open = T.registrationOpen && !T.rosterLocked

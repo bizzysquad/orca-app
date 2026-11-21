@@ -36,8 +36,8 @@ export async function findTournament(store: Store, slug?: string | null): Promis
   }
   const featured = await store.select<TournamentRow>('sp_tournaments', { is_featured: true }, { limit: 1 })
   if (featured[0]) return featured[0]
-  const latest = await store.select<TournamentRow>('sp_tournaments', { status: { neq: 'archived' } }, { order: [{ col: 'created_at', asc: false }], limit: 1 })
-  return latest[0] || null
+  const latest = await store.select<TournamentRow>('sp_tournaments', { status: { neq: 'archived' } }, { order: [{ col: 'created_at', asc: false }], limit: 50 })
+  return latest.find(t => !t.is_test && !normalizeRules(t.rules).selfServe) || null
 }
 
 export async function loadBundle(store: Store, t: TournamentRow): Promise<Bundle> {
@@ -146,6 +146,23 @@ export function winners(b: Bundle) {
     runnerUp: name(ru),
     score: final.result_kind === 'played' ? `${Math.max(final.score_a, final.score_b)} to ${Math.min(final.score_a, final.score_b)}` : null,
   }
+}
+
+// Live self-started games, for the public Scores page: team names and score only.
+export async function publicLiveGames(store: Store) {
+  const live = await store.select<MatchRow>('sp_matches', { status: { in: ['live', 'paused'] } }, { limit: 200 })
+  if (!live.length) return []
+  const ts = await store.select<TournamentRow>('sp_tournaments', { id: { in: Array.from(new Set(live.map(m => m.tournament_id))) } })
+  const self = new Set(ts.filter(t => normalizeRules(t.rules).selfServe).map(t => t.id))
+  const ms = live.filter(m => self.has(m.tournament_id))
+  if (!ms.length) return []
+  const teams = await store.select<TeamRow>('sp_teams', { tournament_id: { in: Array.from(new Set(ms.map(m => m.tournament_id))) } })
+  const hands = await store.select<HandRow>('sp_hands', { match_id: { in: ms.map(m => m.id) }, status: { in: ['bidding', 'playing', 'review', 'disputed'] } })
+  const name = (id: string | null) => teams.find(t => t.id === id)?.name || ''
+  return ms.map(m => ({
+    id: m.id, teamA: name(m.team_a_id), teamB: name(m.team_b_id), scoreA: m.score_a, scoreB: m.score_b,
+    target: m.target, status: m.status, handNumber: hands.find(h => h.match_id === m.id)?.hand_number || null,
+  }))
 }
 
 // Every event people can see and join, for the home page list.

@@ -391,3 +391,12 @@ test('public registrations are approved automatically up to the limit, then wait
   const r3 = await S.registerTeam(store, S.PUBLIC, { tournamentId: ev.id, name: 'C', player1: 'c1', player2: 'c2' })
   assert.deepEqual([r1.status, r2.status, r3.status], ['approved', 'approved', 'waitlist'])
 })
+
+test('with no events posted, the default event is never a self-started or test game', async () => {
+  const store = new MemoryStore()
+  await S.createSelfServeGame(store, { teamA: 'Q', captainA: 'q1', partnerA: 'q2', teamB: 'R', captainB: 'r1', partnerB: 'r2' })
+  await S.createTestEvent(store, owner)
+  assert.equal(await V.findTournament(store, null), null)
+  const real = await S.createTournament(store, owner, { name: 'Posted Event' })
+  assert.equal((await V.findTournament(store, null))!.id, real.id)
+})

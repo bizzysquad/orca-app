@@ -1,171 +1,62 @@
 'use client'
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
-import { Bracket, provisionalData } from './_components/Bracket'
 import { useSpades } from './_components/useSpades'
-import { ErrorBox, Loading, Shell, SpadeIcon } from './_components/ui'
+import { Loading, Shell, SpadeIcon } from './_components/ui'
 
-function Landing() {
-  const t = useSearchParams().get('t')
-  const { data, error, loading, online, reload } = useSpades<any>('public', { t, winners: '1', events: '1' })
+// Home: three choices and the events the director posts. Nothing else.
+export default function Home() {
+  const { data, loading, online } = useSpades<any>('public', { events: '1' })
   if (loading && !data) return <Shell active="home"><Loading /></Shell>
-  if (!data?.tournament) return <Shell active="home" online={online}><div className="sp-wrap-narrow"><ErrorBox message={error || 'Tournament not found'} onRetry={reload} /></div></Shell>
-  const T = data.tournament
-  const W = data.winners
-  const past: any[] = data.pastChampions || []
-  const live = data.matches.filter((m: any) => m.status === 'live' || m.status === 'paused')
-  const q = t ? `?t=${t}` : ''
+  const events: any[] = data?.events || []
+  const open = events.filter(e => e.registrationOpen)
+  const joinHref = open.length === 1 ? `/spades/register?t=${open[0].slug}` : '/spades/register'
+
   return (
-    <Shell active="home" online={online} viewer={data.viewer}>
-      {(data.events || []).length > 0 && (
-        <section className="sp-wrap mb-6" aria-label="Events">
-          <h2 className="sp-display text-2xl mb-3">Events</h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {data.events.map((e: any) => {
-              const current = e.slug === T.slug
-              const full = e.approved >= e.teamLimit
-              const state = e.status === 'live' ? 'In progress' : e.status === 'completed' ? 'Finished' : e.registrationOpen ? (full ? 'Waitlist open' : 'Registration open') : 'Registration closed'
-              return (
-                <div key={e.slug} className="sp-card p-4 grid gap-2" style={current ? { borderColor: 'var(--sp-gold)' } : undefined}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-black text-lg leading-tight">{e.name}</div>
-                    <span className={`sp-chip ${e.status === 'live' ? 'sp-chip-live' : e.registrationOpen ? 'sp-chip-warn' : 'sp-chip-dim'}`}>{state}</span>
-                  </div>
-                  <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>
-                    {e.teamLimit <= 2 ? (e.gamesToWin > 1 ? `Best of ${e.gamesToWin * 2 - 1}` : 'One game') : e.useBracket ? 'Bracket' : 'Open play'} · {e.approved} of {e.teamLimit} teams
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {e.registrationOpen && <Link href={`/spades/register?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-gold">{full ? 'Join waitlist' : 'Register for this event'}</Link>}
-                    {!current && <Link href={`/spades?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-ghost">View</Link>}
-                  </div>
+    <Shell active="home" online={online} viewer={data?.viewer}>
+      <div className="sp-wrap-narrow grid gap-5">
+        <header className="text-center pt-2">
+          <span className="inline-grid place-items-center rounded-full mx-auto" style={{ width: 72, height: 72, background: 'var(--sp-gold)', color: 'var(--sp-wine)' }}><SpadeIcon size={40} /></span>
+          <h1 className="sp-display mt-3" style={{ fontSize: 'clamp(40px, 10vw, 64px)' }}>Spades HQ</h1>
+          <p className="sp-display text-base mt-1 tracking-widest" style={{ color: 'var(--sp-gold)' }}>Powered by DJ MASKOFF</p>
+        </header>
+
+        <nav className="grid gap-3" aria-label="What do you want to do?">
+          {open.length ? (
+            <Link href={joinHref} className="sp-btn sp-btn-gold sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>Join a tournament</Link>
+          ) : (
+            <span className="sp-btn sp-btn-gold sp-btn-block" aria-disabled="true" style={{ minHeight: 68, fontSize: 20, opacity: 0.5, cursor: 'not-allowed' }}>No tournament open right now</span>
+          )}
+          <Link href="/spades/start" className="sp-btn sp-btn-wine sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>Start your own game</Link>
+          <Link href="/spades/bracket" className="sp-btn sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>View scores</Link>
+          {data?.viewer?.kind === 'player' && <Link href="/spades/play" className="sp-btn sp-btn-ghost sp-btn-block">Back to my game</Link>}
+        </nav>
+
+        <section aria-label="Events" className="grid gap-3">
+          <h2 className="sp-display text-2xl">Events</h2>
+          {events.length === 0 ? (
+            <div className="sp-card p-5 text-center" style={{ color: 'var(--sp-muted)' }}>No events posted right now. Check back soon.</div>
+          ) : events.map(e => {
+            const full = e.approved >= e.teamLimit
+            const state = e.status === 'live' ? 'In progress' : e.status === 'completed' ? 'Finished' : e.registrationOpen ? (full ? 'Waitlist open' : 'Registration open') : 'Registration closed'
+            return (
+              <div key={e.slug} className="sp-card p-4 grid gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-black text-lg leading-tight">{e.name}</div>
+                  <span className={`sp-chip ${e.status === 'live' ? 'sp-chip-live' : e.registrationOpen ? 'sp-chip-warn' : 'sp-chip-dim'}`}>{state}</span>
                 </div>
-              )
-            })}
-          </div>
+                <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>
+                  {e.teamLimit <= 2 ? (e.gamesToWin > 1 ? `Best of ${e.gamesToWin * 2 - 1}` : 'One game') : e.useBracket ? 'Tournament' : 'Open play'} · {e.approved} of {e.teamLimit} teams
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {e.registrationOpen && <Link href={`/spades/register?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-gold">{full ? 'Join waitlist' : 'Register'}</Link>}
+                  <Link href={`/spades/bracket?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-ghost">Scores</Link>
+                </div>
+              </div>
+            )
+          })}
         </section>
-      )}
-
-      <section className="sp-wrap">
-        <div className="relative overflow-hidden rounded-3xl p-6 sm:p-10" style={{ background: 'linear-gradient(135deg, var(--sp-wine) 0%, #2a0b13 70%)', border: '2px solid var(--sp-line)' }}>
-          <div aria-hidden className="sp-vinyl absolute" style={{ width: 340, height: 340, right: -110, top: -90, opacity: 0.55 }} />
-          <div aria-hidden className="absolute rounded-full" style={{ width: 92, height: 92, right: 14, top: 36, background: 'var(--sp-gold)', display: 'grid', placeItems: 'center', color: 'var(--sp-wine)' }}>
-            <SpadeIcon size={46} />
-          </div>
-          <p className="sp-label" style={{ color: 'var(--sp-gold)' }}>DJ Maskoff presents</p>
-          <h1 className="sp-display mt-2" style={{ fontSize: 'clamp(40px, 9vw, 92px)', maxWidth: 760 }}>{T.name.replace(/^DJ Maskoff Presents\s*/i, '')}</h1>
-          <p className="sp-display text-lg mt-3 tracking-widest" style={{ color: 'var(--sp-gold)' }}>Powered by DJ MASKOFF</p>
-          <div className="flex flex-wrap gap-2 mt-5">
-            <span className="sp-chip sp-chip-live">Free to enter</span>
-          </div>
-          <div className="flex flex-wrap gap-3 mt-7">
-            <Link href="/spades/start" className="sp-btn sp-btn-wine">Start your own game</Link>
-            {T.registrationOpen && !T.rosterLocked
-              ? <Link href={`/spades/register${q}`} className="sp-btn sp-btn-gold">{data.registration.full ? 'Join the waitlist' : 'Register a team'}</Link>
-              : <span className="sp-btn sp-btn-gold" aria-disabled="true" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Registration closed</span>}
-            <Link href={`/spades/bracket${q}`} className="sp-btn">Live bracket</Link>
-            <Link href="/spades/play" className="sp-btn sp-btn-ghost">My table</Link>
-            <Link href={`/spades/rules${q}`} className="sp-btn sp-btn-ghost">Rules</Link>
-          </div>
-        </div>
-      </section>
-
-      {T.useBracket && (
-      <section className="sp-wrap mt-6" aria-label="Winners" id="winners">
-        <div className="flex items-center justify-between gap-2 mb-3"><h2 className="sp-display text-2xl">Winners</h2><Link href="/spades/winners" className="sp-btn sp-btn-sm sp-btn-ghost">See all winners</Link></div>
-        {W ? (
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="sp-card-paper p-6 text-center md:col-span-2">
-              <p className="sp-label">Champions</p>
-              <p className="sp-display mt-1" style={{ fontSize: 'clamp(36px, 7vw, 64px)' }}>{W.champion}</p>
-              {W.championPlayers?.length > 0 && <p className="font-bold mt-1">{W.championPlayers.join(' & ')}</p>}
-              <p className="sp-serif italic mt-2">{T.award || 'Championship trophy'}{W.score ? ` · won the final ${W.score}` : ''}</p>
-            </div>
-            <div className="sp-card p-6 text-center grid content-center">
-              <p className="sp-label">Runner up</p>
-              <p className="sp-display text-3xl mt-1">{W.runnerUp}</p>
-            </div>
-          </div>
-        ) : (
-          <div className="sp-card p-6 text-center">
-            <SpadeIcon size={32} className="mx-auto mb-2" />
-            <p className="sp-display text-2xl">Champion to be crowned</p>
-            <p className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>The winning team shows up here the moment the championship is final.</p>
-          </div>
-        )}
-        {past.length > 0 && (
-          <div className="mt-4">
-            <p className="sp-label mb-2">Past champions</p>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {past.map(p => (
-                <Link key={p.slug} href={`/spades/bracket?t=${p.slug}`} className="sp-card p-3 block">
-                  <div className="font-black">{p.champion}</div>
-                  <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{p.tournament}</div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-      )}
-
-      <section className="sp-wrap mt-6 grid md:grid-cols-3 gap-4">
-        <div className="sp-card p-5">
-          <p className="sp-label">Teams</p>
-          <p className="sp-display sp-num text-5xl mt-1">{data.registration.approved}<span className="text-2xl" style={{ color: 'var(--sp-dim)' }}>/{T.teamLimit}</span></p>
-          <p className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>{data.registration.full ? 'Bracket is full' : 'Spots open'}{data.registration.waitlist ? ` · ${data.registration.waitlist} on the waitlist` : ''}</p>
-        </div>
-        <div className="sp-card p-5">
-          <p className="sp-label">Format</p>
-          <p className="font-black text-xl mt-1">Doubles · {T.gamesToWin > 1 ? `Best of ${T.gamesToWin * 2 - 1}` : T.teamLimit <= 2 ? "One game" : "Single elimination"}</p>
-          <p className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>Opening rounds to {T.rules.targetDefault}. Championship to {T.rules.targetFinal}. Joker deck.</p>
-        </div>
-        <div className="sp-card p-5">
-          <p className="sp-label">Prize</p>
-          <p className="font-black text-xl mt-1">{T.award || 'Championship trophy'}</p>
-          <p className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>Recognition only. No buy ins, no cash, no wagering.</p>
-        </div>
-      </section>
-
-      {live.length > 0 && (
-        <section className="sp-wrap mt-6">
-          <h2 className="sp-display text-2xl mb-3">On the tables now</h2>
-          <div className="grid sm:grid-cols-2 gap-3">
-            {live.map((m: any) => {
-              const a = data.teams.find((x: any) => x.id === m.teamA)?.name
-              const b = data.teams.find((x: any) => x.id === m.teamB)?.name
-              return (
-                <Link key={m.id} href={`/spades/match/${m.id}`} className="sp-card p-4 block">
-                  <div className="flex justify-between mb-2"><span className="sp-label">Table {m.table} · {m.roundName}</span><span className="sp-chip sp-chip-live"><span className="sp-dot sp-dot-pulse" />{m.label}</span></div>
-                  <div className="flex justify-between font-bold text-lg"><span>{a}</span><span className="sp-display sp-num">{m.scoreA}</span></div>
-                  <div className="flex justify-between font-bold text-lg"><span>{b}</span><span className="sp-display sp-num">{m.scoreB}</span></div>
-                </Link>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      {T.bracketPublished && data.matches.length > 0 ? (
-        <section className="sp-wrap mt-8">
-          <h2 className="sp-display text-2xl mb-3">{T.useBracket ? 'Bracket' : 'Games'}</h2>
-          <Bracket data={data} />
-        </section>
-      ) : (
-        <section className="sp-wrap mt-8">
-          <h2 className="sp-display text-2xl mb-3">{T.useBracket ? 'Live bracket' : 'Games'}</h2>
-          <Bracket data={provisionalData(data)} linkMatches={false} />
-        </section>
-      )}
-
-      <section className="sp-wrap mt-8">
-        <div className="sp-banner sp-banner-warn text-sm">House rule: no gambling, betting, side bets or wagering of any kind. This is a recreational tournament.</div>
-      </section>
+      </div>
     </Shell>
   )
-}
-
-export default function Page() {
-  return <Suspense fallback={<Loading />}><Landing /></Suspense>
 }

@@ -15,6 +15,9 @@ function Display() {
     const id = setTimeout(() => window.location.reload(), 30 * 60 * 1000)
     return () => clearTimeout(id)
   }, [])
+  if (data?.noEvent) {
+    return <div className="min-h-screen grid place-items-center text-center p-8"><div><p className="sp-label text-base" style={{ color: 'var(--sp-gold)' }}>Powered by DJ MASKOFF</p><p className="sp-display text-5xl mt-2">Spades HQ</p><p className="text-2xl mt-4" style={{ color: 'var(--sp-muted)' }}>Next event coming soon</p></div></div>
+  }
   if (!data?.tournament) {
     return <div className="min-h-screen grid place-items-center"><div className="text-center"><div className="sp-vinyl mx-auto mb-4" style={{ width: 120, height: 120 }} /><p className="sp-label">Connecting</p></div></div>
   }

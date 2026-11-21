@@ -3,12 +3,13 @@
 import Link from 'next/link'
 import { MyTable } from '../_components/MyTable'
 import { useSpades } from '../_components/useSpades'
-import { Empty, ErrorBox, Loading, Shell } from '../_components/ui'
+import { Empty, ErrorBox, Loading, NoEvents, Shell } from '../_components/ui'
 
 export default function PlayPage() {
   const { data, error, loading, online, act, serverNow, reload } = useSpades<any>('play')
   if (loading && !data) return <Shell active="play"><Loading /></Shell>
   const viewer = data?.viewer
+  if (data?.noEvent && data?.viewer?.kind !== 'player') return <Shell active="play" online={online} viewer={data?.viewer}><NoEvents /></Shell>
   if (!data?.tournament) return <Shell active="play" online={online}><div className="sp-wrap-narrow"><ErrorBox message={error || 'Could not load'} onRetry={reload} /></div></Shell>
 
   if (!viewer || viewer.kind === 'public') {

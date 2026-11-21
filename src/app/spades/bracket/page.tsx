@@ -5,12 +5,13 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { Bracket, provisionalData } from '../_components/Bracket'
 import { useSpades } from '../_components/useSpades'
-import { ErrorBox, Loading, Shell } from '../_components/ui'
+import { ErrorBox, Loading, NoEvents, Shell } from '../_components/ui'
 
 function BracketView() {
   const t = useSearchParams().get('t')
-  const { data, error, loading, online, reload } = useSpades<any>('public', { t, events: '1' })
+  const { data, error, loading, online, reload } = useSpades<any>('public', { t, events: '1', games: '1' })
   if (loading && !data) return <Shell active="bracket"><Loading /></Shell>
+  if (data?.noEvent) return <Shell active="bracket" online={online} viewer={data?.viewer}><div className="sp-wrap grid gap-4"><h1 className="sp-display text-4xl">Scores</h1><LiveGames games={data.liveGames || []} /></div><NoEvents viewer={data?.viewer} /></Shell>
   if (!data?.tournament) return <Shell active="bracket" online={online}><div className="sp-wrap-narrow"><ErrorBox message={error || 'Not found'} onRetry={reload} /></div></Shell>
   const T = data.tournament
   const champ = T.championTeamId ? data.teams.find((x: any) => x.id === T.championTeamId) : null
@@ -19,6 +20,8 @@ function BracketView() {
   return (
     <Shell active="bracket" online={online} viewer={data.viewer}>
       <div className="sp-wrap grid gap-4">
+        <h1 className="sp-display text-4xl">Scores</h1>
+        <LiveGames games={data.liveGames || []} />
         {events.length > 1 && (
           <nav aria-label="Pick an event" className="grid gap-2">
             <span className="sp-label">Pick an event</span>
@@ -43,7 +46,7 @@ function BracketView() {
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <p className="sp-label" style={{ color: 'var(--sp-gold)' }}>{T.name}</p>
-            <h1 className="sp-display text-4xl mt-1">{T.useBracket ? 'Live bracket' : 'Games'}</h1>
+            <h2 className="sp-display text-3xl mt-1">{T.useBracket ? 'Tournament bracket' : 'Games'}</h2>
           </div>
           <div className="flex gap-2">
             {T.registrationOpen && !T.rosterLocked && <Link href={`/spades/register?t=${T.slug}`} className="sp-btn sp-btn-sm sp-btn-gold">Register</Link>}
@@ -72,6 +75,24 @@ function BracketView() {
         <p className="text-xs" style={{ color: 'var(--sp-dim)' }}>Scores update live as hands are scored.</p>
       </div>
     </Shell>
+  )
+}
+
+function LiveGames({ games }: { games: any[] }) {
+  if (!games.length) return null
+  return (
+    <section aria-label="Games being played" className="grid gap-2">
+      <h2 className="sp-display text-2xl">Games being played</h2>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {games.map(g => (
+          <div key={g.id} className="sp-card p-4" style={{ borderColor: 'var(--sp-green)' }}>
+            <div className="flex justify-between mb-1"><span className="sp-label">{g.handNumber ? `Hand ${g.handNumber}` : 'Live'} · to {g.target}</span><span className="sp-chip sp-chip-live"><span className="sp-dot sp-dot-pulse" />{g.status === 'paused' ? 'Paused' : 'Live'}</span></div>
+            <div className="flex justify-between font-bold text-lg"><span className="truncate">{g.teamA}</span><span className="sp-display sp-num">{g.scoreA}</span></div>
+            <div className="flex justify-between font-bold text-lg"><span className="truncate">{g.teamB}</span><span className="sp-display sp-num">{g.scoreB}</span></div>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
