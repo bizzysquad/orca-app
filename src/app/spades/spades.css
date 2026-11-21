@@ -1,0 +1,201 @@
+/* Spades HQ: Crooked Rumor retro print look on an R&B night palette.
+   Burgundy, cream, ink black, warm gold. Scoped under .sp-root. */
+
+.sp-root {
+  --sp-ink: #14090b;
+  --sp-night: #1c0d10;
+  --sp-surface: #26121a;
+  --sp-surface-2: #331822;
+  --sp-wine: #6e1426;
+  --sp-wine-hi: #9a1f37;
+  --sp-cream: #f3e7cf;
+  --sp-paper: #fff9ee;
+  --sp-muted: #c2ad90;
+  --sp-dim: #8f7b66;
+  --sp-gold: #e0ad4f;
+  --sp-green: #4cc27a;
+  --sp-red: #ff5a4e;
+  --sp-blue: #7fb4ff;
+  --sp-line: rgba(243, 231, 207, 0.18);
+  min-height: 100vh;
+  color: var(--sp-cream);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(154, 31, 55, 0.45), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(224, 173, 79, 0.12), transparent 60%),
+    var(--sp-ink);
+  font-family: var(--sp-font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  position: relative;
+  isolation: isolate;
+}
+.sp-root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: screen;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.9 0 0 0 0 0.8 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.sp-root ::selection { background: var(--sp-gold); color: var(--sp-ink); }
+
+.sp-display {
+  font-family: var(--sp-font-display), Impact, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 0.95;
+}
+.sp-serif { font-family: var(--sp-font-serif), Georgia, serif; }
+.sp-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sp-muted);
+}
+.sp-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+
+.sp-wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+.sp-wrap-narrow { width: 100%; max-width: 640px; margin: 0 auto; padding: 0 16px; }
+
+/* cards */
+.sp-card {
+  background: linear-gradient(180deg, var(--sp-surface-2), var(--sp-surface));
+  border: 2px solid var(--sp-line);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.sp-card-paper {
+  background: var(--sp-paper);
+  color: var(--sp-ink);
+  border: 3px solid var(--sp-ink);
+  border-radius: 16px;
+  box-shadow: 6px 6px 0 var(--sp-wine);
+}
+.sp-card-paper .sp-label { color: #6f6253; }
+
+/* buttons: chunky print style, 48px+ tall touch targets */
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px 20px;
+  border: 2px solid var(--sp-ink);
+  border-radius: 12px;
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--sp-cream);
+  color: var(--sp-ink);
+  box-shadow: 4px 4px 0 var(--sp-wine);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.15s ease;
+  text-align: center;
+}
+.sp-btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--sp-wine); }
+.sp-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: 4px 4px 0 var(--sp-wine); }
+.sp-btn-gold { background: var(--sp-gold); }
+.sp-btn-wine { background: var(--sp-wine-hi); color: var(--sp-paper); border-color: var(--sp-paper); box-shadow: 4px 4px 0 #000; }
+.sp-btn-ghost { background: transparent; color: var(--sp-cream); border-color: var(--sp-line); box-shadow: none; }
+.sp-btn-danger { background: var(--sp-red); color: #1a0505; }
+.sp-btn-sm { min-height: 40px; padding: 8px 14px; font-size: 13px; box-shadow: 3px 3px 0 var(--sp-wine); }
+.sp-btn-block { width: 100%; }
+
+/* inputs */
+.sp-input, .sp-select, .sp-textarea {
+  width: 100%;
+  min-height: 48px;
+  background: var(--sp-paper);
+  color: var(--sp-ink);
+  border: 2px solid var(--sp-ink);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 16px; /* stops iOS zoom */
+  outline: none;
+}
+.sp-textarea { min-height: 96px; resize: vertical; }
+.sp-input:focus, .sp-select:focus, .sp-textarea:focus { box-shadow: 0 0 0 3px var(--sp-gold); }
+.sp-field { display: grid; gap: 6px; }
+.sp-field > span { font-size: 13px; font-weight: 700; color: var(--sp-muted); }
+
+/* number pad */
+.sp-pad { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.sp-pad button {
+  min-height: 52px;
+  border-radius: 12px;
+  border: 2px solid var(--sp-line);
+  background: var(--sp-night);
+  color: var(--sp-cream);
+  font-family: var(--sp-font-display), Impact, sans-serif;
+  font-size: 22px;
+  cursor: pointer;
+}
+.sp-pad button[aria-pressed='true'] { background: var(--sp-gold); color: var(--sp-ink); border-color: var(--sp-gold); }
+.sp-pad button:disabled { opacity: 0.25; cursor: not-allowed; }
+@media (max-width: 360px) { .sp-pad { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+/* bracket: stacked on phones, one column per round from tablet up */
+@media (min-width: 768px) { .sp-bracket { grid-template-columns: repeat(var(--rounds, 3), minmax(0, 1fr)); } }
+
+/* chips */
+.sp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1.5px solid currentColor;
+  white-space: nowrap;
+}
+.sp-chip-live { color: var(--sp-green); }
+.sp-chip-warn { color: var(--sp-gold); }
+.sp-chip-bad { color: var(--sp-red); }
+.sp-chip-info { color: var(--sp-blue); }
+.sp-chip-dim { color: var(--sp-dim); }
+.sp-dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; display: inline-block; }
+.sp-dot-pulse { animation: sp-pulse 1.6s ease-in-out infinite; }
+@keyframes sp-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .sp-dot-pulse { animation: none; } }
+
+.sp-banner { border-radius: 12px; padding: 12px 14px; font-weight: 700; border: 2px solid; }
+.sp-banner-bad { background: rgba(255, 90, 78, 0.12); border-color: var(--sp-red); color: #ffd7d3; }
+.sp-banner-warn { background: rgba(224, 173, 79, 0.12); border-color: var(--sp-gold); color: #ffe9c2; }
+.sp-banner-ok { background: rgba(76, 194, 122, 0.12); border-color: var(--sp-green); color: #d4f7e1; }
+.sp-banner-info { background: rgba(127, 180, 255, 0.1); border-color: var(--sp-blue); color: #dbe9ff; }
+
+.sp-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sp-table th { text-align: left; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--sp-muted); padding: 8px 6px; border-bottom: 1px solid var(--sp-line); }
+.sp-table td { padding: 9px 6px; border-bottom: 1px solid rgba(243, 231, 207, 0.08); vertical-align: top; }
+.sp-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.sp-root a:focus-visible, .sp-root button:focus-visible, .sp-root summary:focus-visible { outline: 3px solid var(--sp-gold); outline-offset: 2px; }
+.sp-root details > summary { cursor: pointer; list-style: none; }
+.sp-root details > summary::-webkit-details-marker { display: none; }
+
+.sp-marquee { display: flex; width: max-content; animation: sp-marquee 40s linear infinite; }
+@keyframes sp-marquee { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .sp-marquee { animation: none; } }
+
+.sp-vinyl {
+  border-radius: 999px;
+  background: repeating-radial-gradient(circle at 50% 50%, #0b0506 0 2px, #1d0f12 2px 4px);
+  box-shadow: inset 0 0 0 2px rgba(243, 231, 207, 0.08);
+}
+
+@media print {
+  .sp-root { background: #fff !important; color: #000 !important; }
+  .sp-root::before { display: none; }
+  .sp-noprint { display: none !important; }
+  .sp-print-card { border: 2px solid #000 !important; background: #fff !important; color: #000 !important; box-shadow: none !important; break-inside: avoid; }
+  .sp-print-break { break-after: page; }
+}

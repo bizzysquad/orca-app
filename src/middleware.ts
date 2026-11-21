@@ -67,7 +67,11 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/maskoffdadj') ||
     pathname.startsWith('/bizzyplug') ||
     pathname.startsWith('/RSVP') ||
-    pathname.startsWith('/crookedrumor')
+    pathname.startsWith('/crookedrumor') ||
+    // Spades HQ has its own invitation / director sessions, enforced by
+    // /api/spades/* (see src/lib/spades/service.ts).
+    pathname === '/spades' ||
+    pathname.startsWith('/spades/')
   if (isPublicPage) {
     return NextResponse.next()
   }

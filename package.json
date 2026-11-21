@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "npx supabase db push",
-    "db:reset": "npx supabase db reset"
+    "db:reset": "npx supabase db reset",
+    "test:spades": "node --experimental-strip-types --no-warnings --test tests/spades/scoring.test.ts tests/spades/flow.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
