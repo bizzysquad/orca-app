@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { actorFrom, errorResponse, json, store } from '@/lib/spades/http'
-import { isDirector, isStaff } from '@/lib/spades/service'
+import { actAsPlayer, isDirector, isStaff } from '@/lib/spades/service'
 import { adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
 import type { TournamentRow } from '@/lib/spades/types'
 
@@ -11,8 +11,11 @@ export const runtime = 'nodejs'
 export async function GET(req: NextRequest) {
   try {
     const s = store()
-    const actor = await actorFrom(req, s)
+    let actor = await actorFrom(req, s)
     const sp = req.nextUrl.searchParams
+    // Test Mode: director previews exactly what a simulated player sees.
+    const as = sp.get('as')
+    if (as) actor = await actAsPlayer(s, actor, as)
     const view = sp.get('view') || 'public'
     let slug = sp.get('t')
     let t: TournamentRow | null = null
@@ -32,7 +35,7 @@ export async function GET(req: NextRequest) {
     const b = await loadBundle(s, t)
     const viewer = viewerInfo(actor, b)
     const tournaments = actor.kind === 'owner'
-      ? (await s.select<TournamentRow>('sp_tournaments', {}, { order: [{ col: 'created_at', asc: false }], limit: 100 })).map(x => ({ slug: x.slug, name: x.name, status: x.status }))
+      ? (await s.select<TournamentRow>('sp_tournaments', {}, { order: [{ col: 'created_at', asc: false }], limit: 100 })).map(x => ({ id: x.id, slug: x.slug, name: x.name, status: x.status, eventType: x.event_type || 'tournament', isTest: !!x.is_test, isFeatured: x.is_featured }))
       : undefined
 
     if (view === 'public') {

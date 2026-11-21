@@ -82,12 +82,12 @@ function Landing() {
       <section className="sp-wrap mt-6 grid md:grid-cols-3 gap-4">
         <div className="sp-card p-5">
           <p className="sp-label">Teams</p>
-          <p className="sp-display sp-num text-5xl mt-1">{data.registration.approved}<span className="text-2xl" style={{ color: 'var(--sp-dim)' }}>/{T.capacity}</span></p>
+          <p className="sp-display sp-num text-5xl mt-1">{data.registration.approved}<span className="text-2xl" style={{ color: 'var(--sp-dim)' }}>/{T.teamLimit}</span></p>
           <p className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>{data.registration.full ? 'Bracket is full' : 'Spots open'}{data.registration.waitlist ? ` · ${data.registration.waitlist} on the waitlist` : ''}</p>
         </div>
         <div className="sp-card p-5">
           <p className="sp-label">Format</p>
-          <p className="font-black text-xl mt-1">Doubles · Single elimination</p>
+          <p className="font-black text-xl mt-1">Doubles · {T.gamesToWin > 1 ? `Best of ${T.gamesToWin * 2 - 1}` : T.teamLimit <= 2 ? "One game" : "Single elimination"}</p>
           <p className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>Opening rounds to {T.rules.targetDefault}. Championship to {T.rules.targetFinal}. Joker deck.</p>
         </div>
         <div className="sp-card p-5">

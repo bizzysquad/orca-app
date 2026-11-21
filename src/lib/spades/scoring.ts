@@ -75,6 +75,7 @@ export function scoreHand(h: HandInput, before: { a: TeamTotals; b: TeamTotals }
 export interface VerifiedHand extends HandInput {
   id: string
   handNumber: number
+  game?: number
 }
 
 export interface MatchComputation {
@@ -131,4 +132,49 @@ export function validBooks(booksA: unknown, booksB: unknown): boolean {
     Number.isInteger(booksA) && Number.isInteger(booksB) &&
     booksA >= 0 && booksB >= 0 && booksA + booksB === 13
   )
+}
+
+export interface SeriesState {
+  games: { game: number; comp: MatchComputation; winner: Side | null; decided: boolean }[]
+  winsA: number
+  winsB: number
+  currentGame: number
+  current: { a: TeamTotals; b: TeamTotals }
+  done: boolean
+  winner: Side | null
+  tiebreak: boolean
+}
+
+// Best of N: each game plays to the target with fresh scores and bags. A
+// game is decided the moment a verified hand puts a team past the target
+// with the higher score. The series ends when a team reaches gamesToWin.
+// (Series games ignore the match clock.)
+export function computeSeries(hands: VerifiedHand[], rules: Rules, target: number): SeriesState {
+  const maxGame = hands.reduce((m, h) => Math.max(m, h.game || 1), 1)
+  const games: SeriesState['games'] = []
+  let winsA = 0
+  let winsB = 0
+  let currentGame = 0
+  let tiebreak = false
+  for (let g = 1; g <= maxGame; g++) {
+    const comp = computeMatch(hands.filter(h => (h.game || 1) === g), rules)
+    const out = matchOutcome(comp.a.total, comp.b.total, target, false)
+    games.push({ game: g, comp, winner: out.winner, decided: out.done })
+    if (out.done) {
+      if (out.winner === 'a') winsA++
+      else winsB++
+    } else if (!currentGame) {
+      currentGame = g
+      tiebreak = out.tiebreak
+    }
+  }
+  const done = winsA >= rules.gamesToWin || winsB >= rules.gamesToWin
+  if (!currentGame) currentGame = done ? maxGame : maxGame + 1
+  const cur = games.find(x => x.game === currentGame)
+  const zero = { total: 0, bags: rules.initialBags }
+  return {
+    games, winsA, winsB, currentGame,
+    current: cur ? { a: cur.comp.a, b: cur.comp.b } : { a: zero, b: { ...zero } },
+    done, winner: done ? (winsA > winsB ? 'a' : 'b') : null, tiebreak,
+  }
 }

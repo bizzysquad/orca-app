@@ -13,13 +13,13 @@
 // from verified hands by scoring.ts every time a hand changes.
 
 import { normalizeRules, type Rules } from './rules.ts'
-import { computeMatch, elapsedMs, matchOutcome, validBid, validBooks, type Side, type VerifiedHand } from './scoring.ts'
+import { computeMatch, computeSeries, elapsedMs, matchOutcome, validBid, validBooks, type SeriesState, type Side, type VerifiedHand } from './scoring.ts'
 import { generateBracket as buildBracket, isPowerOfTwo, nextSlot, shuffle, totalRounds } from './bracket.ts'
 import { StoreError, type Store } from './store.ts'
 import { cryptoRandom, formatCode, hashToken, isAccessCode, newAccessCode, newToken, normalizeCode } from './tokens.ts'
 import type {
   ApprovalRow, BidRow, DisputeKind, DisputeRow, HandRow, InviteRow, MatchRow, PlayerRow, ReportRow,
-  SessionRow, StaffRow, TableRow, TeamRow, TeamStatus, TournamentRow,
+  BidControl, EventType, SessionRow, StaffRow, TableRow, TeamRow, TeamStatus, TournamentRow,
 } from './types.ts'
 
 export class SpadesError extends Error {
@@ -170,14 +170,32 @@ export function biddingOrder(dealerPos: number): number[] {
   return [1, 2, 3, 4].map(i => (dealerPos + i) % 4)
 }
 
-interface MatchCtx { match: MatchRow; players: PlayerRow[]; table: TableRow | null; rules: Rules }
+interface MatchCtx { match: MatchRow; players: PlayerRow[]; teams: TeamRow[]; table: TableRow | null; rules: Rules }
 
 async function loadMatchCtx(store: Store, matchId: string): Promise<MatchCtx> {
   const match = await one<MatchRow>(store, 'sp_matches', { id: matchId }, 'Match not found')
   const teamIds = [match.team_a_id, match.team_b_id].filter(Boolean) as string[]
   const players = teamIds.length ? await store.select<PlayerRow>('sp_players', { team_id: { in: teamIds } }) : []
+  const teams = teamIds.length ? await store.select<TeamRow>('sp_teams', { id: { in: teamIds } }) : []
   const table = match.table_id ? await maybe<TableRow>(store, 'sp_tables', { id: match.table_id }) : null
-  return { match, players, table, rules: normalizeRules(match.rules) }
+  return { match, players, teams, table, rules: normalizeRules(match.rules) }
+}
+
+// Who enters a team's bids: the captain for both partners, or each player.
+// Teams choose this themselves; older teams fall back to the event default.
+export function teamControl(team: TeamRow | undefined, rules: Rules): BidControl {
+  if (team?.bid_control === 'captain' || team?.bid_control === 'individual') return team.bid_control
+  return rules.biddingMode === 'individual' ? 'individual' : 'captain'
+}
+
+export function limitOf(t: TournamentRow): number {
+  return t.team_limit || t.capacity
+}
+
+export function nextPow2(n: number): number {
+  let c = 2
+  while (c < n) c *= 2
+  return c
 }
 
 async function loadHandCtx(store: Store, handId: unknown) {
@@ -212,7 +230,7 @@ function timeExpired(match: MatchRow, now: Date): boolean {
 // ─── bidding ────────────────────────────────────────────────────────────────
 
 export async function submitBids(store: Store, actor: Actor, input: { handId: string; bids: { playerId: string; bid: number }[] }) {
-  const { hand, match, players, table, rules } = await loadHandCtx(store, input.handId)
+  const { hand, match, players, teams, table, rules } = await loadHandCtx(store, input.handId)
   const staff = supervisesTable(actor, match.tournament_id, table)
   if (!staff) requirePlayerInMatch(actor, match)
   if (hand.status !== 'bidding') fail(409, 'Bids for this hand are already locked')
@@ -230,14 +248,18 @@ export async function submitBids(store: Store, actor: Actor, input: { handId: st
   }
 
   let mySide: Side | null = null
+  let myControl: BidControl | null = null
   if (!staff && actor.kind === 'player') {
     mySide = sideOfTeam(match, actor.teamId)
-    if (rules.biddingMode === 'individual') {
-      if (entries.length !== 1 || entries[0].playerId !== actor.playerId) fail(403, 'You can only enter your own bid')
-    } else {
-      if (!actor.isCaptain) fail(403, 'Your team captain enters the bids in this match')
-      const mine = seats.filter(s => s.teamId === actor.teamId).map(s => s.playerId)
-      if (entries.length !== 2 || !mine.every(id => seen.has(id))) fail(400, 'Enter a bid for both partners')
+    myControl = teamControl(teams.find(t => t.id === actor.teamId), rules)
+    const mine = seats.filter(s => s.teamId === actor.teamId).map(s => s.playerId)
+    if (!entries.every(e => mine.includes(e.playerId))) fail(403, 'You can only enter bids for your own team')
+    if (myControl === 'captain') {
+      if (!actor.isCaptain) fail(403, 'Your captain enters the bids for your team')
+      if (entries.length !== 2) fail(400, 'Enter a bid for both partners')
+    } else if (!actor.isCaptain && (entries.length !== 1 || entries[0].playerId !== actor.playerId)) {
+      // Each-player teams: you enter your own bid. The captain may also fill in for a partner who is away.
+      fail(403, 'You can only enter your own bid')
     }
   }
 
@@ -249,7 +271,7 @@ export async function submitBids(store: Store, actor: Actor, input: { handId: st
     const order = biddingOrder(hand.dealer_pos)
     const has = (pos: number) => after.has(seats[pos].playerId)
     const hadBefore = (pos: number) => current.some(b => b.player_id === seats[pos].playerId)
-    if (rules.biddingMode === 'captain') {
+    if (myControl === 'captain' || entries.length > 1) {
       const firstSide = seats[order[0]].side
       if (mySide !== firstSide) {
         const firstDone = seats.filter(s => s.side === firstSide).every(s => current.some(b => b.player_id === s.playerId))
@@ -275,7 +297,7 @@ export async function submitBids(store: Store, actor: Actor, input: { handId: st
     if (!ids.every(id => after.has(id))) continue
     const sum = ids.reduce((s, id) => s + (after.get(id) || 0), 0)
     if (sum < rules.minTeamBid) {
-      if (!staff && rules.biddingMode === 'individual' && actor.kind === 'player') {
+      if (!staff && myControl === 'individual' && actor.kind === 'player' && entries.length === 1) {
         const partner = ids.find(id => id !== actor.playerId)!
         const need = rules.minTeamBid - (after.get(partner) || 0)
         fail(400, `Your team must bid at least ${rules.minTeamBid} combined. Your partner bid ${after.get(partner)}, so bid ${need} or more.`)
@@ -515,18 +537,21 @@ async function loadVerifiedHands(store: Store, match: MatchRow): Promise<Verifie
       booksA: h.books_a ?? 0,
       booksB: h.books_b ?? 0,
       renegeSide: sideOfTeam(match, h.renege_team_id),
+      game: h.game_number || 1,
     }
   })
 }
 
-export async function recomputeMatch(store: Store, matchId: string) {
+export async function recomputeMatch(store: Store, matchId: string): Promise<{ a: { total: number; bags: number }; b: { total: number; bags: number }; series: SeriesState | null }> {
   const match = await one<MatchRow>(store, 'sp_matches', { id: matchId })
   const rules = normalizeRules(match.rules)
   const hands = await loadVerifiedHands(store, match)
-  const comp = computeMatch(hands, rules)
+  const series = rules.gamesToWin > 1 ? computeSeries(hands, rules, match.target) : null
+  const comp = series ? null : computeMatch(hands, rules)
+  const allRows = series ? series.games.flatMap(g => g.comp.rows) : comp!.rows
   await store.remove('sp_score_ledger', { match_id: matchId })
   const rows: Record<string, any>[] = []
-  for (const r of comp.rows) {
+  for (const r of allRows) {
     for (const side of ['a', 'b'] as Side[]) {
       const t = r[side]
       rows.push({
@@ -537,10 +562,21 @@ export async function recomputeMatch(store: Store, matchId: string) {
     }
   }
   if (rows.length) await store.insert('sp_score_ledger', rows)
+  if (series) {
+    // Show the game in progress, or the deciding game once the series is over.
+    const shown = series.games.find(g => g.game === series.currentGame)?.comp || (series.done && series.games.length ? series.games[series.games.length - 1].comp : null)
+    const a = shown ? shown.a : { total: 0, bags: rules.initialBags }
+    const b = shown ? shown.b : { total: 0, bags: rules.initialBags }
+    await store.update('sp_matches', { id: matchId }, {
+      score_a: a.total, score_b: b.total, bags_a: a.bags, bags_b: b.bags, hands_verified: allRows.length,
+      games_a: series.winsA, games_b: series.winsB, current_game: series.currentGame,
+    })
+    return { a, b, series }
+  }
   await store.update('sp_matches', { id: matchId }, {
-    score_a: comp.a.total, score_b: comp.b.total, bags_a: comp.a.bags, bags_b: comp.b.bags, hands_verified: comp.rows.length,
+    score_a: comp!.a.total, score_b: comp!.b.total, bags_a: comp!.a.bags, bags_b: comp!.b.bags, hands_verified: comp!.rows.length,
   })
-  return comp
+  return { a: comp!.a, b: comp!.b, series: null }
 }
 
 async function openNextHand(store: Store, match: MatchRow, tiebreak: boolean) {
@@ -548,11 +584,14 @@ async function openNextHand(store: Store, match: MatchRow, tiebreak: boolean) {
   if (open) return
   const last = await store.select<HandRow>('sp_hands', { match_id: match.id }, { order: [{ col: 'hand_number', asc: false }], limit: 1 })
   const n = (last[0]?.hand_number || 0) + 1
+  const fresh = await one<MatchRow>(store, 'sp_matches', { id: match.id })
+  const series = normalizeRules(fresh.rules).gamesToWin > 1
   try {
     await store.insert('sp_hands', {
       id: uid(), tournament_id: match.tournament_id, match_id: match.id, hand_number: n, status: 'bidding',
       dealer_pos: (n - 1) % 4, is_tiebreak: tiebreak, bids_locked_at: null, books_a: null, books_b: null,
       renege_team_id: null, ruling: null, verified_at: null, version: 1, created_at: nowIso(store),
+      ...(series ? { game_number: fresh.current_game || 1 } : {}),
     })
   } catch (err) {
     if (!(err instanceof StoreError && err.code === 'unique')) throw err
@@ -562,6 +601,23 @@ async function openNextHand(store: Store, match: MatchRow, tiebreak: boolean) {
 async function afterVerification(store: Store, actor: Actor, matchId: string) {
   const match = await one<MatchRow>(store, 'sp_matches', { id: matchId })
   if (match.status !== 'live' && match.status !== 'paused') return
+  const rules = normalizeRules(match.rules)
+  if (rules.gamesToWin > 1) {
+    const st = computeSeries(await loadVerifiedHands(store, match), rules, match.target)
+    if (st.done) {
+      const winner = teamOfSide(match, st.winner!)
+      const upd = await store.update('sp_matches', { id: matchId, version: match.version }, {
+        status: 'completed', winner_team_id: winner, result_kind: 'played', completed_at: nowIso(store), version: match.version + 1,
+        ...(match.paused_at ? { paused_at: null, paused_ms: match.paused_ms + (store.now().getTime() - new Date(match.paused_at).getTime()) } : {}),
+      })
+      if (upd.length) await audit(store, actor, { tournamentId: match.tournament_id, matchId, action: 'match.completed', after: { winner, gamesA: st.winsA, gamesB: st.winsB, reason: 'series' } })
+      return
+    }
+    const prevGame = match.current_game || 1
+    if (st.currentGame > prevGame) await audit(store, actor, { tournamentId: match.tournament_id, matchId, action: 'series.game_won', after: { game: prevGame, gamesA: st.winsA, gamesB: st.winsB } })
+    await openNextHand(store, match, st.tiebreak)
+    return
+  }
   const outcome = matchOutcome(match.score_a, match.score_b, match.target, timeExpired(match, store.now()))
   if (outcome.done) {
     const winner = teamOfSide(match, outcome.winner!)
@@ -657,11 +713,19 @@ async function applyRuling(store: Store, actor: Actor, handId: string, ruling: R
       booksA: hasBooks ? ruling.booksA! : h.booksA, booksB: hasBooks ? ruling.booksB! : h.booksB,
       renegeSide: ruling.renegeTeamId !== undefined ? sideOfTeam(match, ruling.renegeTeamId) : h.renegeSide,
     })
-    const comp = computeMatch(edited, rules)
     if (match.result_kind === 'played') {
-      const out = matchOutcome(comp.a.total, comp.b.total, match.target, true)
-      if (!out.done) fail(409, 'This correction would leave the finalized match tied. Reset the match instead.')
-      const w = teamOfSide(match, out.winner!)
+      let winSide: Side
+      if (rules.gamesToWin > 1) {
+        const st = computeSeries(edited, rules, match.target)
+        if (!st.done) fail(409, 'This correction would leave the finalized series undecided. Reset the match instead.')
+        winSide = st.winner!
+      } else {
+        const comp = computeMatch(edited, rules)
+        const out = matchOutcome(comp.a.total, comp.b.total, match.target, true)
+        if (!out.done) fail(409, 'This correction would leave the finalized match tied. Reset the match instead.')
+        winSide = out.winner!
+      }
+      const w = teamOfSide(match, winSide)
       if (w !== match.winner_team_id) {
         const ns = nextSlot(match.round, match.slot, await roundsOf(store, match.tournament_id))
         if (ns) {
@@ -710,7 +774,7 @@ async function applyRuling(store: Store, actor: Actor, handId: string, ruling: R
 
   if (hand.status === 'verified') {
     const comp = await recomputeMatch(store, match.id)
-    await reconcileAfterCorrection(store, actor, match.id, comp.a.total, comp.b.total, finalWinnerChange, reason)
+    await reconcileAfterCorrection(store, actor, match.id, comp, finalWinnerChange, reason)
   } else if (hand.status === 'bidding' && ruling.bids) {
     await tryLockBids(store, actor, hand.id, seats, rules)
   } else if (hand.status === 'review' && ruling.bids) {
@@ -723,10 +787,13 @@ async function roundsOf(store: Store, tournamentId: string): Promise<number> {
   return totalRounds(t.capacity)
 }
 
-async function reconcileAfterCorrection(store: Store, actor: Actor, matchId: string, scoreA: number, scoreB: number, finalWinnerChange: string | null, reason: string) {
+async function reconcileAfterCorrection(store: Store, actor: Actor, matchId: string, comp: Awaited<ReturnType<typeof recomputeMatch>>, finalWinnerChange: string | null, reason: string) {
   const match = await one<MatchRow>(store, 'sp_matches', { id: matchId })
+  if (match.result_note?.startsWith('Ended by director')) return
   if (match.status === 'completed' && match.result_kind === 'played') {
-    const out = matchOutcome(scoreA, scoreB, match.target, timeExpired(match, store.now()))
+    const out = comp.series
+      ? { done: comp.series.done, winner: comp.series.winner, tiebreak: comp.series.tiebreak }
+      : matchOutcome(comp.a.total, comp.b.total, match.target, timeExpired(match, store.now()))
     if (out.done) {
       const w = teamOfSide(match, out.winner!)
       if (w !== match.winner_team_id) {
@@ -806,7 +873,7 @@ export async function voidHand(store: Store, actor: Actor, input: { handId: stri
   for (const d of openDisputes) await store.update('sp_disputes', { id: d.id }, { status: 'resolved', resolution: `Hand voided: ${reason}`, resolved_by_name: actorName(actor), resolved_at: nowIso(store) })
   if (hand.status === 'verified') {
     const comp = await recomputeMatch(store, match.id)
-    await reconcileAfterCorrection(store, actor, match.id, comp.a.total, comp.b.total, null, reason)
+    await reconcileAfterCorrection(store, actor, match.id, comp, null, reason)
   }
   const fresh = await one<MatchRow>(store, 'sp_matches', { id: match.id })
   if (fresh.status === 'live' || fresh.status === 'paused') await openNextHand(store, fresh, false)
@@ -956,8 +1023,10 @@ export async function finalizeMatch(store: Store, actor: Actor, input: { matchId
   const open = await store.count('sp_disputes', { match_id: match.id, status: 'open' })
   if (open) fail(409, 'Resolve open disputes on this match before finalizing')
   const comp = await recomputeMatch(store, match.id)
-  const out = matchOutcome(comp.a.total, comp.b.total, match.target, true)
-  if (!out.done || teamOfSide(match, out.winner!) !== match.winner_team_id) fail(409, 'Scores do not match the recorded winner. Review the hands first.')
+  if (!match.result_note?.startsWith('Ended by director')) {
+    const out = comp.series ? { done: comp.series.done, winner: comp.series.winner } : matchOutcome(comp.a.total, comp.b.total, match.target, true)
+    if (!out.done || teamOfSide(match, out.winner!) !== match.winner_team_id) fail(409, 'Scores do not match the recorded winner. Review the hands first.')
+  }
   const upd = await store.update('sp_matches', { id: match.id, version: match.version, status: 'completed' }, { status: 'final', finalized_at: nowIso(store), version: match.version + 1 })
   if (!upd.length) fail(409, 'This match changed on another device. Refresh and try again.')
   await placeInNext(store, match, match.winner_team_id!)
@@ -1014,16 +1083,22 @@ export async function resetMatch(store: Store, actor: Actor, input: { matchId: s
     completed_at: null, completion_verified_by: null, finalized_at: null, version: match.version + 1,
   })
   await recomputeMatch(store, match.id)
+  try { await store.update('sp_matches', { id: match.id }, { games_a: 0, games_b: 0, current_game: 1 }) } catch { /* v3 not migrated */ }
   await clearReady(store, match.id)
   await audit(store, actor, { tournamentId: match.tournament_id, matchId: match.id, action: 'match.reset', reason, before: { status: match.status, winner: match.winner_team_id, scoreA: match.score_a, scoreB: match.score_b } })
   await touch(store, match.tournament_id)
   return { ok: true }
 }
 
-export async function editMatch(store: Store, actor: Actor, input: { matchId: string; target?: number; timeLimitMin?: number; tableId?: string | null }) {
+export async function editMatch(store: Store, actor: Actor, input: { matchId: string; target?: number; timeLimitMin?: number; tableId?: string | null; scheduledAt?: string | null }) {
   const match = await one<MatchRow>(store, 'sp_matches', { id: input.matchId }, 'Match not found')
   requireDirector(actor, match.tournament_id)
   const patch: Record<string, any> = {}
+  if (input.scheduledAt !== undefined) {
+    if (input.scheduledAt && Number.isNaN(Date.parse(input.scheduledAt))) fail(400, 'Start time is not a valid date')
+    if (!['pending', 'ready'].includes(match.status)) fail(409, 'This game already began')
+    patch.scheduled_at = input.scheduledAt ? new Date(input.scheduledAt).toISOString() : null
+  }
   if (input.target !== undefined) {
     if (!Number.isInteger(input.target) || input.target < 10 || input.target > 2000) fail(400, 'Target must be 10 to 2000')
     if (!['pending', 'ready'].includes(match.status)) fail(409, 'Target can only change before the match starts')
@@ -1046,7 +1121,72 @@ export async function editMatch(store: Store, actor: Actor, input: { matchId: st
   }
   if (!Object.keys(patch).length) return { ok: true }
   await store.update('sp_matches', { id: match.id }, { ...patch, version: match.version + 1 })
-  await audit(store, actor, { tournamentId: match.tournament_id, matchId: match.id, action: 'match.edit', before: { target: match.target, timeLimitMin: match.time_limit_min, tableId: match.table_id }, after: patch })
+  await audit(store, actor, { tournamentId: match.tournament_id, matchId: match.id, action: 'match.edit', before: { target: match.target, timeLimitMin: match.time_limit_min, tableId: match.table_id, scheduledAt: match.scheduled_at ?? null }, after: patch })
+  await touch(store, match.tournament_id)
+  return { ok: true }
+}
+
+// Sets one start time for every game in a round that has not begun.
+export async function scheduleRound(store: Store, actor: Actor, input: { tournamentId: string; round: number; scheduledAt: string | null; autoStart?: boolean }) {
+  requireDirector(actor, input.tournamentId)
+  if (input.scheduledAt && Number.isNaN(Date.parse(input.scheduledAt))) fail(400, 'Start time is not a valid date')
+  const ms = await store.select<MatchRow>('sp_matches', { tournament_id: input.tournamentId, round: input.round, status: { in: ['pending', 'ready'] } })
+  const at = input.scheduledAt ? new Date(input.scheduledAt).toISOString() : null
+  for (const m of ms) await store.update('sp_matches', { id: m.id }, { scheduled_at: at })
+  if (input.autoStart !== undefined) await store.update('sp_tournaments', { id: input.tournamentId }, { auto_start: !!input.autoStart })
+  await audit(store, actor, { tournamentId: input.tournamentId, action: 'round.schedule', after: { round: input.round, scheduledAt: at, autoStart: input.autoStart } })
+  await touch(store, input.tournamentId)
+  return { ok: true, updated: ms.length }
+}
+
+// Starts any game whose scheduled time has passed, when the event has
+// automatic start on. Called from the pulse endpoint, so it runs as soon as
+// any screen is open. Failures (for example no free table) are retried on
+// the next pulse and do not spam the audit log.
+export async function autoStartDue(store: Store, t: TournamentRow): Promise<number> {
+  if (!t.auto_start || !t.bracket_published) return 0
+  const due = await store.select<MatchRow>('sp_matches', { tournament_id: t.id, status: 'ready', scheduled_at: { lt: store.now().toISOString() } })
+  let started = 0
+  const system: Actor = { kind: 'owner', name: 'Scheduled start' }
+  for (const m of due) {
+    try {
+      if (!m.table_id) {
+        const tables = await store.select<TableRow>('sp_tables', { tournament_id: t.id }, { order: [{ col: 'number' }] })
+        const busy = new Set((await store.select<MatchRow>('sp_matches', { tournament_id: t.id, status: { in: ['live', 'paused', 'completed'] } })).map(x => x.table_id))
+        const free = tables.find(tb => !busy.has(tb.id))
+        if (!free) continue
+        await store.update('sp_matches', { id: m.id }, { table_id: free.id })
+      }
+      await startMatch(store, system, { matchId: m.id })
+      started++
+    } catch (err) {
+      console.warn('[spades] auto start skipped', m.id, err instanceof Error ? err.message : err)
+    }
+  }
+  return started
+}
+
+// Director ends a running game early. The leader wins (series: more games
+// won, then the current game score). A tie has to be played out or forfeited.
+export async function endMatchNow(store: Store, actor: Actor, input: { matchId: string; reason: string }) {
+  const reason = cleanText(input.reason, 'Reason', 500)
+  const match = await one<MatchRow>(store, 'sp_matches', { id: input.matchId }, 'Match not found')
+  requireDirector(actor, match.tournament_id)
+  if (!['live', 'paused'].includes(match.status)) fail(409, 'Only a game in progress can be ended')
+  const comp = await recomputeMatch(store, match.id)
+  let side: Side | null = null
+  if (comp.series && comp.series.winsA !== comp.series.winsB) side = comp.series.winsA > comp.series.winsB ? 'a' : 'b'
+  else if (comp.a.total !== comp.b.total) side = comp.a.total > comp.b.total ? 'a' : 'b'
+  if (!side) fail(409, 'The score is tied. Play another hand, or record a forfeit.')
+  const openHands = await store.select<HandRow>('sp_hands', { match_id: match.id, status: { in: ['bidding', 'playing', 'review', 'disputed'] } })
+  for (const h of openHands) await store.update('sp_hands', { id: h.id }, { status: 'void', ruling: `Game ended by director: ${reason}`, version: h.version + 1 })
+  const fresh = await one<MatchRow>(store, 'sp_matches', { id: match.id })
+  const upd = await store.update('sp_matches', { id: match.id, version: fresh.version }, {
+    status: 'completed', winner_team_id: teamOfSide(match, side), result_kind: 'played', result_note: `Ended by director: ${reason}`,
+    completed_at: nowIso(store), paused_at: null, version: fresh.version + 1,
+  })
+  if (!upd.length) fail(409, 'This match changed on another device. Refresh and try again.')
+  await audit(store, actor, { tournamentId: match.tournament_id, matchId: match.id, action: 'match.ended_early', reason, after: { winner: teamOfSide(match, side), scoreA: comp.a.total, scoreB: comp.b.total } })
   await touch(store, match.tournament_id)
   return { ok: true }
 }
@@ -1057,19 +1197,38 @@ export function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
 }
 
-export async function createTournament(store: Store, actor: Actor, input: { name: string; slug?: string; capacity?: number; startsAt?: string; venue?: string; address?: string }) {
-  if (actor.kind !== 'owner') fail(403, 'Only the site owner can create tournaments')
-  const name = cleanText(input.name, 'Tournament name', 120)
-  const slug = slugify(input.slug || name)
-  if (!slug) fail(400, 'Tournament slug is required')
-  const capacity = input.capacity ?? 8
-  if (!isPowerOfTwo(capacity) || capacity > 64) fail(400, 'Team capacity must be 2, 4, 8, 16, 32 or 64')
+const EVENT_TYPES: EventType[] = ['tournament', 'small', 'exhibition', 'series', 'custom', 'test']
+
+export async function createTournament(store: Store, actor: Actor, input: {
+  name: string; slug?: string; capacity?: number; teamLimit?: number; startsAt?: string; venue?: string; address?: string
+  eventType?: EventType; gamesToWin?: number; targetDefault?: number; targetFinal?: number
+}) {
+  if (actor.kind !== 'owner') fail(403, 'Only the site owner can create events')
+  const name = cleanText(input.name, 'Event name', 120)
+  const eventType: EventType = input.eventType && EVENT_TYPES.includes(input.eventType) ? input.eventType : 'tournament'
+  let slug = slugify(input.slug || name)
+  if (!slug) fail(400, 'Event link is required')
+  if (eventType === 'test') slug = `test-${slug.slice(0, 40)}-${Math.floor(cryptoRandom() * 1e6).toString(36)}`
+  const presetLimit: Partial<Record<EventType, number>> = { exhibition: 2, series: 2, test: 2 }
+  const limit = presetLimit[eventType] ?? input.teamLimit ?? input.capacity ?? 8
+  if (!Number.isInteger(limit) || limit < 2 || limit > 64) fail(400, 'Number of teams must be 2 to 64')
+  if (eventType === 'small' && ![2, 4, 6].includes(limit)) fail(400, 'A small tournament has 2, 4 or 6 teams')
+  const capacity = nextPow2(limit)
+  const short = eventType === 'exhibition' || eventType === 'series' || eventType === 'test'
+  const rules = normalizeRules({
+    gamesToWin: eventType === 'series' ? input.gamesToWin ?? 2 : eventType === 'custom' ? input.gamesToWin ?? 1 : 1,
+    targetDefault: input.targetDefault ?? 250,
+    targetFinal: input.targetFinal ?? (short ? input.targetDefault ?? 250 : 350),
+  })
   const row = {
     id: uid(), slug, name, subtitle: null, venue: input.venue ? cleanText(input.venue, 'Venue', 120) : null,
     address: input.address ? cleanText(input.address, 'Address', 200) : null, timezone: 'America/New_York',
-    starts_at: input.startsAt || null, ends_at: null, schedule_note: null, award: null, status: 'draft', capacity,
-    registration_open: false, waitlist_enabled: true, roster_locked: false, bracket_published: false, is_featured: false,
-    champion_team_id: null, rules: normalizeRules({}), pulse: uid(), created_at: nowIso(store), updated_at: nowIso(store),
+    starts_at: input.startsAt || null, ends_at: null, schedule_note: null, award: null,
+    status: eventType === 'test' ? 'registration' : 'draft', capacity,
+    registration_open: false, waitlist_enabled: eventType !== 'exhibition' && eventType !== 'series' && eventType !== 'test',
+    roster_locked: false, bracket_published: false, is_featured: false,
+    champion_team_id: null, rules, pulse: uid(), created_at: nowIso(store), updated_at: nowIso(store),
+    event_type: eventType, is_test: eventType === 'test', team_limit: limit, auto_start: false,
   }
   try {
     await store.insert('sp_tournaments', row)
@@ -1077,7 +1236,7 @@ export async function createTournament(store: Store, actor: Actor, input: { name
     if (err instanceof StoreError && err.code === 'unique') fail(409, 'A tournament with that link already exists')
     throw err
   }
-  await audit(store, actor, { tournamentId: row.id, action: 'tournament.create', after: { name, slug, capacity } })
+  await audit(store, actor, { tournamentId: row.id, action: 'tournament.create', after: { name, slug, eventType, teamLimit: limit, gamesToWin: rules.gamesToWin } })
   return { ok: true, id: row.id, slug }
 }
 
@@ -1096,14 +1255,17 @@ export async function updateTournament(store: Store, actor: Actor, input: { tour
     } else patch[k] = p[k] === null || p[k] === '' ? (k === 'name' ? fail(400, 'Name is required') : null) : cleanText(p[k], k, k === 'name' ? 120 : 300)
   }
   if (p.rules !== undefined) patch.rules = normalizeRules({ ...normalizeRules(t.rules), ...p.rules })
-  if (p.capacity !== undefined) {
-    if (!isPowerOfTwo(p.capacity) || p.capacity > 64) fail(400, 'Team capacity must be 2, 4, 8, 16, 32 or 64')
+  const newLimit = p.team_limit ?? p.capacity
+  if (newLimit !== undefined) {
+    if (!Number.isInteger(newLimit) || newLimit < 2 || newLimit > 64) fail(400, 'Number of teams must be 2 to 64')
     const n = await store.count('sp_matches', { tournament_id: t.id })
-    if (n) fail(409, 'Capacity cannot change after the bracket is generated')
+    if (n) fail(409, 'The team limit cannot change after the bracket is drawn')
     const approved = await store.count('sp_teams', { tournament_id: t.id, status: 'approved' })
-    if (approved > p.capacity) fail(409, 'More approved teams than the new capacity')
-    patch.capacity = p.capacity
+    if (approved > newLimit) fail(409, 'More approved teams than the new limit')
+    patch.team_limit = newLimit
+    patch.capacity = nextPow2(newLimit)
   }
+  if (p.auto_start !== undefined) patch.auto_start = !!p.auto_start
   if (p.registration_open !== undefined) {
     if (p.registration_open && t.roster_locked) fail(409, 'Unlock the roster before reopening registration')
     patch.registration_open = !!p.registration_open
@@ -1150,7 +1312,7 @@ export async function setRosterLock(store: Store, actor: Actor, input: { tournam
   const existing = await store.count('sp_matches', { tournament_id: t.id })
   if (!existing && input.generate !== false) {
     const approved = await store.count('sp_teams', { tournament_id: t.id, status: 'approved' })
-    if (approved > t.capacity / 2) {
+    if (approved >= 2) {
       await generateBracket(store, actor, { tournamentId: t.id, mode: 'random' })
       generated = true
     }
@@ -1159,7 +1321,7 @@ export async function setRosterLock(store: Store, actor: Actor, input: { tournam
   return { ok: true, generated }
 }
 
-interface TeamInput { name: string; player1: string; player2: string; captainSeat?: number; contact?: string }
+interface TeamInput { name: string; player1: string; player2: string; captainSeat?: number; contact?: string; bidControl?: BidControl }
 
 export async function registerTeam(store: Store, actor: Actor, input: { tournamentId: string } & TeamInput) {
   const t = await one<TournamentRow>(store, 'sp_tournaments', { id: input.tournamentId }, 'Tournament not found')
@@ -1182,15 +1344,18 @@ export async function registerTeam(store: Store, actor: Actor, input: { tourname
 
   const approved = existingTeams.filter(x => x.status === 'approved').length
   const pending = existingTeams.filter(x => x.status === 'pending').length
+  const limit = limitOf(t)
   let status: TeamStatus
-  if (director) status = approved < t.capacity ? 'approved' : t.waitlist_enabled ? 'waitlist' : fail(409, 'The tournament is full')
-  else status = approved + pending < t.capacity ? 'pending' : t.waitlist_enabled ? 'waitlist' : fail(409, 'Registration is full')
+  if (director) status = approved < limit ? 'approved' : t.waitlist_enabled ? 'waitlist' : fail(409, 'The event is full')
+  else status = approved + pending < limit ? 'pending' : t.waitlist_enabled ? 'waitlist' : fail(409, 'Registration is full')
+  const bidControl: BidControl = input.bidControl === 'individual' || input.bidControl === 'captain'
+    ? input.bidControl : normalizeRules(t.rules).biddingMode === 'individual' ? 'individual' : 'captain'
 
   const teamId = uid()
   const p1Id = uid()
   const p2Id = uid()
   try {
-    await store.insert('sp_teams', { id: teamId, tournament_id: t.id, name, name_key: nameKey(name), status, seed: null, contact, checked_in_at: null, created_at: nowIso(store) })
+    await store.insert('sp_teams', { id: teamId, tournament_id: t.id, name, name_key: nameKey(name), status, seed: null, contact, checked_in_at: null, created_at: nowIso(store), bid_control: bidControl })
   } catch (err) {
     if (err instanceof StoreError && err.code === 'unique') fail(409, 'That team name is already taken')
     throw err
@@ -1263,7 +1428,7 @@ export async function setTeamStatus(store: Store, actor: Actor, input: { teamId:
   if (t.roster_locked) fail(409, 'The roster is locked')
   if (input.status === 'approved' && team.status !== 'approved') {
     const approved = await store.count('sp_teams', { tournament_id: t.id, status: 'approved' })
-    if (approved >= t.capacity) fail(409, `Already ${t.capacity} approved teams. Move one to the waitlist first.`)
+    if (approved >= limitOf(t)) fail(409, `Already ${limitOf(t)} approved teams. Move one to the waitlist first.`)
   }
   await store.update('sp_teams', { id: team.id }, { status: input.status })
   await audit(store, actor, { tournamentId: t.id, action: 'team.status', before: { status: team.status }, after: { status: input.status, team: team.name } })
@@ -1278,10 +1443,10 @@ export async function approveAllTeams(store: Store, actor: Actor, input: { tourn
   requireDirector(actor, t.id)
   if (t.roster_locked) fail(409, 'The roster is locked')
   const teams = await store.select<TeamRow>('sp_teams', { tournament_id: t.id }, { order: [{ col: 'created_at' }] })
-  let open = t.capacity - teams.filter(x => x.status === 'approved').length
+  let open = limitOf(t) - teams.filter(x => x.status === 'approved').length
   const pending = teams.filter(x => x.status === 'pending')
   if (!pending.length) fail(409, 'No pending teams to approve')
-  if (open <= 0) fail(409, `Already ${t.capacity} approved teams. The bracket is full.`)
+  if (open <= 0) fail(409, `Already ${limitOf(t)} approved teams. The event is full.`)
   const approved: string[] = []
   for (const team of pending) {
     if (open <= 0) break
@@ -1332,8 +1497,11 @@ export async function generateBracket(store: Store, actor: Actor, input: { tourn
   const finals = (await store.select<MatchRow>('sp_matches', { tournament_id: t.id, status: 'final' })).filter(m => m.result_kind !== 'bye')
   if (started || finals.length) fail(409, 'Matches already started. The bracket cannot be regenerated.')
   const teams = await store.select<TeamRow>('sp_teams', { tournament_id: t.id, status: 'approved' })
-  if (teams.length <= t.capacity / 2) fail(409, `Need more than ${t.capacity / 2} approved teams for a ${t.capacity} team bracket. Lower the capacity or approve more teams.`)
-  if (teams.length > t.capacity) fail(409, 'More approved teams than bracket capacity')
+  if (teams.length < 2) fail(409, 'Approve at least two teams first')
+  if (teams.length > limitOf(t)) fail(409, `More approved teams than the limit of ${limitOf(t)}`)
+  // The bracket is sized to the teams actually playing; extra slots become byes.
+  const capacity = nextPow2(teams.length)
+  if (capacity !== t.capacity) await store.update('sp_tournaments', { id: t.id }, { capacity })
   let order: string[]
   if (input.mode === 'manual') {
     order = Array.isArray(input.order) ? input.order : []
@@ -1344,8 +1512,8 @@ export async function generateBracket(store: Store, actor: Actor, input: { tourn
   } else {
     order = shuffle(teams.map(x => x.id), cryptoRandom)
   }
-  const slots = buildBracket(order, t.capacity)
-  const rounds = totalRounds(t.capacity)
+  const slots = buildBracket(order, capacity)
+  const rounds = totalRounds(capacity)
   const rules = normalizeRules(t.rules)
   await store.remove('sp_matches', { tournament_id: t.id })
   for (let i = 0; i < order.length; i++) await store.update('sp_teams', { id: order[i] }, { seed: i + 1 })
@@ -1353,7 +1521,7 @@ export async function generateBracket(store: Store, actor: Actor, input: { tourn
     id: uid(), tournament_id: t.id, round: s.round, slot: s.slot, team_a_id: s.teamA, team_b_id: s.teamB, table_id: null,
     status: s.round === 1 && s.teamA && s.teamB ? 'ready' : 'pending', winner_team_id: null, result_kind: null, result_note: null,
     target: s.round === rounds ? rules.targetFinal : rules.targetDefault,
-    time_limit_min: s.round === rounds ? rules.timeFinalMin : rules.timeDefaultMin,
+    time_limit_min: rules.gamesToWin > 1 ? 0 : s.round === rounds ? rules.timeFinalMin : rules.timeDefaultMin,
     rules: null, started_at: null, paused_at: null, paused_ms: 0, completed_at: null, completion_verified_by: null, finalized_at: null,
     score_a: 0, score_b: 0, bags_a: 0, bags_b: 0, hands_verified: 0, version: 1, created_at: nowIso(store),
   }))
@@ -1644,4 +1812,79 @@ export async function resolveSession(store: Store, token: string | null | undefi
 export async function revokeSession(store: Store, token: string) {
   if (!token) return
   await store.update('sp_sessions', { token_hash: hashToken(token), revoked_at: null }, { revoked_at: nowIso(store) })
+}
+
+
+// ─── team choices ───────────────────────────────────────────────────────────
+
+export async function setBidControl(store: Store, actor: Actor, input: { teamId: string; control: BidControl }) {
+  const team = await one<TeamRow>(store, 'sp_teams', { id: input.teamId }, 'Team not found')
+  if (input.control !== 'captain' && input.control !== 'individual') fail(400, 'Choose captain or each player')
+  const director = isDirector(actor, team.tournament_id)
+  if (!director && !(actor.kind === 'player' && actor.teamId === team.id && actor.isCaptain)) fail(403, 'Only your captain can change this')
+  const playing = (await store.select<MatchRow>('sp_matches', { team_a_id: team.id, status: { in: ['live', 'paused'] } })).length
+    + (await store.select<MatchRow>('sp_matches', { team_b_id: team.id, status: { in: ['live', 'paused'] } })).length
+  if (playing && !director) fail(409, 'Your game already began. Ask the director to change this.')
+  await store.update('sp_teams', { id: team.id }, { bid_control: input.control })
+  await audit(store, actor, { tournamentId: team.tournament_id, action: 'team.bid_control', before: { control: team.bid_control ?? null }, after: { control: input.control, team: team.name } })
+  await touch(store, team.tournament_id)
+  return { ok: true }
+}
+
+// The captain makes an access code for their partner so the partner can
+// sign in on their own phone. A new code replaces the previous partner code.
+export async function issuePartnerCode(store: Store, actor: Actor) {
+  if (actor.kind !== 'player' || !actor.isCaptain) fail(403, 'Only the team captain can invite a partner')
+  const partner = (await store.select<PlayerRow>('sp_players', { team_id: actor.teamId })).find(p => p.id !== actor.playerId)
+  if (!partner) fail(404, 'Partner not found')
+  return mintAccessCode(store, actor, { tournamentId: actor.tournamentId, kind: 'player', name: partner.display_name, playerId: partner.id, staffId: null, revokeSessions: false })
+}
+
+// ─── test mode ──────────────────────────────────────────────────────────────
+
+// A private practice event: two teams, four simulated players, one table,
+// bracket drawn and published, ready to Begin. Never featured, never in the
+// winners history, and deletable.
+export async function createTestEvent(store: Store, actor: Actor, input: { gamesToWin?: number; target?: number; control?: BidControl } = {}) {
+  if (actor.kind !== 'owner') fail(403, 'Only the site owner can create test matches')
+  const stamp = new Date(store.now().getTime()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+  const ev = await createTournament(store, actor, {
+    name: `Test match ${stamp}`, eventType: 'test', gamesToWin: input.gamesToWin ?? 1, targetDefault: input.target ?? 250, targetFinal: input.target ?? 250,
+  })
+  await setTableCount(store, actor, { tournamentId: ev.id, count: 1 })
+  const control = input.control === 'individual' ? 'individual' : 'captain'
+  await registerTeam(store, actor, { tournamentId: ev.id, name: 'Test Team North', player1: 'Sim Ana', player2: 'Sim Ben', bidControl: control })
+  await registerTeam(store, actor, { tournamentId: ev.id, name: 'Test Team South', player1: 'Sim Cy', player2: 'Sim Dee', bidControl: control })
+  await setRosterLock(store, actor, { tournamentId: ev.id, locked: true })
+  await publishBracket(store, actor, { tournamentId: ev.id, published: true })
+  return { ok: true, id: ev.id, slug: ev.slug }
+}
+
+export async function deleteTestEvent(store: Store, actor: Actor, input: { tournamentId: string }) {
+  const t = await one<TournamentRow>(store, 'sp_tournaments', { id: input.tournamentId }, 'Event not found')
+  requireDirector(actor, t.id)
+  if (!t.is_test) fail(403, 'Only test events can be deleted')
+  const tid = t.id
+  for (const table of ['sp_hand_approvals', 'sp_score_ledger', 'sp_book_reports', 'sp_bids', 'sp_disputes', 'sp_hands', 'sp_sessions', 'sp_invitations']) {
+    await store.remove(table, { tournament_id: tid })
+  }
+  await store.update('sp_tournaments', { id: tid }, { champion_team_id: null })
+  await store.remove('sp_matches', { tournament_id: tid })
+  await store.remove('sp_tables', { tournament_id: tid })
+  await store.remove('sp_players', { tournament_id: tid })
+  await store.remove('sp_teams', { tournament_id: tid })
+  await store.remove('sp_staff', { tournament_id: tid })
+  await store.remove('sp_audit', { tournament_id: tid })
+  await store.remove('sp_tournaments', { id: tid })
+  return { ok: true }
+}
+
+// In a test event, the director can act as any simulated player to see and
+// do exactly what that player would. Never allowed in real events.
+export async function actAsPlayer(store: Store, actor: Actor, playerId: string): Promise<Actor> {
+  const p = await one<PlayerRow>(store, 'sp_players', { id: playerId }, 'Player not found')
+  const t = await one<TournamentRow>(store, 'sp_tournaments', { id: p.tournament_id })
+  if (!t.is_test) fail(403, 'Acting as a player is only allowed in test matches')
+  if (!isDirector(actor, t.id)) fail(403, 'Director access required')
+  return { kind: 'player', playerId: p.id, teamId: p.team_id, tournamentId: p.tournament_id, isCaptain: p.is_captain, name: p.display_name }
 }

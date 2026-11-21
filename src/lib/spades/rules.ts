@@ -26,6 +26,8 @@ export interface Rules {
   timeDefaultMin: number
   timeFinalMin: number
   requireCaptainApproval: boolean
+  // Games a team must win to take the match. 1 = single game, 2 = best of 3.
+  gamesToWin: number
   renegePolicy: 'lose_bid_award_opponent'
   // Director written rules page. Empty means the page is generated from the
   // settings above (ruleSummary).
@@ -49,6 +51,7 @@ export const DEFAULT_RULES: Rules = {
   timeDefaultMin: 50,
   timeFinalMin: 70,
   requireCaptainApproval: true,
+  gamesToWin: 1,
   renegePolicy: 'lose_bid_award_opponent',
   customSections: [],
 }
@@ -80,6 +83,7 @@ export function normalizeRules(raw: unknown): Rules {
     timeDefaultMin: int(r.timeDefaultMin, d.timeDefaultMin, 0, 600),
     timeFinalMin: int(r.timeFinalMin, d.timeFinalMin, 0, 600),
     requireCaptainApproval: r.requireCaptainApproval === false ? false : true,
+    gamesToWin: int(r.gamesToWin, d.gamesToWin, 1, 3),
     renegePolicy: 'lose_bid_award_opponent',
     customSections: cleanSections(r.customSections),
   }
@@ -129,9 +133,7 @@ export function ruleSummary(r: Rules): RuleSection[] {
         'Partners sit across from each other. Every player bids before every hand.',
         `Bids are whole numbers from 0 to ${r.maxBid}. Each team must bid at least ${r.minTeamBid} books combined.`,
         'No nil, no blind nil, no Boston, no special bid bonuses.',
-        r.biddingMode === 'captain'
-          ? 'Team captain bidding: each captain enters both partner bids in the app.'
-          : 'Individual bidding: every player enters their own bid in the app.',
+        'Each team chooses who enters bids in the app: the captain for both partners, or each player for themselves.',
         r.bidOrder === 'sequential'
           ? 'Bids are entered in seat order starting left of the dealer, and earlier bids are visible.'
           : 'Bids are entered at the same time and stay hidden from the other team until all four are locked.',
@@ -163,6 +165,7 @@ export function ruleSummary(r: Rules): RuleSection[] {
         'The target is checked only after a hand is officially verified. If both teams pass it, the higher score wins.',
         'When time runs out, the hand in progress is finished and the higher score wins.',
         'Tied? Tiebreaker hands are played until one team leads.',
+        ...(r.gamesToWin > 1 ? [`Series: first team to win ${r.gamesToWin} games takes the match. Scores and bags reset every game.`] : []),
       ],
     },
     {

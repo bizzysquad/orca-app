@@ -4,11 +4,39 @@ A live tournament manager for in-person Joker Spades. Players use real cards at 
 
 ## Setup (one time)
 
-1. Run `supabase-migration-spades.sql` in the Supabase SQL editor. It only creates new `sp_*` tables and is safe to run more than once. It also creates the inaugural event (`dj-maskoff-rnb-spades-2026`) with 4 tables and marks it as the main `/spades` event.
+1. Run `supabase-migration-spades.sql`, then `supabase-migration-spades-ready.sql`, then `supabase-migration-spades-v3.sql` in the Supabase SQL editor. It only creates new `sp_*` tables and is safe to run more than once. It also creates the inaugural event (`dj-maskoff-rnb-spades-2026`) with 4 tables and marks it as the main `/spades` event.
 2. Environment variables. No new ones are required:
    - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: already set for ORCA.
    - Director password: `SPADES_DIRECTOR_PASSWORD` if set, otherwise it falls back to `RSVP_OWNER_PASSWORD`. Set a dedicated one in Vercel if you want them separate.
 3. Deploy ORCA as usual (see DEPLOY.md / the ORCA deploy flow).
+
+## Event types (Director → Events tab)
+
+- **Full tournament**: up to 8 teams by default, single elimination. The limit can be raised before the draw.
+- **Small tournament**: 2, 4 or 6 teams. With 6, the top two seeds get a bye.
+- **Exhibition**: two teams, one game. Not counted in the winners history.
+- **Best of 3 series**: first team to win two games. Scores and bags reset every game, and there is no clock.
+- **Custom**: you pick the team count, the format (single, best of 3, best of 5) and the target.
+
+The bracket is sized to the approved teams when you lock the roster. Extra slots become byes.
+
+## Test Mode (Director → Test Mode tab)
+
+Creates a private match with two teams and four simulated players. The test console shows all four phones side by side (one at a time on a phone). Each panel is the real My Table screen for that player, so you can bid, report and confirm for everyone. You can also try the countdown ("Auto start in 1 minute"), pause, restart, end early and finalize. Test matches never appear in public lists or the winners history, and Delete removes them completely, audit log included. Real events' audit logs stay append-only.
+
+## Teams and phones
+
+- The captain registers and chooses **Captain controls** (one phone enters both bids and the books) or **Each player** (the partner joins with an access code from My Table and enters their own bid). The captain can switch until the game begins. On an each-player team, the captain can still fill in for a partner who is away.
+- Access codes (XXXX-XXXX) are typed at `/spades/join`. They are reusable until a new one is issued for that person.
+- My Table shows the team, partner, opponent, a countdown, a Ready button, a locked preview of the bid pad, the scoreboard, results and the rules. Bidding unlocks when the game begins.
+
+## Scheduling
+
+On the Run tab, each round has **Schedule a start time**:
+- **Start on its own**: the game begins automatically at that time, as long as any Spades HQ screen is open.
+- **Countdown only**: players see the countdown and you still tap Begin.
+
+Per-match times can be set from the match page (Director controls).
 
 ## Routes
 
@@ -21,7 +49,8 @@ A live tournament manager for in-person Joker Spades. Players use real cards at 
 | `/spades/match/[id]` | everyone (redacted by role) | Full match, hand history, staff tools |
 | `/spades/bracket` | everyone | Live bracket |
 | `/spades/supervisor` | staff | Every table at a glance, check-in |
-| `/spades/admin` | director | Teams, invitations, staff, bracket, rules, disputes, audit, exports |
+| `/spades/admin` | director | Run, Teams, Events, Test Mode, Staff, Bracket, Disputes, Settings, Audit, Export |
+| `/spades/admin/test?t=` | director | Test Mode console (four simulated phones) |
 | `/spades/display` | TV / projector | Read-only big-screen view |
 | `/spades/rules` | everyone | Official rules |
 | `/spades/print` | staff | Paper scorecards and bracket backup |

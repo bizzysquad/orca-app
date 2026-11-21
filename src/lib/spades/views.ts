@@ -6,7 +6,7 @@ import { normalizeRules, type Rules } from './rules.ts'
 import { scoreHand, type Side } from './scoring.ts'
 import { roundName, totalRounds } from './bracket.ts'
 import type { Store } from './store.ts'
-import { biddingOrder, isDirector, isStaff, playerSide, supervisesTable, type Actor } from './service.ts'
+import { biddingOrder, isDirector, isStaff, playerSide, supervisesTable, teamControl, type Actor } from './service.ts'
 import type {
   ApprovalRow, AuditRow, BidRow, DisputeRow, HandRow, InviteRow, LedgerRow, MatchRow, PlayerRow, ReportRow,
   SessionRow, StaffRow, TableRow, TeamRow, TournamentRow,
@@ -72,6 +72,8 @@ export function publicTournament(t: TournamentRow) {
     capacity: t.capacity, registrationOpen: t.registration_open, waitlistEnabled: t.waitlist_enabled,
     rosterLocked: t.roster_locked, bracketPublished: t.bracket_published, championTeamId: t.champion_team_id,
     rules: normalizeRules(t.rules), rounds: totalRounds(t.capacity),
+    eventType: t.event_type || 'tournament', isTest: !!t.is_test, teamLimit: t.team_limit || t.capacity, autoStart: !!t.auto_start,
+    gamesToWin: normalizeRules(t.rules).gamesToWin,
   }
 }
 
@@ -116,6 +118,10 @@ export function publicMatch(b: Bundle, m: MatchRow) {
     startedAt: m.started_at, pausedAt: m.paused_at, pausedMs: m.paused_ms, completedAt: m.completed_at,
     handsVerified: m.hands_verified,
     readyA: !!m.ready_a_at, readyB: !!m.ready_b_at,
+    scheduledAt: m.scheduled_at || null,
+    gamesA: m.games_a || 0, gamesB: m.games_b || 0, currentGame: m.current_game || 1,
+    gamesToWin: normalizeRules(m.rules ?? b.t.rules).gamesToWin,
+    resultNote: m.result_kind && m.result_kind !== 'played' ? m.result_note : m.result_note?.startsWith('Ended by director') ? 'Ended early by the director' : null,
     current: hand ? {
       handNumber: hand.hand_number, status: hand.status, isTiebreak: hand.is_tiebreak,
       // Team bids become public only once every bid is locked.
@@ -145,7 +151,7 @@ export async function pastChampions(store: Store, currentId: string) {
   const ts = await store.select<TournamentRow>('sp_tournaments', { status: { in: ['completed', 'archived'] } }, { order: [{ col: 'created_at', asc: false }], limit: 20 })
   const out: { tournament: string; slug: string; champion: string; date: string | null }[] = []
   for (const t of ts) {
-    if (t.id === currentId || !t.champion_team_id) continue
+    if (t.id === currentId || !t.champion_team_id || t.is_test || t.event_type === 'exhibition' || t.event_type === 'test') continue
     const team = (await store.select<TeamRow>('sp_teams', { id: t.champion_team_id }, { limit: 1 }))[0]
     if (team) out.push({ tournament: t.name, slug: t.slug, champion: team.name, date: t.starts_at })
   }
@@ -161,7 +167,7 @@ export function publicState(b: Bundle, now: Date) {
     tournament: publicTournament(b.t),
     registration: {
       approved: approved.length, pending, waitlist: b.teams.filter(t => t.status === 'waitlist').length,
-      full: approved.length + pending >= b.t.capacity,
+      full: approved.length + pending >= (b.t.team_limit || b.t.capacity),
     },
     teams: approved.map(t => ({ id: t.id, name: t.name, seed: t.seed, checkedIn: !!t.checked_in_at })),
     matches: b.t.bracket_published ? b.matches.map(m => publicMatch(b, m)) : [],
@@ -200,7 +206,7 @@ export function matchDetail(b: Bundle, actor: Actor, matchId: string, now: Date)
     if (!t) return null
     const ps = b.players.filter(p => p.team_id === id).sort((x, y) => x.seat - y.seat)
     return {
-      id: t.id, name: t.name, seed: t.seed,
+      id: t.id, name: t.name, seed: t.seed, bidControl: teamControl(t, rules),
       players: level === 'public' ? [] : ps.map(p => ({ id: p.id, name: p.display_name, seat: p.seat, isCaptain: p.is_captain })),
     }
   }
@@ -215,7 +221,7 @@ export function matchDetail(b: Bundle, actor: Actor, matchId: string, now: Date)
     const lb = led.find(l => l.hand_number === n && l.team_id === m.team_b_id)!
     const h = b.hands.find(x => x.id === la?.hand_id)
     const pack = (l: LedgerRow | undefined) => l && ({ bid: l.bid, books: l.books, made: l.made, renege: l.renege, points: l.points, bagsEarned: l.bags_earned, bagPenalty: l.bag_penalty, total: l.total_after, bags: l.bags_after })
-    return { handNumber: n, handId: la?.hand_id, isTiebreak: !!h?.is_tiebreak, ruling: level === 'public' ? null : h?.ruling || null, a: pack(la), b: pack(lb) }
+    return { handNumber: n, handId: la?.hand_id, game: h?.game_number || 1, isTiebreak: !!h?.is_tiebreak, ruling: level === 'public' ? null : h?.ruling || null, a: pack(la), b: pack(lb) }
   })
   const voided = level === 'public' ? [] : b.hands.filter(h => h.match_id === m.id && h.status === 'void').map(h => ({ handNumber: h.hand_number, ruling: h.ruling }))
 
@@ -300,6 +306,7 @@ export function matchDetail(b: Bundle, actor: Actor, matchId: string, now: Date)
     teamA, teamB,
     viewer: {
       level, side, canSupervise, isDirector: director,
+      control: side ? teamControl(b.teams.find(t => t.id === (side === 'a' ? m.team_a_id : m.team_b_id)), rules) : null,
       playerId: actor.kind === 'player' ? actor.playerId : null,
       isCaptain: actor.kind === 'player' && !!side ? actor.isCaptain : false,
     },
@@ -379,7 +386,7 @@ export function playerState(b: Bundle, actor: Actor, now: Date) {
   const eliminated = mine.some(m => m.status === 'final' && m.winner_team_id && m.winner_team_id !== actor.teamId)
   return {
     team: team ? {
-      id: team.id, name: team.name, seed: team.seed, checkedIn: !!team.checked_in_at, status: team.status,
+      id: team.id, name: team.name, seed: team.seed, checkedIn: !!team.checked_in_at, status: team.status, bidControl: teamControl(team, normalizeRules(b.t.rules)),
       players: b.players.filter(p => p.team_id === team.id).sort((x, y) => x.seat - y.seat).map(p => ({ id: p.id, name: p.display_name, isCaptain: p.is_captain })),
     } : null,
     activeMatch: active && b.t.bracket_published ? matchDetail(b, actor, active.id, now) : null,
@@ -412,7 +419,7 @@ export async function adminState(store: Store, b: Bundle, actor: Actor, now: Dat
     teams: b.teams.filter(t => t.status === 'approved').map(t => ({ id: t.id, name: t.name, seed: t.seed, checkedIn: !!t.checked_in_at })),
     tournamentFull: { ...publicTournament(b.t), isFeatured: b.t.is_featured },
     allTeams: b.teams.map(t => ({
-      id: t.id, name: t.name, status: t.status, seed: t.seed, contact: t.contact, checkedIn: !!t.checked_in_at, createdAt: t.created_at,
+      id: t.id, name: t.name, status: t.status, seed: t.seed, contact: t.contact, checkedIn: !!t.checked_in_at, createdAt: t.created_at, bidControl: teamControl(t, normalizeRules(b.t.rules)),
       players: b.players.filter(p => p.team_id === t.id).sort((x, y) => x.seat - y.seat).map(p => ({
         id: p.id, name: p.display_name, seat: p.seat, isCaptain: p.is_captain, invite: inviteStatus('player_id', p.id),
       })),

@@ -31,8 +31,14 @@ const ACTIONS: Record<string, Handler> = {
   finalize: (s, a, b) => S.finalizeMatch(s, a, { matchId: b.matchId }),
   forfeit: (s, a, b) => S.forfeitMatch(s, a, { matchId: b.matchId, winnerTeamId: b.winnerTeamId, kind: b.kind, reason: b.reason }),
   resetMatch: (s, a, b) => S.resetMatch(s, a, { matchId: b.matchId, reason: b.reason }),
-  editMatch: (s, a, b) => S.editMatch(s, a, { matchId: b.matchId, target: b.target, timeLimitMin: b.timeLimitMin, tableId: b.tableId }),
-  createTournament: (s, a, b) => S.createTournament(s, a, { name: b.name, slug: b.slug, capacity: b.capacity, startsAt: b.startsAt, venue: b.venue, address: b.address }),
+  editMatch: (s, a, b) => S.editMatch(s, a, { matchId: b.matchId, target: b.target, timeLimitMin: b.timeLimitMin, tableId: b.tableId, scheduledAt: b.scheduledAt }),
+  scheduleRound: (s, a, b) => S.scheduleRound(s, a, { tournamentId: b.tournamentId, round: Number(b.round), scheduledAt: b.scheduledAt ?? null, autoStart: b.autoStart }),
+  endNow: (s, a, b) => S.endMatchNow(s, a, { matchId: b.matchId, reason: b.reason }),
+  bidControl: (s, a, b) => S.setBidControl(s, a, { teamId: b.teamId, control: b.control }),
+  partnerCode: (s, a) => S.issuePartnerCode(s, a),
+  createTest: (s, a, b) => S.createTestEvent(s, a, { gamesToWin: b.gamesToWin, target: b.target, control: b.control }),
+  deleteTest: (s, a, b) => S.deleteTestEvent(s, a, { tournamentId: b.tournamentId }),
+  createTournament: (s, a, b) => S.createTournament(s, a, { name: b.name, slug: b.slug, teamLimit: b.teamLimit, capacity: b.capacity, startsAt: b.startsAt, venue: b.venue, address: b.address, eventType: b.eventType, gamesToWin: b.gamesToWin, targetDefault: b.targetDefault, targetFinal: b.targetFinal }),
   updateTournament: (s, a, b) => S.updateTournament(s, a, { tournamentId: b.tournamentId, patch: b.patch }),
   rosterLock: (s, a, b) => S.setRosterLock(s, a, { tournamentId: b.tournamentId, locked: !!b.locked, generate: b.generate }),
   addTeam: (s, a, b) => S.registerTeam(s, a, { tournamentId: b.tournamentId, name: b.name, player1: b.player1, player2: b.player2, captainSeat: b.captainSeat, contact: b.contact }),
@@ -68,7 +74,7 @@ export async function POST(req: NextRequest) {
       await S.rateLimit(s, key, 'register', 30, 30 * 60 * 1000)
       await S.recordAttempt(s, key, 'register')
       const r = await S.registerTeam(s, S.PUBLIC, {
-        tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: 1, contact: body.contact,
+        tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: 1, contact: body.contact, bidControl: body.bidControl,
       })
       const sess = await S.createSession(s, { kind: 'player', tournamentId: body.tournamentId, playerId: r.captainPlayerId, staffId: null, invitationId: null, ttlMs: S.PLAYER_SESSION_MS })
       const code = await S.issueRegistrantCode(s, r.captainPlayerId)
@@ -79,8 +85,10 @@ export async function POST(req: NextRequest) {
 
     const handler = Object.prototype.hasOwnProperty.call(ACTIONS, name) ? ACTIONS[name] : null
     if (!handler) return json({ error: 'Unknown action' }, 400)
-    const actor = await actorFrom(req, s)
-    if (actor.kind === 'public') return json({ error: 'Please sign in with your invitation link first' }, 401)
+    let actor = await actorFrom(req, s)
+    if (actor.kind === 'public') return json({ error: 'Please sign in with your access code first' }, 401)
+    // Test Mode: the director acts as a simulated player of a test event.
+    if (typeof body.asPlayerId === 'string' && body.asPlayerId) actor = await S.actAsPlayer(s, actor, body.asPlayerId)
     const result = await handler(s, actor, body)
     return json(result ?? { ok: true })
   } catch (err) {

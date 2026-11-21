@@ -71,7 +71,7 @@ function Scoreboard({ d, names, serverNow }: { d: any; names: { a: string; b: st
           </div>
         )}
         <div className="sp-display sp-num mt-2" style={{ fontSize: 52 }} aria-label={`${names[side]} score`}>{side === 'a' ? m.scoreA : m.scoreB}</div>
-        <div className="text-sm sp-num" style={{ color: 'var(--sp-muted)' }}>Bags <b style={{ color: 'var(--sp-cream)' }}>{side === 'a' ? m.bagsA : m.bagsB}</b></div>
+        <div className="text-sm sp-num" style={{ color: 'var(--sp-muted)' }}>Bags <b style={{ color: 'var(--sp-cream)' }}>{side === 'a' ? m.bagsA : m.bagsB}</b>{m.gamesToWin > 1 && <> · Games won <b style={{ color: 'var(--sp-gold)' }}>{side === 'a' ? m.gamesA : m.gamesB}</b></>}</div>
       </div>
     )
   }
@@ -79,7 +79,7 @@ function Scoreboard({ d, names, serverNow }: { d: any; names: { a: string; b: st
     <section className="sp-card p-4" aria-label="Scoreboard">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="sp-label">{m.roundName}</span>
+          <span className="sp-label">{m.roundName}{m.gamesToWin > 1 ? ` · Game ${m.currentGame}` : ''}</span>
           {d.table && <span className="sp-chip sp-chip-info">Table {d.table.number}</span>}
           <StatusChip label={m.label} />
         </div>
@@ -90,8 +90,8 @@ function Scoreboard({ d, names, serverNow }: { d: any; names: { a: string; b: st
       </div>
       <div className="grid grid-cols-2 gap-3">{col('a')}{col('b')}</div>
       <div className="flex flex-wrap justify-between gap-2 mt-3 text-xs" style={{ color: 'var(--sp-muted)' }}>
-        <span>Playing to <b style={{ color: 'var(--sp-cream)' }}>{m.target}</b></span>
-        <span>{m.biddingMode === 'captain' ? 'Captain bidding' : 'Individual bidding'} · {m.bidOrder === 'sequential' ? 'In seat order' : 'Bids hidden until locked'}</span>
+        <span>{m.gamesToWin > 1 ? 'Each game to' : 'Playing to'} <b style={{ color: 'var(--sp-cream)' }}>{m.target}</b>{m.gamesToWin > 1 ? ` · first to ${m.gamesToWin} games` : ''}</span>
+        {v.control && <span>{v.control === 'captain' ? 'Your captain enters both bids' : 'Each player enters their own bid'}</span>}
         {d.table?.supervisor && <span>Supervisor: {d.table.supervisor}</span>}
       </div>
     </section>
@@ -136,7 +136,7 @@ function HandPanel({ d, act, names }: { d: any; act: Act; names: { a: string; b:
         </span>
       </div>
       {c.status === 'bidding' && <SeatList c={c} names={names} />}
-      {c.status === 'bidding' && v.level === 'player' && live && (m.biddingMode === 'captain' ? <CaptainBid d={d} act={act} /> : <MyBid d={d} act={act} />)}
+      {c.status === 'bidding' && v.level === 'player' && live && (v.control === 'captain' ? <CaptainBid d={d} act={act} /> : <MyBid d={d} act={act} />)}
       {c.status !== 'bidding' && <LockedBids d={d} names={names} />}
       {c.status === 'playing' && (
         <div className="sp-banner sp-banner-info text-sm">
@@ -213,6 +213,12 @@ function MyBid({ d, act }: { d: any; act: Act }) {
         </>
       )}
       <Feedback msg={msg} />
+      {v.isCaptain && partner && !partner.submitted && (
+        <details>
+          <summary className="text-sm font-bold" style={{ color: 'var(--sp-muted)' }}>Partner not here? Enter both bids yourself</summary>
+          <div className="mt-2"><CaptainBid d={d} act={act} /></div>
+        </details>
+      )}
     </div>
   )
 }
@@ -352,12 +358,13 @@ function History({ d, names }: { d: any; names: { a: string; b: string } }) {
       <div className="sp-scroll">
         <table className="sp-table">
           <thead>
-            <tr><th>#</th><th>{names.a} bid/books</th><th>Total · bags</th><th>{names.b} bid/books</th><th>Total · bags</th></tr>
+            <tr><th>#</th>{d.match.gamesToWin > 1 && <th>Game</th>}<th>{names.a} bid/books</th><th>Total · bags</th><th>{names.b} bid/books</th><th>Total · bags</th></tr>
           </thead>
           <tbody>
             {d.history.map((h: any) => (
               <tr key={h.handNumber}>
                 <td className="sp-num font-bold">{h.handNumber}{h.isTiebreak ? ' TB' : ''}</td>
+                {d.match.gamesToWin > 1 && <td className="sp-num">{h.game}</td>}
                 <td>{cell(h.a)}</td>
                 <td className="sp-num font-black">{h.a?.total} · {h.a?.bags}</td>
                 <td>{cell(h.b)}</td>
@@ -674,6 +681,7 @@ function DirectorMatchTools({ d, act, names }: { d: any; act: Act; names: { a: s
   const [kind, setKind] = useState('forfeit')
   const [reason, setReason] = useState('')
   const [limit, setLimit] = useState(String(m.timeLimitMin))
+  const [when, setWhen] = useState(m.scheduledAt ? toLocal(m.scheduledAt) : '')
   const { busy, msg, run } = useBusy(act)
   return (
     <details className="p-3 rounded-lg" style={{ background: 'rgba(224,173,79,0.08)', border: '1px solid var(--sp-gold)' }}>
@@ -686,6 +694,17 @@ function DirectorMatchTools({ d, act, names }: { d: any; act: Act; names: { a: s
             </label>
             <button className="sp-btn sp-btn-sm" disabled={busy || !limit} onClick={() => run('editMatch', { matchId: m.id, timeLimitMin: Number(limit) }, 'Time limit updated')}>Save</button>
           </div>
+        )}
+        {['pending', 'ready'].includes(m.status) && (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="sp-field flex-1"><span>Scheduled start (players see a countdown)</span>
+              <input type="datetime-local" className="sp-input" value={when} onChange={e => setWhen(e.target.value)} />
+            </label>
+            <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('editMatch', { matchId: m.id, scheduledAt: when ? new Date(when).toISOString() : null }, when ? 'Start time saved' : 'Start time cleared')}>{when ? 'Save' : 'Clear'}</button>
+          </div>
+        )}
+        {['live', 'paused'].includes(m.status) && (
+          <ReasonAction label="End game now (current leader wins)" action="endNow" payload={{ matchId: m.id }} act={act} />
         )}
         {['ready', 'live', 'paused', 'completed'].includes(m.status) && (
           <div className="grid gap-2">
@@ -704,10 +723,63 @@ function DirectorMatchTools({ d, act, names }: { d: any; act: Act; names: { a: s
           </div>
         )}
         {!['pending', 'ready'].includes(m.status) && m.resultKind !== 'bye' && (
-          <ReasonAction label="Reset this match (voids every hand)" action="resetMatch" payload={{ matchId: m.id }} act={act} danger />
+          <ReasonAction label="Restart this game from zero (voids every hand)" action="resetMatch" payload={{ matchId: m.id }} act={act} danger />
         )}
         <Feedback msg={msg} />
       </div>
     </details>
+  )
+}
+
+function toLocal(iso: string) {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+// Countdown to a scheduled start. Shows "Starting now" once the time passes.
+export function Countdown({ at, serverNow, big = false }: { at: string; serverNow: () => number; big?: boolean }) {
+  const [, setT] = useState(0)
+  useEffect(() => { const id = setInterval(() => setT(x => x + 1), 1000); return () => clearInterval(id) }, [])
+  const ms = new Date(at).getTime() - serverNow()
+  if (ms <= 0) return <span className={`sp-display ${big ? 'text-4xl' : 'text-xl'}`} style={{ color: 'var(--sp-green)' }}>Starting now</span>
+  const s = Math.floor(ms / 1000)
+  const h = Math.floor(s / 3600)
+  const mm = Math.floor((s % 3600) / 60)
+  const ss = s % 60
+  const text = h ? `${h}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${mm}:${String(ss).padStart(2, '0')}`
+  return <span className={`sp-display sp-num ${big ? 'text-5xl' : 'text-2xl'}`} aria-label={`Starts in ${text}`}>{text}</span>
+}
+
+// Before the game begins: the full table layout with every control locked,
+// so players can look around and learn it.
+export function GamePreview({ d, serverNow }: { d: any; serverNow: () => number }) {
+  const names = { a: d.teamA?.name || 'TBD', b: d.teamB?.name || 'TBD' }
+  const v = d.viewer
+  const mineTeam = v.side === 'a' ? d.teamA : d.teamB
+  return (
+    <div className="grid gap-4" aria-label="Game preview">
+      <Scoreboard d={d} names={names} serverNow={serverNow} />
+      <section className="sp-card p-4 grid gap-3" style={{ opacity: 0.92 }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="sp-display text-2xl">Hand 1</h2>
+          <span className="sp-chip sp-chip-dim">Locked until the game starts</span>
+        </div>
+        <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>
+          {v.control === 'captain'
+            ? `When the game starts, ${mineTeam?.players?.find((p: any) => p.isCaptain)?.name || 'your captain'} enters both of your bids here before every hand.`
+            : 'When the game starts, you enter your own bid here before every hand. Your partner enters theirs.'}
+        </p>
+        <div aria-disabled="true" style={{ pointerEvents: 'none', opacity: 0.45 }}>
+          <NumberPad label="Bid (locked)" value={null} onChange={() => {}} isDisabled={() => true} />
+        </div>
+        <ol className="grid gap-1 text-sm list-decimal pl-5">
+          <li>Everyone bids. The hand starts when all four bids are locked.</li>
+          <li>Play the hand with real cards.</li>
+          <li>Each captain taps how many books their team won. Both reports must match.</li>
+          <li>Both captains confirm. The scoreboard updates on every phone.</li>
+        </ol>
+      </section>
+    </div>
   )
 }

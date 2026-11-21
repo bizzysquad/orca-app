@@ -25,6 +25,7 @@ export function useSpades<T = any>(view: string, params: Record<string, string |
   const q = new URLSearchParams({ view })
   for (const [k, v] of Object.entries(params)) if (v) q.set(k, v)
   const qs = q.toString()
+  const asPlayer = params.as || null
 
   const load = useCallback(async (): Promise<void> => {
     if (inflight.current) { again.current = true; return }
@@ -98,7 +99,8 @@ export function useSpades<T = any>(view: string, params: Record<string, string |
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ ...payload, action }),
+        // Test Mode panels act as a simulated player (director only, test events only).
+        body: JSON.stringify({ ...payload, action, ...(asPlayer ? { asPlayerId: asPlayer } : {}) }),
       })
       const j = await res.json().catch(() => ({}))
       void load()
@@ -109,7 +111,7 @@ export function useSpades<T = any>(view: string, params: Record<string, string |
       void load()
       return { ok: false, error: 'Not sent. You look offline. Check your connection, then tap again.' }
     }
-  }, [load])
+  }, [load, asPlayer])
 
   const serverNow = useCallback(() => Date.now() + offset.current, [])
 

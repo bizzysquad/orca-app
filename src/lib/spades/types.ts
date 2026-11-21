@@ -1,5 +1,7 @@
 // Row shapes for the sp_* tables (see supabase-migration-spades.sql).
 
+export type EventType = 'tournament' | 'small' | 'exhibition' | 'series' | 'custom' | 'test'
+export type BidControl = 'captain' | 'individual'
 export type TournamentStatus = 'draft' | 'registration' | 'locked' | 'live' | 'completed' | 'archived'
 export type TeamStatus = 'pending' | 'approved' | 'waitlist' | 'rejected'
 export type MatchStatus = 'pending' | 'ready' | 'live' | 'paused' | 'completed' | 'final'
@@ -31,6 +33,11 @@ export interface TournamentRow {
   pulse: string
   created_at: string
   updated_at: string
+  // v3 (supabase-migration-spades-v3.sql)
+  event_type?: EventType
+  is_test?: boolean
+  team_limit?: number | null
+  auto_start?: boolean
 }
 
 export interface TeamRow {
@@ -42,6 +49,7 @@ export interface TeamRow {
   seed: number | null
   contact: string | null
   checked_in_at: string | null
+  bid_control?: BidControl
   created_at: string
 }
 
@@ -99,6 +107,10 @@ export interface MatchRow {
   // Added by supabase-migration-spades-ready.sql; undefined until it runs.
   ready_a_at?: string | null
   ready_b_at?: string | null
+  scheduled_at?: string | null
+  games_a?: number
+  games_b?: number
+  current_game?: number
   finalized_at: string | null
   score_a: number
   score_b: number
@@ -117,6 +129,7 @@ export interface HandRow {
   status: HandStatus
   dealer_pos: number
   is_tiebreak: boolean
+  game_number?: number
   bids_locked_at: string | null
   books_a: number | null
   books_b: number | null

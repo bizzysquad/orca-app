@@ -13,7 +13,7 @@ import { ErrorBox, Feedback, Loading, MatchTimer, Shell, StatusChip, fmtTime } f
 
 type Act = (action: string, payload?: Record<string, unknown>) => Promise<ActResult>
 type Msg = { ok: boolean; text: string } | null
-const TABS = ['Run', 'Teams', 'Staff', 'Bracket', 'Disputes', 'Settings', 'Audit', 'Export'] as const
+const TABS = ['Run', 'Teams', 'Events', 'Test Mode', 'Staff', 'Bracket', 'Disputes', 'Settings', 'Audit', 'Export'] as const
 
 function useRun(act: Act) {
   const [busy, setBusy] = useState(false)
@@ -80,6 +80,8 @@ function Admin() {
             <h1 className="sp-display text-3xl mt-1">{T.name}</h1>
             <div className="flex flex-wrap gap-2 mt-2">
               <span className="sp-chip sp-chip-info">{T.status}</span>
+              <span className="sp-chip sp-chip-warn">{EVENT_LABEL[T.eventType] || T.eventType}{T.gamesToWin > 1 ? ` · best of ${T.gamesToWin * 2 - 1}` : ''}</span>
+              {T.isTest && <span className="sp-chip sp-chip-bad">Test event, not official</span>}
               <span className={`sp-chip ${T.registrationOpen ? 'sp-chip-live' : 'sp-chip-dim'}`}>Registration {T.registrationOpen ? 'open' : 'closed'}</span>
               <span className={`sp-chip ${T.rosterLocked ? 'sp-chip-warn' : 'sp-chip-dim'}`}>Roster {T.rosterLocked ? 'locked' : 'open'}</span>
               <span className={`sp-chip ${T.bracketPublished ? 'sp-chip-live' : 'sp-chip-dim'}`}>Bracket {T.bracketPublished ? 'published' : 'hidden'}</span>
@@ -107,6 +109,8 @@ function Admin() {
         {tab === 'Settings' && <SettingsTab data={data} act={act} />}
         {tab === 'Audit' && <AuditTab data={data} />}
         {tab === 'Export' && <ExportTab data={data} />}
+        {tab === 'Events' && <EventsTab data={data} act={act} />}
+        {tab === 'Test Mode' && <TestModeTab data={data} act={act} />}
       </div>
     </Shell>
   )
@@ -128,7 +132,7 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
         <h2 className="sp-display text-xl">Tonight, step by step</h2>
         <ol className="grid gap-2">
           {[
-            `Teams: ${approved.length} of ${T.capacity} approved, ${checkedIn} checked in. Send invitations from the Teams tab.`,
+            `Teams: ${approved.length} of ${T.teamLimit} approved, ${checkedIn} checked in.`,
             'Close registration and lock the roster. The bracket is drawn at random automatically.',
             'Check the draw on the Bracket tab, then publish it.',
             'Tap Begin to start round 1. Teams wait on their phones until you do. Finalize each match when it completes to move winners forward.',
@@ -167,6 +171,7 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="font-black" style={{ color: 'var(--sp-gold)' }}>{ms[0]?.roundName}</h3>
                   {readyCount > 0 && <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>{ms.filter((m: any) => m.status === 'ready' && m.readyA && m.readyB).length} of {readyCount} tables ready</span>}
+                  {ms.some((m: any) => ['pending', 'ready'].includes(m.status) && m.resultKind !== 'bye') && <ScheduleRound T={T} round={r} ms={ms} act={act} />}
                   {readyCount > 0 && T.bracketPublished && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Start ${readyCount} ${ms[0]?.roundName} match${readyCount > 1 ? 'es' : ''} now? Every team at those tables sees their game begin and the clocks start.`)) run('startRound', { tournamentId: T.id, round: r }, 'Game on') }}>Begin {ms[0]?.roundName}</button>}
                 </div>
                 {ms.map((m: any) => <MatchRow key={m.id} m={m} data={data} act={act} teams={teams} serverNow={serverNow} />)}
@@ -211,7 +216,8 @@ function MatchRow({ m, data, act, teams, serverNow }: { m: any; data: any; act: 
         {m.status === 'live' && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => run('pause', { matchId: m.id }, 'Paused')}>Pause</button>}
         {m.status === 'paused' && <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('resume', { matchId: m.id }, 'Resumed')}>Resume</button>}
         {m.teamA && m.teamB && <Link href={`/spades/match/${m.id}`} className="sp-btn sp-btn-sm sp-btn-ghost">Open match</Link>}
-        {['pending', 'ready'].includes(m.status) && <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>To {m.target} · {m.timeLimitMin} min</span>}
+        {['pending', 'ready'].includes(m.status) && <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>To {m.target}{m.gamesToWin > 1 ? ` · first to ${m.gamesToWin} games` : ` · ${m.timeLimitMin} min`}{m.scheduledAt ? ` · starts ${new Date(m.scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}${T.autoStart ? ' (auto)' : ''}` : ''}</span>}
+        {['live', 'paused'].includes(m.status) && m.gamesToWin > 1 && <span className="text-xs" style={{ color: 'var(--sp-muted)' }}>Game {m.currentGame} · games {m.gamesA} to {m.gamesB}</span>}
       </div>
       <Feedback msg={msg} />
     </div>
@@ -291,7 +297,7 @@ function TeamsTab({ data, act }: { data: any; act: Act }) {
         <div className="sp-card p-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="font-black">{data.allTeams.filter((x: any) => x.status === 'pending').length} teams waiting for approval</div>
-            <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>{T.capacity - data.allTeams.filter((x: any) => x.status === 'approved').length} spots left. Teams are approved in the order they signed up.</div>
+            <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>{T.teamLimit - data.allTeams.filter((x: any) => x.status === 'approved').length} spots left. Teams are approved in the order they signed up.</div>
           </div>
           <button className="sp-btn sp-btn-gold" disabled={busy} onClick={async () => {
             const r = await run('approveAll', { tournamentId: T.id }, 'Approved')
@@ -301,7 +307,7 @@ function TeamsTab({ data, act }: { data: any; act: Act }) {
       )}
       {groups.filter(([, list]) => list.length).map(([label, list]) => (
         <section key={label} className="grid gap-2">
-          <h2 className="sp-display text-xl">{label} <span className="sp-num" style={{ color: 'var(--sp-dim)' }}>{list.length}{label === 'Approved' ? `/${T.capacity}` : ''}</span></h2>
+          <h2 className="sp-display text-xl">{label} <span className="sp-num" style={{ color: 'var(--sp-dim)' }}>{list.length}{label === 'Approved' ? `/${T.teamLimit}` : ''}</span></h2>
           {list.map((team: any) => (
             <div key={team.id} className="sp-card p-4 grid gap-3">
               {editing === team.id ? (
@@ -310,6 +316,7 @@ function TeamsTab({ data, act }: { data: any; act: Act }) {
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
+                      <div className="text-xs mb-1"><button className="sp-chip sp-chip-info" title="Change who enters bids" onClick={() => run('bidControl', { teamId: team.id, control: team.bidControl === 'individual' ? 'captain' : 'individual' }, 'Bid control changed')}>{team.bidControl === 'individual' ? 'Each player bids' : 'Captain controls'} (tap to switch)</button></div>
                       <div className="font-black text-lg">{team.seed ? <span className="sp-num mr-2" style={{ color: 'var(--sp-gold)' }}>#{team.seed}</span> : null}{team.name}</div>
                       {team.contact && <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{team.contact}</div>}
                     </div>
@@ -577,8 +584,7 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
   const { busy, msg, run } = useRun(act)
   const [ev, setEv] = useState({ name: T.name, subtitle: T.subtitle || '', venue: T.venue || '', address: T.address || '', schedule_note: T.scheduleNote || '', award: T.award || '', starts_at: toLocalInput(T.startsAt), ends_at: toLocalInput(T.endsAt) })
   const [r, setR] = useState({ ...T.rules })
-  const [capacity, setCapacity] = useState(T.capacity)
-  const [nt, setNt] = useState({ name: '', capacity: 8 })
+  const [limit, setLimit] = useState(String(T.teamLimit))
   const live = data.matches.some((m: any) => ['live', 'paused'].includes(m.status))
   const num = (k: string) => (
     <label className="sp-field"><span>{({ minTeamBid: 'Minimum team bid', targetDefault: 'Target, opening rounds', targetFinal: 'Target, championship', timeDefaultMin: 'Minutes, opening rounds', timeFinalMin: 'Minutes, championship', initialBags: 'Starting bags', bagLimit: 'Bags per penalty', bagPenalty: 'Bag penalty points' } as any)[k]}</span>
@@ -615,6 +621,13 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
               <option value="sequential">In seat order, earlier bids visible</option>
             </select>
           </label>
+          <label className="sp-field"><span>Match format</span>
+            <select className="sp-select" value={r.gamesToWin} onChange={e => setR({ ...r, gamesToWin: Number(e.target.value) })}>
+              <option value={1}>Single game</option>
+              <option value={2}>Best of 3 (first to 2 games)</option>
+              <option value={3}>Best of 5 (first to 3 games)</option>
+            </select>
+          </label>
           {num('minTeamBid')}{num('initialBags')}{num('targetDefault')}{num('targetFinal')}{num('timeDefaultMin')}{num('timeFinalMin')}{num('bagLimit')}{num('bagPenalty')}
           <label className="flex items-center gap-3 font-bold"><input type="checkbox" className="w-6 h-6" checked={r.requireCaptainApproval} onChange={e => setR({ ...r, requireCaptainApproval: e.target.checked })} /> Both captains confirm every hand</label>
         </div>
@@ -625,30 +638,24 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
       <RulesTextEditor T={T} act={act} />
 
       <section className="sp-card p-4 grid gap-3">
-        <h2 className="sp-display text-xl">Capacity and waitlist</h2>
+        <h2 className="sp-display text-xl">Team limit and waitlist</h2>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="sp-field" style={{ maxWidth: 200 }}><span>Bracket size</span>
-            <select className="sp-select" value={capacity} onChange={e => setCapacity(Number(e.target.value))} disabled={data.matches.length > 0}>
-              {[4, 8, 16, 32, 64].map(n => <option key={n} value={n}>{n} teams</option>)}
-            </select>
+          <label className="sp-field" style={{ maxWidth: 200 }}><span>Most teams allowed</span>
+            <input className="sp-input" inputMode="numeric" value={limit} disabled={data.matches.length > 0} onChange={e => setLimit(e.target.value.replace(/\D/g, ''))} />
           </label>
-          <button className="sp-btn sp-btn-sm" disabled={busy || capacity === T.capacity} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { capacity } }, 'Capacity saved')}>Save</button>
+          <button className="sp-btn sp-btn-sm" disabled={busy || !limit || Number(limit) === T.teamLimit || data.matches.length > 0} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { team_limit: Number(limit) } }, 'Team limit saved')}>Save</button>
           <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { waitlist_enabled: !T.waitlistEnabled } }, 'Saved')}>Waitlist {T.waitlistEnabled ? 'on' : 'off'}</button>
         </div>
       </section>
 
       {data.viewer.kind === 'owner' && (
         <section className="sp-card p-4 grid gap-3">
-          <h2 className="sp-display text-xl">Tournaments</h2>
+          <h2 className="sp-display text-xl">This event</h2>
           <div className="flex flex-wrap gap-2">
             {!T.isFeatured && <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { is_featured: true } }, 'Now the main /spades event')}>Make this the main /spades event</button>}
             {T.status === 'completed' && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { if (confirm('Archive this tournament? It becomes read only.')) run('updateTournament', { tournamentId: T.id, patch: { status: 'archived' } }, 'Archived') }}>Archive</button>}
           </div>
-          <form className="grid sm:grid-cols-3 gap-2" onSubmit={async e => { e.preventDefault(); const res = await run('createTournament', { name: nt.name, capacity: nt.capacity }, 'Created'); if (res.ok) window.location.href = `/spades/admin?t=${res.data.slug}` }}>
-            <input className="sp-input" placeholder="New tournament name" aria-label="New tournament name" value={nt.name} onChange={e => setNt({ ...nt, name: e.target.value })} />
-            <select className="sp-select" aria-label="Capacity" value={nt.capacity} onChange={e => setNt({ ...nt, capacity: Number(e.target.value) })}>{[4, 8, 16, 32, 64].map(n => <option key={n} value={n}>{n} teams</option>)}</select>
-            <button className="sp-btn sp-btn-gold" disabled={busy || !nt.name.trim()}>Create tournament</button>
-          </form>
+          <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Create new events on the Events tab.</p>
         </section>
       )}
       <Feedback msg={msg} />
@@ -688,6 +695,135 @@ function RulesTextEditor({ T, act }: { T: any; act: Act }) {
       </div>
       <Feedback msg={msg} />
     </section>
+  )
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  tournament: 'Full tournament', small: 'Small tournament', exhibition: 'Exhibition', series: 'Series', custom: 'Custom', test: 'Test',
+}
+
+function ScheduleRound({ T, round, ms, act }: { T: any; round: number; ms: any[]; act: Act }) {
+  const first = ms.find((m: any) => m.scheduledAt)?.scheduledAt
+  const [when, setWhen] = useState(first ? toLocalInput(first) : '')
+  const { busy, msg, run } = useRun(act)
+  return (
+    <details className="w-full">
+      <summary className="text-xs font-bold" style={{ color: 'var(--sp-muted)' }}>{first ? `Scheduled ${new Date(first).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}${T.autoStart ? ', starts on its own' : ''}` : 'Schedule a start time'}</summary>
+      <div className="flex flex-wrap items-end gap-2 mt-2">
+        <label className="sp-field"><span>Start time (players see a countdown)</span><input type="datetime-local" className="sp-input" value={when} onChange={e => setWhen(e.target.value)} /></label>
+        <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy || !when} onClick={() => run('scheduleRound', { tournamentId: T.id, round, scheduledAt: new Date(when).toISOString(), autoStart: true }, 'Scheduled. Games begin on their own at that time.')}>Start on its own</button>
+        <button className="sp-btn sp-btn-sm" disabled={busy || !when} onClick={() => run('scheduleRound', { tournamentId: T.id, round, scheduledAt: new Date(when).toISOString(), autoStart: false }, 'Scheduled. You tap Begin when ready.')}>Countdown only</button>
+        {first && <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { setWhen(''); run('scheduleRound', { tournamentId: T.id, round, scheduledAt: null }, 'Schedule cleared') }}>Clear</button>}
+      </div>
+      <Feedback msg={msg} />
+    </details>
+  )
+}
+
+const EVENT_TYPES = [
+  { k: 'tournament', t: 'Full tournament', d: 'Up to 8 teams by default, single elimination. Raise the limit any time before the draw.' },
+  { k: 'small', t: 'Small tournament', d: '2, 4 or 6 teams. With 6, the top two seeds get a first round bye.' },
+  { k: 'exhibition', t: 'Exhibition match', d: 'Two teams, one game. Not counted in the winners history.' },
+  { k: 'series', t: 'Best of 3 series', d: 'Two teams play until one wins two games. Scores reset every game.' },
+  { k: 'custom', t: 'Custom', d: 'Pick the number of teams, the format and the target score.' },
+]
+
+function EventsTab({ data, act }: { data: any; act: Act }) {
+  const { busy, msg, run } = useRun(act)
+  const [type, setType] = useState('tournament')
+  const [name, setName] = useState('')
+  const [teams, setTeams] = useState('8')
+  const [small, setSmall] = useState('4')
+  const [games, setGames] = useState('1')
+  const [target, setTarget] = useState('250')
+  if (data.viewer.kind !== 'owner') return <div className="sp-banner sp-banner-info text-sm">Only the site owner can create events.</div>
+  const list = (data.tournaments || []).filter((x: any) => !x.isTest)
+  const create = async () => {
+    const payload: Record<string, unknown> = { name, eventType: type }
+    if (type === 'tournament') payload.teamLimit = Number(teams)
+    if (type === 'small') payload.teamLimit = Number(small)
+    if (type === 'series') payload.gamesToWin = 2
+    if (type === 'custom') { payload.teamLimit = Number(teams); payload.gamesToWin = Number(games); payload.targetDefault = Number(target); payload.targetFinal = Number(target) }
+    const r = await run('createTournament', payload, 'Event created')
+    if (r.ok) window.location.href = `/spades/admin?t=${r.data.slug}`
+  }
+  return (
+    <div className="grid gap-4">
+      <section className="sp-card p-4 grid gap-3">
+        <h2 className="sp-display text-xl">Create an event</h2>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2" role="radiogroup" aria-label="Event type">
+          {EVENT_TYPES.map(o => (
+            <button key={o.k} role="radio" aria-checked={type === o.k} onClick={() => setType(o.k)} className="p-3 rounded-xl text-left" style={{ background: type === o.k ? 'rgba(224,173,79,0.18)' : 'rgba(0,0,0,0.22)', border: `2px solid ${type === o.k ? 'var(--sp-gold)' : 'transparent'}` }}>
+              <div className="font-black">{o.t}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--sp-muted)' }}>{o.d}</div>
+            </button>
+          ))}
+        </div>
+        <div className="grid sm:grid-cols-3 gap-2 items-end">
+          <label className="sp-field"><span>Event name</span><input className="sp-input" value={name} maxLength={120} onChange={e => setName(e.target.value)} /></label>
+          {(type === 'tournament' || type === 'custom') && <label className="sp-field"><span>Most teams</span><input className="sp-input" inputMode="numeric" value={teams} onChange={e => setTeams(e.target.value.replace(/\D/g, ''))} /></label>}
+          {type === 'small' && <label className="sp-field"><span>Teams</span><select className="sp-select" value={small} onChange={e => setSmall(e.target.value)}><option value="2">2 teams</option><option value="4">4 teams</option><option value="6">6 teams</option></select></label>}
+          {type === 'custom' && <label className="sp-field"><span>Format</span><select className="sp-select" value={games} onChange={e => setGames(e.target.value)}><option value="1">Single game</option><option value="2">Best of 3</option><option value="3">Best of 5</option></select></label>}
+          {type === 'custom' && <label className="sp-field"><span>Play to</span><input className="sp-input" inputMode="numeric" value={target} onChange={e => setTarget(e.target.value.replace(/\D/g, ''))} /></label>}
+        </div>
+        <button className="sp-btn sp-btn-gold" disabled={busy || !name.trim()} onClick={create}>Create event</button>
+        <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Each event has its own registration, teams, schedule, games and scoreboard. Rules, start times and the team limit can be changed afterward.</p>
+        <Feedback msg={msg} />
+      </section>
+      <section className="sp-card p-4 grid gap-2">
+        <h2 className="sp-display text-xl">All events</h2>
+        {list.map((x: any) => (
+          <div key={x.slug} className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}>
+            <div>
+              <div className="font-bold">{x.name}{x.slug === data.tournamentFull.slug ? ' (open now)' : ''}{x.isFeatured ? ' · main /spades event' : ''}</div>
+              <div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{EVENT_LABEL[x.eventType] || 'Tournament'} · {x.status}</div>
+            </div>
+            <a className="sp-btn sp-btn-sm" href={`/spades/admin?t=${x.slug}`}>Manage</a>
+          </div>
+        ))}
+      </section>
+    </div>
+  )
+}
+
+function TestModeTab({ data, act }: { data: any; act: Act }) {
+  const { busy, msg, run } = useRun(act)
+  const [games, setGames] = useState('1')
+  const [target, setTarget] = useState('100')
+  const [control, setControl] = useState('captain')
+  if (data.viewer.kind !== 'owner') return <div className="sp-banner sp-banner-info text-sm">Only the site owner can use Test Mode.</div>
+  const tests = (data.tournaments || []).filter((x: any) => x.isTest)
+  return (
+    <div className="grid gap-4">
+      <section className="sp-card p-4 grid gap-3">
+        <h2 className="sp-display text-xl">Practice by yourself</h2>
+        <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Creates a private test match: two teams, four simulated players, one table, ready to begin. You see all four phones side by side and can bid and score for every player. Test matches never show on the public pages or in the winners history, and you can delete them completely.</p>
+        <div className="grid sm:grid-cols-3 gap-2">
+          <label className="sp-field"><span>Format</span><select className="sp-select" value={games} onChange={e => setGames(e.target.value)}><option value="1">Single game</option><option value="2">Best of 3</option></select></label>
+          <label className="sp-field"><span>Play to (low = quick test)</span><input className="sp-input" inputMode="numeric" value={target} onChange={e => setTarget(e.target.value.replace(/\D/g, ''))} /></label>
+          <label className="sp-field"><span>Who enters bids</span><select className="sp-select" value={control} onChange={e => setControl(e.target.value)}><option value="captain">Captain controls</option><option value="individual">Each player</option></select></label>
+        </div>
+        <button className="sp-btn sp-btn-gold" disabled={busy || !target} onClick={async () => {
+          const r = await run('createTest', { gamesToWin: Number(games), target: Number(target), control }, 'Test match ready')
+          if (r.ok) window.location.href = `/spades/admin/test?t=${r.data.slug}`
+        }}>Create test match</button>
+        <Feedback msg={msg} />
+      </section>
+      {tests.length > 0 && (
+        <section className="sp-card p-4 grid gap-2">
+          <h2 className="sp-display text-xl">Your test matches</h2>
+          {tests.map((x: any) => (
+            <div key={x.slug} className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}>
+              <div><div className="font-bold">{x.name}</div><div className="text-xs" style={{ color: 'var(--sp-muted)' }}>{x.status}</div></div>
+              <div className="flex gap-2">
+                <a className="sp-btn sp-btn-sm sp-btn-gold" href={`/spades/admin/test?t=${x.slug}`}>Open</a>
+                <button className="sp-btn sp-btn-sm sp-btn-danger" disabled={busy} onClick={() => { if (confirm(`Delete ${x.name}? Everything in it is removed.`)) run('deleteTest', { tournamentId: x.id }, 'Deleted') }}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+    </div>
   )
 }
 

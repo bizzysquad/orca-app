@@ -146,7 +146,12 @@ export class MemoryStore implements Store {
   }
 
   async remove(table: string, filter: Filter): Promise<number> {
-    if (APPEND_ONLY.has(table)) throw new StoreError('other', `${table} is append only`)
+    if (APPEND_ONLY.has(table)) {
+      // Mirrors the trigger: only audit rows of test events may be deleted.
+      const hits = this.t(table).filter(r => matches(r, filter))
+      const testIds = new Set(this.t('sp_tournaments').filter(t => t.is_test).map(t => t.id))
+      if (!hits.every(r => testIds.has(r.tournament_id))) throw new StoreError('other', `${table} is append only`)
+    }
     const before = this.t(table).length
     this.tables[table] = this.t(table).filter(r => !matches(r, filter))
     return before - this.tables[table].length
