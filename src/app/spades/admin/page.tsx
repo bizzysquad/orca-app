@@ -115,6 +115,24 @@ function Admin() {
 
 // ─── Run ────────────────────────────────────────────────────────────────────
 
+// Close registration, set up the games with whoever signed up, then offer
+// to begin them all right away.
+async function closeAndBegin(T: any, data: any, run: (a: string, p: Record<string, unknown>, ok?: string) => Promise<ActResult>) {
+  const teams = data.allTeams.filter((x: any) => x.status === 'approved' || x.status === 'pending').length
+  if (!confirm(`Close registration with ${teams} team${teams === 1 ? '' : 's'}? ${T.useBracket ? 'The bracket is drawn with everyone who signed up.' : 'Teams are paired into games.'}`)) return
+  const locked = await run('rosterLock', { tournamentId: T.id, locked: true }, 'Registration closed')
+  if (!locked.ok) return
+  if (teams < 2) return
+  const setup = T.useBracket
+    ? await run('publishBracket', { tournamentId: T.id, published: true }, 'Bracket drawn and live')
+    : await run('autoPair', { tournamentId: T.id }, 'Games set up')
+  if (!setup.ok) return
+  if (confirm('Registration is closed and the games are set. Begin all the games now?')) {
+    const r = await run('startAll', { tournamentId: T.id }, 'Games started. Good luck!')
+    if (r.ok && r.data?.skipped?.length) alert(`${r.data.started} started. ${r.data.skipped.length} could not start:\n${r.data.skipped.map((x: any) => x.reason).join('\n')}`)
+  }
+}
+
 function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () => number }) {
   const T = data.tournamentFull
   const { busy, msg, run } = useRun(act)
@@ -131,11 +149,11 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
         <ol className="grid gap-2">
           {(open ? [
             `Teams: ${approved.length} of ${T.teamLimit} approved, ${checkedIn} checked in.`,
-            'Add games below: pick the two teams for each game. No bracket, so teams can play as many games as you set up.',
+            'Close registration and teams are paired into games for you, or add games by hand below.',
             'Tap Begin on a game, or Begin all ready games. Finalize each game when it ends; the standings update.',
           ] : [
             `Teams: ${approved.length} of ${T.teamLimit} approved, ${checkedIn} checked in.`,
-            'Close registration. The bracket is drawn at random and shown to everyone.',
+            'Close registration whenever you are ready, even with fewer teams. The bracket is drawn with whoever signed up, and you can begin every game in one tap.',
             'Tap Begin to start round 1. Teams wait on their phones until you do. Finalize each match when it completes to move winners forward.',
           ]).map((s, i) => (
             <li key={i} className="flex gap-3 p-3 rounded-lg" style={{ background: step === i + 1 ? 'rgba(224,173,79,0.15)' : 'rgba(0,0,0,0.2)', border: step === i + 1 ? '1px solid var(--sp-gold)' : '1px solid transparent' }}>
@@ -144,13 +162,10 @@ function RunTab({ data, act, serverNow }: { data: any; act: Act; serverNow: () =
           ))}
         </ol>
         <div className="flex flex-wrap gap-2">
-          {!T.rosterLocked && (
-            <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { registration_open: !T.registrationOpen } }, T.registrationOpen ? 'Registration closed' : 'Registration opened')}>
-              {T.registrationOpen ? 'Close registration' : 'Open registration'}
-            </button>
-          )}
+          {!T.rosterLocked && (T.registrationOpen ? <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => closeAndBegin(T, data, run)}>Close registration</button> : <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { registration_open: true } }, 'Registration open')}>Open registration</button>)}
+{!T.rosterLocked && !T.registrationOpen && data.allTeams.some((x: any) => x.status === 'approved' || x.status === 'pending') && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => closeAndBegin(T, data, run)}>Set up games</button>}
           {open ? null : !T.rosterLocked ? (
-            <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => { if (confirm(`Close registration with ${approved.length} teams and draw the bracket?`)) (async () => { const r = await run('rosterLock', { tournamentId: T.id, locked: true }, 'Registration closed and bracket drawn'); if (r.ok) await run('publishBracket', { tournamentId: T.id, published: true }, 'Registration closed. Bracket drawn and live.') })() }}>Close registration and draw bracket</button>
+            <span />
           ) : T.status !== 'live' && T.status !== 'completed' && (
             <button className="sp-btn sp-btn-sm sp-btn-ghost" disabled={busy} onClick={() => { if (confirm('Reopen registration? This clears the bracket so it can be drawn again.')) run('rosterLock', { tournamentId: T.id, locked: false }, 'Roster unlocked') }}>Reopen registration</button>
           )}
@@ -844,7 +859,8 @@ function ActivityHub({ data, act, serverNow }: { data: any; act: Act; serverNow:
               <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>{teamCount} of {T.teamLimit} teams · {T.registrationOpen && !T.rosterLocked ? 'registration open' : 'registration closed'} · {T.useBracket ? 'bracket' : 'open play'}</div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {!T.rosterLocked && <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { registration_open: !T.registrationOpen } }, T.registrationOpen ? 'Registration closed' : 'Registration open')}>{T.registrationOpen ? 'Close registration' : 'Open registration'}</button>}
+              {!T.rosterLocked && (T.registrationOpen ? <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => closeAndBegin(T, data, run)}>Close registration</button> : <button className="sp-btn sp-btn-sm" disabled={busy} onClick={() => run('updateTournament', { tournamentId: T.id, patch: { registration_open: true } }, 'Registration open')}>Open registration</button>)}
+{!T.rosterLocked && !T.registrationOpen && data.allTeams.some((x: any) => x.status === 'approved' || x.status === 'pending') && <button className="sp-btn sp-btn-sm sp-btn-gold" disabled={busy} onClick={() => closeAndBegin(T, data, run)}>Set up games</button>}
               <a className="sp-btn sp-btn-sm sp-btn-ghost" href={`/spades?t=${T.slug}`} target="_blank" rel="noreferrer">Public page</a>
               <a className="sp-btn sp-btn-sm sp-btn-ghost" href={`/spades/display?t=${T.slug}`} target="_blank" rel="noreferrer">TV display</a>
             </div>

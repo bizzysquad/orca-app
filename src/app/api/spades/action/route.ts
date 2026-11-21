@@ -43,6 +43,7 @@ const ACTIONS: Record<string, Handler> = {
   createGame: (s, a, b) => S.createGame(s, a, { tournamentId: b.tournamentId, teamAId: b.teamAId, teamBId: b.teamBId, tableId: b.tableId, scheduledAt: b.scheduledAt }),
   gameTeams: (s, a, b) => S.setGameTeams(s, a, { matchId: b.matchId, teamAId: b.teamAId, teamBId: b.teamBId }),
   deleteGame: (s, a, b) => S.deleteGame(s, a, { matchId: b.matchId }),
+  autoPair: (s, a, b) => S.autoPairGames(s, a, { tournamentId: b.tournamentId }),
   startAll: (s, a, b) => S.startAllReady(s, a, { tournamentId: b.tournamentId, onlyBothReady: !!b.onlyBothReady, matchIds: Array.isArray(b.matchIds) ? b.matchIds : undefined }),
   createTournament: (s, a, b) => S.createTournament(s, a, { name: b.name, slug: b.slug, teamLimit: b.teamLimit, capacity: b.capacity, startsAt: b.startsAt, venue: b.venue, address: b.address, eventType: b.eventType, gamesToWin: b.gamesToWin, targetDefault: b.targetDefault, targetFinal: b.targetFinal, useBracket: b.useBracket }),
   updateTournament: (s, a, b) => S.updateTournament(s, a, { tournamentId: b.tournamentId, patch: b.patch }),

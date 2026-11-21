@@ -400,3 +400,30 @@ test('with no events posted, the default event is never a self-started or test g
   const real = await S.createTournament(store, owner, { name: 'Posted Event' })
   assert.equal((await V.findTournament(store, null))!.id, real.id)
 })
+
+test('closing with only some teams: pending teams join, bracket fits, everything can begin at once', async () => {
+  const store = new MemoryStore()
+  const ev = await S.createTournament(store, owner, { name: 'Short Night', teamLimit: 8 })
+  await S.updateTournament(store, owner, { tournamentId: ev.id, patch: { registration_open: true, rules: { autoApprove: false } } })
+  for (let i = 1; i <= 5; i++) await S.registerTeam(store, S.PUBLIC, { tournamentId: ev.id, name: `T${i}`, player1: `t${i}a`, player2: `t${i}b` })
+  assert.equal((await store.select<TeamRow>('sp_teams', { tournament_id: ev.id, status: 'pending' })).length, 5)
+  await S.setRosterLock(store, owner, { tournamentId: ev.id, locked: true })
+  assert.equal((await store.select<TeamRow>('sp_teams', { tournament_id: ev.id, status: 'approved' })).length, 5)
+  await S.publishBracket(store, owner, { tournamentId: ev.id, published: true })
+  const r = await S.startAllReady(store, owner, { tournamentId: ev.id }) // no tables set up at all
+  assert.ok(r.started >= 1)
+  assert.equal(r.skipped.length, 0)
+})
+
+test('open play: auto pair registered teams into games', async () => {
+  const store = new MemoryStore()
+  const ev = await S.createTournament(store, owner, { name: 'Pairs', teamLimit: 8, useBracket: false })
+  for (let i = 1; i <= 5; i++) await S.registerTeam(store, owner, { tournamentId: ev.id, name: `P${i}`, player1: `p${i}a`, player2: `p${i}b` })
+  await S.setRosterLock(store, owner, { tournamentId: ev.id, locked: true })
+  const r = await S.autoPairGames(store, owner, { tournamentId: ev.id })
+  assert.equal(r.games, 2)
+  assert.equal(r.waiting, 1)
+  await expectReject(S.autoPairGames(store, owner, { tournamentId: ev.id }), 409)
+  const started = await S.startAllReady(store, owner, { tournamentId: ev.id })
+  assert.equal(started.started, 2)
+})

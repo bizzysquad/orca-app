@@ -917,7 +917,8 @@ export async function startMatch(store: Store, actor: Actor, input: { matchId: s
     if (free) {
       await store.update('sp_matches', { id: match.id }, { table_id: free.id })
       match.table_id = free.id
-    } else if (bracket) fail(409, 'Assign a table before starting')
+    }
+    // No free table is fine: the game still begins without a table number.
   }
   if (match.table_id) {
     const busy = await store.select<MatchRow>('sp_matches', { table_id: match.table_id, status: { in: ['live', 'paused', 'completed'] } })
@@ -1373,6 +1374,17 @@ export async function setRosterLock(store: Store, actor: Actor, input: { tournam
     await audit(store, actor, { tournamentId: t.id, action: 'roster.unlock' })
     await touch(store, t.id)
     return { ok: true }
+  }
+  // Closing registration: everyone who signed up and is still waiting is in
+  // (up to the team limit), so the director can start with whoever came.
+  {
+    const teams = await store.select<TeamRow>('sp_teams', { tournament_id: t.id }, { order: [{ col: 'created_at' }] })
+    let room = limitOf(t) - teams.filter(x => x.status === 'approved').length
+    for (const team of teams.filter(x => x.status === 'pending')) {
+      if (room <= 0) break
+      await store.update('sp_teams', { id: team.id, status: 'pending' }, { status: 'approved' })
+      room--
+    }
   }
   await store.update('sp_tournaments', { id: t.id }, { roster_locked: true, registration_open: false, status: t.status === 'live' ? 'live' : 'locked' })
   await audit(store, actor, { tournamentId: t.id, action: 'roster.lock' })
@@ -2145,4 +2157,27 @@ export async function requestRematch(store: Store, actor: Actor) {
   const row = await insertGame(store, t, last.team_a_id, last.team_b_id, last.table_id, null)
   await audit(store, actor, { tournamentId: t.id, matchId: row.id, action: 'game.rematch', after: { teamA: row.team_a_id, teamB: row.team_b_id } })
   return setReady(store, actor, { matchId: row.id, ready: true })
+}
+
+
+// Open play: pair every approved team that is not already in a waiting or
+// running game into new games, at random. An odd team out waits.
+export async function autoPairGames(store: Store, actor: Actor, input: { tournamentId: string }) {
+  const t = await one<TournamentRow>(store, 'sp_tournaments', { id: input.tournamentId }, 'Event not found')
+  requireDirector(actor, t.id)
+  if (normalizeRules(t.rules).useBracket) fail(409, 'This event uses a bracket')
+  const teams = await store.select<TeamRow>('sp_teams', { tournament_id: t.id, status: 'approved' })
+  const busy = new Set((await store.select<MatchRow>('sp_matches', { tournament_id: t.id, status: { in: ['ready', 'live', 'paused', 'completed'] } }))
+    .flatMap(m => [m.team_a_id, m.team_b_id]))
+  const free = shuffle(teams.filter(x => !busy.has(x.id)).map(x => x.id), cryptoRandom)
+  if (free.length < 2) fail(409, 'Need at least two teams that are not already playing')
+  let made = 0
+  for (let i = 0; i + 1 < free.length; i += 2) {
+    const fresh = await one<TournamentRow>(store, 'sp_tournaments', { id: t.id })
+    await insertGame(store, fresh, free[i], free[i + 1], null, null)
+    made++
+  }
+  await audit(store, actor, { tournamentId: t.id, action: 'game.autopair', after: { games: made, waiting: free.length % 2 } })
+  await touch(store, t.id)
+  return { ok: true, games: made, waiting: free.length % 2 }
 }
