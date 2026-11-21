@@ -32,8 +32,8 @@ function Rules() {
             <li>Register your team on your phone. That phone is your team's scorekeeper for the night.</li>
             <li>Before every hand, enter your bid ({rules.biddingMode === 'captain' ? 'the scorekeeper phone enters both partner bids' : 'each player enters their own'}). The hand starts when all four bids are locked.</li>
             <li>Play the hand with real cards.</li>
-            <li>Each scorekeeper taps how many books their team won. Both reports must match and add up to 13.</li>
-            <li>Both scorekeepers confirm the score. Only then does it count.</li>
+            <li>When the hand is over, each captain counts the books on their side and enters that one number.</li>
+            <li>If the two numbers add up to 13 the hand scores itself. If not, recount and enter again.</li>
             <li>Something wrong? Tap Flag a problem. A supervisor reviews it.</li>
           </ol>
         </section>

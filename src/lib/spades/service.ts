@@ -428,7 +428,8 @@ async function evaluateReports(store: Store, actor: Actor, handId: string, rules
     const ra = reports.find(r => r.team_id === match.team_a_id)
     const rb = reports.find(r => r.team_id === match.team_b_id)
     if (!ra || !rb) return
-    const agree = ra.books_a === rb.books_a && ra.books_b === rb.books_b
+    // Each captain enters the books on their own side; together they must make 13.
+    const agree = ra.books_a + rb.books_b === 13
     let target: HandRow['status']
     if (agree) {
       const mism = await store.select<DisputeRow>('sp_disputes', { hand_id: handId, kind: 'report_mismatch', status: 'open' })
@@ -444,7 +445,7 @@ async function evaluateReports(store: Store, actor: Actor, handId: string, rules
         await store.insert('sp_disputes', {
           id: uid(), tournament_id: hand.tournament_id, match_id: hand.match_id, hand_id: handId, kind: 'report_mismatch', status: 'open',
           raised_by_kind: 'system', raised_by_id: null, raised_by_name: SYSTEM_NAME,
-          reason: `Captain reports disagree: Team A says ${ra.books_a} to ${ra.books_b}, Team B says ${rb.books_a} to ${rb.books_b}`,
+          reason: `Books do not add up to 13: Team A has ${ra.books_a}, Team B has ${rb.books_b} (${ra.books_a + rb.books_b} total). Recount.`,
           resolution: null, resolved_by_name: null, resolved_at: null, created_at: nowIso(store),
         })
       } catch (err) {
@@ -468,8 +469,10 @@ export async function approveHand(store: Store, actor: Actor, input: { handId: s
   const { hand, match, table } = await loadHandCtx(store, input.handId)
   const staff = supervisesTable(actor, match.tournament_id, table)
   if (!staff) requirePlayerInMatch(actor, match)
-  requireLiveForPlayers(match, staff)
+  // Already scored (for example automatically when the books added up): a
+  // late or repeated tap is harmless.
   if (hand.status === 'verified') return { ok: true, verified: true }
+  requireLiveForPlayers(match, staff)
   if (hand.status === 'disputed') fail(409, 'This hand is disputed. A supervisor must resolve it.')
   if (hand.status !== 'review') fail(409, 'This hand is not ready to confirm yet')
   const open = await store.count('sp_disputes', { hand_id: hand.id, status: 'open' })

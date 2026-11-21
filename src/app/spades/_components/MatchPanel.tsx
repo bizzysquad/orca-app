@@ -71,7 +71,7 @@ function Scoreboard({ d, names, serverNow }: { d: any; names: { a: string; b: st
           </div>
         )}
         <div className="sp-display sp-num mt-2" style={{ fontSize: 52 }} aria-label={`${names[side]} score`}>{side === 'a' ? m.scoreA : m.scoreB}</div>
-        <div className="text-sm sp-num" style={{ color: 'var(--sp-muted)' }}>Bags <b style={{ color: 'var(--sp-cream)' }}>{side === 'a' ? m.bagsA : m.bagsB}</b>{m.gamesToWin > 1 && <> · Games won <b style={{ color: 'var(--sp-gold)' }}>{side === 'a' ? m.gamesA : m.gamesB}</b></>}</div>
+        {(m.rules?.bagsEnabled || m.gamesToWin > 1) && (<div className="text-sm sp-num" style={{ color: 'var(--sp-muted)' }}>{m.rules?.bagsEnabled && <>Bags <b style={{ color: 'var(--sp-cream)' }}>{side === 'a' ? m.bagsA : m.bagsB}</b></>}{m.gamesToWin > 1 && <> · Games won <b style={{ color: 'var(--sp-gold)' }}>{side === 'a' ? m.gamesA : m.gamesB}</b></>}</div>)}
       </div>
     )
   }
@@ -140,16 +140,16 @@ function HandPanel({ d, act, names }: { d: any; act: Act; names: { a: string; b:
       {c.status !== 'bidding' && <LockedBids d={d} names={names} />}
       {c.status === 'playing' && (
         <div className="sp-banner sp-banner-info text-sm">
-          Bids are locked. Play the hand. When the last trick is taken, each captain reports the books.
+          Bids are locked. Play all 13 books. When the hand is over, each captain enters the books on their side.
           {c.reports && (c.reports.a || c.reports.b) && ` Reports in: ${c.reports.a ? names.a : ''}${c.reports.a && c.reports.b ? ' and ' : ''}${c.reports.b ? names.b : ''}.`}
         </div>
       )}
       {c.renegeTeamId && <div className="sp-banner sp-banner-bad text-sm">Supervisor ruling: renege by {c.renegeTeamId === d.teamA?.id ? names.a : names.b}. Renege scoring applies to this hand.</div>}
       {c.status === 'disputed' && (
         <div className="sp-banner sp-banner-bad text-sm" role="alert">
-          Reports do not match. {c.reports?.a && !c.reports.a.hidden && `${names.a} says ${c.reports.a.booksA} to ${c.reports.a.booksB}. `}
-          {c.reports?.b && !c.reports.b.hidden && `${names.b} says ${c.reports.b.booksA} to ${c.reports.b.booksB}. `}
-          The supervisor has been notified. A captain can fix a typo by reporting again.
+          The books do not add up to 13. {c.reports?.a && !c.reports.a.hidden && `${names.a} entered ${c.reports.a.booksA}. `}
+          {c.reports?.b && !c.reports.b.hidden && `${names.b} entered ${c.reports.b.booksB}. `}
+          Recount the books on each side and enter them again. A supervisor can also settle it.
         </div>
       )}
       {c.status === 'review' && c.provisional && <Provisional d={d} names={names} />}
@@ -280,18 +280,12 @@ function ReportBooks({ d, act, names }: { d: any; act: Act; names: { a: string; 
   }
   return (
     <div className="grid gap-3 p-3 rounded-xl" style={{ border: '2px solid var(--sp-gold)' }}>
-      <h3 className="font-black text-lg">{mineRep ? 'Your report' : 'Report books'}: how many books did {names[side]} win?</h3>
-      <NumberPad label="Books we won" value={val} onChange={setVal} />
-      {val !== null && (
-        <div className="grid grid-cols-2 gap-2 text-center">
-          <div className="p-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}><div className="sp-label">{names[side]}</div><div className="sp-display sp-num text-3xl">{val}</div></div>
-          <div className="p-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}><div className="sp-label">{names[other]}</div><div className="sp-display sp-num text-3xl">{13 - val}</div></div>
-        </div>
-      )}
+      <h3 className="font-black text-lg">{mineRep ? `You entered ${myBooks} books` : 'Hand over? Count the books on your side'}</h3>
+      <NumberPad label="Books on our side" value={val} onChange={setVal} />
       <button className="sp-btn sp-btn-gold sp-btn-block" disabled={busy || val === null || val === myBooks} onClick={send}>
-        {busy ? 'Sending' : val === null ? 'Pick a number' : `Confirm ${val} to ${13 - val}`}
+        {busy ? 'Sending' : val === null ? 'Pick a number' : mineRep ? `Change to ${val} books` : `We have ${val} books`}
       </button>
-      {mineRep && c.status === 'playing' && <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Reported. Waiting for the other captain.</p>}
+      {mineRep && c.status === 'playing' && <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Sent. Waiting for {names[other]} to enter theirs. The hand scores itself when the two add up to 13.</p>}
       <Feedback msg={msg} />
     </div>
   )
@@ -308,7 +302,7 @@ function Provisional({ d, names }: { d: any; names: { a: string; b: string } }) 
         <td className="sp-num">{r.books}</td>
         <td>{r.renege ? <span className="sp-chip sp-chip-bad">Renege</span> : r.made ? <span className="sp-chip sp-chip-live">Made</span> : <span className="sp-chip sp-chip-bad">Set</span>}</td>
         <td className="sp-num font-black" style={{ color: r.points < 0 ? 'var(--sp-red)' : 'var(--sp-green)' }}>{r.points > 0 ? '+' : ''}{r.points}</td>
-        <td className="sp-num">{r.bagsEarned}{r.bagPenalty ? <span style={{ color: 'var(--sp-red)' }}> (minus {r.bagPenalty})</span> : ''}</td>
+        {d.match.rules?.bagsEnabled && <td className="sp-num">{r.bagsEarned}{r.bagPenalty ? <span style={{ color: 'var(--sp-red)' }}> (minus {r.bagPenalty})</span> : ''}</td>}
         <td className="sp-num font-black">{r.totalAfter}</td>
       </tr>
     )
@@ -317,7 +311,7 @@ function Provisional({ d, names }: { d: any; names: { a: string; b: string } }) 
     <div className="sp-scroll">
       <p className="sp-label mb-2">Provisional result. Not official until both captains confirm.</p>
       <table className="sp-table">
-        <thead><tr><th>Team</th><th>Bid</th><th>Books</th><th>Result</th><th>Points</th><th>Bags</th><th>Total</th></tr></thead>
+        <thead><tr><th>Team</th><th>Bid</th><th>Books</th><th>Result</th><th>Points</th>{d.match.rules?.bagsEnabled && <th>Bags</th>}<th>Total</th></tr></thead>
         <tbody>{row('a')}{row('b')}</tbody>
       </table>
     </div>
@@ -358,7 +352,7 @@ function History({ d, names }: { d: any; names: { a: string; b: string } }) {
       <div className="sp-scroll">
         <table className="sp-table">
           <thead>
-            <tr><th>#</th>{d.match.gamesToWin > 1 && <th>Game</th>}<th>{names.a} bid/books</th><th>Total · bags</th><th>{names.b} bid/books</th><th>Total · bags</th></tr>
+            <tr><th>#</th>{d.match.gamesToWin > 1 && <th>Game</th>}<th>{names.a} bid/books</th><th>{d.match.rules?.bagsEnabled ? 'Total · bags' : 'Total'}</th><th>{names.b} bid/books</th><th>{d.match.rules?.bagsEnabled ? 'Total · bags' : 'Total'}</th></tr>
           </thead>
           <tbody>
             {d.history.map((h: any) => (
@@ -366,9 +360,9 @@ function History({ d, names }: { d: any; names: { a: string; b: string } }) {
                 <td className="sp-num font-bold">{h.handNumber}{h.isTiebreak ? ' TB' : ''}</td>
                 {d.match.gamesToWin > 1 && <td className="sp-num">{h.game}</td>}
                 <td>{cell(h.a)}</td>
-                <td className="sp-num font-black">{h.a?.total} · {h.a?.bags}</td>
+                <td className="sp-num font-black">{h.a?.total}{d.match.rules?.bagsEnabled ? ` · ${h.a?.bags}` : ''}</td>
                 <td>{cell(h.b)}</td>
-                <td className="sp-num font-black">{h.b?.total} · {h.b?.bags}</td>
+                <td className="sp-num font-black">{h.b?.total}{d.match.rules?.bagsEnabled ? ` · ${h.b?.bags}` : ''}</td>
               </tr>
             ))}
           </tbody>
@@ -776,8 +770,8 @@ export function GamePreview({ d, serverNow }: { d: any; serverNow: () => number 
         <ol className="grid gap-1 text-sm list-decimal pl-5">
           <li>Everyone bids. The hand starts when all four bids are locked.</li>
           <li>Play the hand with real cards.</li>
-          <li>Each captain taps how many books their team won. Both reports must match.</li>
-          <li>Both captains confirm. The scoreboard updates on every phone.</li>
+          <li>When the hand is over, each captain enters the books on their side.</li>
+          <li>If the two add up to 13 the hand scores itself and every phone updates.</li>
         </ol>
       </section>
     </div>

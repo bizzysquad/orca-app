@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { actorFrom, errorResponse, json, store } from '@/lib/spades/http'
 import { actAsPlayer, isDirector, isStaff } from '@/lib/spades/service'
-import { adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
+import { adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicEvents, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
 import type { TournamentRow } from '@/lib/spades/types'
 import { normalizeRules } from '@/lib/spades/rules'
 
@@ -41,7 +41,8 @@ export async function GET(req: NextRequest) {
 
     if (view === 'public') {
       const past = sp.get('winners') === '1' ? await pastChampions(s, t.id) : undefined
-      return json({ ...publicState(b, now), viewer, pastChampions: past })
+      const events = sp.get('events') === '1' ? await publicEvents(s) : undefined
+      return json({ ...publicState(b, now), viewer, pastChampions: past, events })
     }
     if (view === 'play') return json({ ...publicState(b, now), viewer, me: playerState(b, actor, now) })
     if (view === 'match') {

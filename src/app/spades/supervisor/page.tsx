@@ -83,7 +83,7 @@ export default function SupervisorPage() {
                           <div className="text-xs truncate" style={{ color: 'var(--sp-muted)' }}>{t?.players.map((p: any) => p.name + (p.isCaptain ? ' (C)' : '')).join(' & ')}</div>
                           <div className="flex items-end justify-between mt-1">
                             <span className="sp-display sp-num text-4xl">{side === 'a' ? m.scoreA : m.scoreB}</span>
-                            <span className="text-xs sp-num">bags {side === 'a' ? m.bagsA : m.bagsB}</span>
+                            {m.rules?.bagsEnabled && <span className="text-xs sp-num">bags {side === 'a' ? m.bagsA : m.bagsB}</span>}
                           </div>
                           {c && <div className="text-xs mt-1">Bid: <b className="sp-num">{c.teamBid[side] ?? (c.seats.filter((s: any) => s.side === side && s.submitted).length + '/2 in')}</b></div>}
                         </div>

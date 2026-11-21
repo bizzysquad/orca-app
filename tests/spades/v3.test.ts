@@ -208,3 +208,28 @@ test('delete event: unplayed events go completely, played events must be archive
   await playHand(s2, m.id, [2, 2, 2, 2], 7)
   await expectReject(S.deleteEvent(s2, owner, { tournamentId: tid }), 409, /Archive/)
 })
+
+test('default flow: each captain enters own books once; 13 total scores it with no confirm step', async () => {
+  const { store, tid } = await setup({ teams: 2, rules: { bagsEnabled: false, requireCaptainApproval: false } })
+  await lockAndStart(store, tid)
+  const [m] = await roundMatches(store, tid, 1)
+  const ps = await store.select<any>('sp_players', { tournament_id: tid })
+  const capOf = async (team: string) => S.actAsPlayer(store, owner, ps.find((p: any) => p.team_id === team && p.is_captain).id).catch(() => null)
+  assert.equal(await capOf(m.team_a_id!), null) // real event: no impersonation
+  const sess = async (team: string) => S.resolveSession(store, (await S.createSession(store, { kind: 'player', tournamentId: tid, playerId: ps.find((p: any) => p.team_id === team && p.is_captain).id, staffId: null, invitationId: null, ttlMs: 1e7 })).sessionToken)
+  const ca = await sess(m.team_a_id!), cb = await sess(m.team_b_id!)
+  const h = await openHand(store, m.id)
+  await S.submitBids(store, ca, { handId: h.id, bids: ps.filter((p: any) => p.team_id === m.team_a_id).map((p: any) => ({ playerId: p.id, bid: 2 })) })
+  await S.submitBids(store, cb, { handId: h.id, bids: ps.filter((p: any) => p.team_id === m.team_b_id).map((p: any) => ({ playerId: p.id, bid: 2 })) })
+  // A says they have 7; B says they have 5: 12, not 13 -> recount
+  await S.reportBooks(store, ca, { handId: h.id, booksA: 7, booksB: 6 })
+  await S.reportBooks(store, cb, { handId: h.id, booksA: 8, booksB: 5 })
+  assert.equal((await openHand(store, m.id)).status, 'disputed')
+  // B recounts: 6. Now 7 + 6 = 13 and the hand is scored immediately.
+  await S.reportBooks(store, cb, { handId: h.id, booksA: 7, booksB: 6 })
+  const mm = await getMatch(store, m.id)
+  assert.equal(mm.hands_verified, 1)
+  assert.equal(mm.score_a, 43)
+  assert.equal(mm.score_b, 42)
+  assert.equal(mm.bags_a, 0)
+})

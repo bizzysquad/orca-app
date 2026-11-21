@@ -650,8 +650,9 @@ function SettingsTab({ data, act }: { data: any; act: Act }) {
               <option value={3}>Best of 5 (first to 3 games)</option>
             </select>
           </label>
-          {num('minTeamBid')}{num('initialBags')}{num('targetDefault')}{num('targetFinal')}{num('timeDefaultMin')}{num('timeFinalMin')}{num('bagLimit')}{num('bagPenalty')}
-          <label className="flex items-center gap-3 font-bold"><input type="checkbox" className="w-6 h-6" checked={r.requireCaptainApproval} onChange={e => setR({ ...r, requireCaptainApproval: e.target.checked })} /> Both captains confirm every hand</label>
+          {num('minTeamBid')}{num('initialBags')}{num('targetDefault')}{num('targetFinal')}{num('timeDefaultMin')}{num('timeFinalMin')}{r.bagsEnabled && num('bagLimit')}{r.bagsEnabled && num('bagPenalty')}
+          <label className="flex items-center gap-3 font-bold"><input type="checkbox" className="w-6 h-6" checked={r.bagsEnabled} onChange={e => setR({ ...r, bagsEnabled: e.target.checked })} /> Count bags (10 extra books costs 100 points)</label>
+          <label className="flex items-center gap-3 font-bold"><input type="checkbox" className="w-6 h-6" checked={r.requireCaptainApproval} onChange={e => setR({ ...r, requireCaptainApproval: e.target.checked })} /> Extra step: both captains confirm every hand</label>
         </div>
         <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Nil and blind nil are off for this engine. Targets and time limits are copied onto each match when the bracket is drawn; adjust a single match from its match page.</p>
         <button className="sp-btn sp-btn-gold" disabled={busy}>Save rules</button>

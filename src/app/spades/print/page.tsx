@@ -51,7 +51,7 @@ function Print() {
               <h1 className="font-black text-xl uppercase">Backup scorecard · {m.roundName}</h1>
               <span>Table ____ · playing to {m.target}</span>
             </div>
-            <p className="text-sm mb-3">{T.name}. Bid 10 per book, 1 per extra book (bag). Set: minus 10 per book bid. Every 10 bags: minus 100. Books each hand must total 13. Minimum team bid {T.rules.minTeamBid}. No nil.</p>
+            <p className="text-sm mb-3">{T.name}. Bid 10 per book, 1 per extra book. Set: minus 10 per book bid.{T.rules.bagsEnabled ? ' Every 10 bags: minus 100.' : ' No bags.'} Books each hand must total 13. Minimum team bid {T.rules.minTeamBid}. No nil.</p>
             <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr>

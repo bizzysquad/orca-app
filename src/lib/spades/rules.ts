@@ -18,6 +18,9 @@ export interface Rules {
   blindNilAllowed: boolean
   pointsPerBook: number
   bagValue: number
+  // Bags off (default): extra books still score bagValue points each, but
+  // they are not counted and there is never a bag penalty.
+  bagsEnabled: boolean
   bagLimit: number
   bagPenalty: number
   initialBags: number
@@ -46,6 +49,7 @@ export const DEFAULT_RULES: Rules = {
   blindNilAllowed: false,
   pointsPerBook: 10,
   bagValue: 1,
+  bagsEnabled: false,
   bagLimit: 10,
   bagPenalty: 100,
   initialBags: 0,
@@ -53,7 +57,7 @@ export const DEFAULT_RULES: Rules = {
   targetFinal: 350,
   timeDefaultMin: 50,
   timeFinalMin: 70,
-  requireCaptainApproval: true,
+  requireCaptainApproval: false,
   gamesToWin: 1,
   useBracket: true,
   renegePolicy: 'lose_bid_award_opponent',
@@ -79,6 +83,7 @@ export function normalizeRules(raw: unknown): Rules {
     blindNilAllowed: false,
     pointsPerBook: int(r.pointsPerBook, d.pointsPerBook, 1, 100),
     bagValue: int(r.bagValue, d.bagValue, 0, 10),
+    bagsEnabled: r.bagsEnabled === true,
     bagLimit: int(r.bagLimit, d.bagLimit, 1, 100),
     bagPenalty: int(r.bagPenalty, d.bagPenalty, 0, 1000),
     initialBags: int(r.initialBags, d.initialBags, 0, 99),
@@ -86,7 +91,7 @@ export function normalizeRules(raw: unknown): Rules {
     targetFinal: int(r.targetFinal, d.targetFinal, 10, 2000),
     timeDefaultMin: int(r.timeDefaultMin, d.timeDefaultMin, 0, 600),
     timeFinalMin: int(r.timeFinalMin, d.timeFinalMin, 0, 600),
-    requireCaptainApproval: r.requireCaptainApproval === false ? false : true,
+    requireCaptainApproval: r.requireCaptainApproval === true,
     gamesToWin: int(r.gamesToWin, d.gamesToWin, 1, 3),
     useBracket: r.useBracket === false ? false : true,
     renegePolicy: 'lose_bid_award_opponent',
@@ -155,11 +160,11 @@ export function ruleSummary(r: Rules): RuleSection[] {
     {
       title: 'Scoring',
       items: [
-        `Make your bid: ${r.pointsPerBook} points per book bid plus ${r.bagValue} point for each extra book (bag).`,
-        `Get set: lose ${r.pointsPerBook} points per book bid. No bag points on a set.`,
-        `Every ${r.bagLimit} bags costs ${r.bagPenalty} points. Leftover bags carry over.`,
-        'Example: bid 5, win 7 = +52 and 2 bags. Bid 5, win 4 = minus 50.',
-        'Both captains report books after every hand. The 13 books must add up and both reports must match.',
+        `Make your bid: ${r.pointsPerBook} points per book bid plus ${r.bagValue} point for each extra book.`,
+        `Get set: lose ${r.pointsPerBook} points per book bid.`,
+        ...(r.bagsEnabled ? [`Extra books count as bags. Every ${r.bagLimit} bags costs ${r.bagPenalty} points. Leftover bags carry over.`] : ['No bags: extra books never count against you.']),
+        r.bagsEnabled ? 'Example: bid 5, win 7 = +52 and 2 bags. Bid 5, win 4 = minus 50.' : 'Example: bid 5, win 7 = +52. Bid 5, win 4 = minus 50.',
+        'When all 13 books are played, each captain enters the books on their side. The two numbers must add up to 13.',
       ],
     },
     {

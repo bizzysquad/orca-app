@@ -8,7 +8,7 @@ import { ErrorBox, Feedback, Loading, Shell } from '../_components/ui'
 
 function Register() {
   const t = useSearchParams().get('t')
-  const { data, error, loading, online, act, reload } = useSpades<any>('public', { t })
+  const { data, error, loading, online, act, reload } = useSpades<any>('public', { t, events: '1' })
   const [form, setForm] = useState({ name: '', player1: '', player2: '', captainSeat: 1, contact: '', bidControl: 'captain' })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -39,7 +39,17 @@ function Register() {
           <h1 className="sp-display text-4xl mt-1">Register a team</h1>
           <p className="mt-2" style={{ color: 'var(--sp-muted)' }}>Free. Two players per team. {data.registration.approved} of {T.teamLimit} spots confirmed.</p>
         </div>
-        {done ? (
+        {!t && !done && (data.events || []).filter((e: any) => e.registrationOpen).length > 1 ? (
+          <div className="grid gap-3">
+            <p className="font-bold">Which event are you signing up for?</p>
+            {data.events.filter((e: any) => e.registrationOpen).map((e: any) => (
+              <a key={e.slug} href={`/spades/register?t=${e.slug}`} className="sp-card p-4 flex items-center justify-between gap-3">
+                <span><span className="font-black block">{e.name}</span><span className="text-sm" style={{ color: 'var(--sp-muted)' }}>{e.approved} of {e.teamLimit} teams</span></span>
+                <span className="sp-btn sp-btn-sm sp-btn-gold">Pick</span>
+              </a>
+            ))}
+          </div>
+        ) : done ? (
           <div className="sp-card-paper p-6 grid gap-3">
             <h2 className="sp-display text-3xl">{done === 'waitlist' ? 'You are on the waitlist' : 'Request received'}</h2>
             <p>

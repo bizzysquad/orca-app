@@ -9,7 +9,7 @@ import { ErrorBox, Loading, Shell, SpadeIcon } from './_components/ui'
 
 function Landing() {
   const t = useSearchParams().get('t')
-  const { data, error, loading, online, reload } = useSpades<any>('public', { t, winners: '1' })
+  const { data, error, loading, online, reload } = useSpades<any>('public', { t, winners: '1', events: '1' })
   if (loading && !data) return <Shell active="home"><Loading /></Shell>
   if (!data?.tournament) return <Shell active="home" online={online}><div className="sp-wrap-narrow"><ErrorBox message={error || 'Tournament not found'} onRetry={reload} /></div></Shell>
   const T = data.tournament
@@ -19,6 +19,34 @@ function Landing() {
   const q = t ? `?t=${t}` : ''
   return (
     <Shell active="home" online={online} viewer={data.viewer}>
+      {(data.events || []).length > 0 && (
+        <section className="sp-wrap mb-6" aria-label="Events">
+          <h2 className="sp-display text-2xl mb-3">Events</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {data.events.map((e: any) => {
+              const current = e.slug === T.slug
+              const full = e.approved >= e.teamLimit
+              const state = e.status === 'live' ? 'In progress' : e.status === 'completed' ? 'Finished' : e.registrationOpen ? (full ? 'Waitlist open' : 'Registration open') : 'Registration closed'
+              return (
+                <div key={e.slug} className="sp-card p-4 grid gap-2" style={current ? { borderColor: 'var(--sp-gold)' } : undefined}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-black text-lg leading-tight">{e.name}</div>
+                    <span className={`sp-chip ${e.status === 'live' ? 'sp-chip-live' : e.registrationOpen ? 'sp-chip-warn' : 'sp-chip-dim'}`}>{state}</span>
+                  </div>
+                  <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>
+                    {e.teamLimit <= 2 ? (e.gamesToWin > 1 ? `Best of ${e.gamesToWin * 2 - 1}` : 'One game') : e.useBracket ? 'Bracket' : 'Open play'} · {e.approved} of {e.teamLimit} teams
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {e.registrationOpen && <Link href={`/spades/register?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-gold">{full ? 'Join waitlist' : 'Register for this event'}</Link>}
+                    {!current && <Link href={`/spades?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-ghost">View</Link>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       <section className="sp-wrap">
         <div className="relative overflow-hidden rounded-3xl p-6 sm:p-10" style={{ background: 'linear-gradient(135deg, var(--sp-wine) 0%, #2a0b13 70%)', border: '2px solid var(--sp-line)' }}>
           <div aria-hidden className="sp-vinyl absolute" style={{ width: 340, height: 340, right: -110, top: -90, opacity: 0.55 }} />

@@ -27,6 +27,9 @@ export interface TeamTotals {
 export function scoreTeamHand(bid: number, books: number, bagsBefore: number, rules: Rules): Omit<TeamHandResult, 'totalAfter' | 'renege'> {
   if (books >= bid) {
     const extra = books - bid
+    if (!rules.bagsEnabled) {
+      return { bid, books, made: true, points: rules.pointsPerBook * bid + rules.bagValue * extra, bagsEarned: 0, bagPenalty: 0, bagsAfter: 0 }
+    }
     let bags = bagsBefore + extra
     let penalty = 0
     while (bags >= rules.bagLimit) {

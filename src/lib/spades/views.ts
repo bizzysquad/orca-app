@@ -148,6 +148,20 @@ export function winners(b: Bundle) {
   }
 }
 
+// Every event people can see and join, for the home page list.
+export async function publicEvents(store: Store) {
+  const ts = await store.select<TournamentRow>('sp_tournaments', { status: { in: ['draft', 'registration', 'locked', 'live', 'completed'] } }, { order: [{ col: 'created_at', asc: false }], limit: 50 })
+  const shown = ts.filter(t => !t.is_test && t.event_type !== 'test' && t.status !== 'draft' || (t.is_featured && !t.is_test))
+  if (!shown.length) return []
+  const teams = await store.select<TeamRow>('sp_teams', { tournament_id: { in: shown.map(t => t.id) }, status: 'approved' })
+  return shown.map(t => ({
+    slug: t.slug, name: t.name, subtitle: t.subtitle, eventType: t.event_type || 'tournament', status: t.status,
+    registrationOpen: t.registration_open && !t.roster_locked, teamLimit: t.team_limit || t.capacity,
+    approved: teams.filter(x => x.tournament_id === t.id).length, isFeatured: t.is_featured,
+    useBracket: normalizeRules(t.rules).useBracket, gamesToWin: normalizeRules(t.rules).gamesToWin,
+  }))
+}
+
 // Champions of other finished tournaments, newest first, for the winners wall.
 export async function pastChampions(store: Store, currentId: string) {
   const ts = await store.select<TournamentRow>('sp_tournaments', { status: { in: ['completed', 'archived'] } }, { order: [{ col: 'created_at', asc: false }], limit: 20 })
