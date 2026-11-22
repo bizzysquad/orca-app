@@ -40,7 +40,7 @@ const NAV = [
   { href: '/spades/rules', label: 'Rules', key: 'rules' },
 ]
 
-export function Shell({ children, active, online = true, viewer, wide = false }: { children: ReactNode; active?: string; online?: boolean; viewer?: any; wide?: boolean }) {
+export function Shell({ children, active, online = true, viewer, wide = false, badge = true }: { children: ReactNode; active?: string; online?: boolean; viewer?: any; wide?: boolean; badge?: boolean }) {
   const staff = viewer && (viewer.kind === 'owner' || viewer.kind === 'staff')
   const director = viewer && (viewer.kind === 'owner' || viewer.role === 'director')
   return (
@@ -48,7 +48,7 @@ export function Shell({ children, active, online = true, viewer, wide = false }:
       <header className="sp-noprint sticky top-0 z-20" style={{ background: 'rgba(20,9,11,0.88)', backdropFilter: 'blur(8px)', borderBottom: '1px solid var(--sp-line)' }}>
         <div className={`${wide ? 'sp-wrap' : 'sp-wrap'} flex items-center justify-between gap-3 py-3`}>
           <Link href="/spades" aria-label="Spades HQ home"><Logo small /></Link>
-          <ConnectionBadge online={online} />
+          {badge && <ConnectionBadge online={online} />}
         </div>
         <nav className="sp-wrap flex gap-1 overflow-x-auto pb-2" aria-label="Spades HQ">
           {[...NAV, ...(staff ? [{ href: '/spades/supervisor', label: 'Tables', key: 'supervisor' }] : []), ...(director ? [{ href: '/spades/admin', label: 'Director', key: 'admin' }] : [])].map(n => (

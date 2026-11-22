@@ -2,12 +2,12 @@
 
 import Link from 'next/link'
 import { useSpades } from './_components/useSpades'
-import { Loading, Shell, SpadeIcon } from './_components/ui'
+import { Shell, SpadeIcon } from './_components/ui'
 
 // Home: three choices and the events the director posts. Nothing else.
+// Draws right away; the events list fills in when the server answers.
 export default function Home() {
   const { data, loading, online } = useSpades<any>('public', { events: '1' })
-  if (loading && !data) return <Shell active="home"><Loading /></Shell>
   const events: any[] = data?.events || []
   const open = events.filter(e => e.registrationOpen)
   const joinHref = open.length === 1 ? `/spades/register?t=${open[0].slug}` : '/spades/register'
@@ -22,19 +22,23 @@ export default function Home() {
         </header>
 
         <nav className="grid gap-3" aria-label="What do you want to do?">
-          {open.length ? (
+          {loading && !data ? (
+            <span className="sp-btn sp-btn-gold sp-btn-block" aria-disabled="true" style={{ minHeight: 68, fontSize: 20, opacity: 0.6 }}>Checking for tournaments</span>
+          ) : open.length ? (
             <Link href={joinHref} className="sp-btn sp-btn-gold sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>Join a tournament</Link>
           ) : (
             <span className="sp-btn sp-btn-gold sp-btn-block" aria-disabled="true" style={{ minHeight: 68, fontSize: 20, opacity: 0.5, cursor: 'not-allowed' }}>No tournament open right now</span>
           )}
-          <Link href="/spades/start" className="sp-btn sp-btn-wine sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>Start your own game</Link>
+          <Link href="/spades/start" className="sp-btn sp-btn-wine sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>Keep score for a game</Link>
           <Link href="/spades/bracket" className="sp-btn sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>View scores</Link>
           {data?.viewer?.kind === 'player' && <Link href="/spades/play" className="sp-btn sp-btn-ghost sp-btn-block">Back to my game</Link>}
         </nav>
 
         <section aria-label="Events" className="grid gap-3">
           <h2 className="sp-display text-2xl">Events</h2>
-          {events.length === 0 ? (
+          {loading && !data ? (
+            <div className="sp-card p-5 text-center" style={{ color: 'var(--sp-muted)' }} role="status">Loading events</div>
+          ) : events.length === 0 ? (
             <div className="sp-card p-5 text-center" style={{ color: 'var(--sp-muted)' }}>No events posted right now. Check back soon.</div>
           ) : events.map(e => {
             const full = e.approved >= e.teamLimit
