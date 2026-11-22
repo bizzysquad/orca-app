@@ -79,7 +79,7 @@ export default function JoinPage() {
             <p id="code-help" className="text-sm" style={{ color: 'var(--sp-muted)' }}>You got this code when you registered your team. Supervisors get theirs from the tournament director. Lost it? The director can give you a new one in seconds.</p>
             {error && <div className="sp-banner sp-banner-bad text-sm" role="alert">{error}</div>}
             <button className="sp-btn sp-btn-gold" disabled={busy || code.replace('-', '').length !== 8}>{busy ? 'Checking' : 'Continue'}</button>
-            <Link href="/spades/register" className="sp-btn sp-btn-ghost">Register a new team instead</Link>
+            <Link href="/spades#signup" className="sp-btn sp-btn-ghost">Sign up instead</Link>
           </form>
         )}
         {preview && preview.signedInAsThis && (

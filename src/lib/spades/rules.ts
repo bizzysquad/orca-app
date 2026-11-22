@@ -48,6 +48,15 @@ export interface Rules {
   // Director written rules page. Empty means the page is generated from the
   // settings above (ruleSummary).
   customSections: RuleSection[]
+  // Played for the trophy: counts on the Winners page records.
+  championship: boolean
+  // The first hand of every game has no bidding: each team scores the books
+  // it takes, as if it had bid them.
+  firstHandBidsItself: boolean
+  // Set on a match once it starts (never on the event): the player who keeps
+  // score at that table, and the seat (0 to 3) that dealt the first hand.
+  scorekeeperPlayerId: string | null
+  firstDealer: number | null
 }
 
 export const DEFAULT_RULES: Rules = {
@@ -76,6 +85,19 @@ export const DEFAULT_RULES: Rules = {
   autoApprove: true,
   renegePolicy: 'lose_bid_award_opponent',
   customSections: [],
+  championship: false,
+  firstHandBidsItself: false,
+  scorekeeperPlayerId: null,
+  firstDealer: null,
+}
+
+// House rules for tournaments created from the director page: 10 points per
+// book bid, no bid minimum, first hand bids itself, one scorekeeper per table,
+// no clock, sign ups approved automatically.
+export const HOUSE_RULES: Partial<Rules> = {
+  biddingMode: 'captain', minTeamBid: 0, pointsPerBook: 10, setPenaltyPerBook: 0, bagValue: 0, bagsEnabled: false,
+  targetDefault: 250, targetFinal: 250, timeDefaultMin: 0, timeFinalMin: 0, scorekeeping: 'one', autoApprove: true,
+  firstHandBidsItself: true, requireCaptainApproval: false,
 }
 
 function int(v: unknown, fallback: number, min: number, max: number): number {
@@ -116,6 +138,10 @@ export function normalizeRules(raw: unknown): Rules {
     autoApprove: r.autoApprove === false ? false : true,
     renegePolicy: 'lose_bid_award_opponent',
     customSections: cleanSections(r.customSections),
+    championship: r.championship === true,
+    firstHandBidsItself: r.firstHandBidsItself === true,
+    scorekeeperPlayerId: typeof r.scorekeeperPlayerId === 'string' && r.scorekeeperPlayerId ? r.scorekeeperPlayerId : null,
+    firstDealer: typeof r.firstDealer === 'number' && Number.isInteger(r.firstDealer) && r.firstDealer >= 0 && r.firstDealer <= 3 ? r.firstDealer : null,
   }
 }
 
@@ -161,9 +187,10 @@ export function ruleSummary(r: Rules): RuleSection[] {
       title: 'Bidding',
       items: [
         'Partners sit across from each other. Every player bids before every hand.',
-        `Bids are whole numbers from 0 to ${r.maxBid}. Each team must bid at least ${r.minTeamBid} books combined.`,
+        r.minTeamBid ? `Bids are whole numbers from 0 to ${r.maxBid}. Each team must bid at least ${r.minTeamBid} books combined.` : `Each team bids a whole number from 0 to ${r.maxBid}. No minimum.`,
+        ...(r.firstHandBidsItself ? ['First hand of every game: no bidding. The books bid themselves, so each team scores for every book it takes.'] : []),
         'No nil, no blind nil, no Boston, no special bid bonuses.',
-        r.scorekeeping === 'one' ? 'One scorekeeper enters every bid and the books for both teams. Nobody else needs a phone.' : 'Each team captain enters both partners bids and their own books. Partners do not need a phone.',
+        r.scorekeeping === 'one' ? 'Each table picks one scorekeeper who enters both team bids and the books. Nobody else needs to touch a phone.' : 'Each team captain enters both partners bids and their own books. Partners do not need a phone.',
         r.bidOrder === 'sequential'
           ? 'Bids are entered in seat order starting left of the dealer, and earlier bids are visible.'
           : 'Bids are entered at the same time and stay hidden from the other team until all four are locked.',
@@ -184,16 +211,16 @@ export function ruleSummary(r: Rules): RuleSection[] {
         r.setPenaltyPerBook ? `Get set: lose ${r.setPenaltyPerBook} point${r.setPenaltyPerBook === 1 ? '' : 's'} per book bid.` : 'Get set (fewer books than you bid): 0 points for that hand.',
         ...(r.bagsEnabled ? [`Extra books count as bags. Every ${r.bagLimit} bags costs ${r.bagPenalty} points. Leftover bags carry over.`] : ['No bags.']),
         `Example: bid 5, win 7 = ${5 * r.pointsPerBook + 2 * r.bagValue}. Bid 5, win 4 = ${-5 * r.setPenaltyPerBook === 0 ? 0 : -5 * r.setPenaltyPerBook}.`,
-        'When all 13 books are played, each captain enters the books on their side. The two numbers must add up to 13.',
+        r.scorekeeping === 'one' ? 'When all 13 books are played, the scorekeeper enters the books one team took. The other team gets the rest of the 13.' : 'When all 13 books are played, each captain enters the books on their side. The two numbers must add up to 13.',
       ],
     },
     {
       title: 'Winning a Match',
       items: [
-        `Opening rounds play to ${r.targetDefault}. The championship plays to ${r.targetFinal}.`,
-        `Time limit: ${r.timeDefaultMin} minutes for opening rounds and semifinals, ${r.timeFinalMin} minutes for the championship.`,
+        r.targetDefault === r.targetFinal ? `Every game plays to ${r.targetDefault}.` : `Opening rounds play to ${r.targetDefault}. The final plays to ${r.targetFinal}.`,
+        ...(r.timeDefaultMin || r.timeFinalMin ? [`Time limit: ${r.timeDefaultMin} minutes for opening rounds and semifinals, ${r.timeFinalMin} minutes for the final.`] : ['No clock. Games play until a team reaches the target.']),
         'The target is checked only after a hand is officially verified. If both teams pass it, the higher score wins.',
-        'When time runs out, the hand in progress is finished and the higher score wins.',
+        ...(r.timeDefaultMin || r.timeFinalMin ? ['When time runs out, the hand in progress is finished and the higher score wins.'] : []),
         'Tied? Tiebreaker hands are played until one team leads.',
         ...(r.gamesToWin > 1 ? [`Series: first team to win ${r.gamesToWin} games takes the match. Scores and bags reset every game.`] : []),
       ],

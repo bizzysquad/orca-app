@@ -5,14 +5,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Feedback, NumberPad, Shell } from '../_components/ui'
 import {
-  GAME_TYPES, addHand, computeQuick, defaultSetup, gameTypeLabel, resultText, scoringSummary, seatName, seatTeam, undoHand,
+  GAME_TYPES, QUICK_KEY, addHand, computeQuick, defaultSetup, gameTypeLabel, resultText, scoringSummary, seatName, seatTeam, undoHand,
   type QuickGame, type QuickSetup, type QuickState, type Side,
 } from '@/lib/spades/quickgame'
 
 // One-phone scorekeeper. Everything stays on this device: nothing is sent to
-// the server. sessionStorage only protects a game in progress from an
-// accidental refresh and is wiped on Main menu or when the tab closes.
-const KEY = 'spades-hq-scorekeeper'
+// the server. The game in progress is kept in this phone's localStorage so a
+// refresh, a locked screen or a closed tab never loses the score. It is
+// wiped when the players leave the finished game (Main menu or Rematch).
+const KEY = QUICK_KEY
 type Phase = 'setup' | 'dealer' | 'play'
 interface Saved { phase: Phase; setup: QuickSetup; game: QuickGame | null }
 
@@ -25,7 +26,7 @@ export default function Scorekeeper() {
 
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(KEY)
+      const raw = localStorage.getItem(KEY)
       if (raw) {
         const s = JSON.parse(raw) as Saved
         if (s.setup) setSetup(s.setup)
@@ -38,11 +39,14 @@ export default function Scorekeeper() {
 
   useEffect(() => {
     if (!loaded) return
-    try { sessionStorage.setItem(KEY, JSON.stringify({ phase, setup, game } satisfies Saved)) } catch {}
+    try {
+      if (game) localStorage.setItem(KEY, JSON.stringify({ phase, setup, game } satisfies Saved))
+      else localStorage.removeItem(KEY)
+    } catch {}
   }, [loaded, phase, setup, game])
 
   const mainMenu = () => {
-    try { sessionStorage.removeItem(KEY) } catch {}
+    try { localStorage.removeItem(KEY) } catch {}
     router.push('/spades')
   }
 
@@ -291,10 +295,15 @@ function PlayStep({ game, setGame, onRematch, onEditSetup, onMenu }: { game: Qui
       <History game={game} st={st} onUndo={() => setGame(undoHand(game))} />
       <button
         className="sp-btn sp-btn-ghost sp-btn-block"
-        onClick={() => { if (confirm('End this game and go back to the main menu? The score will be lost.')) onMenu() }}
+        onClick={() => {
+          if (!confirm('Quit this game? The score is erased and cannot be brought back.')) return
+          if (prompt('Type QUIT to erase the score') !== 'QUIT') return
+          onMenu()
+        }}
       >
-        End game
+        Quit game (erases the score)
       </button>
+      <p className="text-xs text-center" style={{ color: 'var(--sp-dim)' }}>The score is kept on this phone until the game ends, even if you close the page. Open Keep score again to pick up where you left off.</p>
     </div>
   )
 }

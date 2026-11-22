@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { displayRules, normalizeRules } from '@/lib/spades/rules'
 import { Countdown, GamePreview, MatchPanel } from './MatchPanel'
 import { Empty, Feedback } from './ui'
+import { SignupCard } from './Signup'
 import type { ActResult } from './useSpades'
 
 type Act = (action: string, payload?: Record<string, unknown>) => Promise<ActResult>
@@ -39,7 +40,11 @@ export function MyTable({ data, act, serverNow, compact = false }: { data: any; 
         </div>
       )}
 
-      {team && team.status !== 'approved' ? (
+      {team && !T.rosterLocked && T.rules?.firstHandBidsItself ? (
+        <SignupCard act={act} s={{ tournament: T.name, name: viewer.name, teamName: team.name, solo: !!team.solo, ready: !!team.checkedIn, partner: partner?.name || null, started: false, status: team.status }} />
+      ) : team && team.status === 'waitlist' && T.rosterLocked && T.rules?.firstHandBidsItself ? (
+        <Empty title="Sitting this one out">The tournament started with the teams that were ready. Catch the next one.<div className="mt-3"><a href="/spades" className="sp-btn sp-btn-sm">Back to home</a></div></Empty>
+      ) : team && team.status !== 'approved' ? (
         <Empty title={team.status === 'waitlist' ? 'You are on the waitlist' : team.status === 'rejected' ? 'Registration not accepted' : 'Waiting for the director to approve your team'}>
           {team.status === 'waitlist' ? 'The event is full. If a spot opens, the director moves you in and this screen updates by itself.'
             : team.status === 'rejected' ? 'See the tournament director.' : 'Look around while you wait: your team settings, the rules and scoring are all below. This screen updates by itself.'}
@@ -61,7 +66,7 @@ export function MyTable({ data, act, serverNow, compact = false }: { data: any; 
         <Empty title="Waiting for your next match">Your next opponent is decided when the other match finishes. This screen updates by itself.</Empty>
       )}
 
-      {team && !started && <TeamSettings team={team} viewer={viewer} act={act} partner={partner} selfServe={me?.selfServe} opponentCaptain={opp?.players?.find((p: any) => p.isCaptain)?.name} oneMode={T.rules?.scorekeeping === 'one'} />}
+      {team && !started && (T.rosterLocked || !T.rules?.firstHandBidsItself) && <TeamSettings team={team} viewer={viewer} act={act} partner={partner} selfServe={me?.selfServe} opponentCaptain={opp?.players?.find((p: any) => p.isCaptain)?.name} oneMode={T.rules?.scorekeeping === 'one'} />}
 
       {opp && !started && (
         <section className="sp-card p-4">

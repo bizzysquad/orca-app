@@ -170,13 +170,23 @@ export async function publicEvents(store: Store) {
   const ts = await store.select<TournamentRow>('sp_tournaments', { status: { in: ['draft', 'registration', 'locked', 'live', 'completed'] } }, { order: [{ col: 'created_at', asc: false }], limit: 50 })
   const shown = ts.filter(t => !normalizeRules(t.rules).selfServe && (!t.is_test && t.event_type !== 'test' && t.status !== 'draft' || (t.is_featured && !t.is_test)))
   if (!shown.length) return []
-  const teams = await store.select<TeamRow>('sp_teams', { tournament_id: { in: shown.map(t => t.id) }, status: 'approved' })
-  return shown.map(t => ({
-    slug: t.slug, name: t.name, subtitle: t.subtitle, eventType: t.event_type || 'tournament', status: t.status,
-    registrationOpen: t.registration_open && !t.roster_locked, teamLimit: t.team_limit || t.capacity,
-    approved: teams.filter(x => x.tournament_id === t.id).length, isFeatured: t.is_featured,
-    useBracket: normalizeRules(t.rules).useBracket, gamesToWin: normalizeRules(t.rules).gamesToWin,
-  }))
+  const ids = shown.map(t => t.id)
+  const allTeams = await store.select<TeamRow>('sp_teams', { tournament_id: { in: ids } })
+  const players = await store.select<PlayerRow>('sp_players', { tournament_id: { in: ids } })
+  const teams = allTeams.filter(x => x.status === 'approved')
+  return shown.map(t => {
+    const mine = allTeams.filter(x => x.tournament_id === t.id && x.status !== 'rejected')
+    const size = (x: TeamRow) => players.filter(p => p.team_id === x.id).length
+    return {
+      id: t.id, slug: t.slug, name: t.name, subtitle: t.subtitle, eventType: t.event_type || 'tournament', status: t.status,
+      registrationOpen: t.registration_open && !t.roster_locked, teamLimit: t.team_limit || t.capacity,
+      approved: teams.filter(x => x.tournament_id === t.id).length, isFeatured: t.is_featured,
+      useBracket: normalizeRules(t.rules).useBracket, gamesToWin: normalizeRules(t.rules).gamesToWin,
+      championship: normalizeRules(t.rules).championship, startsAt: t.starts_at, venue: t.venue,
+      rosterLocked: t.roster_locked, target: normalizeRules(t.rules).targetDefault,
+      signedUp: { teams: mine.filter(x => size(x) === 2).length, solo: mine.filter(x => size(x) === 1).length, ready: mine.filter(x => x.checked_in_at).length },
+    }
+  })
 }
 
 // Champions of other finished tournaments, newest first, for the winners wall.
@@ -223,7 +233,7 @@ export function publicState(b: Bundle, now: Date) {
     matches: b.t.bracket_published ? b.matches.map(m => publicMatch(b, m)) : [],
     // Everyone signed up so far (in sign up order), for the preliminary
     // bracket shown before the draw.
-    registered: b.teams.filter(t => t.status === 'approved' || t.status === 'pending').map(t => ({ id: t.id, name: t.name, status: t.status })),
+    registered: b.teams.filter(t => t.status === 'approved' || t.status === 'pending').map(t => ({ id: t.id, name: t.name, status: t.status, solo: b.players.filter(p => p.team_id === t.id).length === 1, ready: !!t.checked_in_at })),
     winners: b.t.bracket_published ? winners(b) : null,
     results: normalizeRules(b.t.rules).useBracket ? [] : results(b),
   }
@@ -328,6 +338,8 @@ export function matchDetail(b: Bundle, actor: Actor, matchId: string, now: Date)
     const nextToBid = rules.bidOrder === 'sequential' && !locked ? order.find(p => !seats[p]?.submitted) ?? null : null
     current = {
       id: hand.id, version: hand.version, handNumber: hand.hand_number, status: hand.status, isTiebreak: hand.is_tiebreak,
+      // First hand of a game in house rules: locked with no bids, books bid themselves.
+      bidsItself: locked && hb.length === 0 && rules.firstHandBidsItself,
       dealerPos: hand.dealer_pos, leadPos: (hand.dealer_pos + 1) % 4, order, nextToBid, locked, seats,
       teamBid: { a: sumFor('a'), b: sumFor('b') },
       reports: level === 'public' ? null : { a: repFor(m.team_a_id, 'a'), b: repFor(m.team_b_id, 'b') },
@@ -355,11 +367,17 @@ export function matchDetail(b: Bundle, actor: Actor, matchId: string, now: Date)
     },
     table: table ? { id: table.id, number: table.number, supervisor: sup?.display_name || null } : null,
     teamA, teamB,
+    scorekeeper: rules.scorekeeping === 'one' && rules.scorekeeperPlayerId
+      ? { playerId: rules.scorekeeperPlayerId, name: b.players.find(p => p.id === rules.scorekeeperPlayerId)?.display_name || 'Scorekeeper' }
+      : null,
+    firstDealer: rules.firstDealer,
+    firstHandScored: b.hands.some(h => h.match_id === m.id && h.status === 'verified'),
     viewer: {
       level, side, canSupervise, isDirector: director,
       control: side ? teamControl(b.teams.find(t => t.id === (side === 'a' ? m.team_a_id : m.team_b_id)), rules) : null,
       playerId: actor.kind === 'player' ? actor.playerId : null,
       isCaptain: actor.kind === 'player' && !!side ? actor.isCaptain : false,
+      isKeeper: actor.kind === 'player' && !!side && rules.scorekeeping === 'one' && rules.scorekeeperPlayerId === actor.playerId,
     },
     history, voided, current, disputes,
   }
@@ -442,6 +460,7 @@ export function playerState(b: Bundle, actor: Actor, now: Date) {
   return {
     team: team ? {
       id: team.id, name: team.name, seed: team.seed, checkedIn: !!team.checked_in_at, status: team.status, bidControl: teamControl(team, normalizeRules(b.t.rules)),
+      solo: b.players.filter(p => p.team_id === team.id).length === 1,
       players: b.players.filter(p => p.team_id === team.id).sort((x, y) => x.seat - y.seat).map(p => ({ id: p.id, name: p.display_name, isCaptain: p.is_captain })),
     } : null,
     activeMatch: active && b.t.bracket_published ? matchDetail(b, actor, active.id, now) : null,
@@ -489,6 +508,7 @@ export async function adminState(store: Store, b: Bundle, actor: Actor, now: Dat
     tournamentFull: { ...publicTournament(b.t), isFeatured: b.t.is_featured },
     allTeams: b.teams.map(t => ({
       id: t.id, name: t.name, status: t.status, seed: t.seed, contact: t.contact, checkedIn: !!t.checked_in_at, createdAt: t.created_at, bidControl: teamControl(t, normalizeRules(b.t.rules)),
+      solo: b.players.filter(p => p.team_id === t.id).length === 1,
       players: b.players.filter(p => p.team_id === t.id).sort((x, y) => x.seat - y.seat).map(p => ({
         id: p.id, name: p.display_name, seat: p.seat, isCaptain: p.is_captain, invite: inviteStatus('player_id', p.id),
       })),
@@ -567,4 +587,78 @@ export async function activityState(store: Store, now: Date) {
       players: players.length,
     },
   }
+}
+
+
+// ─── sign up status for the home page ───────────────────────────────────────
+
+// What the signed in player's sign up looks like, wherever they signed up.
+export async function mySignup(store: Store, actor: Actor) {
+  if (actor.kind !== 'player') return null
+  const [t] = await store.select<TournamentRow>('sp_tournaments', { id: actor.tournamentId }, { limit: 1 })
+  if (!t || t.status === 'archived' || normalizeRules(t.rules).selfServe) return null
+  const [team] = await store.select<TeamRow>('sp_teams', { id: actor.teamId }, { limit: 1 })
+  if (!team) return null
+  const players = await store.select<PlayerRow>('sp_players', { team_id: team.id })
+  const partner = players.find(p => p.id !== actor.playerId)
+  return {
+    tournamentId: t.id, slug: t.slug, tournament: t.name, started: t.roster_locked,
+    teamName: team.name, solo: players.length === 1, ready: !!team.checked_in_at, status: team.status,
+    name: actor.name, partner: partner?.display_name || null,
+  }
+}
+
+// ─── championship records (Winners page) ────────────────────────────────────
+
+// Every tournament played for the trophy, and each team's record across
+// them. Teams are matched by name from week to week.
+export async function championshipRecords(store: Store) {
+  const ts = (await store.select<TournamentRow>('sp_tournaments', { status: { in: ['live', 'locked', 'completed', 'archived'] } }, { order: [{ col: 'created_at', asc: false }], limit: 200 }))
+    .filter(t => !t.is_test && normalizeRules(t.rules).championship)
+  if (!ts.length) return { events: [], teams: [] }
+  const ids = ts.map(t => t.id)
+  const [teams, players, matches] = await Promise.all([
+    store.select<TeamRow>('sp_teams', { tournament_id: { in: ids } }),
+    store.select<PlayerRow>('sp_players', { tournament_id: { in: ids } }),
+    store.select<MatchRow>('sp_matches', { tournament_id: { in: ids }, status: 'final' }),
+  ])
+  const rec = new Map<string, { team: string; players: string[]; wins: number; losses: number; titles: number; events: number; lastPlayed: string }>()
+  const teamName = (id: string | null) => teams.find(x => x.id === id)?.name || ''
+  const roster = (id: string | null) => players.filter(p => p.team_id === id).sort((x, y) => x.seat - y.seat).map(p => p.display_name)
+  for (const t of [...ts].reverse()) {
+    const played = new Set<string>()
+    for (const m of matches.filter(x => x.tournament_id === t.id && x.result_kind !== 'bye' && x.winner_team_id)) {
+      for (const id of [m.team_a_id, m.team_b_id]) {
+        const team = teams.find(x => x.id === id)
+        if (!team) continue
+        const key = team.name_key
+        const r = rec.get(key) || { team: team.name, players: roster(team.id), wins: 0, losses: 0, titles: 0, events: 0, lastPlayed: '' }
+        r.team = team.name
+        r.players = roster(team.id)
+        r.lastPlayed = t.starts_at || t.created_at
+        if (m.winner_team_id === id) r.wins++
+        else r.losses++
+        if (!played.has(key)) { played.add(key); r.events++ }
+        rec.set(key, r)
+      }
+    }
+    if (t.champion_team_id) {
+      const champ = teams.find(x => x.id === t.champion_team_id)
+      if (champ && rec.has(champ.name_key)) rec.get(champ.name_key)!.titles++
+    }
+  }
+  const events = ts.map(t => {
+    const rounds = totalRounds(t.capacity)
+    const final = matches.find(m => m.tournament_id === t.id && m.round === rounds && m.winner_team_id)
+    const ru = final ? (final.team_a_id === final.winner_team_id ? final.team_b_id : final.team_a_id) : null
+    return {
+      id: t.id, name: t.name, date: t.starts_at || t.created_at, status: t.status,
+      champion: t.champion_team_id ? teamName(t.champion_team_id) : null, championPlayers: roster(t.champion_team_id),
+      runnerUp: ru ? teamName(ru) : null,
+      score: final && final.result_kind === 'played' ? `${Math.max(final.score_a, final.score_b)} to ${Math.min(final.score_a, final.score_b)}` : null,
+      teams: new Set(matches.filter(m => m.tournament_id === t.id).flatMap(m => [m.team_a_id, m.team_b_id]).filter(Boolean)).size,
+    }
+  })
+  const list = Array.from(rec.values()).sort((x, y) => y.titles - x.titles || y.wins - x.wins || x.losses - y.losses || x.team.localeCompare(y.team))
+  return { events, teams: list }
 }

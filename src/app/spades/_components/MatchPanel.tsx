@@ -128,24 +128,44 @@ function HandPanel({ d, act, names }: { d: any; act: Act; names: { a: string; b:
   const m = d.match
   const live = m.status === 'live'
   const oneMode = m.rules?.scorekeeping === 'one'
-  const keeper = oneMode && v.level === 'player' && v.isCaptain
+  const keeper = oneMode && v.level === 'player' && !!v.isKeeper
+  const player = v.level === 'player'
   const readyCount = (side: 'a' | 'b') => c.seats.filter((s: any) => s.side === side && s.submitted).length
+  const seatName = (pos: number) => c.seats[pos]?.name || (pos % 2 === 0 ? names.a : names.b)
+  // One scorekeeper mode: nobody enters anything until someone takes it, and
+  // the scorekeeper says who dealt before scoring the first hand.
+  const needKeeper = oneMode && player && live && !d.scorekeeper
+  const needDealer = keeper && live && !d.firstHandScored && d.firstDealer === null
   return (
     <section className="sp-card p-4 grid gap-4" aria-label={`Hand ${c.handNumber}`} id="hand">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="sp-display text-2xl">Hand {c.handNumber}{c.isTiebreak && <span className="sp-chip sp-chip-warn ml-2 align-middle">Tiebreaker</span>}</h2>
         <span className="text-sm" style={{ color: 'var(--sp-muted)' }}>
-          {c.status === 'bidding' ? `Bids in: ${names.a} ${readyCount('a')}/2 · ${names.b} ${readyCount('b')}/2` : c.locked ? `Bids: ${names.a} ${c.teamBid.a ?? '?'} · ${names.b} ${c.teamBid.b ?? '?'}` : ''}
+          {c.bidsItself ? 'No bidding this hand' : c.status === 'bidding' ? (oneMode ? 'Waiting for bids' : `Bids in: ${names.a} ${readyCount('a')}/2 · ${names.b} ${readyCount('b')}/2`) : c.locked ? `Bids: ${names.a} ${c.teamBid.a ?? '?'} · ${names.b} ${c.teamBid.b ?? '?'}` : ''}
         </span>
       </div>
-      {c.status === 'bidding' && <SeatList c={c} names={names} />}
-      {c.status === 'bidding' && v.level === 'player' && live && (keeper ? <KeeperBids d={d} act={act} names={names} /> : oneMode ? <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>The scorekeeper enters every bid.</p> : v.control === 'captain' ? <CaptainBid d={d} act={act} /> : <MyBid d={d} act={act} />)}
-      {c.status !== 'bidding' && <LockedBids d={d} names={names} />}
-      {c.status === 'playing' && (
-        <div className="sp-banner sp-banner-info text-sm">
-          Bids are locked. Play all 13 books. When the hand is over, each captain enters the books on their side.
-          {c.reports && (c.reports.a || c.reports.b) && ` Reports in: ${c.reports.a ? names.a : ''}${c.reports.a && c.reports.b ? ' and ' : ''}${c.reports.b ? names.b : ''}.`}
-        </div>
+      {c.seats.length === 4 && (d.firstDealer !== null || d.firstHandScored || !oneMode) && (
+        <p className="text-sm"><b>{seatName(c.dealerPos)}</b> deals. <b>{seatName(c.leadPos)}</b> {c.bidsItself ? 'leads' : 'bids and leads'} first.</p>
+      )}
+      {oneMode && (
+        <KeeperLine d={d} act={act} />
+      )}
+      {needKeeper ? <ClaimKeeper d={d} act={act} /> : needDealer ? <PickDealer d={d} act={act} names={names} /> : (
+        <>
+          {keeper && live && !d.firstHandScored && d.firstDealer !== null && <PickDealer d={d} act={act} names={names} compact />}
+          {c.bidsItself && (
+            <div className="sp-banner sp-banner-warn text-sm">First hand: no bidding. The books bid themselves, so each team scores {m.rules?.pointsPerBook ?? 10} for every book it takes. Play it out, then enter the books.</div>
+          )}
+          {c.status === 'bidding' && !oneMode && <SeatList c={c} names={names} />}
+          {c.status === 'bidding' && player && live && (keeper ? <KeeperBids d={d} act={act} names={names} /> : oneMode ? <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>{d.scorekeeper?.name || 'The scorekeeper'} enters the bids.</p> : v.control === 'captain' ? <CaptainBid d={d} act={act} /> : <MyBid d={d} act={act} />)}
+          {c.status !== 'bidding' && !c.bidsItself && <LockedBids d={d} names={names} />}
+          {c.status === 'playing' && !c.bidsItself && (
+            <div className="sp-banner sp-banner-info text-sm">
+              Bids are locked. Play all 13 books. {oneMode ? `When the hand is over, ${d.scorekeeper?.name || 'the scorekeeper'} enters the books.` : 'When the hand is over, each captain enters the books on their side.'}
+              {!oneMode && c.reports && (c.reports.a || c.reports.b) && ` Reports in: ${c.reports.a ? names.a : ''}${c.reports.a && c.reports.b ? ' and ' : ''}${c.reports.b ? names.b : ''}.`}
+            </div>
+          )}
+        </>
       )}
       {c.renegeTeamId && <div className="sp-banner sp-banner-bad text-sm">Supervisor ruling: renege by {c.renegeTeamId === d.teamA?.id ? names.a : names.b}. Renege scoring applies to this hand.</div>}
       {c.status === 'disputed' && (
@@ -156,8 +176,8 @@ function HandPanel({ d, act, names }: { d: any; act: Act; names: { a: string; b:
         </div>
       )}
       {c.status === 'review' && c.provisional && <Provisional d={d} names={names} />}
-      {['playing', 'disputed', 'review'].includes(c.status) && v.level === 'player' && v.isCaptain && live && (keeper ? <KeeperBooks d={d} act={act} names={names} /> : <ReportBooks d={d} act={act} names={names} />)}
-      {c.status === 'review' && v.level === 'player' && v.isCaptain && live && <ApproveHand d={d} act={act} />}
+      {['playing', 'disputed', 'review'].includes(c.status) && player && live && !needKeeper && !needDealer && (keeper ? <KeeperBooks d={d} act={act} names={names} /> : !oneMode && v.isCaptain ? <ReportBooks d={d} act={act} names={names} /> : null)}
+      {c.status === 'review' && player && v.isCaptain && live && !oneMode && <ApproveHand d={d} act={act} />}
       {v.level === 'player' && !v.isCaptain && !oneMode && c.status !== 'bidding' && (
         <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Your captain reports books and confirms each hand.</p>
       )}
@@ -844,7 +864,7 @@ function KeeperBids({ d, act, names }: { d: any; act: Act; names: { a: string; b
       <button className="sp-btn sp-btn-gold sp-btn-block" disabled={busy || a === null || b === null} onClick={() => run('bid', { handId: c.id, bids: bids() }, 'Bids locked')}>
         {busy ? 'Sending' : a === null || b === null ? 'Pick both bids' : `Lock in ${names.a} ${a}, ${names.b} ${b}`}
       </button>
-      <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Each team bids at least {rules.minTeamBid}.</p>
+      {rules.minTeamBid > 0 && <p className="text-xs" style={{ color: 'var(--sp-muted)' }}>Each team bids at least {rules.minTeamBid}.</p>}
       <Feedback msg={msg} />
     </div>
   )
@@ -861,9 +881,68 @@ function KeeperBooks({ d, act, names }: { d: any; act: Act; names: { a: string; 
       <h3 className="font-black text-lg">Hand over? Books won by {names.a}</h3>
       <NumberPad label={`Books won by ${names.a}`} value={val} onChange={setVal} />
       {val !== null && <p className="font-bold text-center">{names.a} {val} · {names.b} {13 - val}</p>}
-      <button className="sp-btn sp-btn-gold sp-btn-block" disabled={busy || val === null} onClick={() => run('report', { handId: c.id, booksA: val, booksB: 13 - (val as number) }, 'Hand scored')}>
+      <button className="sp-btn sp-btn-gold sp-btn-block" disabled={busy || val === null} onClick={() => {
+        if (!confirm(`Score this hand? ${names.a} took ${val}, ${names.b} took ${13 - (val as number)}.`)) return
+        run('report', { handId: c.id, booksA: val, booksB: 13 - (val as number) }, 'Hand scored')
+      }}>
         {busy ? 'Sending' : val === null ? 'Pick a number' : 'Score this hand'}
       </button>
+      <Feedback msg={msg} />
+    </div>
+  )
+}
+
+// Who is keeping score at this table, with a hand off button for them.
+function KeeperLine({ d, act }: { d: any; act: Act }) {
+  const { busy, msg, run } = useBusy(act)
+  if (!d.scorekeeper) return null
+  const me = d.viewer.isKeeper
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-sm p-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.22)' }}>
+      <span>{me ? <b>You are keeping score for this table.</b> : <><b>{d.scorekeeper.name}</b> is keeping score. You just play.</>}</span>
+      {me && d.match.status === 'live' && <button className="underline font-bold" disabled={busy} onClick={() => { if (confirm('Let someone else keep score? The score stays exactly as it is.')) run('setKeeper', { matchId: d.match.id, playerId: null }) }}>Hand it off</button>}
+      <Feedback msg={msg} />
+    </div>
+  )
+}
+
+function ClaimKeeper({ d, act }: { d: any; act: Act }) {
+  const { busy, msg, run } = useBusy(act)
+  return (
+    <div className="grid gap-3 p-4 rounded-xl text-center" style={{ border: '2px solid var(--sp-gold)' }}>
+      <h3 className="sp-display text-2xl">Who is keeping score?</h3>
+      <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Pick one person at this table. Only their phone can enter bids and books, so nobody else can change the score by accident.</p>
+      <button className="sp-btn sp-btn-gold sp-btn-block" style={{ minHeight: 60, fontSize: 18 }} disabled={busy} onClick={() => run('claimKeeper', { matchId: d.match.id })}>{busy ? 'Sending' : 'I will keep score'}</button>
+      <Feedback msg={msg} />
+    </div>
+  )
+}
+
+// Scorekeeper: tap who dealt the first hand. The deal rotates left after that.
+function PickDealer({ d, act, names, compact = false }: { d: any; act: Act; names: { a: string; b: string }; compact?: boolean }) {
+  const { busy, msg, run } = useBusy(act)
+  const [open, setOpen] = useState(!compact)
+  const seats = d.current.seats
+  if (compact && !open) return <button className="text-sm underline font-bold justify-self-start" onClick={() => setOpen(true)}>Wrong dealer? Change it</button>
+  const pos = [{ seat: 0, col: '2', row: '1' }, { seat: 1, col: '3', row: '2' }, { seat: 2, col: '2', row: '3' }, { seat: 3, col: '1', row: '2' }]
+  return (
+    <div className="grid gap-3 p-3 rounded-xl" style={{ border: '2px solid var(--sp-gold)' }}>
+      <h3 className="font-black text-lg">Who deals first?</h3>
+      <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>Partners sit across from each other. Tap the dealer. The deal moves to the left after every hand.</p>
+      <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1.2fr 1fr', alignItems: 'center' }}>
+        <div className="rounded-2xl grid place-items-center sp-label" style={{ gridColumn: '2', gridRow: '2', minHeight: 70, background: 'rgba(76,194,122,0.12)', border: '2px solid rgba(76,194,122,0.35)' }}>Table</div>
+        {pos.map(({ seat, col, row }) => {
+          const s = seats[seat]
+          const on = d.firstDealer === seat
+          return (
+            <button key={seat} type="button" disabled={busy} onClick={async () => { const ok = await run('firstDealer', { matchId: d.match.id, seat }); if (ok && compact) setOpen(false) }}
+              style={{ gridColumn: col, gridRow: row, minHeight: 64, padding: 8, borderRadius: 14, textAlign: 'center', background: on ? 'var(--sp-gold)' : s?.side === 'a' ? 'rgba(154,31,55,0.45)' : 'rgba(127,180,255,0.14)', color: on ? 'var(--sp-ink)' : 'var(--sp-cream)', border: `2px solid ${on ? 'var(--sp-gold)' : 'var(--sp-line)'}` }}>
+              <span className="font-black block leading-tight break-words">{s?.name || 'Player'}</span>
+              <span className="text-xs">{s?.side === 'a' ? names.a : names.b}</span>
+            </button>
+          )
+        })}
+      </div>
       <Feedback msg={msg} />
     </div>
   )

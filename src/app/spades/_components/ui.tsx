@@ -33,7 +33,6 @@ export function ConnectionBadge({ online }: { online: boolean }) {
 
 const NAV = [
   { href: '/spades', label: 'Home', key: 'home' },
-  { href: '/spades/register', label: 'Register', key: 'register' },
   { href: '/spades/bracket', label: 'Scores', key: 'bracket' },
   { href: '/spades/play', label: 'My Table', key: 'play' },
   { href: '/spades/winners', label: 'Winners', key: 'winners' },

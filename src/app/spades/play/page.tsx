@@ -20,7 +20,7 @@ export default function PlayPage() {
           <Empty title="Register your team, or join one">
             Captains: register your team on this phone. Partners: type the access code your captain gave you.
           </Empty>
-          {data.tournament.registrationOpen && !data.tournament.rosterLocked && <Link href="/spades/register" className="sp-btn sp-btn-gold">Register a team</Link>}
+          {data.tournament.registrationOpen && !data.tournament.rosterLocked && <Link href="/spades#signup" className="sp-btn sp-btn-gold">Sign up</Link>}
           <Link href="/spades/join" className="sp-btn">I have an access code</Link>
         </div>
       </Shell>

@@ -82,7 +82,7 @@ function Display() {
               </div>
             )}
           </div>
-          <div className="lg:col-span-2">{T.bracketPublished ? <Bracket data={data} linkMatches={false} /> : <Bracket data={provisionalData(data)} linkMatches={false} />}</div>
+          <div className="lg:col-span-2">{T.bracketPublished ? <Bracket data={data} linkMatches={false} /> : T.rules?.firstHandBidsItself ? <p className="sp-display text-3xl">Bracket drawn at the start</p> : <Bracket data={provisionalData(data)} linkMatches={false} />}</div>
         </section>
       )}
       <footer className="flex justify-between text-lg" style={{ color: 'var(--sp-dim)' }}>

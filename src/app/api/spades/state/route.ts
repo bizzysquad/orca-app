@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { actorFrom, errorResponse, json, store } from '@/lib/spades/http'
 import { actAsPlayer, isDirector, isStaff } from '@/lib/spades/service'
-import { activityState, adminState, findTournament, loadBundle, matchDetail, pastChampions, playerState, publicEvents, publicLiveGames, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
+import { activityState, adminState, championshipRecords, findTournament, loadBundle, matchDetail, mySignup, pastChampions, playerState, publicEvents, publicLiveGames, publicState, supervisorState, viewerInfo } from '@/lib/spades/views'
 import type { TournamentRow } from '@/lib/spades/types'
 import { normalizeRules } from '@/lib/spades/rules'
 
@@ -42,7 +42,9 @@ export async function GET(req: NextRequest) {
         ? (await s.select<TournamentRow>('sp_tournaments', {}, { order: [{ col: 'created_at', asc: false }], limit: 100 })).map(x => ({ id: x.id, slug: x.slug, name: x.name, status: x.status, eventType: x.event_type || 'tournament', isTest: !!x.is_test, isFeatured: x.is_featured, startsAt: x.starts_at, teamLimit: x.team_limit || x.capacity, registrationOpen: x.registration_open, rosterLocked: x.roster_locked, rules: normalizeRules(x.rules) }))
         : undefined
       const liveGames = sp.get('games') === '1' ? await publicLiveGames(s) : undefined
-      return json({ noEvent: true, serverNow: s.now().toISOString(), viewer: viewerInfo(actor, null), events: [], tournaments, liveGames })
+      const signup = sp.get('events') === '1' ? await mySignup(s, actor) : undefined
+      const records = sp.get('records') === '1' ? await championshipRecords(s) : undefined
+      return json({ noEvent: true, serverNow: s.now().toISOString(), viewer: viewerInfo(actor, null), events: [], tournaments, liveGames, mySignup: signup, records })
     }
 
     const now = s.now()
@@ -56,7 +58,9 @@ export async function GET(req: NextRequest) {
       const past = sp.get('winners') === '1' ? await pastChampions(s, t.id) : undefined
       const events = sp.get('events') === '1' ? await publicEvents(s) : undefined
       const liveGames = sp.get('games') === '1' ? await publicLiveGames(s) : undefined
-      return json({ ...publicState(b, now), viewer, pastChampions: past, events, liveGames })
+      const signup = sp.get('events') === '1' ? await mySignup(s, actor) : undefined
+      const records = sp.get('records') === '1' ? await championshipRecords(s) : undefined
+      return json({ ...publicState(b, now), viewer, pastChampions: past, events, liveGames, mySignup: signup, records })
     }
     if (view === 'play') return json({ ...publicState(b, now), viewer, me: playerState(b, actor, now) })
     if (view === 'match') {
@@ -71,7 +75,8 @@ export async function GET(req: NextRequest) {
     }
     if (view === 'admin') {
       if (!isDirector(actor, t.id)) return json({ error: 'Director sign in required', viewer, tournament: { slug: t.slug, name: t.name } }, 401)
-      return json({ ...(await adminState(s, b, actor, now)), tournaments })
+      const records = sp.get('records') === '1' ? await championshipRecords(s) : undefined
+      return json({ ...(await adminState(s, b, actor, now)), tournaments, records })
     }
     return json({ error: 'Unknown view' }, 400)
   } catch (err) {

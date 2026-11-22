@@ -1,16 +1,26 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { useSpades } from './_components/useSpades'
 import { Shell, SpadeIcon } from './_components/ui'
+import { SignupCard, SignupForm } from './_components/Signup'
+import { QUICK_KEY } from '@/lib/spades/quickgame'
 
-// Home: three choices and the events the director posts. Nothing else.
-// Draws right away; the events list fills in when the server answers.
+// Home: sign up for a tournament right here, mark yourself ready, or keep
+// score for a game of your own. Draws right away; tournaments fill in when
+// the server answers.
 export default function Home() {
-  const { data, loading, online } = useSpades<any>('public', { events: '1' })
+  const { data, loading, online, act, reload } = useSpades<any>('public', { events: '1' })
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [code, setCode] = useState<string | null>(null)
+  const [resume, setResume] = useState(false)
+  useEffect(() => {
+    try { setResume(!!localStorage.getItem(QUICK_KEY)) } catch {}
+  }, [])
   const events: any[] = data?.events || []
-  const open = events.filter(e => e.registrationOpen)
-  const joinHref = open.length === 1 ? `/spades/register?t=${open[0].slug}` : '/spades/register'
+  const mine = data?.mySignup || null
+  const waiting = loading && !data
 
   return (
     <Shell active="home" online={online} viewer={data?.viewer}>
@@ -21,45 +31,63 @@ export default function Home() {
           <p className="sp-display text-base mt-1 tracking-widest" style={{ color: 'var(--sp-gold)' }}>Powered by DJ MASKOFF</p>
         </header>
 
-        <nav className="grid gap-3" aria-label="What do you want to do?">
-          {loading && !data ? (
-            <span className="sp-btn sp-btn-gold sp-btn-block" aria-disabled="true" style={{ minHeight: 68, fontSize: 20, opacity: 0.6 }}>Checking for tournaments</span>
-          ) : open.length ? (
-            <Link href={joinHref} className="sp-btn sp-btn-gold sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>Join a tournament</Link>
-          ) : (
-            <span className="sp-btn sp-btn-gold sp-btn-block" aria-disabled="true" style={{ minHeight: 68, fontSize: 20, opacity: 0.5, cursor: 'not-allowed' }}>No tournament open right now</span>
-          )}
-          <Link href="/spades/start" className="sp-btn sp-btn-wine sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>Keep score for a game</Link>
-          <Link href="/spades/bracket" className="sp-btn sp-btn-block" style={{ minHeight: 68, fontSize: 20 }}>View scores</Link>
-          {data?.viewer?.kind === 'player' && <Link href="/spades/play" className="sp-btn sp-btn-ghost sp-btn-block">Back to my game</Link>}
-        </nav>
+        {resume && (
+          <Link href="/spades/start" className="sp-btn sp-btn-gold sp-btn-block" style={{ minHeight: 64, fontSize: 19 }}>Resume your game in progress</Link>
+        )}
 
-        <section aria-label="Events" className="grid gap-3">
-          <h2 className="sp-display text-2xl">Events</h2>
-          {loading && !data ? (
-            <div className="sp-card p-5 text-center" style={{ color: 'var(--sp-muted)' }} role="status">Loading events</div>
+        {code && (
+          <div className="sp-card-paper p-5 text-center grid gap-2">
+            <p className="sp-label">You are signed up. Your access code</p>
+            <p className="sp-display sp-num" style={{ fontSize: 40, letterSpacing: '0.08em' }}>{code}</p>
+            <p className="text-sm">Screenshot this. If you switch phones, open orcafin.app/spades/join and type it.</p>
+            <button className="sp-btn sp-btn-sm justify-self-center" onClick={() => setCode(null)}>Got it</button>
+          </div>
+        )}
+
+        {mine && <SignupCard s={mine} act={act} />}
+
+        <section aria-label="Tournaments" className="grid gap-3" id="signup">
+          <h2 className="sp-display text-2xl">Tournaments</h2>
+          {waiting ? (
+            <div className="sp-card p-5 text-center" style={{ color: 'var(--sp-muted)' }} role="status">Loading tournaments</div>
           ) : events.length === 0 ? (
-            <div className="sp-card p-5 text-center" style={{ color: 'var(--sp-muted)' }}>No events posted right now. Check back soon.</div>
+            <div className="sp-card p-5 text-center" style={{ color: 'var(--sp-muted)' }}>No tournament posted right now. Check back soon.</div>
           ) : events.map(e => {
-            const full = e.approved >= e.teamLimit
-            const state = e.status === 'live' ? 'In progress' : e.status === 'completed' ? 'Finished' : e.registrationOpen ? (full ? 'Waitlist open' : 'Registration open') : 'Registration closed'
+            const signedHere = mine && mine.slug === e.slug
+            const canSign = e.registrationOpen && !signedHere
+            const state = e.status === 'completed' ? 'Finished' : e.rosterLocked ? 'In progress' : e.registrationOpen ? 'Sign ups open' : 'Sign ups closed'
             return (
-              <div key={e.slug} className="sp-card p-4 grid gap-2">
+              <div key={e.slug} className="sp-card p-4 grid gap-3" style={{ borderColor: canSign ? 'var(--sp-gold)' : undefined }}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="font-black text-lg leading-tight">{e.name}</div>
-                  <span className={`sp-chip ${e.status === 'live' ? 'sp-chip-live' : e.registrationOpen ? 'sp-chip-warn' : 'sp-chip-dim'}`}>{state}</span>
+                  <div>
+                    <div className="font-black text-xl leading-tight">{e.name}</div>
+                    <div className="text-sm mt-1" style={{ color: 'var(--sp-muted)' }}>
+                      {e.championship ? '🏆 Championship for the trophy' : 'Just for fun'}
+                      {e.startsAt ? ` · ${new Date(e.startsAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
+                      {e.venue ? ` · ${e.venue}` : ''}
+                    </div>
+                    {!e.rosterLocked && e.signedUp && (
+                      <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>{e.signedUp.teams} team{e.signedUp.teams === 1 ? '' : 's'}{e.signedUp.solo ? ` · ${e.signedUp.solo} looking for a partner` : ''}</div>
+                    )}
+                  </div>
+                  <span className={`sp-chip ${e.rosterLocked && e.status !== 'completed' ? 'sp-chip-live' : e.registrationOpen ? 'sp-chip-warn' : 'sp-chip-dim'}`}>{state}</span>
                 </div>
-                <div className="text-sm" style={{ color: 'var(--sp-muted)' }}>
-                  {e.teamLimit <= 2 ? (e.gamesToWin > 1 ? `Best of ${e.gamesToWin * 2 - 1}` : 'One game') : e.useBracket ? 'Tournament' : 'Open play'} · {e.approved} of {e.teamLimit} teams
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {e.registrationOpen && <Link href={`/spades/register?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-gold">{full ? 'Join waitlist' : 'Register'}</Link>}
-                  <Link href={`/spades/bracket?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-ghost">Scores</Link>
-                </div>
+                {canSign && (openId === e.id ? (
+                  <SignupForm event={e} act={act} onDone={c => { setCode(c); setOpenId(null); reload() }} />
+                ) : (
+                  <button className="sp-btn sp-btn-gold sp-btn-block" style={{ minHeight: 60, fontSize: 18 }} onClick={() => setOpenId(e.id)}>Sign up</button>
+                ))}
+                {(e.rosterLocked || !canSign) && <Link href={`/spades/bracket?t=${e.slug}`} className="sp-btn sp-btn-sm sp-btn-ghost justify-self-start">{e.rosterLocked ? 'Live scores' : 'Who signed up'}</Link>}
               </div>
             )
           })}
         </section>
+
+        <nav className="grid gap-3" aria-label="More">
+          <Link href="/spades/start" className="sp-btn sp-btn-wine sp-btn-block" style={{ minHeight: 64, fontSize: 19 }}>Keep score for a game</Link>
+          <Link href="/spades/bracket" className="sp-btn sp-btn-block" style={{ minHeight: 56 }}>View scores</Link>
+          <Link href="/spades/winners" className="sp-btn sp-btn-ghost sp-btn-block">Winners and records</Link>
+        </nav>
       </div>
     </Shell>
   )

@@ -49,7 +49,7 @@ function BracketView() {
             <h2 className="sp-display text-3xl mt-1">{T.useBracket ? 'Tournament bracket' : 'Games'}</h2>
           </div>
           <div className="flex gap-2">
-            {T.registrationOpen && !T.rosterLocked && <Link href={`/spades/register?t=${T.slug}`} className="sp-btn sp-btn-sm sp-btn-gold">Register</Link>}
+            {T.registrationOpen && !T.rosterLocked && <Link href="/spades#signup" className="sp-btn sp-btn-sm sp-btn-gold">Sign up</Link>}
             <Link href={`/spades/display?t=${T.slug}`} className="sp-btn sp-btn-sm sp-btn-ghost">TV mode</Link>
           </div>
         </div>
@@ -64,14 +64,14 @@ function BracketView() {
             <div className="flex flex-wrap gap-2">
               {playing.map(x => (
                 <span key={x.id} className="px-3 py-2 rounded-lg font-bold" style={{ background: 'rgba(0,0,0,0.25)', opacity: x.status === 'approved' ? 1 : 0.6 }}>
-                  {x.name}{x.status !== 'approved' ? ' (pending)' : ''}
+                  {x.name}{x.solo ? ' (needs a partner)' : x.status !== 'approved' ? ' (pending)' : ''}{x.ready && !T.rosterLocked ? ' ✓' : ''}
                 </span>
               ))}
             </div>
           ) : <p className="text-sm" style={{ color: 'var(--sp-muted)' }}>No teams yet. Be the first to register.</p>}
         </section>
 
-        {T.bracketPublished && data.matches.length ? <Bracket data={data} /> : <Bracket data={provisionalData(data)} linkMatches={false} />}
+        {T.bracketPublished && data.matches.length ? <Bracket data={data} /> : T.rules?.firstHandBidsItself ? <p className="text-sm" style={{ color: "var(--sp-muted)" }}>The bracket is drawn when the director starts the tournament, with the teams that are ready.</p> : <Bracket data={provisionalData(data)} linkMatches={false} />}
         <p className="text-xs" style={{ color: 'var(--sp-dim)' }}>Scores update live as hands are scored.</p>
       </div>
     </Shell>

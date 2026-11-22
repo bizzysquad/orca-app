@@ -10,6 +10,9 @@
 
 export type Side = 'a' | 'b'
 
+// localStorage key for a game in progress on this phone (never sent anywhere).
+export const QUICK_KEY = 'spades-hq-scorekeeper'
+
 export interface QuickSetup {
   teamA: string
   teamB: string

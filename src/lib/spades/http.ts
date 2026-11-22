@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { SpadesError, resolveSession, type Actor } from './service.ts'
-import { StoreError, type Store } from './store.ts'
+import { MemoryStore, StoreError, type Store } from './store.ts'
 import { getSpadesStore } from './supabaseStore.ts'
 
 // Node runtime helpers shared by the /api/spades/* routes.
 
 export const SESSION_COOKIE = 'sp-session'
 
+// SPADES_MEMORY_STORE=local (local testing only, never set on Vercel) keeps
+// everything in memory so a local run cannot touch the real database.
 export function store(): Store {
+  if (process.env.SPADES_MEMORY_STORE === 'local') {
+    const g = globalThis as any
+    return (g.__spadesMemoryStore ||= new MemoryStore())
+  }
   return getSpadesStore()
 }
 

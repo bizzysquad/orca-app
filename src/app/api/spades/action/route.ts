@@ -25,6 +25,14 @@ const ACTIONS: Record<string, Handler> = {
   verifyCompletion: (s, a, b) => S.verifyCompletion(s, a, { matchId: b.matchId }),
   ready: (s, a, b) => S.setReady(s, a, { matchId: b.matchId, ready: !!b.ready, teamId: b.teamId }),
   checkIn: (s, a, b) => S.checkInTeam(s, a, { teamId: b.teamId, present: !!b.present }),
+  // sign up sheet + table scorekeeper
+  present: (s, a, b) => S.setPresent(s, a, { ready: !!b.ready }),
+  renameTeam: (s, a, b) => S.renameMyTeam(s, a, { name: b.name }),
+  pairSolos: (s, a, b) => S.pairSolos(s, a, { tournamentId: b.tournamentId, onlyReady: b.onlyReady !== false }),
+  startTournament: (s, a, b) => S.startTournament(s, a, { tournamentId: b.tournamentId }),
+  claimKeeper: (s, a, b) => S.claimScorekeeper(s, a, { matchId: b.matchId }),
+  setKeeper: (s, a, b) => S.setScorekeeper(s, a, { matchId: b.matchId, playerId: b.playerId || null }),
+  firstDealer: (s, a, b) => S.setFirstDealer(s, a, { matchId: b.matchId, seat: Number(b.seat) }),
   // director
   startMatch: (s, a, b) => S.startMatch(s, a, { matchId: b.matchId }),
   startRound: (s, a, b) => S.startRound(s, a, { tournamentId: b.tournamentId, round: Number(b.round) }),
@@ -45,10 +53,10 @@ const ACTIONS: Record<string, Handler> = {
   deleteGame: (s, a, b) => S.deleteGame(s, a, { matchId: b.matchId }),
   autoPair: (s, a, b) => S.autoPairGames(s, a, { tournamentId: b.tournamentId }),
   startAll: (s, a, b) => S.startAllReady(s, a, { tournamentId: b.tournamentId, onlyBothReady: !!b.onlyBothReady, matchIds: Array.isArray(b.matchIds) ? b.matchIds : undefined }),
-  createTournament: (s, a, b) => S.createTournament(s, a, { name: b.name, slug: b.slug, teamLimit: b.teamLimit, capacity: b.capacity, startsAt: b.startsAt, venue: b.venue, address: b.address, eventType: b.eventType, gamesToWin: b.gamesToWin, targetDefault: b.targetDefault, targetFinal: b.targetFinal, useBracket: b.useBracket }),
+  createTournament: (s, a, b) => S.createTournament(s, a, { name: b.name, slug: b.slug, teamLimit: b.teamLimit, capacity: b.capacity, startsAt: b.startsAt, venue: b.venue, address: b.address, eventType: b.eventType, gamesToWin: b.gamesToWin, targetDefault: b.targetDefault, targetFinal: b.targetFinal, useBracket: b.useBracket, house: !!b.house, championship: !!b.championship, target: b.target }),
   updateTournament: (s, a, b) => S.updateTournament(s, a, { tournamentId: b.tournamentId, patch: b.patch }),
   rosterLock: (s, a, b) => S.setRosterLock(s, a, { tournamentId: b.tournamentId, locked: !!b.locked, generate: b.generate }),
-  addTeam: (s, a, b) => S.registerTeam(s, a, { tournamentId: b.tournamentId, name: b.name, player1: b.player1, player2: b.player2, captainSeat: b.captainSeat, contact: b.contact }),
+  addTeam: (s, a, b) => S.registerTeam(s, a, { tournamentId: b.tournamentId, name: b.name, player1: b.player1, player2: b.player2, captainSeat: b.captainSeat, contact: b.contact, solo: !!b.solo }),
   updateTeam: (s, a, b) => S.updateTeam(s, a, { teamId: b.teamId, name: b.name, player1: b.player1, player2: b.player2, captainSeat: b.captainSeat, contact: b.contact }),
   teamStatus: (s, a, b) => S.setTeamStatus(s, a, { teamId: b.teamId, status: b.status }),
   approveAll: (s, a, b) => S.approveAllTeams(s, a, { tournamentId: b.tournamentId }),
@@ -81,7 +89,7 @@ export async function POST(req: NextRequest) {
       await S.rateLimit(s, key, 'register', 30, 30 * 60 * 1000)
       await S.recordAttempt(s, key, 'register')
       const r = await S.registerTeam(s, S.PUBLIC, {
-        tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: 1, contact: body.contact, bidControl: 'captain',
+        tournamentId: body.tournamentId, name: body.name, player1: body.player1, player2: body.player2, captainSeat: 1, contact: body.contact, bidControl: 'captain', solo: !!body.solo,
       })
       const sess = await S.createSession(s, { kind: 'player', tournamentId: body.tournamentId, playerId: r.captainPlayerId, staffId: null, invitationId: null, ttlMs: S.PLAYER_SESSION_MS })
       const code = await S.issueRegistrantCode(s, r.captainPlayerId)

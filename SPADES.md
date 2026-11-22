@@ -2,6 +2,21 @@
 
 A live tournament manager for in-person Joker Spades. Players use real cards at real tables. The app handles registration, private sign-in, bids, book reports, scoring, disputes and the bracket. There is no betting, payment or wagering anywhere in it.
 
+## Running a tournament (Director → Tournaments, since 2026-11-22)
+
+1. **Create a tournament:** name, optional date and place, what games play to (250 by default), and whether it is a **Championship for the trophy** or **Just for fun**. Sign ups open on the home page right away and it becomes the main /spades event.
+2. **Sign ups (home page):** each person enters their name and either their partner plus a team name (required), or "I need a partner". The phone that signs up is signed in and gets an access code.
+3. **At the venue:** people tap **I'm here, seated and ready**. The sign up sheet shows who is ready; the director can tap Ready for anyone, add people without a phone, rename, remove, or make a new access code.
+4. **Pair ready players at random:** everyone who is ready and needs a partner is paired. An odd person out keeps waiting.
+5. **Start with N ready teams:** only full teams that are ready go in. Everyone else sits out. The bracket is drawn at random and every first round game begins.
+6. **At each table:** one person taps **I will keep score**. Only their phone can enter anything (the director can change it). They tap who deals first; the deal rotates left. Hand 1 of every game bids itself (10 per book taken). After that the scorekeeper enters each team's bid (no minimum) and the books one team took.
+7. **Make it official** when a game ends, then **Begin** the next round. The final's winner is the champion.
+8. **Clear the scoreboard** when it is over: the tournament leaves the home and Scores pages. Championship results and team records stay on the Winners page.
+
+House scoring: made bid = 10 per book bid, set = 0, extra books = 0, no bags, no clock.
+
+**Local testing without touching the real database:** `SPADES_MEMORY_STORE=local SPADES_DIRECTOR_PASSWORD=test npx next start` (after `next build`). Never set that variable on Vercel.
+
 ## Setup (one time)
 
 1. Run `supabase-migration-spades.sql`, then `supabase-migration-spades-ready.sql`, then `supabase-migration-spades-v3.sql` in the Supabase SQL editor. It only creates new `sp_*` tables and is safe to run more than once. It also creates the inaugural event (`dj-maskoff-rnb-spades-2026`) with 4 tables and marks it as the main `/spades` event.
@@ -108,4 +123,4 @@ Add `?t=<slug>` to any public route to view a different tournament.
 
 ## Tests
 
-`npm run test:spades` runs 33 tests on Node's built-in test runner against an in-memory store that mirrors the DB's unique constraints. They exercise the same service code the API uses, including a complete 8-team tournament from registration to champion.
+`npm run test:spades` runs 72 tests on Node's built-in test runner against an in-memory store that mirrors the DB's unique constraints. They exercise the same service code the API uses, including a complete 8-team tournament from registration to champion.
