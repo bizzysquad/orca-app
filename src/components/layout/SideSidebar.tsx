@@ -1,88 +1,71 @@
 'use client'
 
 import React from 'react'
-import { X } from 'lucide-react'
+import { X, Search, SlidersHorizontal, Settings } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '@/context/ThemeContext'
 import NavList from './NavList'
-
-const BENTLEY_INDIGO = '#6366F1'
+import { openCustomize } from './CustomizePanel'
+import { OrcaMark } from './OrcaMark'
 
 interface SideSidebarProps {
   open: boolean
   onClose: () => void
   userName?: string
+  onSettings?: () => void
 }
 
-export default function SideSidebar({ open, onClose, userName }: SideSidebarProps) {
+// Mobile and tablet navigation drawer.
+export default function SideSidebar({ open, onClose, userName, onSettings }: SideSidebarProps) {
   const { theme } = useTheme()
+
+  const footer = [
+    { label: 'Search', icon: Search, onClick: () => { onClose(); window.dispatchEvent(new CustomEvent('orca-open-quick-actions')) } },
+    { label: 'Customize', icon: SlidersHorizontal, onClick: () => { onClose(); openCustomize('sidebar') } },
+    { label: 'Settings', icon: Settings, onClick: () => { onClose(); onSettings?.() } },
+  ]
 
   return (
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-40 lg:hidden"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}
             onClick={onClose}
           />
-
-          {/* Drawer */}
           <motion.div
-            initial={{ x: -280 }}
-            animate={{ x: 0 }}
-            exit={{ x: -280 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            className="fixed left-0 top-0 bottom-0 z-50 w-72 flex flex-col shadow-2xl"
-            style={{ backgroundColor: theme.bg, borderRight: `1px solid ${theme.border}` }}
+            initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 36 }}
+            className="fixed left-0 top-0 bottom-0 z-50 w-[280px] max-w-[85vw] flex flex-col lg:hidden"
+            style={{ backgroundColor: theme.nav, borderRight: `1px solid ${theme.border}`, boxShadow: theme.shadowL }}
           >
-            {/* Header */}
-            <div
-              className="flex items-center justify-between px-5 py-4 border-b shrink-0"
-              style={{ borderColor: theme.border }}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm"
-                  style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)', color: '#fff' }}
-                >
-                  O
-                </div>
-                <div>
-                  <p className="font-black text-sm tracking-widest" style={{ color: BENTLEY_INDIGO }}>
-                    ORCA
-                  </p>
-                  {userName && (
-                    <p className="text-xs truncate max-w-[140px]" style={{ color: theme.textM }}>
-                      {userName}
-                    </p>
-                  )}
+            <div className="flex items-center justify-between px-4 h-14 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <OrcaMark />
+                <div className="min-w-0">
+                  <p className="text-[15px] font-semibold tracking-tight leading-tight" style={{ color: theme.text }}>ORCA</p>
+                  {userName && <p className="text-[11px] truncate" style={{ color: theme.subtext }}>{userName}</p>}
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-xl transition-opacity hover:opacity-70"
-                style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}
-                aria-label="Close navigation"
-              >
-                <X size={16} style={{ color: theme.textM }} />
+              <button onClick={onClose} className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: theme.subtext }} aria-label="Close navigation">
+                <X size={18} />
               </button>
             </div>
 
-            {/* Nav Items */}
-            <div className="flex-1 overflow-y-auto px-3 py-5">
+            <div className="flex-1 overflow-y-auto px-3 py-3">
               <NavList onNavigate={onClose} />
             </div>
 
-            {/* Footer */}
-            <div className="px-5 py-4 border-t shrink-0" style={{ borderColor: theme.border }}>
-              <p className="text-[11px] text-center" style={{ color: theme.textM }}>
-                ORCA
-              </p>
+            <div className="px-3 py-3 grid grid-cols-3 gap-1.5 shrink-0" style={{ borderTop: `1px solid ${theme.border}` }}>
+              {footer.map(b => (
+                <button key={b.label} onClick={b.onClick} className="flex flex-col items-center gap-1 py-2 rounded-lg" style={{ color: theme.subtext, backgroundColor: `${theme.text}08` }}>
+                  <b.icon size={16} />
+                  <span className="text-[11px] font-medium">{b.label}</span>
+                </button>
+              ))}
             </div>
           </motion.div>
         </>

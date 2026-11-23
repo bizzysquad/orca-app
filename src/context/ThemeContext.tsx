@@ -1,5 +1,6 @@
 'use client'
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { setLocalSynced } from '@/lib/syncLocal'
 
 export interface GlassVars {
   glassBg: string
@@ -138,6 +139,8 @@ const BASE_DARK_THEME_PROPS = {
 
 // Helper function to create a dark variant of a light theme
 function makeDark(lightTheme: Theme): Theme {
+  // The ORCA house theme has a hand-tuned dark twin instead of the generic slate.
+  if (lightTheme.id === 'orca') return ORCA_GRAPHITE
   // Dark color mappings for backgrounds and surfaces
   const darkBg = '#0F172A'
   const darkSurface = '#1E293B'
@@ -169,7 +172,32 @@ function makeDark(lightTheme: Theme): Theme {
   }
 }
 
+// ── ORCA house theme (2026-11 redesign) ─────────────────────────────────────
+// Light "Paper" and dark "Graphite": warm neutrals, one teal accent, and
+// semantic colors reserved for money states (in / owed / warning).
+const ORCA_GRAPHITE: Theme = withAliases({
+  id: 'orca', name: 'ORCA',
+  bg: '#0C0D10', surface: '#121418', card: '#15171B',
+  text: '#ECEDEF', subtext: '#8C919B', accent: '#2DD4BF',
+  border: '#23262C', input: '#191C21', nav: '#0F1114',
+  ...BASE_DARK_THEME_PROPS,
+  ok: '#4ADE80', okBg: 'rgba(74,222,128,0.12)',
+  warn: '#FBBF24', warnBg: 'rgba(251,191,36,0.12)',
+  bad: '#F87171', badBg: 'rgba(248,113,113,0.12)',
+  shadow: '0 1px 0 rgba(255,255,255,0.03) inset, 0 1px 2px rgba(0,0,0,0.4)',
+  shadowL: '0 24px 48px -12px rgba(0,0,0,0.6)',
+})
+
 export const THEMES: Record<string, Theme> = {
+  'orca': withAliases({
+    id: 'orca', name: 'ORCA',
+    bg: '#F5F5F2', surface: '#FFFFFF', card: '#FFFFFF',
+    text: '#16181C', subtext: '#6A6F78', accent: '#0D9488',
+    border: '#E6E5E0', input: '#FAFAF8', nav: '#FBFBF9',
+    ...BASE_THEME_PROPS,
+    shadow: '0 1px 2px rgba(20,20,15,0.04)',
+    shadowL: '0 24px 48px -12px rgba(20,20,15,0.18)',
+  }),
   'bentley-dark': withAliases({
     id: 'bentley-dark', name: 'Bentley Dark',
     bg: '#070B14', surface: '#0F1629', card: '#111827',
@@ -266,11 +294,11 @@ type ThemeContextType = {
   toggleDark: () => void
 }
 
-const defaultTheme = THEMES['bentley-dark']
+const defaultTheme = ORCA_GRAPHITE
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: defaultTheme,
-  themeId: 'bentley-dark',
+  themeId: 'orca',
   setThemeId: () => {},
   allThemes: THEME_LIST,
   isDark: true,
@@ -279,10 +307,11 @@ const ThemeContext = createContext<ThemeContextType>({
 
 const THEME_ID_KEY = 'orca-theme-id'
 const DARK_MODE_KEY = 'orca-dark-mode'
+const DESIGN_V2_KEY = 'orca-design-v2'
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [themeId, setThemeIdState] = useState<string>('bentley-dark')
-  const [isDarkMode, setIsDarkModeState] = useState<boolean>(false)
+  const [themeId, setThemeIdState] = useState<string>('orca')
+  const [isDarkMode, setIsDarkModeState] = useState<boolean>(true)
 
   const baseTheme = THEMES[themeId] || THEMES['ocean-blue']
   const theme = isDarkMode ? makeDark(baseTheme) : baseTheme
@@ -311,16 +340,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
+      // One-time move onto the redesigned house theme. Any theme picked after
+      // this in Settings sticks, because the flag is already set.
+      if (!localStorage.getItem(DESIGN_V2_KEY)) {
+        localStorage.setItem(DESIGN_V2_KEY, '1')
+        setLocalSynced(THEME_ID_KEY, 'orca')
+        localStorage.setItem(DARK_MODE_KEY, 'true')
+      }
       const saved = localStorage.getItem(THEME_ID_KEY)
       if (saved && THEMES[saved]) {
         setThemeIdState(saved)
         if (typeof console !== 'undefined') console.log('[ORCA Theme] Loaded theme:', saved)
       } else {
-        setThemeIdState('bentley-dark')
-        if (typeof console !== 'undefined') console.log('[ORCA Theme] Using default theme: bentley-dark')
+        setThemeIdState('orca')
       }
 
       const savedDarkMode = localStorage.getItem(DARK_MODE_KEY)
+      if (savedDarkMode === 'false') setIsDarkModeState(false)
       if (savedDarkMode === 'true') {
         setIsDarkModeState(true)
         if (typeof console !== 'undefined') console.log('[ORCA Theme] Dark mode enabled')

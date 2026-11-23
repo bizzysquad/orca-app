@@ -68,6 +68,7 @@ export const SYNC_KEYS = [
   // UI preferences
   'orca-dashboard-order',
   'orca-dashboard-pinned',
+  'orca-layout-prefs',
   'orca-theme-id',
   'orca-admin-nav',
   'orca-admin-settings',

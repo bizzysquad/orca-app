@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import { Search, X, DollarSign, Receipt, CheckSquare, Target, Plus } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { orcaEvents } from '@/lib/eventBus'
+import { NAV_ITEMS } from '@/components/layout/navConfig'
 
 interface QuickActionItem {
   id: string
@@ -110,6 +111,21 @@ export function QuickActions({ onAddBill, onLogIncome, onMarkBillPaid, onCreateG
     },
   ]
 
+  // Every page is reachable from here, including sections hidden from the sidebar.
+  const navActions: QuickActionItem[] = NAV_ITEMS.map(n => {
+    const Icon = n.icon
+    return {
+      id: `go-${n.id}`,
+      label: `Go to ${n.name}`,
+      description: n.href,
+      icon: <Icon size={18} />,
+      color: n.accent,
+      keywords: ['go', 'open', 'page', n.name.toLowerCase(), n.id],
+      action: () => { setOpen(false); router.push(n.href) },
+    }
+  })
+  actions.push(...navActions)
+
   const filteredActions = query.trim()
     ? actions.filter(a =>
         a.label.toLowerCase().includes(query.toLowerCase()) ||
@@ -127,8 +143,13 @@ export function QuickActions({ onAddBill, onLogIncome, onMarkBillPaid, onCreateG
       }
       if (e.key === 'Escape') setOpen(false)
     }
+    const openHandler = () => setOpen(true)
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('orca-open-quick-actions', openHandler)
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('orca-open-quick-actions', openHandler)
+    }
   }, [])
 
   // Focus input when opened
@@ -142,19 +163,6 @@ export function QuickActions({ onAddBill, onLogIncome, onMarkBillPaid, onCreateG
 
   return (
     <>
-      {/* Floating trigger button */}
-      <motion.button
-        onClick={() => setOpen(true)}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        className="fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full flex items-center justify-center shadow-lg"
-        style={{ backgroundColor: theme.accent, color: '#fff' }}
-        aria-label="Quick Actions (Cmd+K)"
-        title="Quick Actions (Cmd+K)"
-      >
-        <Search size={20} />
-      </motion.button>
-
       {/* Palette overlay */}
       <AnimatePresence>
         {open && (

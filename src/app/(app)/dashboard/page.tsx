@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import { Loader2, DollarSign, TrendingUp, Wallet, Mic2, Palette, Flame, Calendar } from 'lucide-react'
+import { Loader2, Disc3, PenTool, Star, SlidersHorizontal } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt } from '@/lib/utils'
@@ -17,10 +17,12 @@ import {
   type LaundrySettings, type LiquorSettings, type SpendingEntry,
 } from '@/lib/lifeTasks'
 import {
-  C, Card, CardHeader, Header, Alerts, Kpi, TodayCard, DashboardCalendar, DayDetail,
-  HealthCard, BillsCard, TasksCard, BizzyPlugCard, GigsCard, IncomeCard,
-  type AlertChip, type MonthIncome, type PriorityItem,
+  Alerts, KpiStrip, CashflowCard, IncomeMixCard, BusinessesCard, TodayCard, CalendarCard,
+  HealthCard, BillsCard, TasksCard, BizzyPlugCard, GigsCard,
+  type AlertChip, type MonthIncome, type PriorityItem, type KpiDef, type BusinessRow,
 } from './widgets'
+import { useLayoutPrefs, prefOps, FOCUS_META, type FocusId, type WidgetId } from '@/lib/layoutPrefs'
+import { Segmented, openCustomize } from '@/components/layout/CustomizePanel'
 
 const CALORIE_TARGET = 3200
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -28,11 +30,34 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 function getGreeting(name: string) {
   const h = new Date().getHours()
   const firstName = name?.split(' ')[0] || 'Boss'
-  if (h < 6) return { greeting: `Working late, ${firstName}?`, line: "Respect the grind. Don't forget sleep is gains too." }
-  if (h < 12) return { greeting: `Morning briefing, ${firstName}.`, line: "Stack the priorities early. The day isn't waiting." }
-  if (h < 17) return { greeting: `Midday check-in, ${firstName}.`, line: "How's the execution? Intentions mean nothing without action." }
-  return { greeting: `Evening report, ${firstName}.`, line: "What did you actually finish today? Let's review." }
+  if (h < 5) return `Working late, ${firstName}`
+  if (h < 12) return `Good morning, ${firstName}`
+  if (h < 17) return `Good afternoon, ${firstName}`
+  return `Good evening, ${firstName}`
 }
+
+// Grid packing. Each widget has a preferred width in columns of the 3 column
+// desktop grid. Rows are packed in the user's order and the last widget in a
+// row stretches to fill any gap, so every order lays out without holes.
+const WIDGET_SPAN: Record<WidgetId, 1 | 2 | 3> = {
+  kpis: 3, alerts: 3, calendar: 3,
+  cashflow: 2, businesses: 2, today: 2, pipeline: 2,
+  incomeMix: 1, bills: 1, tasks: 1, health: 1, gigs: 1,
+}
+function pack(ids: WidgetId[], cols: number): number[] {
+  const spans: number[] = []
+  let used = 0
+  ids.forEach((id, i) => {
+    const want = Math.min(WIDGET_SPAN[id], cols)
+    if (used + want > cols) { spans[i - 1] += cols - used; used = 0 }
+    spans.push(want)
+    used = (used + want) % cols
+  })
+  if (used > 0 && spans.length) spans[spans.length - 1] += cols - used
+  return spans
+}
+const MD_SPAN = ['', 'md:col-span-1', 'md:col-span-2']
+const LG_SPAN = ['', 'lg:col-span-1', 'lg:col-span-2', 'lg:col-span-3']
 
 function gid() { return Math.random().toString(36).slice(2, 10) }
 
@@ -55,7 +80,8 @@ export default function DashboardPage() {
   const [dismissedAt, setDismissedAt] = useState<Record<string, string>>(() => readJSON('orca-dismissed-notifs-ts', {}))
 
   const displayName = user?.name?.trim() || 'Boss'
-  const { greeting, line } = getGreeting(displayName)
+  const greeting = getGreeting(displayName)
+  const { prefs, ready, update } = useLayoutPrefs()
 
   const todayStr = new Date().toISOString().slice(0, 10)
   const [selectedDate, setSelectedDate] = useState(todayStr)
@@ -302,15 +328,15 @@ export default function DashboardPage() {
     return s + Math.max(0, b.amount - cycleAllocs.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0))
   }, 0), [upcomingBills])
 
-  if (loading) {
+  if (loading || !ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: theme.bg }}>
-        <Loader2 size={24} className="animate-spin" style={{ color: C.indigo }} />
+      <div className="min-h-[60vh] flex items-center justify-center" style={{ background: theme.bg }}>
+        <Loader2 size={22} className="animate-spin" style={{ color: theme.subtext }} />
       </div>
     )
   }
 
-  // ── Alerts ──
+  // ── Inbox ──
   const dismiss = (key: string) => {
     const next = { ...dismissedAt, [key]: new Date().toISOString() }
     setDismissedAt(next)
@@ -320,11 +346,11 @@ export default function DashboardPage() {
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
   const alerts: AlertChip[] = [
     ...(bizzyplugNotifications.length > 0 && (!dismissedAt.bp || latestLead > dismissedAt.bp)
-      ? [{ key: 'bp', label: plural(bizzyplugNotifications.length, 'new BizzyPlug lead'), sub: 'View in Projects', href: '/bizzplug', color: C.purple, icon: Palette }] : []),
+      ? [{ key: 'bp', label: plural(bizzyplugNotifications.length, 'new BizzyPlug lead'), sub: 'View in Projects', href: '/bizzplug', icon: PenTool }] : []),
     ...(newQuoteCount > 0 && !dismissedAt.quotes
-      ? [{ key: 'quotes', label: plural(newQuoteCount, 'new DJ quote'), sub: 'Review in DJ Maskoff', href: '/dj', color: C.pink, icon: Mic2 }] : []),
+      ? [{ key: 'quotes', label: plural(newQuoteCount, 'new DJ quote'), sub: 'Review in DJ Maskoff', href: '/dj', icon: Disc3 }] : []),
     ...(newTestimonialCount > 0 && !dismissedAt.reviews
-      ? [{ key: 'reviews', label: plural(newTestimonialCount, 'new review'), sub: 'See the Website tab', href: '/dj', color: C.gold, icon: Flame }] : []),
+      ? [{ key: 'reviews', label: plural(newTestimonialCount, 'new review'), sub: 'See the Website tab', href: '/dj', icon: Star }] : []),
   ]
 
   // ── Today ──
@@ -336,85 +362,156 @@ export default function DashboardPage() {
   const dailyRemaining = DAILY_BUDGET - dailySpent
   const income = lyftNetIncome + djEarnedIncome + bizzplugEarnedIncome
   const monthLabel = new Date(calYear, calMonth).toLocaleDateString('en-US', { month: 'long' })
+  const monthShort = MONTH_NAMES[calMonth]
   const isCurrentMonth = calMonth === new Date().getMonth() && calYear === new Date().getFullYear()
+  const incomeShown = income > 0 ? income : checkingBalance
+  const net = income - totalDue
+
+  // ── Focus + widgets ──
+  const focus = prefs.focus
+  const visible = prefs.widgets[focus].filter(w => w.visible).map(w => w.id)
+
+  const kpis: KpiDef[] = [
+    {
+      label: `Income · ${monthShort}`,
+      value: incomeShown > 0 ? fmt(incomeShown) : '$0.00',
+      sub: income > 0 ? 'Lyft net, DJ, BizzyPlug' : checkingBalance > 0 ? 'Checking balance' : 'Nothing logged yet',
+      href: '/smart-stack', tone: income > 0 ? 'ok' : null,
+    },
+    { label: `Bills owed · ${monthShort}`, value: fmt(totalDue), sub: totalDue > 0 ? 'Still owed this month' : 'All paid', href: '/bill-boss', tone: totalDue > 0 ? 'bad' : 'ok' },
+    { label: `Net · ${monthShort}`, value: `${net < 0 ? '-' : ''}${fmt(Math.abs(net))}`, sub: 'Income minus bills still owed', href: '/smart-stack', tone: net >= 0 ? 'ok' : 'bad' },
+    {
+      label: 'Spent today', value: fmt(dailySpent),
+      sub: dailyRemaining >= 0 ? `${fmt(dailyRemaining)} left of ${fmt(DAILY_BUDGET)}` : `${fmt(-dailyRemaining)} over budget`,
+      href: '/planner',
+      progress: { pct: (dailySpent / DAILY_BUDGET) * 100, tone: dailyRemaining < 0 ? 'bad' : dailySpent / DAILY_BUDGET > 0.8 ? 'warn' : 'ok' },
+    },
+  ]
+
+  const openLeads = bizzplugClientsList.filter((p: any) => p.status === 'new-lead')
+  const pendingValue = openLeads.reduce((s: number, p: any) => s + (p.quote || 0), 0)
+  const lyftCount = lyftSessions.filter((s: any) => s.date?.startsWith(monthKey)).length
+  const nextGig = upcomingGigs[0]
+  const businesses: BusinessRow[] = [
+    {
+      id: 'dj', name: 'DJ Maskoff', href: '/dj', attention: newQuoteCount > 0,
+      status: newQuoteCount > 0 ? `${plural(newQuoteCount, 'quote')} waiting`
+        : nextGig ? `Next gig ${new Date(nextGig.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${nextGig.venue || nextGig.clientName || 'Gig'}`
+        : `No more gigs booked in ${monthLabel}`,
+      metric: fmt(djEarnedIncome),
+    },
+    {
+      id: 'bizzplug', name: 'BizzyPlug', href: '/bizzplug', attention: bizzyplugNotifications.length > 0,
+      status: openLeads.length ? `${plural(openLeads.length, 'open project')} · ${fmt(pendingValue)} pending` : 'No open projects',
+      metric: fmt(bizzplugEarnedIncome),
+    },
+    { id: 'lyft', name: 'Lyft', href: '/business', status: lyftCount ? `${plural(lyftCount, 'session')} in ${monthLabel}, net of gas` : `No sessions in ${monthLabel}`, metric: fmt(lyftNetIncome) },
+    { id: 'crookedrumor', name: 'Crooked Rumor', href: '/crookedrumor/admin', status: 'Bookings, clients and site' },
+    { id: 'rsvp', name: 'RSVP', href: '/RSVP/admin', status: 'Events, guests and check in' },
+  ]
+
+  const render: Record<WidgetId, () => React.ReactNode> = {
+    kpis: () => <KpiStrip items={kpis} />,
+    alerts: () => <Alerts alerts={alerts} onDismiss={dismiss} />,
+    cashflow: () => <CashflowCard months={monthlyIncome} />,
+    incomeMix: () => <IncomeMixCard monthLabel={monthLabel} values={{ lyft: lyftNetIncome, dj: djEarnedIncome, bizzplug: bizzplugEarnedIncome }} />,
+    bills: () => <BillsCard upcoming={upcomingBills} todayStr={todayStr} dueSoonTotal={upcomingBillsOwed} wellsRequired={getRequiredWellsBalance(subscriptions, wellsSettings)} />,
+    businesses: () => <BusinessesCard rows={businesses} />,
+    pipeline: () => <BizzyPlugCard leads={openLeads} earnedThisMonth={bizzplugEarnedIncome} />,
+    gigs: () => <GigsCard gigs={upcomingGigs} />,
+    today: () => (
+      <TodayCard
+        priorities={allPriorities[todayStr] || []}
+        {...priorityHandlers(todayStr)}
+        schedule={getBlocksForDate(todayStr, plannerTemplates, plannerOverrides)}
+        lifeTasks={getLifeTaskRemindersForDate(todayStr, laundrySettings, liquorSettings, grocerySettings.reUpDay)}
+      />
+    ),
+    calendar: () => (
+      <CalendarCard
+        bills={bills}
+        gigs={gigs}
+        priorities={allPriorities}
+        selectedDate={selectedDate}
+        onDateSelect={setSelectedDate}
+        month={calMonth}
+        year={calYear}
+        onMonthChange={handleMonthChange}
+        todayStr={todayStr}
+        dayProps={{ priorities: allPriorities[selectedDate] || [], ...priorityHandlers(selectedDate), todayShownElsewhere: visible.includes('today') }}
+      />
+    ),
+    health: () => (
+      <HealthCard
+        workoutTitle={todayWorkout.title}
+        workoutLogged={todayWorkout.exercises.filter(e => loggedIds.includes(e.id)).length}
+        workoutTotal={todayWorkout.exercises.length}
+        meals={MEAL_ORDER.map(m => ({ label: MEAL_LABELS[m], logged: mealLogs.some(l => l.date === todayStr && l.meal === m) }))}
+        protein={mealTotals.protein}
+        proteinTarget={PROTEIN_TARGET}
+        calories={todayCalories}
+        calorieTarget={CALORIE_TARGET}
+        weight={currentWeight}
+      />
+    ),
+    tasks: () => <TasksCard tasks={tasks} />,
+  }
+
+  // The inbox renders nothing when empty; leave it out of the packing so it never holds a gap.
+  const shown = visible.filter(id => id !== 'alerts' || alerts.length > 0)
+  const mdSpans = pack(shown, 2)
+  const lgSpans = pack(shown, 3)
+
+  const when = isCurrentMonth ? 'this month' : `in ${monthLabel}`
+  const summary = income > 0
+    ? `${fmt(income)} in and ${totalDue > 0 ? `${fmt(totalDue)} still owed` : 'every bill covered'} ${when}.`
+    : totalDue > 0 ? `${fmt(totalDue)} in bills still owed ${when}.` : `Every bill is covered ${when}.`
 
   return (
-    <div className="min-h-screen pb-16 lg:pb-8" style={{ background: theme.bg, color: theme.text }}>
-      <div className="mx-auto max-w-[1440px] px-4 pt-5 md:px-6 lg:px-8 lg:pt-8 space-y-5 md:space-y-6">
-        <Header greeting={greeting} line={line} todayStr={todayStr} />
-        <Alerts alerts={alerts} onDismiss={dismiss} />
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          <Kpi label={`Bills due · ${monthLabel}`} value={fmt(totalDue)} sub="Still owed this month" color={C.red} href="/bill-boss" icon={DollarSign} />
-          <Kpi
-            label={`Income · ${monthLabel}`}
-            value={income > 0 ? fmt(income) : checkingBalance > 0 ? fmt(checkingBalance) : '$0.00'}
-            sub={income > 0 ? 'Lyft net, DJ, BizzyPlug' : checkingBalance > 0 ? 'Checking balance' : 'Nothing logged yet'}
-            color={C.green}
-            href="/smart-stack"
-            icon={TrendingUp}
-          />
-          <Kpi label="Spent today" value={fmt(dailySpent)} sub={`${fmt(dailyRemaining)} left of ${fmt(DAILY_BUDGET)}`} color={dailyRemaining < 0 ? C.red : C.gold} href="/planner" icon={Wallet} />
-          <Kpi label={isCurrentMonth ? 'Gigs this month' : `Gigs · ${monthLabel}`} value={String(upcomingGigs.length)} sub={upcomingGigs[0] ? `Next: ${upcomingGigs[0].venue || upcomingGigs[0].clientName || 'Gig'}` : 'None booked'} color={C.pink} href="/dj" icon={Mic2} />
+    <div className="min-h-screen pb-16 lg:pb-10" style={{ background: theme.bg, color: theme.text }}>
+      <div className="mx-auto max-w-[1360px] px-4 pt-6 md:px-6 lg:px-8 lg:pt-8">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+          <div className="min-w-0">
+            <p className="text-[13px]" style={{ color: theme.subtext }}>
+              {new Date(todayStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
+            <h1 className="text-[26px] md:text-[30px] font-semibold tracking-tight leading-tight mt-0.5" style={{ color: theme.text }}>{greeting}</h1>
+            <p className="text-[13.5px] mt-1" style={{ color: theme.subtext }}>{summary}</p>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="min-w-0 flex-1 md:flex-none overflow-x-auto no-scrollbar">
+              <Segmented
+                value={focus}
+                onChange={v => update(prefOps.setFocus(v as FocusId))}
+                options={(Object.keys(FOCUS_META) as FocusId[]).map(f => ({ value: f, label: FOCUS_META[f].name }))}
+              />
+            </div>
+            <button
+              onClick={() => openCustomize('dashboard')}
+              className="h-9 px-3 rounded-lg inline-flex items-center gap-2 text-[13px] font-medium shrink-0"
+              style={{ border: `1px solid ${theme.border}`, color: theme.text, backgroundColor: theme.card }}
+              aria-label="Customize dashboard"
+            >
+              <SlidersHorizontal size={14} /> <span className="hidden sm:inline">Customize</span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid gap-5 md:gap-6 lg:grid-cols-12 items-start">
-          {/* Main column */}
-          <div className="lg:col-span-8 space-y-5 md:space-y-6 min-w-0">
-            <TodayCard
-              priorities={allPriorities[todayStr] || []}
-              {...priorityHandlers(todayStr)}
-              schedule={getBlocksForDate(todayStr, plannerTemplates, plannerOverrides)}
-              lifeTasks={getLifeTaskRemindersForDate(todayStr, laundrySettings, liquorSettings, grocerySettings.reUpDay)}
-            />
-
-            <Card>
-              <CardHeader icon={Calendar} title="Command Calendar" accent={C.indigo} />
-              <div className="grid xl:grid-cols-[1fr_320px] border-t" style={{ borderColor: theme.border }}>
-                <DashboardCalendar
-                  bills={bills}
-                  gigs={gigs}
-                  priorities={allPriorities}
-                  selectedDate={selectedDate}
-                  onDateSelect={setSelectedDate}
-                  month={calMonth}
-                  year={calYear}
-                  onMonthChange={handleMonthChange}
-                />
-                <div className="border-t xl:border-t-0 xl:border-l" style={{ borderColor: theme.border }}>
-                  <DayDetail
-                    date={selectedDate}
-                    todayStr={todayStr}
-                    bills={bills}
-                    gigs={gigs}
-                    priorities={allPriorities[selectedDate] || []}
-                    {...priorityHandlers(selectedDate)}
-                  />
-                </div>
+        {shown.length === 0 ? (
+          <div className="rounded-2xl p-10 text-center" style={{ border: `1px dashed ${theme.border}` }}>
+            <p className="text-[14px] font-medium" style={{ color: theme.text }}>Nothing on this focus yet</p>
+            <p className="text-[13px] mt-1 mb-4" style={{ color: theme.subtext }}>Pick the widgets you want to see.</p>
+            <button onClick={() => openCustomize('dashboard')} className="h-9 px-4 rounded-lg text-[13px] font-medium" style={{ backgroundColor: theme.accent, color: theme.bg }}>Add widgets</button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+            {shown.map((id, i) => (
+              <div key={id} className={`min-w-0 [&>section]:h-full ${MD_SPAN[mdSpans[i]]} ${LG_SPAN[lgSpans[i]]}`}>
+                {render[id]()}
               </div>
-            </Card>
+            ))}
           </div>
-
-          {/* Side rail: two columns on tablet, one on desktop */}
-          <div className="lg:col-span-4 grid md:grid-cols-2 lg:grid-cols-1 gap-5 md:gap-6 min-w-0">
-            <HealthCard
-              workoutTitle={todayWorkout.title}
-              workoutLogged={todayWorkout.exercises.filter(e => loggedIds.includes(e.id)).length}
-              workoutTotal={todayWorkout.exercises.length}
-              meals={MEAL_ORDER.map(m => ({ label: MEAL_LABELS[m], logged: mealLogs.some(l => l.date === todayStr && l.meal === m) }))}
-              protein={mealTotals.protein}
-              proteinTarget={PROTEIN_TARGET}
-              calories={todayCalories}
-              calorieTarget={CALORIE_TARGET}
-              weight={currentWeight}
-            />
-            <BillsCard upcoming={upcomingBills} todayStr={todayStr} dueSoonTotal={upcomingBillsOwed} wellsRequired={getRequiredWellsBalance(subscriptions, wellsSettings)} />
-            <TasksCard tasks={tasks} />
-            <BizzyPlugCard leads={bizzplugClientsList.filter((p: any) => p.status === 'new-lead')} earnedThisMonth={bizzplugEarnedIncome} />
-            <GigsCard gigs={upcomingGigs} />
-            <IncomeCard months={monthlyIncome} />
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )

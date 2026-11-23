@@ -3,31 +3,39 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, Settings2, RefreshCw, Check, AlertCircle } from 'lucide-react'
+import {
+  Menu, Settings, RefreshCw, Check, AlertCircle, Search, SlidersHorizontal,
+  PanelLeftClose, PanelLeftOpen,
+} from 'lucide-react'
 import SettingsSheet from './SettingsSheet'
 import SideSidebar from './SideSidebar'
 import NavList from './NavList'
-import { NAV_ITEMS, isNavActive } from './navConfig'
+import CustomizePanel, { openCustomize } from './CustomizePanel'
+import { OrcaMark } from './OrcaMark'
+import { NAV_ITEMS, NAV_GROUPS, isNavActive } from './navConfig'
 import { useTheme } from '@/context/ThemeContext'
 import { QuickActions } from '@/components/QuickActions'
 import { useOrcaData } from '@/context/OrcaDataContext'
+import { useLayoutPrefs, prefOps } from '@/lib/layoutPrefs'
 import { createBrowserClient } from '@supabase/ssr'
-
-const BENTLEY_INDIGO = '#6366F1'
 
 interface AppShellProps {
   children: React.ReactNode
   userName?: string
 }
 
+const openPalette = () => window.dispatchEvent(new CustomEvent('orca-open-quick-actions'))
+
 export default function AppShell({ children, userName = 'User' }: AppShellProps) {
   const { theme } = useTheme()
   const { data, forceSync, syncState } = useOrcaData()
+  const { prefs, update } = useLayoutPrefs()
   const pathname = usePathname()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userEmail, setUserEmail] = useState<string | undefined>()
   const [syncIcon, setSyncIcon] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle')
+  const [isMac, setIsMac] = useState(false)
 
   const handleSync = useCallback(async () => {
     setSyncIcon('syncing')
@@ -42,6 +50,7 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
   }, [forceSync])
 
   useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || ''))
     try {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,138 +63,155 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
   }, [])
 
   const displayName = (data?.user?.name?.trim()) || userName
+  const initials = displayName.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U'
 
   const activeItem = NAV_ITEMS.find(n => isNavActive(n, pathname))
+  const activeGroup = NAV_GROUPS.find(g => activeItem && g.items.includes(activeItem))
+  const rail = prefs.sidebarCollapsed
+  const sideW = rail ? 68 : 244
+
+  const iconBtn = 'w-9 h-9 rounded-lg flex items-center justify-center transition-colors'
+  const hover = (on: boolean) => (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.backgroundColor = on ? `${theme.text}0d` : '' }
 
   return (
     <div
       className="flex min-h-screen max-w-[100vw] overflow-x-hidden"
-      style={{ backgroundColor: theme.bg, color: theme.text }}
+      style={{ backgroundColor: theme.bg, color: theme.text, ['--orca-side' as any]: `${sideW}px` }}
     >
-      {/* ── Desktop Sidebar (lg+) ─────────────────────────────────────────── */}
+      {/* ── Desktop sidebar (lg+) ─────────────────────────────────────────── */}
       <aside
-        className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:z-30"
-        style={{ width: 240, backgroundColor: theme.card, borderRight: `1px solid ${theme.border}` }}
+        className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 transition-[width] duration-200"
+        style={{ width: sideW, backgroundColor: theme.nav, borderRight: `1px solid ${theme.border}` }}
       >
-        {/* Logo / brand */}
-        <div
-          className="flex items-center gap-3 px-4 py-4 shrink-0"
-          style={{ borderBottom: `1px solid ${theme.border}` }}
-        >
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shrink-0"
-            style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)', color: '#fff' }}
-          >
-            O
-          </div>
-          <div className="min-w-0">
-            <p className="font-black text-sm tracking-widest" style={{ color: BENTLEY_INDIGO }}>ORCA</p>
-            <p className="text-[10px] truncate" style={{ color: theme.subtext }}>{displayName}</p>
-          </div>
+        <div className={`flex items-center h-14 shrink-0 ${rail ? 'justify-center' : 'gap-2.5 px-4'}`}>
+          <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0" aria-label="ORCA home">
+            <OrcaMark />
+            {!rail && <span className="text-[15px] font-semibold tracking-tight" style={{ color: theme.text }}>ORCA</span>}
+          </Link>
         </div>
 
-        {/* Nav links */}
-        <div className="flex-1 px-3 py-5 overflow-y-auto">
-          <NavList />
+        {!rail && (
+          <div className="px-3 pb-2">
+            <button
+              onClick={openPalette}
+              className="w-full flex items-center gap-2 h-9 px-2.5 rounded-lg text-[13px]"
+              style={{ backgroundColor: theme.input, border: `1px solid ${theme.border}`, color: theme.subtext }}
+            >
+              <Search size={14} />
+              <span className="flex-1 text-left">Search or jump to</span>
+              <kbd className="text-[10px] font-mono-num px-1.5 rounded" style={{ border: `1px solid ${theme.border}` }}>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+            </button>
+          </div>
+        )}
+
+        <div className={`flex-1 overflow-y-auto no-scrollbar py-3 ${rail ? 'px-2' : 'px-3'}`}>
+          <NavList rail={rail} />
         </div>
 
-        {/* Settings footer */}
-        <div className="px-3 py-3 shrink-0" style={{ borderTop: `1px solid ${theme.border}` }}>
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-all hover:opacity-70 text-left"
-            style={{ color: theme.subtext }}
-          >
-            <Settings2 size={18} strokeWidth={1.5} className="shrink-0" />
-            <span className="text-sm">Settings</span>
-          </button>
+        <div className={`shrink-0 py-3 space-y-px ${rail ? 'px-2' : 'px-3'}`} style={{ borderTop: `1px solid ${theme.border}` }}>
+          {[
+            { label: 'Customize', icon: SlidersHorizontal, onClick: () => openCustomize('sidebar') },
+            { label: 'Settings', icon: Settings, onClick: () => setSettingsOpen(true) },
+            { label: rail ? 'Expand sidebar' : 'Collapse sidebar', icon: rail ? PanelLeftOpen : PanelLeftClose, onClick: () => update(prefOps.toggleSidebar) },
+          ].map(b => (
+            <button
+              key={b.label}
+              onClick={b.onClick}
+              title={rail ? b.label : undefined}
+              aria-label={b.label}
+              className={`flex items-center rounded-lg transition-colors ${rail ? 'justify-center h-10 w-10 mx-auto' : 'gap-2.5 px-2.5 h-9 w-full'}`}
+              style={{ color: theme.subtext }}
+              onMouseEnter={hover(true)}
+              onMouseLeave={hover(false)}
+            >
+              <b.icon size={17} strokeWidth={1.75} className="shrink-0" />
+              {!rail && <span className="text-[13.5px] font-medium">{b.label}</span>}
+            </button>
+          ))}
+          <div className={`flex items-center pt-2 ${rail ? 'justify-center' : 'gap-2.5 px-2.5'}`}>
+            <span className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0" style={{ backgroundColor: `${theme.accent}22`, color: theme.accent }} title={displayName}>{initials}</span>
+            {!rail && (
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium truncate" style={{ color: theme.text }}>{displayName}</p>
+                {userEmail && <p className="text-[11px] truncate" style={{ color: theme.subtext }}>{userEmail}</p>}
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
-      {/* ── Main content area ─────────────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 min-w-0 lg:ml-[240px]">
-
-        {/* Top Bar */}
-        <div
-          className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 shrink-0"
+      {/* ── Main ──────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col flex-1 min-w-0 lg:ml-[var(--orca-side)] transition-[margin] duration-200">
+        <header
+          className="sticky top-0 z-40 flex items-center gap-2 px-3 sm:px-4 lg:px-8 h-14 shrink-0"
           style={{
-            backgroundColor: `${theme.bg}f0`,
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
+            backgroundColor: `${theme.bg}e6`,
+            backdropFilter: 'saturate(140%) blur(16px)',
+            WebkitBackdropFilter: 'saturate(140%) blur(16px)',
             borderBottom: `1px solid ${theme.border}`,
           }}
         >
-          <div className="flex items-center gap-3">
-            {/* Hamburger — mobile only */}
+          <button onClick={() => setSidebarOpen(true)} className={`${iconBtn} lg:hidden`} style={{ color: theme.text }} aria-label="Open navigation">
+            <Menu size={19} />
+          </button>
+          <Link href="/dashboard" className="flex items-center gap-2 lg:hidden" aria-label="ORCA home">
+            <OrcaMark size={24} />
+            <span className="text-[15px] font-semibold tracking-tight hidden sm:inline">ORCA</span>
+          </Link>
+
+          <nav className="hidden lg:flex items-center gap-1.5 text-[13px] min-w-0" aria-label="Breadcrumb">
+            {activeGroup?.label && <><span style={{ color: theme.subtext }}>{activeGroup.label}</span><span style={{ color: theme.border }}>/</span></>}
+            <span className="font-medium truncate" style={{ color: theme.text }}>{activeItem?.name ?? 'ORCA'}</span>
+          </nav>
+
+          <div className="ml-auto flex items-center gap-1">
             <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-xl transition-opacity hover:opacity-70"
-              style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-              aria-label="Open navigation"
+              onClick={openPalette}
+              className={`${iconBtn} ${rail ? '' : 'lg:hidden'}`}
+              style={{ color: theme.subtext }}
+              aria-label="Search and quick actions"
+              onMouseEnter={hover(true)}
+              onMouseLeave={hover(false)}
             >
-              <Menu size={16} style={{ color: theme.subtext }} />
+              <Search size={17} />
             </button>
-
-            {/* Logo — mobile only */}
-            <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs"
-                style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)', color: '#fff' }}
-              >
-                O
-              </div>
-              <span className="font-black text-sm tracking-widest" style={{ color: theme.accent }}>ORCA</span>
-            </Link>
-
-            {/* Page title — desktop only */}
-            <span
-              className="hidden lg:block text-sm font-semibold"
-              style={{ color: theme.text }}
+            <button
+              onClick={handleSync}
+              disabled={syncIcon === 'syncing'}
+              className={iconBtn}
+              style={{ color: theme.subtext }}
+              aria-label="Sync data"
+              title={syncIcon === 'error' ? (syncState.lastError || 'Sync failed') : 'Sync all data'}
+              onMouseEnter={hover(true)}
+              onMouseLeave={hover(false)}
             >
-              {activeItem?.name ?? 'ORCA'}
-            </span>
+              {syncIcon === 'done' ? <Check size={17} style={{ color: theme.ok }} />
+                : syncIcon === 'error' ? <AlertCircle size={17} style={{ color: theme.warn }} />
+                : <RefreshCw size={16} className={syncIcon === 'syncing' ? 'animate-spin' : ''} style={{ color: syncIcon === 'syncing' ? theme.accent : undefined }} />}
+            </button>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className={`${iconBtn} lg:hidden`}
+              style={{ color: theme.subtext }}
+              aria-label="Open settings"
+            >
+              <Settings size={17} />
+            </button>
           </div>
+        </header>
 
-          <button
-            onClick={handleSync}
-            disabled={syncIcon === 'syncing'}
-            className="p-2 rounded-xl transition-opacity hover:opacity-70"
-            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-            aria-label="Sync data"
-            title={syncIcon === 'error' ? (syncState.lastError || 'Sync failed') : 'Sync all data'}
-          >
-            {syncIcon === 'done' ? (
-              <Check size={16} style={{ color: '#10B981' }} />
-            ) : syncIcon === 'error' ? (
-              <AlertCircle size={16} style={{ color: '#F59E0B' }} />
-            ) : (
-              <RefreshCw size={16} className={syncIcon === 'syncing' ? 'animate-spin' : ''} style={{ color: syncIcon === 'syncing' ? theme.accent : theme.subtext }} />
-            )}
-          </button>
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="p-2 rounded-xl transition-opacity hover:opacity-70"
-            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-            aria-label="Open settings"
-          >
-            <Settings2 size={16} style={{ color: theme.subtext }} />
-          </button>
-        </div>
-
-        {/* Page content */}
         <main className="flex-1 overflow-x-hidden" style={{ backgroundColor: theme.bg }}>
           {children}
         </main>
       </div>
 
-      {/* Mobile SideSidebar overlay */}
       <SideSidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         userName={displayName}
+        onSettings={() => { setSidebarOpen(false); setSettingsOpen(true) }}
       />
 
-      {/* Settings sheet */}
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -193,7 +219,7 @@ export default function AppShell({ children, userName = 'User' }: AppShellProps)
         userEmail={userEmail}
       />
 
-      {/* Global Quick Actions (Cmd+K) */}
+      <CustomizePanel />
       <QuickActions />
     </div>
   )
