@@ -1,8 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Edit3, Home, Car, CreditCard, Heart, Utensils, BookOpen, Zap, Plus, RefreshCw, Landmark } from 'lucide-react'
+import { Trash2, Check, AlertCircle, X, ChevronLeft, ChevronRight, Edit3, Home, Car, CreditCard, Heart, Utensils, BookOpen, Zap, Plus, Scissors, Copy, Undo2 } from 'lucide-react'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import { fmt, fmtD, gid } from '@/lib/utils'
 import { getRecurringBillDates } from '@/lib/income-engine'
@@ -21,8 +20,12 @@ import {
 } from '@/lib/subscriptions'
 
 import type { Bill, BillAlloc, BillRecurrence, RecurrenceEndType, Subscription, WellsSettings, SubscriptionFrequency, SubscriptionStatus } from '@/lib/types'
-import CalendarPicker from '@/components/CalendarPicker'
 import { orcaEvents } from '@/lib/eventBus'
+import {
+  PageShell, PageHeader, Panel, PanelTitle, Stat, MiniStat, Bar, Button, IconButton, MonthSwitcher,
+  RowMenu, Disclosure, EmptyState, useField, Field, Choice, Sheet, localISO,
+} from '@/components/ui/kit'
+import { Segmented } from '@/components/layout/CustomizePanel'
 
 // ── Progressive form step type ──
 type FormStep = 1 | 2 | 3
@@ -269,125 +272,88 @@ function BillCalendar({ bills, month, year, onMonthChange, onDayClick, selectedD
 
   const cells = []
   for (let i = 0; i < firstDay; i++) {
-    cells.push(<div key={`empty-${i}`} className="aspect-square" />)
+    cells.push(<div key={`empty-${i}`} />)
   }
   for (let d = 1; d <= daysInMonth; d++) {
     const dayEvents = getEventsForDay(d)
     const isToday = d === todayDay
-    const hasBill = dayEvents.length > 0
-    const allPaid = dayEvents.length > 0 && dayEvents.every(e => e.paid)
-
+    const isSelected = selectedDay === d
     cells.push(
-      <div
+      <button
         key={d}
-        onClick={() => onDayClick?.(d)}
-        className="aspect-square rounded-lg flex flex-col items-center justify-center relative text-xs sm:text-sm transition-all cursor-pointer"
-        style={{
-          backgroundColor: isToday
-            ? `${theme.gold}33`
-            : selectedDay === d
-            ? `${theme.gold}1a`
-            : hasBill && !allPaid && selectedDay !== d
-            ? `${theme.bad}1a`
-            : allPaid && selectedDay !== d
-            ? `${theme.ok}1a`
-            : 'transparent',
-          border: isToday
-            ? `1px solid ${theme.gold}`
-            : selectedDay === d
-            ? `1px solid ${theme.gold}80`
-            : 'none',
-        }}
+        onClick={() => onDayClick?.(isSelected ? 0 : d)}
+        className="flex flex-col items-center justify-start pt-1.5 pb-1 rounded-lg min-h-[46px] md:min-h-[54px] transition-colors"
+        style={{ backgroundColor: isSelected ? `${theme.text}14` : 'transparent' }}
+        aria-label={`${monthName.split(' ')[0]} ${d}${dayEvents.length ? `, ${dayEvents.length} payments` : ''}`}
+        aria-pressed={isSelected}
       >
-        <span className="font-medium" style={{ color: isToday ? theme.gold : hasBill ? theme.text : theme.textM }}>
-          {d}
-        </span>
-        {hasBill && (
-          <div className="flex gap-0.5 mt-0.5">
+        <span
+          className="text-xs tnum w-6 h-6 flex items-center justify-center rounded-full"
+          style={{
+            color: isToday ? theme.accent : dayEvents.length ? theme.text : theme.subtext,
+            fontWeight: isToday || isSelected ? 700 : 500,
+            boxShadow: isToday ? `inset 0 0 0 1.5px ${theme.accent}` : undefined,
+          }}
+        >{d}</span>
+        {dayEvents.length > 0 && (
+          <div className="flex gap-[3px] mt-1">
             {dayEvents.slice(0, 3).map((ev, i) => (
-              <div key={i} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ev.paid ? theme.ok : ev.type === 'split' ? '#f59e0b' : theme.bad }} />
+              <div key={i} className="w-[5px] h-[5px] rounded-full" style={{ backgroundColor: ev.paid ? theme.ok : ev.type === 'split' ? theme.warn : theme.bad }} />
             ))}
           </div>
         )}
-      </div>
+      </button>
     )
   }
 
-  return (
-    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-full box-border">
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={() => onMonthChange(-1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.accent} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
-          <ChevronLeft size={20} />
-        </button>
-        <div className="flex items-center gap-3">
-          <Calendar size={18} style={{ color: theme.accent }} />
-          <h3 className="font-bold text-lg" style={{ color: theme.text }}>{monthName}</h3>
-        </div>
-        <button onClick={() => onMonthChange(1)} className={`p-2 rounded-lg transition-colors`} style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.accent} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
-          <ChevronRight size={20} />
-        </button>
-      </div>
+  const selectedEvents = selectedDay && selectedDay > 0 ? getEventsForDay(selectedDay) : []
 
-      <div className="grid grid-cols-7 gap-1 mb-2">
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-[13.5px]" style={{ color: theme.text }}>{monthName}</h3>
+        <div className="flex">
+          <button onClick={() => onMonthChange(-1)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:opacity-70" style={{ color: theme.subtext }} aria-label="Previous month"><ChevronLeft size={16} /></button>
+          <button onClick={() => onMonthChange(1)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:opacity-70" style={{ color: theme.subtext }} aria-label="Next month"><ChevronRight size={16} /></button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-          <div key={i} className="text-center text-[10px] sm:text-xs font-semibold py-1" style={{ color: theme.textM }}>
-            {d}
+          <div key={i} className="text-center text-[10.5px] font-medium py-1" style={{ color: theme.subtext }}>{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">{cells}</div>
+      <div className="flex gap-4 mt-3 pt-3 flex-wrap" style={{ borderTop: `1px solid ${theme.border}` }}>
+        {[{ c: theme.bad, l: 'Unpaid' }, { c: theme.warn, l: 'Split' }, { c: theme.ok, l: 'Paid' }].map(x => (
+          <div key={x.l} className="flex items-center gap-1.5">
+            <div className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: x.c }} />
+            <span className="text-[11px]" style={{ color: theme.subtext }}>{x.l}</span>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
-        {cells}
-      </div>
-
-      <div className="flex gap-4 mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.bad }} />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textM }}>Unpaid</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[#f59e0b]" />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textM }}>Split</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.ok }} />
-          <span className="text-[10px] sm:text-xs" style={{ color: theme.textM }}>Paid</span>
-        </div>
-      </div>
-
-      {/* Selected Day Detail */}
-      {selectedDay && selectedDay > 0 && (
-        <div className="mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold" style={{ color: theme.text }}>
-              {new Date(year, month, selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            </p>
-            <button onClick={() => onDayClick?.(0)} className="text-xs hover:color" style={{ color: theme.textM }}>Close</button>
-          </div>
-          {getEventsForDay(selectedDay).length > 0 ? (
-            <div className="space-y-2">
-              {getEventsForDay(selectedDay).map((ev, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: `${theme.card}60` }}>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: ev.paid ? theme.ok : ev.type === 'split' ? '#f59e0b' : theme.bad }} />
-                    <div>
-                      <p className="text-sm font-medium" style={{ color: theme.text }}>{ev.label}</p>
-                      <p className="text-xs" style={{ color: theme.textM }}>
-                        {new Date(year, month, selectedDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-sm font-bold" style={{ color: ev.paid ? theme.ok : theme.bad }}>
-                    -{fmt(ev.amount)}
-                  </p>
-                </div>
+      {selectedDay && selectedDay > 0 ? (
+        <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${theme.border}` }}>
+          <p className="text-[13px] font-semibold mb-2" style={{ color: theme.text }}>
+            {new Date(year, month, selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
+          {selectedEvents.length > 0 ? (
+            <ul>
+              {selectedEvents.map((ev, i) => (
+                <li key={i} className="flex items-center justify-between gap-3 py-2" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: ev.paid ? theme.ok : ev.type === 'split' ? theme.warn : theme.bad }} />
+                    <span className="text-[13px] truncate" style={{ color: theme.text }}>{ev.label}</span>
+                  </span>
+                  <span className="text-[13px] font-medium tnum shrink-0" style={{ color: ev.paid ? theme.ok : theme.text }}>{ev.paid ? 'Paid · ' : ''}{fmt(ev.amount)}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           ) : (
-            <p className="text-sm" style={{ color: theme.textM }}>No bills due this day</p>
+            <p className="text-[13px]" style={{ color: theme.subtext }}>No bills due this day.</p>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -430,87 +396,80 @@ function SubscriptionCalendar({ subscriptions, month, year, onMonthChange, onDay
 
   const cells = []
   for (let i = 0; i < firstDay; i++) {
-    cells.push(<div key={`empty-${i}`} className="aspect-square" />)
+    cells.push(<div key={`empty-${i}`} />)
   }
   for (let d = 1; d <= daysInMonth; d++) {
     const dayEvents = eventsByDay.get(d) || []
     const isToday = d === todayDay
-    const hasSub = dayEvents.length > 0
-
+    const isSelected = selectedDay === d
     cells.push(
-      <div
+      <button
         key={d}
-        onClick={() => onDayClick?.(d)}
-        className="aspect-square rounded-lg flex flex-col items-center justify-center relative text-xs sm:text-sm transition-all cursor-pointer"
-        style={{
-          backgroundColor: isToday ? `${theme.gold}33` : selectedDay === d ? `${theme.gold}1a` : hasSub && selectedDay !== d ? `${theme.accent}1a` : 'transparent',
-          border: isToday ? `1px solid ${theme.gold}` : selectedDay === d ? `1px solid ${theme.gold}80` : 'none',
-        }}
+        onClick={() => onDayClick?.(isSelected ? 0 : d)}
+        className="flex flex-col items-center justify-start pt-1.5 pb-1 rounded-lg min-h-[46px] md:min-h-[54px] transition-colors"
+        style={{ backgroundColor: isSelected ? `${theme.text}14` : 'transparent' }}
+        aria-label={`${monthName.split(' ')[0]} ${d}${dayEvents.length ? `, ${dayEvents.length} charges` : ''}`}
+        aria-pressed={isSelected}
       >
-        <span className="font-medium" style={{ color: isToday ? theme.gold : hasSub ? theme.text : theme.textM }}>
-          {d}
-        </span>
-        {hasSub && (
-          <div className="flex gap-0.5 mt-0.5">
+        <span
+          className="text-xs tnum w-6 h-6 flex items-center justify-center rounded-full"
+          style={{
+            color: isToday ? theme.accent : dayEvents.length ? theme.text : theme.subtext,
+            fontWeight: isToday || isSelected ? 700 : 500,
+            boxShadow: isToday ? `inset 0 0 0 1.5px ${theme.accent}` : undefined,
+          }}
+        >{d}</span>
+        {dayEvents.length > 0 && (
+          <div className="flex gap-[3px] mt-1">
             {dayEvents.slice(0, 3).map((_, i) => (
-              <div key={i} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: theme.accent }} />
+              <div key={i} className="w-[5px] h-[5px] rounded-full" style={{ backgroundColor: theme.accent }} />
             ))}
           </div>
         )}
-      </div>
+      </button>
     )
   }
 
   const selectedDayEvents = selectedDay ? (eventsByDay.get(selectedDay) || []) : []
 
   return (
-    <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-full box-border">
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={() => onMonthChange(-1)} className="p-2 rounded-lg transition-colors" style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.accent} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
-          <ChevronLeft size={20} />
-        </button>
-        <div className="flex items-center gap-3">
-          <RefreshCw size={18} style={{ color: theme.accent }} />
-          <h3 className="font-bold text-lg" style={{ color: theme.text }}>{monthName}</h3>
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-[13.5px]" style={{ color: theme.text }}>{monthName}</h3>
+        <div className="flex">
+          <button onClick={() => onMonthChange(-1)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:opacity-70" style={{ color: theme.subtext }} aria-label="Previous month"><ChevronLeft size={16} /></button>
+          <button onClick={() => onMonthChange(1)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:opacity-70" style={{ color: theme.subtext }} aria-label="Next month"><ChevronRight size={16} /></button>
         </div>
-        <button onClick={() => onMonthChange(1)} className="p-2 rounded-lg transition-colors" style={{ color: theme.textM }} onMouseEnter={(e) => e.currentTarget.style.color = theme.accent} onMouseLeave={(e) => e.currentTarget.style.color = theme.textM}>
-          <ChevronRight size={20} />
-        </button>
       </div>
-
-      <div className="grid grid-cols-7 gap-1 mb-2">
+      <div className="grid grid-cols-7 mb-1">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-          <div key={i} className="text-center text-[10px] sm:text-xs font-semibold py-1" style={{ color: theme.textM }}>{d}</div>
+          <div key={i} className="text-center text-[10.5px] font-medium py-1" style={{ color: theme.subtext }}>{d}</div>
         ))}
       </div>
+      <div className="grid grid-cols-7 gap-0.5">{cells}</div>
 
-      <div className="grid grid-cols-7 gap-1">{cells}</div>
-
-      {selectedDay && selectedDay > 0 && (
-        <div className="mt-4 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold" style={{ color: theme.text }}>
-              {new Date(year, month, selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            </p>
-            <button onClick={() => onDayClick?.(0)} className="text-xs" style={{ color: theme.textM }}>Close</button>
-          </div>
+      {selectedDay && selectedDay > 0 ? (
+        <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${theme.border}` }}>
+          <p className="text-[13px] font-semibold mb-2" style={{ color: theme.text }}>
+            {new Date(year, month, selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
           {selectedDayEvents.length > 0 ? (
-            <div className="space-y-2">
+            <ul>
               {selectedDayEvents.map((ev, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: `${theme.card}60` }}>
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: theme.text }}>{ev.name}</p>
-                    <p className="text-xs" style={{ color: theme.textM }}>{ev.category}</p>
+                <li key={i} className="flex items-center justify-between gap-3 py-2" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                  <div className="min-w-0">
+                    <p className="text-[13px] truncate" style={{ color: theme.text }}>{ev.name}</p>
+                    <p className="text-[11.5px]" style={{ color: theme.subtext }}>{ev.category}</p>
                   </div>
-                  <p className="text-sm font-bold" style={{ color: theme.accent }}>-{fmt(ev.amount)}</p>
-                </div>
+                  <span className="text-[13px] font-medium tnum" style={{ color: theme.text }}>{fmt(ev.amount)}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           ) : (
-            <p className="text-sm" style={{ color: theme.textM }}>No subscriptions due this day</p>
+            <p className="text-[13px]" style={{ color: theme.subtext }}>No subscriptions charge this day.</p>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -1475,7 +1434,8 @@ export default function BillBossPage() {
 
       const baseAmount = b.amount / numPayments
       const alloc: BillAlloc[] = []
-      const dueDate = new Date(b.due)
+      // Parse as a local date; new Date('YYYY-MM-DD') is UTC and can land a day early.
+      const dueDate = new Date(b.due + 'T00:00:00')
 
       for (let i = 0; i < numPayments; i++) {
         const paymentDate = new Date(dueDate)
@@ -1483,7 +1443,7 @@ export default function BillBossPage() {
 
         alloc.push({
           id: gid(),
-          date: paymentDate.toISOString().split('T')[0],
+          date: localISO(paymentDate),
           amount: baseAmount,
           paid: false,
         })
@@ -1507,1422 +1467,784 @@ export default function BillBossPage() {
     }))
   }
 
-  // Framer motion variants
-  const container = {
-    hidden: { opacity: 1 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.08, delayChildren: 0.1 },
-    },
-  }
-
-  const item = {
-    hidden: { opacity: 0, y: 12 },
-    show: { opacity: 1, y: 0 },
-  }
+  // ── Layout state (2026-11 redesign) ──
+  const [tab, setTab] = useState<'bills' | 'cards' | 'subs'>('bills')
+  const [billsView, setBillsView] = useState<'list' | 'calendar'>('list')
+  const [paidOpen, setPaidOpen] = useState(false)
+  const [openSplits, setOpenSplits] = useState<Record<string, boolean>>({})
+  const [openPlans, setOpenPlans] = useState<Record<string, boolean>>({})
+  const [subSelectedDay, setSubSelectedDay] = useState<number | null>(null)
+  const field = useField()
 
   const visibleBills = getVisibleBills()
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: theme.bg }} className="min-h-screen flex items-center justify-center">
-        <div style={{ color: theme.text }}>Loading...</div>
+      <div style={{ backgroundColor: theme.bg }} className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-sm" style={{ color: theme.subtext }}>Loading…</div>
       </div>
     )
   }
 
+  const upcomingVisible = visibleBills.filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
+  const paidVisible = bills.filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid')
+  const monthName = new Date(calYear, calMonth).toLocaleDateString('en-US', { month: 'long' })
+  const todayISO = localISO(new Date())
+
+  const resetBillForm = () => {
+    setFormData({
+      name: '', amount: '', due: '', cat: CATEGORIES[0], freq: 'monthly',
+      recurrence: 'monthly', customRecurrenceDays: '', recurrenceEndType: 'ongoing',
+      recurrenceEndDate: '', recurrenceEndAfter: '',
+    })
+    setCustomCategory('')
+    setShowOccurrencePreview(false)
+  }
+  const closeBillForm = () => {
+    if (editingBillId) handleCancelEdit()
+    else { resetBillForm(); setShowAddForm(false) }
+    setFormStep(1)
+  }
+  const closeCardForm = () => {
+    if (editingCardId) cancelEditCard()
+    else { setShowAddCard(false); setCardForm({ name: '', balance: '', apr: '', minPayment: '', monthlyPayment: '', dueDay: '' }) }
+  }
+  const closeSubForm = () => { setShowAddSubscription(false); cancelEditSubscription() }
+
+  const undoPaid = (bill: Bill) => persistBills(bills.map(b => {
+    if (b.id !== bill.id) return b
+    // Clear paidDate and unpay this cycle's alloc entries so the bill reverts to upcoming.
+    return {
+      ...b,
+      status: 'upcoming' as const,
+      paidDate: undefined,
+      alloc: b.alloc.map(a => {
+        const ad = new Date(a.date + 'T00:00:00')
+        if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) return { ...a, paid: false }
+        return a
+      }),
+    }
+  }))
+
+  const onAdd = () => {
+    if (tab === 'bills') { resetBillForm(); setEditingBillId(null); setShowAddForm(true) }
+    else if (tab === 'cards') { setEditingCardId(null); setShowAddCard(true) }
+    else { cancelEditSubscription(); setShowAddSubscription(true) }
+  }
+  const addLabel = tab === 'bills' ? 'Add bill' : tab === 'cards' ? 'Add card' : 'Add subscription'
+
+  const recurrenceText = (bill: Bill) => {
+    const r = bill.recurrence || 'one-time'
+    const base = r === 'custom' && bill.customRecurrenceDays ? `Every ${bill.customRecurrenceDays} days` : r === 'one-time' ? 'One time' : r.charAt(0).toUpperCase() + r.slice(1)
+    const extra = [
+      bill.recurrenceEndDate ? `ends ${fmtD(bill.recurrenceEndDate)}` : null,
+      bill.recurrenceEndAfter ? `${bill.recurrenceEndAfter} times` : null,
+    ].filter(Boolean).join(', ')
+    return extra ? `${base}, ${extra}` : base
+  }
+
+  // Hero: next bill due, browsable.
+  const safeIdx = Math.min(nextDueIndex, Math.max(0, upcomingBillsForHero.length - 1))
+  const heroBill = upcomingBillsForHero[safeIdx]
+
+  const cardsWithPayments = creditCards.flatMap(c => c.payments.filter(p => !p.paid).map(p => ({ id: `cc-${c.id}-${p.date}`, name: `${c.name} Payment`, amount: p.amount, cat: 'Debt', due: p.date, freq: '', recurrence: 'one-time' as const, alloc: [], status: 'unpaid' })))
+  const totalCardDebt = creditCards.reduce((s, c) => {
+    const next = c.payments.find(p => !p.paid)
+    return s + (next ? next.remaining + next.amount : 0)
+  }, 0)
+
+  const cardFormFields = (
+    <div className="grid grid-cols-2 gap-3">
+      <Field label="Card name" className="col-span-2"><input value={cardForm.name} onChange={e => setCardForm({ ...cardForm, name: e.target.value })} placeholder="e.g. Capital One" {...field} /></Field>
+      <Field label="Total balance ($)"><input type="number" inputMode="decimal" value={cardForm.balance} onChange={e => setCardForm({ ...cardForm, balance: e.target.value })} {...field} /></Field>
+      <Field label="APR (%)"><input type="number" inputMode="decimal" value={cardForm.apr} onChange={e => setCardForm({ ...cardForm, apr: e.target.value })} placeholder="24.99" {...field} /></Field>
+      <Field label="Minimum payment ($)"><input type="number" inputMode="decimal" value={cardForm.minPayment} onChange={e => setCardForm({ ...cardForm, minPayment: e.target.value })} {...field} /></Field>
+      <Field label="Your monthly payment ($)"><input type="number" inputMode="decimal" value={cardForm.monthlyPayment} onChange={e => setCardForm({ ...cardForm, monthlyPayment: e.target.value })} {...field} /></Field>
+      <Field label="Due day (1 to 28)" className="col-span-2"><input type="number" min="1" max="28" value={cardForm.dueDay} onChange={e => setCardForm({ ...cardForm, dueDay: e.target.value })} {...field} /></Field>
+    </div>
+  )
+
   return (
-    <div style={{ backgroundColor: theme.bg }} className="w-full min-h-screen pb-20 overflow-x-hidden max-w-full">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-30 backdrop-blur-xl border-b px-4 py-4 sm:px-6 sm:py-4 lg:px-8 lg:py-4"
-        style={{ backgroundColor: `${theme.bg}95`, borderColor: theme.border }}
-      >
-        <div className="max-w-3xl mx-auto w-full flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold" style={{ color: theme.text }}>Bill Boss</h1>
-            <p className="text-sm mt-1" style={{ color: theme.textM }}>Manage your monthly bills</p>
-          </div>
-          <button
-            onClick={() => { setShowAddForm(true); setTimeout(() => { const el = document.getElementById('bill-boss-add-form'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); }}
-            className="shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
-            style={{ backgroundColor: theme.accent, color: '#fff' }}
-          >
-            Add Bill
-          </button>
-        </div>
-      </motion.div>
+    <PageShell>
+      <PageHeader
+        title="Bill Boss"
+        sub="Bills, credit cards and subscriptions"
+        right={<>
+          {tab === 'bills' && <MonthSwitcher month={calMonth} year={calYear} onChange={handleMonthChange} />}
+          <Button variant="primary" onClick={onAdd}><Plus size={15} /> {addLabel}</Button>
+        </>}
+      />
 
-      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
-        {/* 1. Hero Card - Total Monthly Bills */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <div className="relative overflow-hidden rounded-2xl p-4 sm:p-8 w-full max-w-full box-border" style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)`, color: '#fff' }}>
-            <div className="text-center mb-6">
-              <p className="text-sm font-medium opacity-80 mb-2">Total Monthly Bills</p>
-              <p className="text-3xl sm:text-5xl font-bold mb-4 break-words">{fmt(unpaidTotal)}</p>
-              <div className="rounded-full inline-flex gap-4 px-5 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
-                <div>
-                  <p className="text-xs opacity-70">Paid</p>
-                  <p className="text-sm font-bold">{fmt(paidTotal)}</p>
-                </div>
-                <div style={{ width: '1px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
-                <div>
-                  <p className="text-xs opacity-70">Total</p>
-                  <p className="text-sm font-bold">{fmt(unpaidTotal + paidTotal)}</p>
-                </div>
-              </div>
-            </div>
+      <div className="mb-5 overflow-x-auto no-scrollbar">
+        <Segmented
+          value={tab}
+          onChange={v => setTab(v as typeof tab)}
+          options={[
+            { value: 'bills', label: `Bills${upcomingVisible.length ? ` · ${upcomingVisible.length}` : ''}` },
+            { value: 'cards', label: `Credit cards${creditCards.length ? ` · ${creditCards.length}` : ''}` },
+            { value: 'subs', label: `Subscriptions${activeSubscriptions.length ? ` · ${activeSubscriptions.length}` : ''}` },
+          ]}
+        />
+      </div>
 
-            {/* Next Bill Due + Quick Pay — arrow-nav carousel across all upcoming bills */}
-            {upcomingBillsForHero.length > 0 && (() => {
-              const safeIdx = Math.min(nextDueIndex, upcomingBillsForHero.length - 1)
-              const heroBill = upcomingBillsForHero[safeIdx]
-              const today = new Date().toISOString().split('T')[0]
-              const isFuture = heroBill.due > today
-              return (
-                <div className="mt-6 pt-6 border-t" style={{ borderColor: 'rgba(255,255,255,0.2)' }}>
-                  <div className="flex items-center gap-2">
-                    {/* ← Prev */}
-                    <button
-                      onClick={() => setNextDueIndex(i => Math.max(0, i - 1))}
-                      disabled={safeIdx === 0}
-                      className="shrink-0 p-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-25"
-                      style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
-                      aria-label="Previous bill"
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-
-                    {/* Bill info */}
-                    <div className="flex-1 min-w-0 px-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-medium opacity-70">Next Due</p>
-                        {upcomingBillsForHero.length > 1 && (
-                          <span className="text-[10px] opacity-40 font-semibold">{safeIdx + 1}/{upcomingBillsForHero.length}</span>
-                        )}
-                        {isFuture && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>FUTURE</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-base font-bold truncate">{heroBill.name}</p>
-                        {heroBill.isSplit && (
-                          <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>SPLIT</span>
-                        )}
-                      </div>
-                      <p className="text-xs opacity-70">{fmtD(heroBill.due)} · {fmt(heroBill.amount)}</p>
-                    </div>
-
-                    {/* → Next */}
-                    <button
-                      onClick={() => setNextDueIndex(i => Math.min(upcomingBillsForHero.length - 1, i + 1))}
-                      disabled={safeIdx >= upcomingBillsForHero.length - 1}
-                      className="shrink-0 p-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-25"
-                      style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
-                      aria-label="Next bill"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-
-                    {/* Pay Now */}
-                    <button
-                      onClick={() => handlePayFull(heroBill.billId, heroBill.due)}
-                      className="shrink-0 px-3 sm:px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 hover:opacity-90"
-                      style={{ backgroundColor: '#fff', color: theme.accent }}
-                    >
-                      Pay Now
-                    </button>
-                  </div>
-                </div>
-              )
-            })()}
-          </div>
-        </motion.div>
-
-        {/* Bill Calendar */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          <BillCalendar
-            bills={[...bills, ...creditCards.flatMap(c => c.payments.filter(p => !p.paid).map(p => ({ id: `cc-${c.id}-${p.date}`, name: `${c.name} Payment`, amount: p.amount, cat: 'Debt', due: p.date, freq: '', recurrence: 'one-time' as const, alloc: [], status: 'unpaid' })))]}
-            month={calMonth}
-            year={calYear}
-            onMonthChange={handleMonthChange}
-            onDayClick={(day) => setSelectedDay(day === 0 ? null : day)}
-            selectedDay={selectedDay}
-            theme={theme}
-          />
-          {/* Monthly Bill Total for selected month */}
-          <div className="mt-3 flex items-center justify-between px-2 py-2 rounded-lg" style={{ backgroundColor: `${theme.gold}10` }}>
-            <span className="text-sm font-medium" style={{ color: theme.textS }}>
-              {new Date(calYear, calMonth).toLocaleDateString('en-US', { month: 'long' })} Bills Total
-            </span>
-            <span className="text-lg font-bold" style={{ color: theme.gold }}>{fmt(monthlyBillTotal)}</span>
-          </div>
-        </motion.div>
-
-        {/* ── CREDIT CARD DEBT PAYOFF ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18 }}
-          className="space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CreditCard size={16} style={{ color: theme.accent }} />
-              <h2 className="text-sm font-bold" style={{ color: theme.text }}>Credit Card Payoff</h2>
-            </div>
-            {!showAddCard && (
-              <button onClick={() => setShowAddCard(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold" style={{ background: `${theme.accent}15`, color: theme.accent, border: `1px solid ${theme.accent}30` }}>
-                <Plus size={11} /> Add Card
-              </button>
-            )}
-          </div>
-
-          {showAddCard && (
-            <div className="rounded-xl p-4 space-y-3" style={{ background: `${theme.accent}08`, border: `1px solid ${theme.accent}25` }}>
-              <p className="text-xs font-bold" style={{ color: theme.accent }}>Add Credit Card Debt</p>
-              <div className="grid grid-cols-2 gap-2">
-                <input value={cardForm.name} onChange={e => setCardForm({ ...cardForm, name: e.target.value })} placeholder="Card name *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <input type="number" value={cardForm.balance} onChange={e => setCardForm({ ...cardForm, balance: e.target.value })} placeholder="Total balance *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <input type="number" value={cardForm.apr} onChange={e => setCardForm({ ...cardForm, apr: e.target.value })} placeholder="APR % (e.g. 24.99)" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <input type="number" value={cardForm.minPayment} onChange={e => setCardForm({ ...cardForm, minPayment: e.target.value })} placeholder="Minimum payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <input type="number" value={cardForm.monthlyPayment} onChange={e => setCardForm({ ...cardForm, monthlyPayment: e.target.value })} placeholder="Your monthly payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <input type="number" value={cardForm.dueDay} onChange={e => setCardForm({ ...cardForm, dueDay: e.target.value })} placeholder="Due day (1-28)" min="1" max="28" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setShowAddCard(false)} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.textM }}>Cancel</button>
-                <button onClick={addCreditCard} disabled={!cardForm.name || !cardForm.balance} className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40" style={{ background: theme.accent, color: '#fff' }}>Create Plan</button>
-              </div>
-            </div>
-          )}
-
-          {creditCards.length === 0 && !showAddCard && (
-            <div className="rounded-2xl p-5 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-              <CreditCard size={24} className="mx-auto mb-2" style={{ color: theme.textM, opacity: 0.5 }} />
-              <p className="text-sm" style={{ color: theme.textM }}>No credit cards tracked yet</p>
-              <p className="text-xs mt-1" style={{ color: theme.textS }}>Add a card to start your payoff plan</p>
-            </div>
-          )}
-
-          {creditCards.map(card => {
-            const isEditing = editingCardId === card.id
-            const nextPayment = card.payments.find(p => !p.paid)
-            const paidCount = card.payments.filter(p => p.paid).length
-            const totalPaid = card.payments.filter(p => p.paid).reduce((s, p) => s + p.amount, 0)
-            const currentBalance = nextPayment ? nextPayment.remaining + nextPayment.amount : 0
-            const progressPct = card.balance > 0 ? Math.min(100, (totalPaid / card.balance) * 100) : 0
-            const unpaidPayments = card.payments.filter(p => !p.paid)
-            const totalInterest = unpaidPayments.reduce((s, p) => s + (p.interest || 0), 0)
-            const payoffDate = unpaidPayments.length > 0 ? unpaidPayments[unpaidPayments.length - 1].date : null
-            const insights = getPayoffInsights(currentBalance, card.monthlyPayment, card.apr, card.minPayment)
-
-            if (isEditing) {
-              return (
-                <div key={card.id} className="rounded-2xl p-4 space-y-3" style={{ background: `${theme.accent}08`, border: `1px solid ${theme.accent}` }}>
-                  <p className="text-xs font-bold" style={{ color: theme.accent }}>Edit {card.name}</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={cardForm.name} onChange={e => setCardForm({ ...cardForm, name: e.target.value })} placeholder="Card name *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                    <input type="number" value={cardForm.balance} onChange={e => setCardForm({ ...cardForm, balance: e.target.value })} placeholder="Total balance *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                    <input type="number" value={cardForm.apr} onChange={e => setCardForm({ ...cardForm, apr: e.target.value })} placeholder="APR %" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                    <input type="number" value={cardForm.minPayment} onChange={e => setCardForm({ ...cardForm, minPayment: e.target.value })} placeholder="Minimum payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                    <input type="number" value={cardForm.monthlyPayment} onChange={e => setCardForm({ ...cardForm, monthlyPayment: e.target.value })} placeholder="Your monthly payment $" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                    <input type="number" value={cardForm.dueDay} onChange={e => setCardForm({ ...cardForm, dueDay: e.target.value })} placeholder="Due day (1-28)" min="1" max="28" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={cancelEditCard} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.textM }}>Cancel</button>
-                    <button onClick={() => deleteCard(card.id)} className="py-2 px-4 rounded-xl text-xs font-bold" style={{ background: '#EF444420', color: '#EF4444', border: '1px solid #EF444440' }}><Trash2 size={12} /></button>
-                    <button onClick={saveEditCard} disabled={!cardForm.name || !cardForm.balance} className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40" style={{ background: theme.accent, color: '#fff' }}>Save Changes</button>
-                  </div>
-                </div>
-              )
-            }
-
-            return (
-              <div key={card.id} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold" style={{ color: theme.text }}>{card.name}</p>
-                      <p className="text-xs" style={{ color: theme.textM }}>
-                        {card.apr}% APR · ${card.monthlyPayment}/mo · {unpaidPayments.length} payments left
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => startEditCard(card)} className="p-1.5 rounded-lg" style={{ color: theme.textM }}>
-                        <Edit3 size={14} />
-                      </button>
-                      <button onClick={() => deleteCard(card.id)} className="p-1.5 rounded-lg" style={{ color: theme.textS }}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span style={{ color: theme.textM }}>Paid: ${fmt(totalPaid)}</span>
-                      <span className="font-bold" style={{ color: currentBalance > 0 ? '#EF4444' : '#10B981' }}>Remaining: ${fmt(currentBalance)}</span>
-                    </div>
-                    <div className="h-2.5 rounded-full overflow-hidden" style={{ background: theme.border }}>
-                      <div className="h-full rounded-full transition-all" style={{ width: `${progressPct}%`, background: progressPct >= 100 ? '#10B981' : theme.accent }} />
-                    </div>
-                  </div>
-
-                  {/* Payoff Strategy */}
-                  {currentBalance > 0 && (
-                    <div className="rounded-xl p-3 space-y-2" style={{ background: `${theme.accent}06`, border: `1px solid ${theme.accent}20` }}>
-                      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.accent }}>Payoff Strategy</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="text-center px-2 py-1.5 rounded-lg" style={{ background: theme.bg }}>
-                          <p className="text-[10px]" style={{ color: theme.textM }}>Debt Free</p>
-                          <p className="text-xs font-bold" style={{ color: theme.text }}>{payoffDate ? new Date(payoffDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—'}</p>
-                        </div>
-                        <div className="text-center px-2 py-1.5 rounded-lg" style={{ background: theme.bg }}>
-                          <p className="text-[10px]" style={{ color: theme.textM }}>Interest Cost</p>
-                          <p className="text-xs font-bold" style={{ color: '#EF4444' }}>${fmt(totalInterest)}</p>
-                        </div>
-                        <div className="text-center px-2 py-1.5 rounded-lg" style={{ background: theme.bg }}>
-                          <p className="text-[10px]" style={{ color: theme.textM }}>Months Left</p>
-                          <p className="text-xs font-bold" style={{ color: theme.text }}>{unpaidPayments.length}</p>
-                        </div>
-                      </div>
-
-                      {insights.minOnly && insights.minOnly.months > insights.current.months && (
-                        <div className="px-2 py-1.5 rounded-lg text-[10px]" style={{ background: '#EF444410', border: '1px solid #EF444420' }}>
-                          <span style={{ color: '#EF4444' }}>Minimum-only warning: </span>
-                          <span style={{ color: theme.textM }}>Paying only ${card.minPayment}/mo would take {insights.minOnly.months} months and cost ${fmt(insights.minOnly.totalInterest)} in interest</span>
-                        </div>
-                      )}
-
-                      {/* Recommended: Cut payoff in half */}
-                      {insights.halvePmt > card.monthlyPayment && insights.halve.months < insights.current.months && (
-                        <div className="rounded-lg p-2.5" style={{ background: '#10B98112', border: '1px solid #10B98130' }}>
-                          <p className="text-[10px] font-bold mb-1" style={{ color: '#10B981' }}>⚡ Recommended — Pay Off in Half the Time</p>
-                          <p className="text-[10px]" style={{ color: theme.textM }}>
-                            Raise your payment to <span className="font-bold" style={{ color: '#10B981' }}>${fmt(insights.halvePmt)}/mo</span> and pay off in{' '}
-                            <span className="font-bold" style={{ color: theme.text }}>{insights.halve.months} months</span> instead of {insights.current.months}.
-                            You'd save <span className="font-bold" style={{ color: '#10B981' }}>${fmt(insights.current.totalInterest - insights.halve.totalInterest)}</span> in interest.
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold" style={{ color: theme.textM }}>Other options:</p>
-                        {[
-                          { label: `+$25/mo ($${Math.round(card.monthlyPayment + 25)})`, data: insights.extra25 },
-                          { label: `+$50/mo ($${Math.round(card.monthlyPayment + 50)})`, data: insights.extra50 },
-                          { label: `+$100/mo ($${Math.round(card.monthlyPayment + 100)})`, data: insights.extra100 },
-                        ].filter(opt => opt.data.months < insights.current.months).map(opt => {
-                          const savedMonths = insights.current.months - opt.data.months
-                          const savedInterest = insights.current.totalInterest - opt.data.totalInterest
-                          return (
-                            <div key={opt.label} className="flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px]" style={{ background: theme.bg }}>
-                              <span className="font-bold" style={{ color: '#10B981' }}>{opt.label}</span>
-                              <span style={{ color: theme.textM }}>{opt.data.months} mo</span>
-                              <span style={{ color: theme.textM }}>Save ${fmt(savedInterest)}</span>
-                              <span className="font-semibold" style={{ color: '#10B981' }}>{savedMonths} faster</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Next payment */}
-                  {nextPayment && (
-                    <div className="flex items-center justify-between px-3 py-2.5 rounded-xl" style={{ background: theme.bg }}>
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: theme.text }}>Next: {new Date(nextPayment.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                        <p className="text-[10px]" style={{ color: theme.textM }}>
-                          ${fmt(nextPayment.interest || 0)} interest · ${fmt(nextPayment.amount - (nextPayment.interest || 0))} to principal
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold" style={{ color: theme.accent }}>${fmt(nextPayment.amount)}</span>
-                        <button onClick={() => markCardPayment(card.id, card.payments.indexOf(nextPayment))} className="px-3 py-1.5 rounded-lg text-[10px] font-bold" style={{ background: `${theme.accent}18`, color: theme.accent }}>
-                          Paid
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Upcoming schedule */}
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: theme.textS }}>Upcoming Payments</p>
-                    {unpaidPayments.slice(0, 4).map((p, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs px-2 py-1 rounded-lg" style={{ background: i === 0 ? `${theme.accent}08` : 'transparent' }}>
-                        <span style={{ color: theme.text }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                        <span style={{ color: theme.textM }}>${fmt(p.amount)}</span>
-                        <span className="font-semibold" style={{ color: theme.textS }}>${fmt(p.remaining)} left</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </motion.div>
-
-        {/* ── SUBSCRIPTIONS ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.19 }}
-          className="space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <RefreshCw size={16} style={{ color: theme.accent }} />
-              <h2 className="text-sm font-bold" style={{ color: theme.text }}>Subscriptions</h2>
-            </div>
-            {!showAddSubscription && subTab === 'list' && (
-              <button onClick={() => setShowAddSubscription(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold" style={{ background: `${theme.accent}15`, color: theme.accent, border: `1px solid ${theme.accent}30` }}>
-                <Plus size={11} /> Add Subscription
-              </button>
-            )}
-          </div>
-
-          {/* Sub-tabs */}
-          <div className="flex gap-2 overflow-x-auto">
-            {([
-              { key: 'list', label: 'All Subscriptions' },
-              { key: 'calendar', label: 'Calendar' },
-              { key: 'total', label: 'Monthly Total' },
-              { key: 'wells', label: 'Wells Account' },
-            ] as { key: typeof subTab; label: string }[]).map(t => (
-              <button
-                key={t.key}
-                onClick={() => setSubTab(t.key)}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all"
-                style={{
-                  backgroundColor: subTab === t.key ? theme.accent : theme.card,
-                  color: subTab === t.key ? '#fff' : theme.textM,
-                  border: `1px solid ${subTab === t.key ? theme.accent : theme.border}`,
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Add / Edit Subscription Form */}
-          {(showAddSubscription || editingSubscriptionId) && (
-            <div className="rounded-xl p-4 space-y-3" style={{ background: `${theme.accent}08`, border: `1px solid ${theme.accent}25` }}>
-              <p className="text-xs font-bold" style={{ color: theme.accent }}>{editingSubscriptionId ? 'Edit Subscription' : 'Add Subscription'}</p>
-              <div className="grid grid-cols-2 gap-2">
-                <input value={subForm.name} onChange={e => setSubForm({ ...subForm, name: e.target.value })} placeholder="Name *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <select value={subForm.category} onChange={e => setSubForm({ ...subForm, category: e.target.value })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}>
-                  {SUBSCRIPTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <input type="number" value={subForm.price} onChange={e => setSubForm({ ...subForm, price: e.target.value })} placeholder="Price *" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <select value={subForm.frequency} onChange={e => setSubForm({ ...subForm, frequency: e.target.value as SubscriptionFrequency })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                  <option value="custom">Custom (days)</option>
-                </select>
-                {subForm.frequency === 'custom' && (
-                  <input type="number" value={subForm.customFrequencyDays} onChange={e => setSubForm({ ...subForm, customFrequencyDays: e.target.value })} placeholder="Every N days" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                )}
-                <input type="date" value={subForm.billingDate} onChange={e => setSubForm({ ...subForm, billingDate: e.target.value })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <input value={subForm.paymentAccount} onChange={e => setSubForm({ ...subForm, paymentAccount: e.target.value })} placeholder="Payment account (e.g. Wells)" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                <select value={subForm.status} onChange={e => setSubForm({ ...subForm, status: e.target.value as SubscriptionStatus })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}>
-                  <option value="active">Active</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => { setShowAddSubscription(false); cancelEditSubscription() }} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.textM }}>Cancel</button>
-                <button
-                  onClick={editingSubscriptionId ? saveEditSubscription : addSubscription}
-                  disabled={!subForm.name || !subForm.price}
-                  className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40"
-                  style={{ background: theme.accent, color: '#fff' }}
-                >
-                  {editingSubscriptionId ? 'Save Changes' : 'Add Subscription'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* All Subscriptions */}
-          {subTab === 'list' && (
-            <div className="space-y-2">
-              {subscriptions.length === 0 && !showAddSubscription && (
-                <div className="rounded-2xl p-5 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                  <RefreshCw size={24} className="mx-auto mb-2" style={{ color: theme.textM, opacity: 0.5 }} />
-                  <p className="text-sm" style={{ color: theme.textM }}>No subscriptions tracked yet</p>
-                  <p className="text-xs mt-1" style={{ color: theme.textS }}>Add one to start tracking recurring charges</p>
-                </div>
-              )}
-              {[...subscriptions].sort((a, b) => {
-                if (a.status !== b.status) return a.status === 'active' ? -1 : 1
-                return new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime()
-              }).map(sub => (
-                <div key={sub.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}`, opacity: sub.status === 'cancelled' ? 0.55 : 1 }}>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{sub.name}</p>
-                      {sub.status === 'cancelled' && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${theme.textM}20`, color: theme.textM }}>CANCELLED</span>
-                      )}
-                    </div>
-                    <p className="text-xs" style={{ color: theme.textM }}>
-                      {sub.category} · {sub.paymentAccount} · Next: {fmtD(sub.nextPaymentDate)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <div className="text-right">
-                      <p className="text-sm font-bold" style={{ color: theme.text }}>{fmt(sub.price)}</p>
-                      <p className="text-[10px]" style={{ color: theme.textS }}>{fmt(getMonthlyEquivalent(sub))}/mo</p>
-                    </div>
-                    <button onClick={() => startEditSubscription(sub)} className="p-1.5 rounded-lg" style={{ color: theme.textM }}><Edit3 size={14} /></button>
-                    <button onClick={() => toggleSubscriptionStatus(sub.id)} className="p-1.5 rounded-lg" style={{ color: sub.status === 'active' ? theme.bad : theme.ok }}>
-                      {sub.status === 'active' ? <X size={14} /> : <Check size={14} />}
-                    </button>
-                    <button onClick={() => deleteSubscription(sub.id)} className="p-1.5 rounded-lg" style={{ color: theme.bad }}><Trash2 size={14} /></button>
-                  </div>
+      {/* ═══════════════ BILLS ═══════════════ */}
+      {tab === 'bills' && (
+        <div className="space-y-4 md:space-y-5">
+          <Panel pad={false}>
+            <div className="grid grid-cols-3">
+              {[
+                { label: 'Still owed', value: fmt(unpaidTotal), tone: unpaidTotal > 0 ? theme.bad : theme.ok },
+                { label: 'Paid', value: fmt(paidTotal), tone: undefined },
+                { label: 'Scheduled', value: fmt(monthlyBillTotal), tone: undefined },
+              ].map((s, i) => (
+                <div key={s.label} className="px-3 sm:px-5 py-4 min-w-0" style={{ borderLeft: i ? `1px solid ${theme.border}` : undefined }}>
+                  <p className="text-[11.5px] sm:text-xs font-medium truncate flex items-center gap-1.5" style={{ color: theme.subtext }}>
+                    {i === 0 && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: s.tone }} />}{s.label}
+                  </p>
+                  <p className="mt-1 text-[15px] min-[400px]:text-[17px] sm:text-[24px] font-semibold tnum tracking-tight leading-tight whitespace-nowrap" style={{ color: theme.text }}>{s.value}</p>
                 </div>
               ))}
             </div>
-          )}
-
-          {/* Subscription Calendar */}
-          {subTab === 'calendar' && (
-            <SubscriptionCalendar
-              subscriptions={subscriptions}
-              month={subCalMonth}
-              year={subCalYear}
-              onMonthChange={(dir) => {
-                let m = subCalMonth + dir, y = subCalYear
-                if (m < 0) { m = 11; y-- } else if (m > 11) { m = 0; y++ }
-                setSubCalMonth(m); setSubCalYear(y)
-              }}
-              theme={theme}
-            />
-          )}
-
-          {/* Monthly Subscription Total */}
-          {subTab === 'total' && (
-            <div className="rounded-2xl p-5 space-y-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium" style={{ color: theme.textS }}>Total Monthly Subscription Cost</span>
-                <span className="text-2xl font-bold" style={{ color: theme.gold }}>{fmt(monthlySubscriptionTotal)}</span>
+            {heroBill && (
+              <div className="flex items-center gap-2 px-3 sm:px-4 py-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                <IconButton onClick={() => setNextDueIndex(i => Math.max(0, i - 1))} label="Previous upcoming bill"><ChevronLeft size={16} /></IconButton>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11.5px]" style={{ color: theme.subtext }}>
+                    Next due{upcomingBillsForHero.length > 1 ? ` · ${safeIdx + 1} of ${upcomingBillsForHero.length}` : ''}
+                    {heroBill.due > todayISO ? '' : heroBill.due === todayISO ? ' · today' : ' · overdue'}
+                  </p>
+                  <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>
+                    {heroBill.name}{heroBill.isSplit ? ' (split)' : ''} <span className="tnum font-normal" style={{ color: theme.subtext }}>· {fmtD(heroBill.due)} · {fmt(heroBill.amount)}</span>
+                  </p>
+                </div>
+                <IconButton onClick={() => setNextDueIndex(i => Math.min(upcomingBillsForHero.length - 1, i + 1))} label="Next upcoming bill"><ChevronRight size={16} /></IconButton>
+                <Button variant="primary" size="sm" onClick={() => handlePayFull(heroBill.billId, heroBill.due)}>Pay</Button>
               </div>
-              {subscriptionCategoryTotals.length > 0 && (
-                <div className="space-y-2 pt-3 border-t" style={{ borderColor: `${theme.border}60` }}>
+            )}
+          </Panel>
+
+          <div className="flex items-center justify-between gap-3">
+            <Segmented size="sm" value={billsView} onChange={v => setBillsView(v as typeof billsView)} options={[{ value: 'list', label: 'List' }, { value: 'calendar', label: 'Calendar' }]} />
+            <span className="text-xs" style={{ color: theme.subtext }}>{upcomingVisible.length} to pay in {monthName}</span>
+          </div>
+
+          {billsView === 'calendar' && (
+            <Panel>
+              <BillCalendar
+                bills={[...bills, ...cardsWithPayments]}
+                month={calMonth}
+                year={calYear}
+                onMonthChange={handleMonthChange}
+                onDayClick={(day) => setSelectedDay(day === 0 ? null : day)}
+                selectedDay={selectedDay}
+                theme={theme}
+              />
+            </Panel>
+          )}
+
+          {billsView === 'list' && (
+            upcomingVisible.length === 0 ? (
+              <EmptyState
+                title={bills.length ? `Nothing left to pay in ${monthName}` : 'No bills yet'}
+                sub={bills.length ? 'Paid bills are listed below.' : 'Add your first bill to start tracking due dates.'}
+                action={!bills.length ? <Button variant="primary" onClick={onAdd}><Plus size={15} /> Add bill</Button> : undefined}
+              />
+            ) : (
+              <Panel pad={false}>
+                <ul>
+                  {upcomingVisible.map((bill, i) => {
+                    const partial = getPartialPayInfo(bill)
+                    const due = cycleDue(bill)
+                    const overdue = due < todayISO
+                    const dueSoon = !overdue && Math.ceil((new Date(due + 'T00:00:00').getTime() - new Date(todayISO + 'T00:00:00').getTime()) / 86400000) <= 3
+                    const iconConfig = CATEGORY_ICONS[bill.cat] || CATEGORY_ICONS['Other']
+                    const Icon = iconConfig.Icon
+                    const splitOpen = !!openSplits[bill.id]
+                    return (
+                      <li key={bill.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                        <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5">
+                          <span className="hidden sm:flex w-9 h-9 rounded-lg items-center justify-center shrink-0" style={{ backgroundColor: `${theme.text}0a`, color: theme.text }}>
+                            <Icon size={16} strokeWidth={1.75} />
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>{bill.name}</p>
+                            <p className="text-[12px] truncate flex items-center gap-1.5" style={{ color: overdue || dueSoon ? theme.bad : theme.subtext }}>
+                              {(overdue || dueSoon) && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: theme.bad }} />}
+                              {overdue ? 'Overdue · ' : ''}Due {fmtD(due)}
+                              <span style={{ color: theme.subtext }}>· {bill.cat} · {recurrenceText(bill)}</span>
+                            </p>
+                            {partial?.isPartial && (
+                              <div className="mt-2 max-w-[260px]">
+                                <Bar pct={partial.pct} color={theme.warn} height={4} />
+                                <p className="text-[11px] mt-1 tnum" style={{ color: theme.subtext }}>{fmt(partial.totalPaid)} paid of {fmt(bill.amount)}</p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[14px] font-semibold tnum" style={{ color: theme.text }}>{fmt(partial?.isPartial ? partial.remaining : bill.amount)}</p>
+                            {partial?.isPartial && <p className="text-[11px]" style={{ color: theme.subtext }}>left</p>}
+                          </div>
+                          <Button variant="primary" size="sm" onClick={() => handlePayFull(bill.id, getEffectiveBillDate(bill))}>Pay</Button>
+                          <RowMenu
+                            label={`More actions for ${bill.name}`}
+                            items={[
+                              { label: 'Edit', icon: Edit3, onClick: () => handleStartEdit(bill.id) },
+                              { label: 'Split into payments', icon: Scissors, onClick: () => setSplitModalBillId(bill.id) },
+                              { label: 'Duplicate', icon: Copy, onClick: () => handleDuplicateBill(bill) },
+                              { label: 'Delete', icon: Trash2, danger: true, onClick: () => handleDeleteBill(bill.id) },
+                            ]}
+                          />
+                        </div>
+                        {bill.alloc.length > 0 && (
+                          <div className="px-4 sm:px-5 pb-3 sm:pl-[68px]">
+                            <Disclosure
+                              open={splitOpen}
+                              onToggle={() => setOpenSplits(p => ({ ...p, [bill.id]: !p[bill.id] }))}
+                              title={<span className="text-xs" style={{ color: theme.subtext }}>{partial?.isPartial ? `Partial payments · ${fmt(partial.totalPaid)} of ${fmt(bill.amount)}` : `Split schedule · ${bill.alloc.filter(a => a.paid).length} of ${bill.alloc.length} paid`}</span>}
+                            >
+                              <ul className="rounded-xl px-3" style={{ backgroundColor: `${theme.text}06` }}>
+                                {bill.alloc.map((alloc, j) => (
+                                  <li key={alloc.id} className="flex items-center justify-between gap-2 py-2" style={{ borderTop: j ? `1px solid ${theme.border}` : undefined }}>
+                                    <span className="flex items-center gap-2 text-[13px]" style={{ color: alloc.paid ? theme.subtext : theme.text, textDecoration: alloc.paid ? 'line-through' : undefined }}>
+                                      {alloc.paid && <Check size={13} style={{ color: theme.ok }} />}{fmtD(alloc.date)}
+                                    </span>
+                                    <span className="flex items-center gap-2">
+                                      <span className="text-[13px] font-medium tnum" style={{ color: theme.text }}>{fmt(alloc.amount)}</span>
+                                      {!alloc.paid && <Button size="sm" onClick={() => handlePayment(bill.id, alloc.id)}>Mark paid</Button>}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </Disclosure>
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </Panel>
+            )
+          )}
+
+          {paidVisible.length > 0 && (
+            <Panel pad={false}>
+              <div className="px-4 sm:px-5">
+                <Disclosure
+                  open={paidOpen}
+                  onToggle={() => setPaidOpen(o => !o)}
+                  title={`Paid in ${monthName} · ${paidVisible.length}`}
+                  right={<span className="text-[13px] tnum" style={{ color: theme.ok }}>{fmt(paidTotal)}</span>}
+                >
+                  <ul className="pb-2">
+                    {paidVisible.map((bill, i) => {
+                      const paidOn = getDisplayPaidDate(bill)
+                      return (
+                        <li key={bill.id} className="flex items-center gap-3 py-2.5" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                          <Check size={15} style={{ color: theme.ok }} className="shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13.5px] truncate" style={{ color: theme.text }}>{bill.name}</p>
+                            <p className="text-[11.5px]" style={{ color: theme.subtext }}>{bill.cat}{paidOn ? ` · Paid ${fmtD(paidOn)}` : ''}</p>
+                          </div>
+                          <span className="text-[13px] tnum" style={{ color: theme.subtext }}>{fmt(bill.amount)}</span>
+                          <Button size="sm" variant="ghost" onClick={() => undoPaid(bill)}><Undo2 size={13} /> Undo</Button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </Disclosure>
+              </div>
+            </Panel>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════ CREDIT CARDS ═══════════════ */}
+      {tab === 'cards' && (
+        <div className="space-y-4 md:space-y-5">
+          {creditCards.length === 0 ? (
+            <EmptyState title="No credit cards tracked" sub="Add a card to get a payoff plan with dates and interest." action={<Button variant="primary" onClick={onAdd}><Plus size={15} /> Add card</Button>} />
+          ) : (
+            <>
+              <Panel>
+                <div className="grid grid-cols-2 gap-4">
+                  <Stat label="Total card debt" value={fmt(totalCardDebt)} tone={totalCardDebt > 0 ? undefined : theme.ok} />
+                  <Stat label="Monthly payments" value={fmt(creditCards.reduce((s, c) => s + (c.payments.some(p => !p.paid) ? c.monthlyPayment : 0), 0))} sub={`${creditCards.length} card${creditCards.length === 1 ? '' : 's'}`} />
+                </div>
+              </Panel>
+              <div className="grid gap-4 md:gap-5 md:grid-cols-2 items-start">
+                {creditCards.map(card => {
+                  const nextPayment = card.payments.find(p => !p.paid)
+                  const totalPaid = card.payments.filter(p => p.paid).reduce((s, p) => s + p.amount, 0)
+                  const currentBalance = nextPayment ? nextPayment.remaining + nextPayment.amount : 0
+                  const progressPct = card.balance > 0 ? Math.min(100, (totalPaid / card.balance) * 100) : 0
+                  const unpaidPayments = card.payments.filter(p => !p.paid)
+                  const totalInterest = unpaidPayments.reduce((s, p) => s + (p.interest || 0), 0)
+                  const payoffDate = unpaidPayments.length > 0 ? unpaidPayments[unpaidPayments.length - 1].date : null
+                  const insights = getPayoffInsights(currentBalance, card.monthlyPayment, card.apr, card.minPayment)
+                  const options = [
+                    { label: `+$25 a month (${fmt(card.monthlyPayment + 25)})`, data: insights.extra25 },
+                    { label: `+$50 a month (${fmt(card.monthlyPayment + 50)})`, data: insights.extra50 },
+                    { label: `+$100 a month (${fmt(card.monthlyPayment + 100)})`, data: insights.extra100 },
+                  ].filter(o => o.data.months < insights.current.months)
+                  return (
+                    <Panel key={card.id}>
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-semibold truncate" style={{ color: theme.text }}>{card.name}</p>
+                          <p className="text-xs" style={{ color: theme.subtext }}>{card.apr}% APR · {fmt(card.monthlyPayment)} a month · {unpaidPayments.length} payments left</p>
+                        </div>
+                        <RowMenu label={`More actions for ${card.name}`} items={[
+                          { label: 'Edit', icon: Edit3, onClick: () => startEditCard(card) },
+                          { label: 'Delete', icon: Trash2, danger: true, onClick: () => deleteCard(card.id) },
+                        ]} />
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="flex items-baseline justify-between mb-1.5">
+                          <span className="text-[22px] font-semibold tnum tracking-tight" style={{ color: theme.text }}>{fmt(currentBalance)}</span>
+                          <span className="text-xs tnum" style={{ color: theme.subtext }}>{fmt(totalPaid)} paid</span>
+                        </div>
+                        <Bar pct={progressPct} color={progressPct >= 100 ? theme.ok : theme.accent} />
+                      </div>
+
+                      {nextPayment && (
+                        <div className="mt-4 flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ backgroundColor: `${theme.text}08` }}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium" style={{ color: theme.text }}>Next payment {new Date(nextPayment.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                            <p className="text-[11.5px] tnum" style={{ color: theme.subtext }}>{fmt(nextPayment.interest || 0)} interest · {fmt(nextPayment.amount - (nextPayment.interest || 0))} to principal</p>
+                          </div>
+                          <span className="text-[14px] font-semibold tnum" style={{ color: theme.text }}>{fmt(nextPayment.amount)}</span>
+                          <Button size="sm" variant="primary" onClick={() => markCardPayment(card.id, card.payments.indexOf(nextPayment))}>Paid</Button>
+                        </div>
+                      )}
+
+                      {currentBalance > 0 && (
+                        <div className="mt-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                          <Disclosure open={!!openPlans[card.id]} onToggle={() => setOpenPlans(p => ({ ...p, [card.id]: !p[card.id] }))} title="Payoff plan">
+                            <div className="space-y-3 pb-1">
+                              <div className="grid grid-cols-3 gap-2">
+                                <MiniStat label="Debt free" value={payoffDate ? new Date(payoffDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—'} />
+                                <MiniStat label="Interest left" value={fmt(totalInterest)} tone={theme.bad} />
+                                <MiniStat label="Months left" value={String(unpaidPayments.length)} />
+                              </div>
+                              {insights.minOnly && insights.minOnly.months > insights.current.months && (
+                                <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: theme.badBg, color: theme.text }}>
+                                  <span style={{ color: theme.bad }}>Minimum only:</span> paying {fmt(card.minPayment)} a month would take {insights.minOnly.months} months and cost {fmt(insights.minOnly.totalInterest)} in interest.
+                                </p>
+                              )}
+                              {insights.halvePmt > card.monthlyPayment && insights.halve.months < insights.current.months && (
+                                <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: theme.okBg, color: theme.text }}>
+                                  <span style={{ color: theme.ok }}>Recommended:</span> pay {fmt(insights.halvePmt)} a month to finish in {insights.halve.months} months instead of {insights.current.months}, saving {fmt(insights.current.totalInterest - insights.halve.totalInterest)} in interest.
+                                </p>
+                              )}
+                              {options.length > 0 && (
+                                <ul className="text-xs">
+                                  {options.map((o, j) => (
+                                    <li key={o.label} className="grid grid-cols-[1fr_auto_auto] gap-3 py-1.5" style={{ borderTop: j ? `1px solid ${theme.border}` : undefined }}>
+                                      <span style={{ color: theme.text }}>{o.label}</span>
+                                      <span className="tnum" style={{ color: theme.subtext }}>{o.data.months} mo, {insights.current.months - o.data.months} sooner</span>
+                                      <span className="tnum" style={{ color: theme.ok }}>save {fmt(insights.current.totalInterest - o.data.totalInterest)}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              <div>
+                                <p className="text-[11px] font-medium mb-1" style={{ color: theme.subtext }}>Upcoming payments</p>
+                                <ul className="text-xs">
+                                  {unpaidPayments.slice(0, 4).map((p, j) => (
+                                    <li key={j} className="grid grid-cols-3 py-1.5 tnum" style={{ borderTop: j ? `1px solid ${theme.border}` : undefined }}>
+                                      <span style={{ color: theme.text }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                      <span className="text-center" style={{ color: theme.subtext }}>{fmt(p.amount)}</span>
+                                      <span className="text-right" style={{ color: theme.subtext }}>{fmt(p.remaining)} left</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          </Disclosure>
+                        </div>
+                      )}
+                    </Panel>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════ SUBSCRIPTIONS ═══════════════ */}
+      {tab === 'subs' && (
+        <div className="space-y-4 md:space-y-5">
+          <Panel>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <Stat label="Monthly cost" value={fmt(monthlySubscriptionTotal)} sub={`${activeSubscriptions.length} active`} />
+              <Stat label={`${wellsSettings.accountName || 'Wells'} balance needed`} value={fmt(wellsRequiredBalance)} sub={wellsSettings.nextDepositDate ? `before ${fmtD(wellsSettings.nextDepositDate)}` : undefined} />
+              <div className="hidden sm:block"><Stat label="Next charge" value={sortedSubscriptions[0] ? fmt(sortedSubscriptions[0].price) : '—'} sub={sortedSubscriptions[0] ? `${sortedSubscriptions[0].name}, ${fmtD(sortedSubscriptions[0].nextPaymentDate)}` : undefined} /></div>
+            </div>
+          </Panel>
+
+          <div className="overflow-x-auto no-scrollbar">
+            <Segmented size="sm" value={subTab} onChange={v => setSubTab(v as typeof subTab)} options={[
+              { value: 'list', label: 'All' },
+              { value: 'calendar', label: 'Calendar' },
+              { value: 'total', label: 'By category' },
+              { value: 'wells', label: `${wellsSettings.accountName || 'Wells'} account` },
+            ]} />
+          </div>
+
+          {subTab === 'list' && (
+            subscriptions.length === 0 ? (
+              <EmptyState title="No subscriptions yet" sub="Track recurring charges and what your account needs to cover them." action={<Button variant="primary" onClick={onAdd}><Plus size={15} /> Add subscription</Button>} />
+            ) : (
+              <Panel pad={false}>
+                <ul>
+                  {[...subscriptions].sort((a, b) => {
+                    if (a.status !== b.status) return a.status === 'active' ? -1 : 1
+                    return new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime()
+                  }).map((sub, i) => (
+                    <li key={sub.id} className="flex items-center gap-3 px-4 sm:px-5 py-3" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined, opacity: sub.status === 'cancelled' ? 0.55 : 1 }}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>
+                          {sub.name}{sub.status === 'cancelled' && <span className="ml-2 text-[11px] font-normal" style={{ color: theme.subtext }}>Cancelled</span>}
+                        </p>
+                        <p className="text-[12px] truncate" style={{ color: theme.subtext }}>{sub.category} · {sub.paymentAccount}{sub.status === 'active' ? ` · Next ${fmtD(sub.nextPaymentDate)}` : ''}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-[14px] font-semibold tnum" style={{ color: theme.text }}>{fmt(sub.price)}</p>
+                        <p className="text-[11px] tnum" style={{ color: theme.subtext }}>{fmt(getMonthlyEquivalent(sub))}/mo</p>
+                      </div>
+                      <RowMenu label={`More actions for ${sub.name}`} items={[
+                        { label: 'Edit', icon: Edit3, onClick: () => { setShowAddSubscription(false); startEditSubscription(sub) } },
+                        { label: sub.status === 'active' ? 'Mark cancelled' : 'Reactivate', icon: sub.status === 'active' ? X : Check, onClick: () => toggleSubscriptionStatus(sub.id) },
+                        { label: 'Delete', icon: Trash2, danger: true, onClick: () => deleteSubscription(sub.id) },
+                      ]} />
+                    </li>
+                  ))}
+                </ul>
+              </Panel>
+            )
+          )}
+
+          {subTab === 'calendar' && (
+            <Panel>
+              <SubscriptionCalendar
+                subscriptions={subscriptions}
+                month={subCalMonth}
+                year={subCalYear}
+                onMonthChange={(dir) => {
+                  let m = subCalMonth + dir, y = subCalYear
+                  if (m < 0) { m = 11; y-- } else if (m > 11) { m = 0; y++ }
+                  setSubCalMonth(m); setSubCalYear(y); setSubSelectedDay(null)
+                }}
+                onDayClick={(d) => setSubSelectedDay(d === 0 ? null : d)}
+                selectedDay={subSelectedDay}
+                theme={theme}
+              />
+            </Panel>
+          )}
+
+          {subTab === 'total' && (
+            <Panel>
+              <PanelTitle title="Monthly cost by category" right={<span className="text-[15px] font-semibold tnum" style={{ color: theme.text }}>{fmt(monthlySubscriptionTotal)}</span>} />
+              {subscriptionCategoryTotals.length === 0 ? <p className="text-[13px]" style={{ color: theme.subtext }}>No active subscriptions.</p> : (
+                <div className="space-y-3">
                   {subscriptionCategoryTotals.map(([cat, amt]) => (
-                    <div key={cat} className="flex items-center justify-between">
-                      <span className="text-xs" style={{ color: theme.textM }}>{cat}</span>
-                      <span className="text-xs font-semibold" style={{ color: theme.text }}>{fmt(amt)}/mo</span>
+                    <div key={cat}>
+                      <div className="flex justify-between text-[13px] mb-1.5">
+                        <span style={{ color: theme.text }}>{cat}</span>
+                        <span className="tnum" style={{ color: theme.text }}>{fmt(amt)}/mo <span className="text-xs" style={{ color: theme.subtext }}>{monthlySubscriptionTotal > 0 ? `${Math.round((amt / monthlySubscriptionTotal) * 100)}%` : ''}</span></span>
+                      </div>
+                      <Bar pct={monthlySubscriptionTotal > 0 ? (amt / monthlySubscriptionTotal) * 100 : 0} color={theme.accent} />
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </Panel>
           )}
 
-          {/* Wells Subscription Account */}
           {subTab === 'wells' && (
-            <div className="space-y-3">
-              <div className="rounded-xl p-4 space-y-3" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <div className="flex items-center gap-2">
-                  <Landmark size={14} style={{ color: theme.accent }} />
-                  <p className="text-xs font-bold" style={{ color: theme.accent }}>Wells Account Settings</p>
+            <div className="grid gap-4 md:gap-5 md:grid-cols-2 items-start">
+              <Panel>
+                <PanelTitle title="Account settings" sub="Used to work out what this account needs to hold" />
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Account name"><input value={wellsSettings.accountName} onChange={e => saveWellsSettings({ ...wellsSettings, accountName: e.target.value })} placeholder="Wells" {...field} /></Field>
+                  <Field label="Deposits">
+                    <select value={wellsSettings.depositFreq} onChange={e => saveWellsSettings({ ...wellsSettings, depositFreq: e.target.value as WellsSettings['depositFreq'] })} {...field}>
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Every two weeks</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="manual">Manual / irregular</option>
+                    </select>
+                  </Field>
+                  <Field label="Next deposit date" className="col-span-2"><input type="date" value={wellsSettings.nextDepositDate} onChange={e => saveWellsSettings({ ...wellsSettings, nextDepositDate: e.target.value })} {...field} /></Field>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input value={wellsSettings.accountName} onChange={e => saveWellsSettings({ ...wellsSettings, accountName: e.target.value })} placeholder="Account name (e.g. Wells)" className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                  <select value={wellsSettings.depositFreq} onChange={e => saveWellsSettings({ ...wellsSettings, depositFreq: e.target.value as WellsSettings['depositFreq'] })} className="px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }}>
-                    <option value="weekly">Weekly deposit</option>
-                    <option value="biweekly">Biweekly deposit</option>
-                    <option value="monthly">Monthly deposit</option>
-                    <option value="manual">Manual / irregular</option>
-                  </select>
-                  <div className="col-span-2">
-                    <label className="text-[10px] font-medium block mb-1" style={{ color: theme.textS }}>Next planned deposit / re-up date</label>
-                    <input type="date" value={wellsSettings.nextDepositDate} onChange={e => saveWellsSettings({ ...wellsSettings, nextDepositDate: e.target.value })} className="w-full px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                  </div>
+              </Panel>
+              <Panel>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+                  <Stat label="Balance needed" value={fmt(wellsRequiredBalance)} sub={wellsSettings.nextDepositDate ? `before ${fmtD(wellsSettings.nextDepositDate)}` : undefined} tone={theme.accent} />
+                  <Stat label="Monthly on this account" value={fmt(wellsMonthlyTotal)} />
+                  <Stat label="Needed this week" value={fmt(wellsNeededThisWeek)} />
+                  <Stat label="Before next charge" value={fmt(wellsNeededBeforeNextCharge)} />
+                  <div className="col-span-2"><Stat label="Recommended buffer" value={fmt(wellsRecommendedBuffer)} sub={`${Math.round((wellsSettings.bufferMultiplier || 1.15) * 100)}% of the monthly total, rounded up`} /></div>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl p-3" style={{ background: `${theme.gold}12`, border: `1px solid ${theme.gold}30` }}>
-                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Required Wells Balance</p>
-                  <p className="text-lg font-bold" style={{ color: theme.gold }}>{fmt(wellsRequiredBalance)}</p>
-                  <p className="text-[10px]" style={{ color: theme.textM }}>before {fmtD(wellsSettings.nextDepositDate)}</p>
-                </div>
-                <div className="rounded-xl p-3" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Monthly Subscription Cost</p>
-                  <p className="text-lg font-bold" style={{ color: theme.text }}>{fmt(wellsMonthlyTotal)}</p>
-                  <p className="text-[10px]" style={{ color: theme.textM }}>on {wellsSettings.accountName || 'Wells'}</p>
-                </div>
-                <div className="rounded-xl p-3" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Needed This Week</p>
-                  <p className="text-lg font-bold" style={{ color: theme.text }}>{fmt(wellsNeededThisWeek)}</p>
-                </div>
-                <div className="rounded-xl p-3" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Before Next Charge</p>
-                  <p className="text-lg font-bold" style={{ color: theme.text }}>{fmt(wellsNeededBeforeNextCharge)}</p>
-                </div>
-                <div className="rounded-xl p-3 col-span-2" style={{ background: `${theme.accent}10`, border: `1px solid ${theme.accent}30` }}>
-                  <p className="text-[10px] font-medium" style={{ color: theme.textS }}>Recommended Account Buffer</p>
-                  <p className="text-lg font-bold" style={{ color: theme.accent }}>{fmt(wellsRecommendedBuffer)}</p>
-                  <p className="text-[10px]" style={{ color: theme.textM }}>{Math.round((wellsSettings.bufferMultiplier || 1.15) * 100)}% of monthly Wells total, rounded up</p>
-                </div>
-              </div>
-
-              <div className="rounded-xl p-4" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                <p className="text-xs font-bold mb-2" style={{ color: theme.text }}>Upcoming Charges</p>
-                {wellsUpcomingCharges.length === 0 ? (
-                  <p className="text-xs" style={{ color: theme.textM }}>No upcoming charges on {wellsSettings.accountName || 'Wells'}</p>
-                ) : (
-                  <div className="space-y-2">
+              </Panel>
+              <Panel className="md:col-span-2">
+                <PanelTitle title="Upcoming charges" sub={`Next three months on ${wellsSettings.accountName || 'Wells'}`} />
+                {wellsUpcomingCharges.length === 0 ? <p className="text-[13px]" style={{ color: theme.subtext }}>No upcoming charges on this account.</p> : (
+                  <ul>
                     {wellsUpcomingCharges.map((c, i) => (
-                      <div key={i} className="flex items-center justify-between">
+                      <li key={i} className="flex items-center justify-between py-2" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
                         <div>
-                          <p className="text-sm" style={{ color: theme.text }}>{c.sub.name}</p>
-                          <p className="text-[10px]" style={{ color: theme.textM }}>{fmtD(c.date)}</p>
+                          <p className="text-[13.5px]" style={{ color: theme.text }}>{c.sub.name}</p>
+                          <p className="text-[11.5px]" style={{ color: theme.subtext }}>{fmtD(c.date)}</p>
                         </div>
-                        <p className="text-sm font-semibold" style={{ color: theme.text }}>{fmt(c.amount)}</p>
-                      </div>
+                        <span className="text-[13.5px] font-medium tnum" style={{ color: theme.text }}>{fmt(c.amount)}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
-              </div>
+              </Panel>
             </div>
           )}
-        </motion.div>
+        </div>
+      )}
 
-        {/* List / Compact Toggle */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.17 }}
-          className="flex gap-3"
-        >
-          <button
-            onClick={() => setViewMode('list')}
-            style={{
-              backgroundColor: viewMode === 'list' ? theme.accent : theme.card,
-              color: viewMode === 'list' ? '#fff' : theme.text,
-              borderColor: theme.border,
-            }}
-            className="flex-1 px-5 py-3 rounded-xl border font-bold transition-all"
-          >
-            List View
-          </button>
-          <button
-            onClick={() => setViewMode('compact')}
-            style={{
-              backgroundColor: viewMode === 'compact' ? theme.accent : theme.card,
-              color: viewMode === 'compact' ? '#fff' : theme.text,
-              borderColor: theme.border,
-            }}
-            className="flex-1 px-5 py-3 rounded-xl border font-bold transition-all"
-          >
-            Compact View
-          </button>
-        </motion.div>
+      {/* ═══════════════ SHEETS ═══════════════ */}
 
-        {/* 2. Add Bill Form */}
-        <AnimatePresence>
-          {showAddForm && (
-            <motion.div
-              id="bill-boss-add-form"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="border rounded-2xl p-5 sm:p-8 space-y-5"
-            >
-              {/* ── Progressive Form Steps ── */}
-              {/* Step Indicator */}
-              <div className="flex items-center gap-2 mb-2">
-                {([1, 2, 3] as FormStep[]).map(step => (
-                  <div key={step} className="flex items-center gap-2">
-                    <button
-                      onClick={() => formStep > step && setFormStep(step)}
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all"
-                      style={{
-                        backgroundColor: formStep >= step ? theme.accent : theme.bg,
-                        color: formStep >= step ? '#fff' : theme.textS,
-                        border: `2px solid ${formStep >= step ? theme.accent : theme.border}`,
-                        cursor: formStep > step ? 'pointer' : 'default',
-                      }}
-                    >{step}</button>
-                    {step < 3 && <div className="h-0.5 w-8 rounded" style={{ backgroundColor: formStep > step ? theme.accent : theme.border }} />}
-                  </div>
-                ))}
-                <span className="ml-2 text-xs font-semibold" style={{ color: theme.textS }}>
-                  {formStep === 1 ? 'Basic Info' : formStep === 2 ? 'Recurrence' : 'Advanced'}
-                </span>
-                <button
-                  onClick={() => { setShowAddForm(false); setFormStep(1); setEditingBillId(null) }}
-                  className="ml-auto text-xs opacity-60 hover:opacity-100"
-                  style={{ color: theme.textS }}
-                >✕ Close</button>
-              </div>
-
-              <AnimatePresence mode="wait">
-                {/* STEP 1: Basic Info */}
-                {formStep === 1 && (
-                  <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                    <input
-                      type="text"
-                      placeholder="Bill Name (e.g. Rent, Netflix)"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                      className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none font-medium"
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <input
-                        type="number"
-                        placeholder="Amount ($)"
-                        value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                        className="w-full px-5 py-3 border rounded-xl placeholder:opacity-50 focus:outline-none font-medium"
-                      />
-                      <div>
-                        <label className="text-xs font-medium block mb-1" style={{ color: theme.textM }}>
-                          {formData.recurrence === 'one-time' ? 'Due Date' : 'Start Date'}
-                        </label>
-                        <input
-                          type="date"
-                          value={formData.due}
-                          onChange={(e) => setFormData({ ...formData, due: e.target.value })}
-                          style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                          className="w-full px-5 py-3 border rounded-xl focus:outline-none font-medium"
-                        />
-                        {formData.recurrence !== 'one-time' && (
-                          <p className="text-[10px] mt-1" style={{ color: theme.textM }}>The bill won&apos;t appear before this date</p>
-                        )}
-                      </div>
-                    </div>
-                    <select
-                      value={formData.cat}
-                      onChange={(e) => setFormData({ ...formData, cat: e.target.value })}
-                      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                      className="w-full px-5 py-3 border rounded-xl focus:outline-none font-medium"
-                    >
-                      {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
-                    {formData.cat === 'Other' && (
-                      <input type="text" placeholder="Custom Category" value={customCategory} onChange={(e) => setCustomCategory(e.target.value)}
-                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                        className="w-full px-4 py-2.5 border rounded-lg placeholder:opacity-50 focus:outline-none" />
-                    )}
-                    <div className="flex gap-3 pt-2">
-                      <button
-                        onClick={() => setFormStep(2)}
-                        disabled={!formData.name || !formData.amount || !formData.due}
-                        style={{ backgroundColor: theme.accent, color: '#fff' }}
-                        className="flex-1 px-5 py-3 rounded-xl font-bold disabled:opacity-50"
-                      >Next: Recurrence →</button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* STEP 2: Recurrence */}
-                {formStep === 2 && (
-                  <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                    <label style={{ color: theme.textM }} className="text-sm font-medium block">How often does this bill recur?</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {([
-                        { value: 'one-time', label: 'One-Time' },
-                        { value: 'weekly', label: 'Weekly' },
-                        { value: 'monthly', label: 'Monthly' },
-                        { value: 'yearly', label: 'Yearly' },
-                        { value: 'custom', label: 'Custom' },
-                      ] as { value: BillRecurrence; label: string }[]).map(opt => (
-                        <button key={opt.value} type="button"
-                          onClick={() => setFormData({ ...formData, recurrence: opt.value })}
-                          style={{
-                            backgroundColor: formData.recurrence === opt.value ? `${theme.accent}20` : theme.bg,
-                            borderColor: formData.recurrence === opt.value ? theme.accent : theme.border,
-                            color: formData.recurrence === opt.value ? theme.accent : theme.textM,
-                          }}
-                          className="px-4 py-2.5 rounded-lg text-sm font-bold border transition-all"
-                        >{opt.label}</button>
-                      ))}
-                    </div>
-                    {formData.recurrence === 'custom' && (
-                      <input type="number" placeholder="Days between each occurrence" value={formData.customRecurrenceDays}
-                        onChange={(e) => setFormData({ ...formData, customRecurrenceDays: e.target.value })} min="1"
-                        style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                        className="w-full px-4 py-2.5 border rounded-lg focus:outline-none" />
-                    )}
-                    <div className="flex gap-3 pt-2">
-                      <button onClick={() => setFormStep(1)} style={{ borderColor: theme.border, color: theme.textS }}
-                        className="flex-1 px-5 py-3 rounded-xl font-bold border">← Back</button>
-                      <button onClick={() => setFormStep(3)} style={{ backgroundColor: theme.accent, color: '#fff' }}
-                        className="flex-1 px-5 py-3 rounded-xl font-bold">Next: Advanced →</button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* STEP 3: Advanced + Preview + Save */}
-                {formStep === 3 && (
-                  <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                    {formData.recurrence !== 'one-time' && (
-                      <>
-                        <label style={{ color: theme.textM }} className="text-sm font-medium block">End Condition</label>
-                        <div className="flex gap-2">
-                          {([
-                            { value: 'ongoing', label: 'Ongoing' },
-                            { value: 'after-date', label: 'End Date' },
-                            { value: 'after-count', label: 'N Times' },
-                          ] as { value: RecurrenceEndType; label: string }[]).map(opt => (
-                            <button key={opt.value} type="button"
-                              onClick={() => setFormData({ ...formData, recurrenceEndType: opt.value })}
-                              style={{
-                                backgroundColor: formData.recurrenceEndType === opt.value ? `${theme.accent}20` : theme.bg,
-                                borderColor: formData.recurrenceEndType === opt.value ? theme.accent : theme.border,
-                                color: formData.recurrenceEndType === opt.value ? theme.accent : theme.textM,
-                              }}
-                              className="flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-all"
-                            >{opt.label}</button>
-                          ))}
-                        </div>
-                        {formData.recurrenceEndType === 'after-date' && (
-                          <CalendarPicker value={formData.recurrenceEndDate || ''} onChange={(date) => setFormData({ ...formData, recurrenceEndDate: date })}
-                            placeholder="End Date" theme={theme} showQuickSelect={false} />
-                        )}
-                        {formData.recurrenceEndType === 'after-count' && (
-                          <input type="number" placeholder="Number of occurrences" value={formData.recurrenceEndAfter}
-                            onChange={(e) => setFormData({ ...formData, recurrenceEndAfter: e.target.value })} min="1"
-                            style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                            className="w-full px-4 py-2.5 border rounded-lg focus:outline-none" />
-                        )}
-                      </>
-                    )}
-
-                    {/* Preview future occurrences */}
-                    {formData.recurrence !== 'one-time' && formData.due && (
-                      <div>
-                        <button onClick={() => setShowOccurrencePreview(o => !o)} className="text-xs font-semibold" style={{ color: theme.accent }}>
-                          {showOccurrencePreview ? '▲ Hide preview' : '▼ Preview future occurrences'}
-                        </button>
-                        {showOccurrencePreview && (() => {
-                          const tempBill: Bill = { id: 'preview', name: formData.name, amount: parseFloat(formData.amount) || 0,
-                            cat: formData.cat, due: formData.due, freq: formData.freq, recurrence: formData.recurrence,
-                            customRecurrenceDays: formData.recurrence === 'custom' ? parseInt(formData.customRecurrenceDays) : undefined,
-                            recurrenceEndDate: formData.recurrenceEndDate, recurrenceEndAfter: parseInt(formData.recurrenceEndAfter) || undefined,
-                            status: 'upcoming', alloc: [] }
-                          const dates = getRecurringBillDates(tempBill, 3)
-                          return (
-                            <div className="mt-2 rounded-xl p-3 space-y-1" style={{ background: theme.bg }}>
-                              {dates.slice(0, 5).map((d, i) => (
-                                <div key={i} className="flex items-center justify-between text-xs">
-                                  <span style={{ color: theme.textS }}>{new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                  <span style={{ color: '#EF4444', fontWeight: 700 }}>−{fmt(parseFloat(formData.amount) || 0)}</span>
-                                </div>
-                              ))}
-                              {dates.length > 5 && <p className="text-xs opacity-50" style={{ color: theme.textS }}>+{dates.length - 5} more...</p>}
-                            </div>
-                          )
-                        })()}
-                      </div>
-                    )}
-
-                    <div className="flex gap-3 pt-2">
-                      <button onClick={() => setFormStep(2)} style={{ borderColor: theme.border, color: theme.textS }}
-                        className="flex-1 px-5 py-3 rounded-xl font-bold border">← Back</button>
-                      {editingBillId && (
-                        <button onClick={handleCancelEdit} style={{ borderColor: theme.border, color: theme.textS }}
-                          className="flex-1 px-5 py-3 rounded-xl font-bold border">Cancel</button>
-                      )}
-                      <button
-                        onClick={editingBillId ? handleSaveEdit : handleAddBill}
-                        disabled={!formData.name || !formData.amount || !formData.due}
-                        style={{ backgroundColor: theme.accent, color: '#fff' }}
-                        className="flex-1 px-5 py-3 rounded-xl font-bold disabled:opacity-50"
-                      >{editingBillId ? '✓ Update Bill' : '✓ Save Bill'}</button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
+      {/* Add / edit bill — one form */}
+      <Sheet
+        open={showAddForm}
+        onClose={closeBillForm}
+        title={editingBillId ? 'Edit bill' : 'Add bill'}
+        footer={<>
+          <Button className="flex-1" onClick={closeBillForm}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!formData.name || !formData.amount || !formData.due} onClick={editingBillId ? handleSaveEdit : handleAddBill}>
+            {editingBillId ? 'Save changes' : 'Save bill'}
+          </Button>
+        </>}
+      >
+        <div className="space-y-4">
+          <Field label="Name"><input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Rent, Phone" autoFocus {...field} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Amount ($)"><input type="number" inputMode="decimal" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} {...field} /></Field>
+            <Field label={formData.recurrence === 'one-time' ? 'Due date' : 'Start date'}><input type="date" value={formData.due} onChange={e => setFormData({ ...formData, due: e.target.value })} {...field} /></Field>
+          </div>
+          <Field label="Category">
+            <select value={formData.cat} onChange={e => setFormData({ ...formData, cat: e.target.value })} {...field}>
+              {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+          </Field>
+          {formData.cat === 'Other' && (
+            <Field label="Custom category"><input value={customCategory} onChange={e => setCustomCategory(e.target.value)} {...field} /></Field>
           )}
-        </AnimatePresence>
-
-        {/* 4. Bills List — List View (detailed) */}
-        {viewMode === 'list' && (
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            className="space-y-4"
-          >
-            {visibleBills
-              .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
-              .map((bill, idx) => {
-                const iconConfig = CATEGORY_ICONS[bill.cat] || CATEGORY_ICONS['Other']
-                return (
-                <motion.div
-                  key={bill.id}
-                  variants={item}
-                  transition={{ delay: idx * 0.05 }}
-                >
+          <Field group label="Repeats">
+            <Choice value={formData.recurrence} onChange={v => setFormData({ ...formData, recurrence: v })} options={[
+              { value: 'one-time', label: 'One time' }, { value: 'weekly', label: 'Weekly' }, { value: 'monthly', label: 'Monthly' },
+              { value: 'yearly', label: 'Yearly' }, { value: 'custom', label: 'Custom' },
+            ]} />
+          </Field>
+          {formData.recurrence === 'custom' && (
+            <Field label="Days between payments"><input type="number" min="1" value={formData.customRecurrenceDays} onChange={e => setFormData({ ...formData, customRecurrenceDays: e.target.value })} {...field} /></Field>
+          )}
+          {formData.recurrence !== 'one-time' && (
+            <>
+              <Field group label="Ends" hint="The bill won't show before its start date.">
+                <Choice value={formData.recurrenceEndType} onChange={v => setFormData({ ...formData, recurrenceEndType: v })} options={[
+                  { value: 'ongoing', label: 'Never' }, { value: 'after-date', label: 'On a date' }, { value: 'after-count', label: 'After a number of times' },
+                ]} />
+              </Field>
+              {formData.recurrenceEndType === 'after-date' && (
+                <Field label="End date"><input type="date" value={formData.recurrenceEndDate} onChange={e => setFormData({ ...formData, recurrenceEndDate: e.target.value })} {...field} /></Field>
+              )}
+              {formData.recurrenceEndType === 'after-count' && (
+                <Field label="Number of payments"><input type="number" min="1" value={formData.recurrenceEndAfter} onChange={e => setFormData({ ...formData, recurrenceEndAfter: e.target.value })} {...field} /></Field>
+              )}
+              {formData.due && (
+                <Disclosure open={showOccurrencePreview} onToggle={() => setShowOccurrencePreview(o => !o)} title={<span className="text-xs" style={{ color: theme.subtext }}>Preview upcoming dates</span>}>
                   {(() => {
-                    const partial = getPartialPayInfo(bill)
+                    const tempBill: Bill = {
+                      id: 'preview', name: formData.name, amount: parseFloat(formData.amount) || 0,
+                      cat: formData.cat, due: formData.due, freq: formData.freq, recurrence: formData.recurrence,
+                      customRecurrenceDays: formData.recurrence === 'custom' ? parseInt(formData.customRecurrenceDays) : undefined,
+                      recurrenceEndDate: formData.recurrenceEndDate, recurrenceEndAfter: parseInt(formData.recurrenceEndAfter) || undefined,
+                      status: 'upcoming', alloc: [],
+                    }
+                    const dates = getRecurringBillDates(tempBill, 3)
                     return (
-                  <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-6 space-y-4">
-                    {/* Bill Header */}
-                    <div className="flex items-start gap-3 sm:gap-4 flex-wrap sm:flex-nowrap">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
-                          <h3 style={{ color: theme.text }} className="font-bold text-base sm:text-lg truncate">{bill.name}</h3>
-                          <span className="px-2 sm:px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: `${iconConfig.color}15`, color: iconConfig.color }}>
-                            {bill.cat}
-                          </span>
-                          {partial?.isPartial && (
-                            <span className="px-2 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: '#F59E0B20', color: '#F59E0B' }}>
-                              Partially Paid
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm" style={{ color: theme.textM }}>
-                          Due {fmtD(cycleDue(bill))}
-                          {bill.recurrence && bill.recurrence !== 'monthly' && (
-                            <span> · {bill.recurrence === 'custom' && bill.customRecurrenceDays ? `Every ${bill.customRecurrenceDays}d` : bill.recurrence}</span>
-                          )}
-                          {bill.recurrence && bill.recurrence !== 'one-time' && <span> · Starts {fmtD(bill.due)}</span>}
-                          {bill.recurrenceEndDate && <span> · Ends {fmtD(bill.recurrenceEndDate)}</span>}
-                          {bill.recurrenceEndAfter && <span> · {bill.recurrenceEndAfter}x left</span>}
-                        </p>
-                        {partial?.isPartial && (
-                          <div className="mt-2">
-                            <div className="flex justify-between text-xs mb-1" style={{ color: theme.textM }}>
-                              <span>Paid: <span className="font-bold" style={{ color: theme.ok }}>{fmt(partial.totalPaid)}</span></span>
-                              <span>Remaining: <span className="font-bold" style={{ color: '#EF4444' }}>{fmt(partial.remaining)}</span></span>
-                            </div>
-                            <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
-                              <div className="h-full rounded-full" style={{ width: `${partial.pct}%`, backgroundColor: '#F59E0B' }} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-xl sm:text-3xl font-bold" style={{ color: '#EF4444' }}>
-                          –{fmt(partial?.isPartial ? partial.remaining : bill.amount)}
-                        </p>
-                        {partial?.isPartial && (
-                          <p className="text-xs mt-0.5" style={{ color: theme.textM }}>of {fmt(bill.amount)}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Partial/Split Payment Schedule (collapsible) */}
-                    {bill.alloc.length > 0 && (
-                      <div style={{ backgroundColor: theme.bg, borderColor: theme.border }} className="border rounded-xl p-4">
-                        <button
-                          onClick={() => setCollapsedSplits(prev => ({ ...prev, [bill.id]: !prev[bill.id] }))}
-                          className="w-full flex items-center justify-between"
-                        >
-                          <p className="text-xs font-bold" style={{ color: theme.gold }}>
-                            {partial?.isPartial ? `PARTIAL PAYMENTS (${fmt(partial.totalPaid)} of ${fmt(bill.amount)})` : `SPLIT SCHEDULE (${bill.alloc.filter(a => a.paid).length}/${bill.alloc.length} paid)`}
-                          </p>
-                          {collapsedSplits[bill.id]
-                            ? <ChevronDown className="w-4 h-4" style={{ color: theme.textM }} />
-                            : <ChevronUp className="w-4 h-4" style={{ color: theme.textM }} />
-                          }
-                        </button>
-                        <AnimatePresence initial={false}>
-                          {!collapsedSplits[bill.id] && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden"
-                            >
-                              <div className="space-y-2 mt-3">
-                                {bill.alloc.map(alloc => (
-                                  <div
-                                    key={alloc.id}
-                                    className={`flex justify-between items-center p-2 rounded ${
-                                      alloc.paid ? 'opacity-50' : ''
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      {alloc.paid && (
-                                        <Check className="w-4 h-4" style={{ color: theme.ok }} />
-                                      )}
-                                      <span className={`text-sm ${alloc.paid ? 'line-through' : ''}`} style={{ color: theme.textM }}>
-                                        {fmtD(alloc.date)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm font-semibold" style={{ color: theme.text }}>
-                                        {fmt(alloc.amount)}
-                                      </span>
-                                      {!alloc.paid && (
-                                        <button
-                                          onClick={() => handlePayment(bill.id, alloc.id)}
-                                          style={{ backgroundColor: `${theme.ok}20`, color: theme.ok }}
-                                          className="px-2 py-1 text-xs rounded hover:opacity-80 transition-colors"
-                                        >
-                                          Pay
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    )}
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 sm:gap-3 pt-2 flex-wrap sm:flex-nowrap">
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handlePayFull(bill.id, getEffectiveBillDate(bill))}
-                        style={{ backgroundColor: theme.accent, color: '#fff' }}
-                        className="flex-1 px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-colors"
-                      >
-                        Pay
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleStartEdit(bill.id)}
-                        style={{ backgroundColor: `${theme.gold}20`, color: theme.gold }}
-                        className="px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-80 transition-colors"
-                      >
-                        Edit
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => setSplitModalBillId(bill.id)}
-                        style={{ backgroundColor: '#F59E0B20', color: '#F59E0B' }}
-                        className="px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-80 transition-colors"
-                      >
-                        Split
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleDeleteBill(bill.id)}
-                        style={{ backgroundColor: `${theme.bad}20`, color: theme.bad }}
-                        className="px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-80 transition-colors"
-                      >
-                        Del
-                      </motion.button>
-                    </div>
-                  </div>
+                      <ul className="rounded-xl px-3" style={{ backgroundColor: `${theme.text}06` }}>
+                        {dates.slice(0, 5).map((d, i) => (
+                          <li key={i} className="flex justify-between py-1.5 text-[13px] tnum" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                            <span style={{ color: theme.text }}>{new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                            <span style={{ color: theme.subtext }}>{fmt(parseFloat(formData.amount) || 0)}</span>
+                          </li>
+                        ))}
+                        {dates.length > 5 && <li className="py-1.5 text-xs" style={{ color: theme.subtext }}>and {dates.length - 5} more</li>}
+                      </ul>
                     )
                   })()}
-                </motion.div>
-              )
-              })}
-          </motion.div>
-        )}
+                </Disclosure>
+              )}
+            </>
+          )}
+        </div>
+      </Sheet>
 
-        {/* 4b. Bills — Compact View (condensed, easy-to-scan) */}
-        {viewMode === 'compact' && (
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            style={{ backgroundColor: theme.card, borderColor: theme.border }}
-            className="border rounded-2xl overflow-hidden divide-y"
+      {/* Add / edit credit card */}
+      <Sheet
+        open={showAddCard || !!editingCardId}
+        onClose={closeCardForm}
+        title={editingCardId ? `Edit ${creditCards.find(c => c.id === editingCardId)?.name || 'card'}` : 'Add credit card'}
+        sub={editingCardId ? 'Payments already marked paid are kept; the rest of the plan is recalculated.' : 'We build a month by month payoff plan from these numbers.'}
+        footer={<>
+          {editingCardId && <Button variant="danger" ariaLabel="Delete card" onClick={() => { deleteCard(editingCardId); cancelEditCard() }}><Trash2 size={14} /></Button>}
+          <Button className="flex-1" onClick={closeCardForm}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!cardForm.name || !cardForm.balance} onClick={editingCardId ? saveEditCard : addCreditCard}>
+            {editingCardId ? 'Save changes' : 'Create plan'}
+          </Button>
+        </>}
+      >
+        {cardFormFields}
+      </Sheet>
+
+      {/* Add / edit subscription */}
+      <Sheet
+        open={showAddSubscription || !!editingSubscriptionId}
+        onClose={closeSubForm}
+        title={editingSubscriptionId ? 'Edit subscription' : 'Add subscription'}
+        footer={<>
+          <Button className="flex-1" onClick={closeSubForm}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!subForm.name || !subForm.price} onClick={editingSubscriptionId ? saveEditSubscription : addSubscription}>
+            {editingSubscriptionId ? 'Save changes' : 'Add subscription'}
+          </Button>
+        </>}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Name" className="col-span-2"><input value={subForm.name} onChange={e => setSubForm({ ...subForm, name: e.target.value })} placeholder="e.g. Netflix" {...field} /></Field>
+          <Field label="Price ($)"><input type="number" inputMode="decimal" value={subForm.price} onChange={e => setSubForm({ ...subForm, price: e.target.value })} {...field} /></Field>
+          <Field label="Category">
+            <select value={subForm.category} onChange={e => setSubForm({ ...subForm, category: e.target.value })} {...field}>
+              {SUBSCRIPTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Billing date"><input type="date" value={subForm.billingDate} onChange={e => setSubForm({ ...subForm, billingDate: e.target.value })} {...field} /></Field>
+          <Field label="Repeats">
+            <select value={subForm.frequency} onChange={e => setSubForm({ ...subForm, frequency: e.target.value as SubscriptionFrequency })} {...field}>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+              <option value="custom">Custom (days)</option>
+            </select>
+          </Field>
+          {subForm.frequency === 'custom' && (
+            <Field label="Every how many days" className="col-span-2"><input type="number" value={subForm.customFrequencyDays} onChange={e => setSubForm({ ...subForm, customFrequencyDays: e.target.value })} {...field} /></Field>
+          )}
+          <Field label="Paid from"><input value={subForm.paymentAccount} onChange={e => setSubForm({ ...subForm, paymentAccount: e.target.value })} placeholder="Wells" {...field} /></Field>
+          <Field label="Status">
+            <select value={subForm.status} onChange={e => setSubForm({ ...subForm, status: e.target.value as SubscriptionStatus })} {...field}>
+              <option value="active">Active</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </Field>
+        </div>
+      </Sheet>
+
+      {/* Pay a bill (full or partial) */}
+      {(() => {
+        const bill = partialPayId ? bills.find(b => b.id === partialPayId) : null
+        const close = () => { setPartialPayId(null); setPaymentTargetDate(null) }
+        if (!bill) return <Sheet open={false} onClose={close} title="">{null}</Sheet>
+        // What is still owed in the cycle this payment applies to.
+        const tDate = paymentTargetDate || new Date().toISOString().split('T')[0]
+        const mcd = new Date(tDate + 'T00:00:00')
+        const billTotal = getCycleRemaining(bill, mcd.getMonth(), mcd.getFullYear()) || bill.amount
+        const enteredAmount = parseFloat(partialPayAmount) || 0
+        const clampedAmount = Math.min(enteredAmount, billTotal)
+        const fillPct = billTotal > 0 ? Math.min((clampedAmount / billTotal) * 100, 100) : 0
+        const remaining = Math.max(billTotal - clampedAmount, 0)
+        const isFullPayment = clampedAmount >= billTotal
+        let cycleNote: string | null = null
+        if (paymentTargetDate) {
+          const now = new Date()
+          if (mcd.getMonth() !== now.getMonth() || mcd.getFullYear() !== now.getFullYear()) {
+            cycleNote = `${paymentTargetDate > now.toISOString().split('T')[0] ? 'Advance payment' : 'Back-dated payment'} for the ${mcd.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} cycle`
+          }
+        }
+        return (
+          <Sheet
+            open
+            onClose={close}
+            title={`Pay ${bill.name}`}
+            sub={<>Owed this cycle: <span className="tnum font-medium" style={{ color: theme.text }}>{fmt(billTotal)}</span>{cycleNote && <span className="block mt-1" style={{ color: theme.accent }}>{cycleNote}</span>}</>}
+            footer={
+              <Button className="flex-1" variant="primary" disabled={clampedAmount <= 0} onClick={handleApplyPartialPayment}>
+                {clampedAmount <= 0 ? 'Enter an amount' : isFullPayment ? `Pay in full · ${fmt(clampedAmount)}` : `Pay part · ${fmt(clampedAmount)}`}
+              </Button>
+            }
           >
-            {visibleBills
-              .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
-              .map((bill, idx) => {
-                const partial = getPartialPayInfo(bill)
-                return (
-                <motion.div
-                  key={bill.id}
-                  variants={item}
-                  transition={{ delay: idx * 0.03 }}
-                  className="flex items-center gap-3 px-4 py-3"
-                  style={{ borderColor: theme.border }}
-                >
-                  {/* Name + Due Date */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{bill.name}</p>
-                    <p className="text-xs" style={{ color: theme.textM }}>Due {fmtD(bill.due)}</p>
-                  </div>
-                  {/* Amount */}
-                  <p className="text-sm font-bold flex-shrink-0 tabular-nums" style={{ color: '#EF4444' }}>–{fmt(partial?.isPartial ? partial.remaining : bill.amount)}</p>
-                  {/* Pay button only */}
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => handlePayFull(bill.id, getEffectiveBillDate(bill))}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: theme.accent }}
-                      title="Mark Paid"
-                    >
-                      <Check size={13} style={{ color: '#fff' }} />
-                    </button>
-                  </div>
-                </motion.div>
-              )
-              })}
-
-              {/* (Payment flow handled by the partial-pay bottom-sheet below) */}
-            {visibleBills.filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming').length === 0 && (
-              <div className="p-8 text-center">
-                <p className="text-sm" style={{ color: theme.textM }}>No upcoming bills</p>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {/* 5. Paid Bills Section */}
-        {bills.filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid').length > 0 && (
-          <motion.div
-            variants={item}
-            initial="hidden"
-            animate="show"
-            className="space-y-4 mt-8"
-          >
-            <h3 style={{ color: theme.text }} className="font-bold text-lg mb-4">Paid Bills</h3>
-            {viewMode === 'list' ? (
-              bills
-                .filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid')
-                .map(bill => {
-                  const paidOn = getDisplayPaidDate(bill)
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Full', sub: fmt(billTotal), mode: 'full' as const, amount: billTotal },
+                  { label: 'Half', sub: fmt(billTotal / 2), mode: 'half' as const, amount: billTotal / 2 },
+                  { label: 'Custom', sub: 'Any amount', mode: 'custom' as const, amount: null },
+                ].map(opt => {
+                  const on = partialPayMode === opt.mode
                   return (
-                  <div
-                    key={bill.id}
-                    style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                    className="border rounded-2xl p-6 opacity-60 flex justify-between items-center"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Check className="w-5 h-5" style={{ color: theme.ok }} />
-                      <div>
-                        <p style={{ color: theme.text }} className="font-bold">{bill.name}</p>
-                        <p className="text-sm" style={{ color: theme.textM }}>{bill.cat}</p>
-                        {paidOn && (
-                          <p className="text-xs font-semibold mt-0.5" style={{ color: theme.ok }}>
-                            ✓ Paid {fmtD(paidOn)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <p style={{ color: '#ef4444' }} className="font-bold">–{fmt(bill.amount)}</p>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => persistBills(bills.map(b => {
-                          if (b.id !== bill.id) return b
-                          // Clear paidDate and unpay any cycle alloc entries so
-                          // getBillEffectiveStatus correctly reverts to 'upcoming'.
-                          return {
-                            ...b,
-                            status: 'upcoming' as const,
-                            paidDate: undefined,
-                            alloc: b.alloc.map(a => {
-                              const ad = new Date(a.date + 'T00:00:00')
-                              if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) {
-                                return { ...a, paid: false }
-                              }
-                              return a
-                            }),
-                          }
-                        }))}
-                        style={{ backgroundColor: theme.ok, color: '#fff' }}
-                        className="px-4 py-1.5 text-sm font-bold rounded-lg hover:opacity-90 transition-colors"
-                      >
-                        Undo
-                      </motion.button>
-                    </div>
-                  </div>
-                  )
-                })
-            ) : (
-              <div style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl overflow-hidden divide-y opacity-70">
-                {bills.filter(b => getBillEffectiveStatus(b, calMonth, calYear) === 'paid').map(bill => {
-                  const paidOn = getDisplayPaidDate(bill)
-                  return (
-                  <div key={bill.id} className="flex items-center gap-3 px-5 py-3" style={{ borderColor: theme.border }}>
-                    <Check size={14} style={{ color: theme.ok }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate" style={{ color: theme.text }}>{bill.name}</p>
-                      {paidOn && (
-                        <p className="text-[10px] font-semibold" style={{ color: theme.ok }}>Paid {fmtD(paidOn)}</p>
-                      )}
-                    </div>
-                    <p className="text-sm font-bold flex-shrink-0" style={{ color: theme.textM }}>–{fmt(bill.amount)}</p>
                     <button
-                      onClick={() => persistBills(bills.map(b => {
-                        if (b.id !== bill.id) return b
-                        return {
-                          ...b,
-                          status: 'upcoming' as const,
-                          paidDate: undefined,
-                          alloc: b.alloc.map(a => {
-                            const ad = new Date(a.date + 'T00:00:00')
-                            if (ad.getMonth() === calMonth && ad.getFullYear() === calYear) {
-                              return { ...a, paid: false }
-                            }
-                            return a
-                          }),
-                        }
-                      }))}
-                      className="flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg hover:opacity-90 transition-colors"
-                      style={{ backgroundColor: theme.ok, color: '#fff' }}
+                      key={opt.mode}
+                      onClick={() => { setPartialPayMode(opt.mode); if (opt.amount !== null) setPartialPayAmount(String(opt.amount)) }}
+                      className="rounded-xl px-3 py-2.5 text-left transition-colors"
+                      style={{ border: `1px solid ${on ? theme.accent : theme.border}`, backgroundColor: on ? `${theme.accent}14` : 'transparent' }}
+                      aria-pressed={on}
                     >
-                      Undo
+                      <p className="text-[13px] font-medium" style={{ color: theme.text }}>{opt.label}</p>
+                      <p className="text-[11.5px] tnum" style={{ color: theme.subtext }}>{opt.sub}</p>
                     </button>
-                  </div>
                   )
                 })}
               </div>
-            )}
-          </motion.div>
-        )}
+              {partialPayMode === 'custom' && (
+                <Field label="Amount ($)">
+                  <input type="number" inputMode="decimal" value={partialPayAmount} onChange={e => setPartialPayAmount(e.target.value)} autoFocus step="0.01" min="0" max={billTotal} {...field} className={`${field.className} text-[18px] font-semibold h-12`} />
+                </Field>
+              )}
+              <div>
+                <div className="flex justify-between text-xs mb-1.5 tnum">
+                  <span style={{ color: theme.subtext }}>Paying {fmt(clampedAmount)}</span>
+                  <span style={{ color: remaining > 0 ? theme.warn : theme.ok }}>{remaining > 0 ? `${fmt(remaining)} left after this` : 'Paid in full'}</span>
+                </div>
+                <Bar pct={fillPct} color={isFullPayment ? theme.ok : theme.accent} />
+              </div>
+            </div>
+          </Sheet>
+        )
+      })()}
 
-      </div>
-
-      {/* 6b. Partial Payment Modal — Redesigned */}
-      <AnimatePresence>
-        {partialPayId && (() => {
-          const bill = bills.find(b => b.id === partialPayId)
-          if (!bill) return null
-          // Use cycle-remaining as the "total due" so the modal always reflects
-          // what's actually owed this cycle, not the raw bill amount.
-          const today = new Date().toISOString().split('T')[0]
-          // Use paymentTargetDate (which encodes the billing cycle) if set; otherwise today.
-          const tDate = paymentTargetDate || today
-          const mcd = new Date(tDate + 'T00:00:00')
-          const billTotal = getCycleRemaining(bill, mcd.getMonth(), mcd.getFullYear()) || bill.amount
-          const enteredAmount = parseFloat(partialPayAmount) || 0
-          const clampedAmount = Math.min(enteredAmount, billTotal)
-          const fillPct = billTotal > 0 ? Math.min((clampedAmount / billTotal) * 100, 100) : 0
-          const remaining = Math.max(billTotal - clampedAmount, 0)
-          const isFullPayment = clampedAmount >= billTotal
-
-          return (
-            <motion.div
-              key="pay-modal"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
-              onClick={() => { setPartialPayId(null); setPaymentTargetDate(null) }}
-            >
-              <motion.div
-                initial={{ y: 100, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 100, opacity: 0 }}
-                onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                className="w-full max-w-full border-t rounded-t-3xl p-5 sm:p-6 space-y-4 overflow-hidden"
+      {/* Split a bill */}
+      <Sheet
+        open={!!splitModalBillId}
+        onClose={() => setSplitModalBillId(null)}
+        title="Split into payments"
+        sub={(() => { const b = bills.find(x => x.id === splitModalBillId); return b ? `${b.name} · ${fmt(b.amount)}, one payment a week starting ${fmtD(b.due)}` : null })()}
+      >
+        <div className="grid grid-cols-3 gap-2">
+          {[2, 3, 4].map(num => {
+            const b = bills.find(x => x.id === splitModalBillId)
+            return (
+              <button
+                key={num}
+                onClick={() => splitModalBillId && handleApplySplit(splitModalBillId, num)}
+                className="rounded-xl px-3 py-3 text-left transition-colors hover:opacity-90"
+                style={{ border: `1px solid ${theme.border}` }}
               >
-                {/* Header */}
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest mb-0.5" style={{ color: theme.textM }}>Make a Payment</p>
-                    <h2 style={{ color: theme.text }} className="font-bold text-xl leading-tight">{bill.name}</h2>
-                    <p className="text-sm mt-0.5" style={{ color: theme.textM }}>
-                      Total due: <span className="font-bold" style={{ color: theme.bad }}>{fmt(billTotal)}</span>
-                    </p>
-                    {(() => {
-                      if (!paymentTargetDate) return null
-                      const targetD = new Date(paymentTargetDate + 'T00:00:00')
-                      const now = new Date()
-                      const isNonCurrentCycle = targetD.getMonth() !== now.getMonth() || targetD.getFullYear() !== now.getFullYear()
-                      if (!isNonCurrentCycle) return null
-                      const isFutureCycle = paymentTargetDate > now.toISOString().split('T')[0]
-                      return (
-                        <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: `${theme.accent}15`, border: `1px solid ${theme.accent}30` }}>
-                          <Calendar className="w-3 h-3 flex-shrink-0" style={{ color: theme.accent }} />
-                          <p className="text-xs font-semibold" style={{ color: theme.accent }}>
-                            {isFutureCycle ? 'Advance payment' : 'Back-dated payment'} — applies to {targetD.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} cycle
-                          </p>
-                        </div>
-                      )
-                    })()}
-                  </div>
-                  <button
-                    onClick={() => { setPartialPayId(null); setPaymentTargetDate(null) }}
-                    className="p-2 rounded-xl transition-colors mt-1"
-                    style={{ backgroundColor: theme.border }}
-                  >
-                    <X className="w-4 h-4" style={{ color: theme.text }} />
-                  </button>
-                </div>
-
-                {/* Quick-pick chips */}
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: theme.textM }}>Payment Amount</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { label: 'Full', sublabel: fmt(billTotal), mode: 'full' as const, amount: billTotal },
-                      { label: 'Half', sublabel: fmt(billTotal / 2), mode: 'half' as const, amount: billTotal / 2 },
-                      { label: 'Custom', sublabel: 'Enter amount', mode: 'custom' as const, amount: null },
-                    ].map(opt => (
-                      <motion.button
-                        key={opt.mode}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => {
-                          setPartialPayMode(opt.mode)
-                          if (opt.amount !== null) setPartialPayAmount(String(opt.amount))
-                        }}
-                        className="rounded-xl p-3 text-center transition-all border-2"
-                        style={{
-                          backgroundColor: partialPayMode === opt.mode ? theme.accent : theme.bg,
-                          borderColor: partialPayMode === opt.mode ? theme.accent : theme.border,
-                          color: partialPayMode === opt.mode ? '#fff' : theme.text,
-                        }}
-                      >
-                        <p className="font-bold text-sm">{opt.label}</p>
-                        <p className="text-xs mt-0.5 opacity-80">{opt.sublabel}</p>
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom amount input */}
-                <AnimatePresence>
-                  {partialPayMode === 'custom' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-lg" style={{ color: theme.textM }}>$</span>
-                        <input
-                          type="number"
-                          value={partialPayAmount}
-                          onChange={(e) => setPartialPayAmount(e.target.value)}
-                          placeholder="0.00"
-                          autoFocus
-                          className="w-full pl-8 pr-4 py-4 rounded-xl border-2 font-bold text-xl outline-none transition-colors"
-                          style={{
-                            backgroundColor: theme.bg,
-                            borderColor: theme.accent,
-                            color: theme.text,
-                          }}
-                          step="0.01"
-                          min="0"
-                          max={billTotal}
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Progress bar */}
-                <div>
-                  <div className="flex justify-between items-center mb-1.5">
-                    <p className="text-xs font-semibold" style={{ color: theme.textM }}>
-                      Paying <span style={{ color: theme.accent }}>{fmt(clampedAmount)}</span>
-                    </p>
-                    <p className="text-xs font-semibold" style={{ color: remaining > 0 ? theme.warn : theme.ok }}>
-                      {remaining > 0 ? `${fmt(remaining)} remaining` : '✓ Fully paid'}
-                    </p>
-                  </div>
-                  <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
-                    <motion.div
-                      className="h-full rounded-full"
-                      animate={{ width: `${fillPct}%` }}
-                      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
-                      style={{ backgroundColor: isFullPayment ? theme.ok : theme.accent }}
-                    />
-                  </div>
-                  <p className="text-xs mt-1 text-right tabular-nums" style={{ color: theme.textM }}>
-                    {fillPct.toFixed(0)}% of bill
-                  </p>
-                </div>
-
-                {/* Confirm button */}
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleApplyPartialPayment}
-                  disabled={clampedAmount <= 0}
-                  style={{
-                    backgroundColor: clampedAmount > 0 ? (isFullPayment ? theme.ok : theme.accent) : theme.border,
-                    color: clampedAmount > 0 ? '#fff' : theme.textM,
-                  }}
-                  className="w-full py-4 rounded-xl font-bold text-base transition-all"
-                >
-                  {clampedAmount <= 0
-                    ? 'Enter an amount to continue'
-                    : isFullPayment
-                    ? `✓ Confirm Full Payment — ${fmt(clampedAmount)}`
-                    : `Confirm Partial Payment — ${fmt(clampedAmount)}`}
-                </motion.button>
-              </motion.div>
-            </motion.div>
-          )
-        })()}
-      </AnimatePresence>
-
-      {/* 7. Split Modal */}
-      <AnimatePresence>
-        {splitModalBillId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
-            onClick={() => setSplitModalBillId(null)}
-          >
-            <motion.div
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="w-full border-t rounded-t-3xl p-8 space-y-5"
-            >
-              <div className="flex justify-between items-center mb-2">
-                <h2 style={{ color: theme.text }} className="font-bold text-xl">Split Payment</h2>
-                <button
-                  onClick={() => setSplitModalBillId(null)}
-                  className="p-2 rounded-lg transition-colors"
-                  style={{ backgroundColor: theme.textS }}
-                >
-                  <X className="w-5 h-5" style={{ color: theme.textM }} />
-                </button>
-              </div>
-
-              <p style={{ color: theme.textM }} className="text-sm">
-                Split this bill into how many payments?
-              </p>
-
-              <div className="grid grid-cols-3 gap-4">
-                {[2, 3, 4].map(num => (
-                  <motion.button
-                    key={num}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleApplySplit(splitModalBillId, num)}
-                    style={{ backgroundColor: theme.accent, color: '#fff' }}
-                    className="px-4 py-3.5 rounded-xl font-bold hover:opacity-90 transition-colors"
-                  >
-                    {num} Payments
-                  </motion.button>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+                <p className="text-[14px] font-semibold" style={{ color: theme.text }}>{num} payments</p>
+                {b && <p className="text-[11.5px] tnum" style={{ color: theme.subtext }}>{fmt(b.amount / num)} each</p>}
+              </button>
+            )
+          })}
+        </div>
+      </Sheet>
+    </PageShell>
   )
 }

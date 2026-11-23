@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, DollarSign, Target, Heart,
@@ -8,7 +9,7 @@ import {
   AlertCircle, CheckCircle, Zap, Check, Calendar, Briefcase,
   Home, ExternalLink, Layers, ChevronLeft, ChevronRight,
   Wallet, BarChart3, Calculator, Clock,
-  ChevronDown, ChevronUp, Car, Mic2, Palette,
+  ChevronDown, ChevronUp, Car, Mic2, Palette, ArrowUpRight,
 } from 'lucide-react';
 import { useOrcaData } from '@/context/OrcaDataContext';
 import { fmt, fmtD, daysTo, calcAlloc, calcIncome, f2w, pct, getPaycheckAmount } from '@/lib/utils';
@@ -17,6 +18,9 @@ import { setLocalSynced } from '@/lib/syncLocal';
 import CalendarPicker from '@/components/CalendarPicker';
 import { useFinancialEngine } from '@/lib/financialEngine';
 import { orcaEvents } from '@/lib/eventBus';
+import { PageShell, PageHeader, Panel, PanelTitle, Stat, MiniStat, Bar, Button, RowMenu, MonthSwitcher, EmptyState, useField, Field, Sheet } from '@/components/ui/kit';
+import { Segmented } from '@/components/layout/CustomizePanel';
+import { useStreamColors } from '@/app/(app)/dashboard/widgets';
 
 type Tab = 'income' | 'savings';
 
@@ -298,7 +302,7 @@ export default function SmartStackPage() {
   const [bizzplugClients, setBizzplugClients] = useState<{id:string;quote:number;paid:number;status:string}[]>([])
   const [metricsMonth, setMetricsMonth] = useState(new Date().getMonth())
   const [metricsYear, setMetricsYear] = useState(new Date().getFullYear())
-  const [summaryAllTime, setSummaryAllTime] = useState(true)
+  const [summaryAllTime, setSummaryAllTime] = useState(false)
   const [customAddAmounts, setCustomAddAmounts] = useState<Record<string, string>>({});
   const [collapsedAccounts, setCollapsedAccounts] = useState<Record<string, boolean>>({});
   const [scheduledPaymentsCollapsed, setScheduledPaymentsCollapsed] = useState(false);
@@ -1007,303 +1011,9 @@ export default function SmartStackPage() {
     );
   };
 
-  const renderIncomeTab = () => {
-    return (
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-
-        <div className="flex rounded-2xl overflow-hidden p-1 w-full max-w-full" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
-          {[
-            { key: 'lyft', label: 'Lyft Metrics', icon: Car },
-            { key: 'dj', label: 'DJ Gigs', icon: Mic2 },
-            { key: 'bizzplug', label: 'BizzyPlug', icon: Palette },
-          ].map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setProjectionMode(key as typeof projectionMode)}
-              className="flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 sm:px-2 text-[10px] sm:text-xs rounded-2xl transition-all min-w-0"
-              style={{
-                backgroundColor: projectionMode === key ? theme.accent : 'transparent',
-                color: projectionMode === key ? '#fff' : theme.accent,
-                fontWeight: projectionMode === key ? 700 : 500,
-              }}
-            >
-              <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="hidden sm:inline">{label}</span>
-            </button>
-          ))}
-        </div>
-
-        {projectionMode === 'lyft' && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#22D3EE20' }}>
-                <Car className="w-5 h-5" style={{ color: '#22D3EE' }} />
-              </div>
-              <div>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>Lyft Earnings</h2>
-                <p className="text-xs" style={{ color: theme.textM }}>{lyftSessionsMonth.length} week{lyftSessionsMonth.length !== 1 ? 's' : ''} this month</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 mb-5">
-              <div className="rounded-xl p-4" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                <p className="text-xs font-semibold mb-1" style={{ color: theme.textM }}>Total Earnings This Month</p>
-                <p className="text-2xl font-black" style={{ color: '#10B981' }}>{fmt(lyftGrossMonth)}</p>
-              </div>
-            </div>
-
-            {/* Log Session Form */}
-            <div className="mb-5">
-              {!lyftFormExpanded ? (
-                <button
-                  onClick={() => { setLyftFormExpanded(true); setLyftAddDate(new Date().toISOString().split('T')[0]); }}
-                  className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                  style={{ background: '#22D3EE18', color: '#22D3EE', border: '1px dashed #22D3EE50' }}
-                >
-                  <Plus className="w-4 h-4" /> Log This Week
-                </button>
-              ) : (
-                <div className="rounded-xl p-3 space-y-3" style={{ background: '#22D3EE10', border: '1px solid #22D3EE40' }}>
-                  <p className="text-xs font-bold" style={{ color: '#22D3EE' }}>Log Weekly Earnings</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Week Ending</label>
-                      <input
-                        type="date"
-                        value={lyftAddDate}
-                        onChange={e => setLyftAddDate(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textM }}>Total Earned ($)</label>
-                      <input
-                        type="number"
-                        placeholder="0.00"
-                        value={lyftAddEarnings}
-                        onChange={e => setLyftAddEarnings(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                        style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setLyftFormExpanded(false)}
-                      className="flex-1 py-2 rounded-xl text-xs font-semibold"
-                      style={{ backgroundColor: theme.card, color: theme.textM, border: `1px solid ${theme.border}` }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={addLyftSession}
-                      disabled={!lyftAddEarnings || !lyftAddDate}
-                      className="flex-1 py-2 rounded-xl text-xs font-bold disabled:opacity-40"
-                      style={{ backgroundColor: '#22D3EE', color: '#fff' }}
-                    >
-                      Save
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Weeks This Month</p>
-              {lyftSessionsMonth.length === 0 ? (
-                <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
-                  No weeks logged this month
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {[...lyftSessionsMonth].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6).map((sess) => (
-                    lyftEditId === sess.id ? (
-                      <div key={sess.id} className="rounded-xl px-3 py-2.5 space-y-2" style={{ backgroundColor: theme.bg, border: `1px solid #22D3EE` }}>
-                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
-                          Week of {new Date(sess.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <label className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Earned ($)</label>
-                          <input
-                            type="number"
-                            value={lyftEditEarnings}
-                            onChange={e => setLyftEditEarnings(e.target.value)}
-                            className="flex-1 px-2 py-1.5 rounded-lg text-sm outline-none"
-                            style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
-                            autoFocus
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => { setLyftEditId(null); setLyftEditEarnings('') }}
-                            className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
-                            style={{ backgroundColor: theme.card, color: theme.textM, border: `1px solid ${theme.border}` }}
-                          >Cancel</button>
-                          <button
-                            onClick={() => deleteLyftSession(sess.id)}
-                            className="py-1.5 px-3 rounded-lg text-xs font-bold"
-                            style={{ backgroundColor: '#EF444420', color: '#EF4444', border: '1px solid #EF444440' }}
-                          ><Trash2 className="w-3 h-3" /></button>
-                          <button
-                            onClick={updateLyftSession}
-                            disabled={!lyftEditEarnings || parseFloat(lyftEditEarnings) <= 0}
-                            className="flex-1 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40"
-                            style={{ backgroundColor: '#22D3EE', color: '#fff' }}
-                          >Save</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div key={sess.id} className="flex items-center justify-between rounded-xl px-3 py-2.5 cursor-pointer" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}
-                        onClick={() => { setLyftEditId(sess.id); setLyftEditEarnings(String(sess.earnings)) }}>
-                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
-                          Week of {new Date(sess.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-black" style={{ color: '#10B981' }}>+{fmt(sess.earnings)}</p>
-                          <Edit3 className="w-3 h-3" style={{ color: theme.textM }} />
-                        </div>
-                      </div>
-                    )
-                  ))}
-                </div>
-              )}
-            </div>
-
-          </motion.div>
-        )}
-
-        {projectionMode === 'dj' && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#F43F5E20' }}>
-                <Mic2 className="w-5 h-5" style={{ color: '#F43F5E' }} />
-              </div>
-              <div>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>DJ Gig Manager</h2>
-                <p className="text-xs" style={{ color: theme.textM }}>{djGigsMonth.length} gigs · {djUpcomingMonth} upcoming this month</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              {[
-                { label: 'Earned This Month', value: fmt(djEarnedMonth), color: '#10B981' },
-                { label: 'Booked This Month', value: fmt(djBookedMonth), color: '#F43F5E' },
-                { label: 'Upcoming', value: String(djUpcomingMonth), color: theme.text },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="rounded-xl p-3 overflow-hidden" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                  <p className="text-xs font-semibold mb-1 truncate" style={{ color: theme.textM }}>{label}</p>
-                  <p className="text-sm font-black truncate" style={{ color }}>{value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Gigs This Month</p>
-              {djGigsMonth.length === 0 ? (
-                <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
-                  No gigs this month yet
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {[...djGigsMonth].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map((gig) => (
-                    <div key={gig.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
-                          {gig.clientName || 'Client'} · {gig.eventType || 'Event'}
-                        </p>
-                        <p className="text-xs" style={{ color: theme.textM }}>
-                          {gig.date ? new Date(gig.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'}
-                          {' · '}<span style={{ textTransform: 'capitalize' }}>{gig.status}</span>
-                        </p>
-                      </div>
-                      <p className="text-sm font-black" style={{ color: '#F43F5E' }}>{fmt(gig.contractAmount || gig.fee || 0)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <a href="/dj" className="flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
-                style={{ backgroundColor: '#F43F5E', color: '#fff' }}>
-                <Mic2 className="w-4 h-4" />
-                DJ Gig Manager
-              </a>
-            </div>
-          </motion.div>
-        )}
-
-        {projectionMode === 'bizzplug' && (() => {
-          const totalProjects = bizzplugClientsMonth.length
-          const newLeads = bizzplugClientsMonth.filter((c: any) => c.status === 'new-lead').length
-          const completed = bizzplugClientsMonth.filter((c: any) => c.status === 'completed').length
-          const recentProjects = [...bizzplugClientsMonth].sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 6)
-          return (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#9333EA20' }}>
-                <Palette className="w-5 h-5" style={{ color: '#9333EA' }} />
-              </div>
-              <div>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: theme.text }}>BizzyPlug</h2>
-                <p className="text-xs" style={{ color: theme.textM }}>{totalProjects} project{totalProjects !== 1 ? 's' : ''} this month · {newLeads} active</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              {[
-                { label: 'Earned This Month', value: fmt(bizzplugEarnedMonth), color: '#10B981' },
-                { label: 'Pending', value: fmt(bizzplugPendingMonth), color: '#F59E0B' },
-                { label: 'Completed', value: String(completed), color: theme.text },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="rounded-xl p-3 overflow-hidden" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                  <p className="text-xs font-semibold mb-1 truncate" style={{ color: theme.textM }}>{label}</p>
-                  <p className="text-sm font-black truncate" style={{ color }}>{value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide mb-3" style={{ color: theme.textS }}>Projects This Month</p>
-              {recentProjects.length === 0 ? (
-                <div className="text-sm text-center py-6 rounded-xl" style={{ color: theme.textM, backgroundColor: theme.bg }}>
-                  No projects this month yet
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {recentProjects.map((proj: any) => (
-                    <div key={proj.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: theme.text }}>
-                          {proj.artistName || 'Client'} · {proj.projectType || 'Project'}
-                        </p>
-                        <p className="text-xs" style={{ color: theme.textM }}>
-                          {proj.createdAt ? new Date(proj.createdAt + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
-                          {' · '}<span style={{ textTransform: 'capitalize' }}>{proj.status || 'new-lead'}</span>
-                        </p>
-                      </div>
-                      <p className="text-sm font-black" style={{ color: proj.paid > 0 ? '#10B981' : '#9333EA' }}>
-                        {proj.paid > 0 ? `+${fmt(proj.paid)}` : fmt(proj.quote || 0)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <a href="/bizzplug" className="flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
-                style={{ backgroundColor: '#9333EA', color: '#fff' }}>
-                <Palette className="w-4 h-4" />
-                BizzyPlug Dashboard
-              </a>
-            </div>
-          </motion.div>
-          )
-        })()}
-
-        {false && (
+  // Incoming Payments: hidden before the 2026-11 redesign (it was wrapped in
+  // `false &&`). Kept intact and uncalled so the feature can be restored.
+  const renderIncomingPaymentsHidden = () => (
           <motion.div ref={paymentSectionRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl p-4 sm:p-5 overflow-hidden w-full">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${theme.accent}20` }}>
@@ -1537,409 +1247,347 @@ export default function SmartStackPage() {
                 );
               })}
           </motion.div>
-        )}
+          );
+  void renderIncomingPaymentsHidden;
 
-        {/* Projection calculator removed */}
-      </motion.div>
-    );
-  };
+  // ── Layout state (2026-11 redesign) ──
+  const [newAcctOpen, setNewAcctOpen] = useState(false)
+  const [newAcctName, setNewAcctName] = useState('')
+  const [newAcctBalance, setNewAcctBalance] = useState('')
+  const [newAcctGoal, setNewAcctGoal] = useState('')
+  const field = useField()
+  const streamColors = useStreamColors()
 
-  const renderSavingsTab = () => {
-    const totalSavings = savingsAccounts.reduce((sum, acc) => sum + acc.amount, 0);
+  // Savings edits are immutable so React state never shares objects with what was saved.
+  const updateAccount = (id: string, patch: Partial<SavingsAccount>) => {
+    const updated = savingsAccounts.map(a => (a.id === id ? { ...a, ...patch } : a))
+    setSavingsAccounts(updated)
+    setLocalSynced('orca-savings-accounts', JSON.stringify(updated))
+  }
+  const addToAccount = (id: string, amt: number) => {
+    const acct = savingsAccounts.find(a => a.id === id)
+    if (acct && amt > 0) updateAccount(id, { amount: acct.amount + amt, saved: true })
+  }
+  const deleteAccount = (id: string) => {
+    const updated = savingsAccounts.filter(a => a.id !== id)
+    setSavingsAccounts(updated)
+    setLocalSynced('orca-savings-accounts', JSON.stringify(updated))
+  }
+  const createAccount = () => {
+    if (!newAcctName.trim()) return
+    const newAcct: SavingsAccount = {
+      id: Date.now().toString(),
+      name: newAcctName.trim(),
+      amount: parseFloat(newAcctBalance) || 0,
+      goal: parseFloat(newAcctGoal) || 0,
+      saved: false,
+    }
+    const updated = [...savingsAccounts, newAcct]
+    setSavingsAccounts(updated)
+    setLocalSynced('orca-savings-accounts', JSON.stringify(updated))
+    setNewAcctName(''); setNewAcctBalance(''); setNewAcctGoal('')
+    setNewAcctOpen(false)
+    setActiveTab('savings')
+  }
 
+  // BizzyPlug createdAt can be a full ISO timestamp or a plain date.
+  const projectDate = (v?: string) => {
+    if (!v) return ''
+    const d = new Date(v.includes('T') ? v : v + 'T00:00:00')
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  const shortDay = (v?: string) => (v ? new Date(v + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD')
+  const monthLabel = new Date(metricsYear, metricsMonth).toLocaleDateString('en-US', { month: 'long' })
+
+  const renderIncomeTab = () => {
     return (
-      <motion.div ref={savingsSectionRef} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-        <div className="rounded-2xl p-5" style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}>
-          <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4" style={{ color: theme.accent }} />
-            <span className="text-sm" style={{ fontWeight: 700, color: theme.accent }}>Total Savings</span>
-          </div>
-          <div className="text-2xl sm:text-[32px] break-words" style={{ fontWeight: 900, color: theme.accent }}>${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-          <div className="text-xs mt-1" style={{ color: theme.textM }}>{savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''}</div>
+      <div className="space-y-4 md:space-y-5">
+        <div className="overflow-x-auto no-scrollbar">
+          <Segmented
+            size="sm"
+            value={projectionMode}
+            onChange={v => setProjectionMode(v as typeof projectionMode)}
+            options={[{ value: 'lyft', label: 'Lyft' }, { value: 'dj', label: 'DJ Maskoff' }, { value: 'bizzplug', label: 'BizzyPlug' }]}
+          />
         </div>
 
-        {savingsAccounts.map(acct => {
-          const isCollapsed = !!collapsedAccounts[acct.id];
-          return (
-          <motion.div key={acct.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ backgroundColor: theme.card, borderColor: theme.border }} className="border rounded-2xl overflow-hidden">
-            {/* Account Header — always visible */}
-            <div
-              className="flex items-center justify-between px-5 py-4 cursor-pointer"
-              style={{ borderBottom: isCollapsed ? 'none' : `1px solid ${theme.border}40` }}
-              onClick={() => setCollapsedAccounts(prev => ({ ...prev, [acct.id]: !prev[acct.id] }))}
-            >
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: theme.accent, letterSpacing: '0.06em' }}>{acct.name}</h3>
-                  <div className="text-lg font-black" style={{ color: theme.accent }}>${acct.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-                </div>
-                {acct.goal > 0 && (
-                  <div className="flex-1 min-w-0 max-w-[120px]">
-                    <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: `${theme.border}` }}>
-                      <div className="h-full rounded-full" style={{ width: `${Math.min((acct.amount / acct.goal) * 100, 100)}%`, backgroundColor: theme.accent }} />
-                    </div>
-                    <p className="text-[10px] mt-0.5" style={{ color: theme.textM }}>{Math.round((acct.amount / acct.goal) * 100)}% of ${acct.goal.toLocaleString()}</p>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setSavingsAccounts(prev => prev.filter(a => a.id !== acct.id)); setLocalSynced('orca-savings-accounts', JSON.stringify(savingsAccounts.filter(a => a.id !== acct.id))); }}
-                  className="p-1.5 rounded-lg transition-all"
-                  style={{ color: '#EF4444' }}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-                <div className="p-1.5 rounded-lg transition-all" style={{ color: theme.textM }}>
-                  {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                </div>
-              </div>
+        {projectionMode === 'lyft' && (
+          <Panel>
+            <PanelTitle
+              title={`Lyft · ${monthLabel}`}
+              sub={`${lyftSessionsMonth.length} week${lyftSessionsMonth.length !== 1 ? 's' : ''} logged`}
+              right={<Button size="sm" variant="primary" onClick={() => { setLyftFormExpanded(true); setLyftAddDate(new Date().toISOString().split('T')[0]) }}><Plus size={14} /> Log a week</Button>}
+            />
+            <div className="grid grid-cols-3 gap-2 mb-5">
+              <MiniStat label="Earned" value={fmt(lyftGrossMonth)} />
+              <MiniStat label="Gas" value={fmt(lyftGasMonth)} />
+              <MiniStat label="Net" value={fmt(lyftNetMonth)} tone={lyftNetMonth > 0 ? theme.ok : undefined} />
             </div>
 
-            {/* Collapsible body */}
-            {!isCollapsed && (
-              <div className="p-5 space-y-3">
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 600 }}>Edit Balance</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
-                    <input type="number" value={acct.amount} onChange={e => {
-                      const updated = [...savingsAccounts];
-                      const idx = updated.findIndex(a => a.id === acct.id);
-                      updated[idx].amount = parseFloat(e.target.value) || 0;
-                      setSavingsAccounts(updated);
-                      setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                    }}
-                      className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none" style={{
-                        backgroundColor: theme.bg,
-                        borderColor: theme.border,
-                        color: theme.text,
-                        border: `1px solid ${theme.border}`,
-                      }} />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: theme.textM, fontWeight: 600 }}>Savings Goal</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
-                    <input type="text" placeholder="Set a goal (optional)" value={acct.goal} onChange={e => {
-                      const updated = [...savingsAccounts];
-                      const idx = updated.findIndex(a => a.id === acct.id);
-                      updated[idx].goal = parseFloat(e.target.value) || 0;
-                      setSavingsAccounts(updated);
-                      setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                    }}
-                      className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none" style={{
-                        backgroundColor: theme.bg,
-                        borderColor: theme.border,
-                        color: theme.text,
-                        border: `1px solid ${theme.border}`,
-                      }} />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs mb-2" style={{ color: theme.textM, fontWeight: 600 }}>Quick Add</label>
-                  <div className="grid grid-cols-4 gap-2 mb-3">
-                    {[10, 25, 50, 100].map(amt => (
-                      <button key={amt} onClick={() => {
-                        const updated = [...savingsAccounts];
-                        const idx = updated.findIndex(a => a.id === acct.id);
-                        updated[idx].amount += amt;
-                        updated[idx].saved = true;
-                        setSavingsAccounts(updated);
-                        setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                      }}
-                        className="py-2 rounded-xl text-sm transition-all hover:opacity-90 font-bold"
-                        style={{ backgroundColor: `${theme.accent}20`, color: theme.accent, border: `1px solid ${theme.accent}` }}>
-                        +${amt}
+            {lyftSessionsMonth.length === 0 ? (
+              <p className="text-[13px] py-2" style={{ color: theme.subtext }}>No weeks logged in {monthLabel}.</p>
+            ) : (
+              <ul>
+                {[...lyftSessionsMonth].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6).map((sess, i) => (
+                  <li key={sess.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                    {lyftEditId === sess.id ? (
+                      <div className="py-3 space-y-2">
+                        <p className="text-[13px] font-medium" style={{ color: theme.text }}>Week of {shortDay(sess.date)}</p>
+                        <div className="flex gap-2">
+                          <input type="number" inputMode="decimal" value={lyftEditEarnings} onChange={e => setLyftEditEarnings(e.target.value)} autoFocus aria-label="Amount earned" {...field} />
+                          <Button variant="danger" ariaLabel="Delete week" onClick={() => deleteLyftSession(sess.id)}><Trash2 size={14} /></Button>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button className="flex-1" onClick={() => { setLyftEditId(null); setLyftEditEarnings('') }}>Cancel</Button>
+                          <Button className="flex-1" variant="primary" disabled={!lyftEditEarnings || parseFloat(lyftEditEarnings) <= 0} onClick={updateLyftSession}>Save</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="w-full flex items-center justify-between gap-3 py-3 text-left" onClick={() => { setLyftEditId(sess.id); setLyftEditEarnings(String(sess.earnings)) }} aria-label={`Edit week of ${shortDay(sess.date)}`}>
+                        <span className="text-[13.5px]" style={{ color: theme.text }}>Week of {shortDay(sess.date)}</span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-[13.5px] font-semibold tnum" style={{ color: theme.text }}>{fmt(sess.earnings)}</span>
+                          <Edit3 size={13} style={{ color: theme.subtext }} />
+                        </span>
                       </button>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <div className="flex-1 relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: theme.textM }}>$</span>
-                      <input
-                        type="number"
-                        placeholder="Custom amount"
-                        value={customAddAmounts[acct.id] || ''}
-                        onChange={e => setCustomAddAmounts(prev => ({ ...prev, [acct.id]: e.target.value }))}
-                        className="w-full pl-7 pr-4 py-2.5 rounded-xl text-sm outline-none"
-                        style={{
-                          backgroundColor: theme.bg,
-                          borderColor: theme.border,
-                          color: theme.text,
-                          border: `1px solid ${theme.border}`,
-                        }}
-                      />
-                    </div>
-                    <button
-                      onClick={() => {
-                        const customAmount = parseFloat(customAddAmounts[acct.id] || '0');
-                        if (customAmount > 0) {
-                          const updated = [...savingsAccounts];
-                          const idx = updated.findIndex(a => a.id === acct.id);
-                          updated[idx].amount += customAmount;
-                          updated[idx].saved = true;
-                          setSavingsAccounts(updated);
-                          setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                          setCustomAddAmounts(prev => ({ ...prev, [acct.id]: '' }));
-                        }
-                      }}
-                      className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-                      style={{ backgroundColor: theme.accent }}>
-                      Add
-                    </button>
-                  </div>
-                </div>
-
-                <button className="w-full py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-all font-bold"
-                  style={{ backgroundColor: '#16A34A', color: '#fff' }}>
-                  ✓ Saved!
-                </button>
-              </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
-          </motion.div>
-        )})}
+          </Panel>
+        )}
 
-      </motion.div>
-    );
-  };
+        {projectionMode === 'dj' && (
+          <Panel>
+            <PanelTitle
+              title={`DJ Maskoff · ${monthLabel}`}
+              sub={`${djGigsMonth.length} gig${djGigsMonth.length !== 1 ? 's' : ''}, ${djUpcomingMonth} still to come`}
+              right={<Link href="/dj"><Button size="sm">Open DJ Maskoff <ArrowUpRight size={13} /></Button></Link>}
+            />
+            <div className="grid grid-cols-3 gap-2 mb-5">
+              <MiniStat label="Earned" value={fmt(djEarnedMonth)} tone={djEarnedMonth > 0 ? theme.ok : undefined} />
+              <MiniStat label="Booked" value={fmt(djBookedMonth)} />
+              <MiniStat label="Upcoming" value={String(djUpcomingMonth)} />
+            </div>
+            {djGigsMonth.length === 0 ? (
+              <p className="text-[13px] py-2" style={{ color: theme.subtext }}>No gigs in {monthLabel} yet.</p>
+            ) : (
+              <ul>
+                {[...djGigsMonth].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map((gig, i) => (
+                  <li key={gig.id} className="flex items-center justify-between gap-3 py-3" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                    <div className="min-w-0">
+                      <p className="text-[13.5px] truncate" style={{ color: theme.text }}>{gig.clientName || 'Client'} · {gig.eventType || 'Event'}</p>
+                      <p className="text-[12px] capitalize" style={{ color: theme.subtext }}>{shortDay(gig.date)} · {gig.status}</p>
+                    </div>
+                    <span className="text-[13.5px] font-semibold tnum" style={{ color: theme.text }}>{fmt(gig.contractAmount || gig.fee || 0)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        )}
 
-  if (loading) {
-    return (
-      <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen flex items-center justify-center">
-        <div>Loading...</div>
+        {projectionMode === 'bizzplug' && (() => {
+          const totalProjects = bizzplugClientsMonth.length
+          const newLeads = bizzplugClientsMonth.filter((c: any) => c.status === 'new-lead').length
+          const completed = bizzplugClientsMonth.filter((c: any) => c.status === 'completed').length
+          const recentProjects = [...bizzplugClientsMonth].sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 6)
+          return (
+            <Panel>
+              <PanelTitle
+                title={`BizzyPlug · ${monthLabel}`}
+                sub={`${totalProjects} project${totalProjects !== 1 ? 's' : ''}, ${newLeads} active`}
+                right={<Link href="/bizzplug"><Button size="sm">Open BizzyPlug <ArrowUpRight size={13} /></Button></Link>}
+              />
+              <div className="grid grid-cols-3 gap-2 mb-5">
+                <MiniStat label="Earned" value={fmt(bizzplugEarnedMonth)} tone={bizzplugEarnedMonth > 0 ? theme.ok : undefined} />
+                <MiniStat label="Pending" value={fmt(bizzplugPendingMonth)} />
+                <MiniStat label="Completed" value={String(completed)} />
+              </div>
+              {recentProjects.length === 0 ? (
+                <p className="text-[13px] py-2" style={{ color: theme.subtext }}>No projects in {monthLabel} yet.</p>
+              ) : (
+                <ul>
+                  {recentProjects.map((proj: any, i: number) => (
+                    <li key={proj.id} className="flex items-center justify-between gap-3 py-3" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                      <div className="min-w-0">
+                        <p className="text-[13.5px] truncate" style={{ color: theme.text }}>{proj.artistName || 'Client'} · {proj.projectType || 'Project'}</p>
+                        <p className="text-[12px]" style={{ color: theme.subtext }}>{[projectDate(proj.createdAt), (proj.status || 'new-lead').replace('-', ' ')].filter(Boolean).join(' · ')}</p>
+                      </div>
+                      <span className="text-[13.5px] font-semibold tnum" style={{ color: proj.paid > 0 ? theme.ok : theme.text }}>
+                        {proj.paid > 0 ? `+${fmt(proj.paid)}` : fmt(proj.quote || 0)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          )
+        })()}
       </div>
     )
   }
 
-  return (
-    <div style={{ backgroundColor: theme.bg, color: theme.text }} className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-x-hidden max-w-full">
-      <div className="max-w-3xl mx-auto w-full min-w-0">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <h1 style={{ color: theme.text }} className="text-4xl font-bold mb-2">
-            Smart Stack
-          </h1>
-          <p style={{ color: theme.textM }} className="text-lg">
-            Complete financial management at a glance
-          </p>
-        </motion.div>
-
-        {/* ── Total Monthly Income — combined Lyft + DJ Gigs + BizzyPlug, navigable by month ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl p-4 sm:p-5 mb-6 flex items-center justify-between"
-          style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)` }}
-        >
-          <button
-            onClick={() => handleMetricsMonthChange(-1)}
-            className="p-2 rounded-xl transition-all active:scale-95 shrink-0"
-            style={{ backgroundColor: 'rgba(255,255,255,0.18)', color: '#fff' }}
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <div className="text-center min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>
-              Total Monthly Income · {new Date(metricsYear, metricsMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </p>
-            <p className="text-3xl sm:text-4xl font-black text-white tabular-nums mt-1">
-              ${totalIncomeMonth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <div className="flex items-center justify-center gap-3 mt-2 flex-wrap">
-              <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                <Car className="w-3 h-3 inline mr-1" style={{ color: '#22D3EE' }} />Lyft ${lyftNetMonth.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </span>
-              <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                <Mic2 className="w-3 h-3 inline mr-1" style={{ color: '#F43F5E' }} />DJ ${djEarnedMonth.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </span>
-              <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                <Palette className="w-3 h-3 inline mr-1" style={{ color: '#9333EA' }} />BizzyPlug ${bizzplugEarnedMonth.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={() => handleMetricsMonthChange(1)}
-            className="p-2 rounded-xl transition-all active:scale-95 shrink-0"
-            style={{ backgroundColor: 'rgba(255,255,255,0.18)', color: '#fff' }}
-            aria-label="Next month"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </motion.div>
-
-        {/* ── Financial Summary Banner ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="rounded-2xl mb-6 overflow-hidden"
-          style={{ backgroundImage: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}cc 100%)` }}
-        >
-          <div className="p-4 sm:p-5">
-            {/* Summary filter — All Time or a specific month */}
-            <div className="flex items-center justify-between gap-2 mb-4 rounded-xl p-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
-              <button
-                onClick={() => { setSummaryAllTime(false); handleMetricsMonthChange(-1) }}
-                className="p-1.5 rounded-lg transition-all active:scale-95 shrink-0"
-                style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff' }}
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setSummaryAllTime(false)}
-                className="flex-1 text-center text-xs font-bold py-1 rounded-lg transition-all"
-                style={{ backgroundColor: !summaryAllTime ? 'rgba(255,255,255,0.25)' : 'transparent', color: '#fff' }}
-              >
-                {new Date(metricsYear, metricsMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </button>
-              <button
-                onClick={() => setSummaryAllTime(true)}
-                className="text-xs font-bold py-1.5 px-3 rounded-lg transition-all shrink-0"
-                style={{ backgroundColor: summaryAllTime ? 'rgba(255,255,255,0.25)' : 'transparent', color: '#fff' }}
-              >
-                All Time
-              </button>
-              <button
-                onClick={() => { setSummaryAllTime(false); handleMetricsMonthChange(1) }}
-                className="p-1.5 rounded-lg transition-all active:scale-95 shrink-0"
-                style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff' }}
-                aria-label="Next month"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Metrics row */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
-                <div className="flex items-center gap-1.5 mb-1">
-                  <DollarSign className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
-                  <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                    Total Income
-                  </p>
+  const renderSavingsTab = () => {
+    if (savingsAccounts.length === 0) {
+      return <EmptyState title="No savings accounts yet" sub="Add an account to track its balance and a goal." action={<Button variant="primary" onClick={() => setNewAcctOpen(true)}><Plus size={15} /> New account</Button>} />
+    }
+    return (
+      <div ref={savingsSectionRef} className="grid gap-4 md:gap-5 md:grid-cols-2 items-start">
+        {savingsAccounts.map(acct => {
+          const editing = collapsedAccounts[acct.id] === false
+          const pctGoal = acct.goal > 0 ? (acct.amount / acct.goal) * 100 : 0
+          return (
+            <Panel key={acct.id}>
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium truncate" style={{ color: theme.subtext }}>{acct.name}</p>
+                  <p className="text-[26px] font-semibold tnum tracking-tight leading-tight" style={{ color: theme.text }}>{fmt(acct.amount)}</p>
                 </div>
-                <p className="text-xl font-black text-white tabular-nums">
-                  ${summaryTotalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  Lyft · DJ Gigs · BizzyPlug
-                </p>
+                <RowMenu label={`More actions for ${acct.name}`} items={[
+                  { label: editing ? 'Done editing' : 'Edit balance and goal', icon: Edit3, onClick: () => setCollapsedAccounts(p => ({ ...p, [acct.id]: editing ? true : false })) },
+                  { label: 'Delete account', icon: Trash2, danger: true, onClick: () => deleteAccount(acct.id) },
+                ]} />
               </div>
-              <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}>
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Target className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.8)' }} />
-                  <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                    Total Savings
-                  </p>
+              {acct.goal > 0 && (
+                <div className="mt-3">
+                  <Bar pct={pctGoal} color={pctGoal >= 100 ? theme.ok : theme.accent} />
+                  <p className="text-[11.5px] mt-1.5 tnum" style={{ color: theme.subtext }}>{Math.round(pctGoal)}% of {fmt(acct.goal)} goal{acct.goal > acct.amount ? ` · ${fmt(acct.goal - acct.amount)} to go` : ''}</p>
                 </div>
-                <p className="text-xl font-black text-white tabular-nums">
-                  ${summaryTotals.totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  {savingsAccounts.length} account{savingsAccounts.length !== 1 ? 's' : ''} · current balance
-                </p>
-              </div>
-            </div>
+              )}
 
-            {/* Income by Source breakdown */}
-            <div className="mb-4 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
-              <div className="px-3 pt-3 pb-2">
-                <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'rgba(255,255,255,0.8)' }}>Income by Source</p>
-              </div>
-              <div className="px-3 pb-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Car className="w-3 h-3" style={{ color: '#22D3EE' }} />
-                    <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>Lyft</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{summaryLyftSessions.length} sessions · {summaryLyftTrips} trips</span>
-                  </div>
-                  <span className="text-sm font-black text-white tabular-nums">${summaryLyftNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              {editing && (
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <Field label="Balance ($)"><input type="number" inputMode="decimal" value={acct.amount} onChange={e => updateAccount(acct.id, { amount: parseFloat(e.target.value) || 0 })} {...field} /></Field>
+                  <Field label="Goal ($)"><input type="number" inputMode="decimal" value={acct.goal || ''} placeholder="Optional" onChange={e => updateAccount(acct.id, { goal: parseFloat(e.target.value) || 0 })} {...field} /></Field>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Mic2 className="w-3 h-3" style={{ color: '#F43F5E' }} />
-                    <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>DJ Gigs</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{summaryDjGigs.length} gigs</span>
-                  </div>
-                  <span className="text-sm font-black text-white tabular-nums">${summaryDjEarned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              )}
+
+              <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${theme.border}` }}>
+                <p className="text-xs font-medium mb-2" style={{ color: theme.subtext }}>Add money</p>
+                <div className="grid grid-cols-4 gap-1.5 mb-2">
+                  {[10, 25, 50, 100].map(amt => (
+                    <Button key={amt} size="sm" onClick={() => addToAccount(acct.id, amt)}>+${amt}</Button>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Palette className="w-3 h-3" style={{ color: '#F59E0B' }} />
-                    <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>BizzyPlug</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>{summaryBizzplugClients.length} clients</span>
-                  </div>
-                  <span className="text-sm font-black text-white tabular-nums">${summaryBizzplugEarned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="Other amount"
+                    aria-label={`Other amount to add to ${acct.name}`}
+                    value={customAddAmounts[acct.id] || ''}
+                    onChange={e => setCustomAddAmounts(prev => ({ ...prev, [acct.id]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') { addToAccount(acct.id, parseFloat(customAddAmounts[acct.id] || '0')); setCustomAddAmounts(prev => ({ ...prev, [acct.id]: '' })) } }}
+                    {...field}
+                  />
+                  <Button variant="primary" disabled={!(parseFloat(customAddAmounts[acct.id] || '0') > 0)} onClick={() => { addToAccount(acct.id, parseFloat(customAddAmounts[acct.id] || '0')); setCustomAddAmounts(prev => ({ ...prev, [acct.id]: '' })) }}>Add</Button>
                 </div>
               </div>
-            </div>
-
-            {/* CTA row */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  const name = window.prompt('Account name (e.g., Emergency Fund):');
-                  if (name && name.trim()) {
-                    const newAcct: SavingsAccount = {
-                      id: Date.now().toString(),
-                      name: name.trim(),
-                      amount: 0,
-                      goal: 0,
-                      saved: false,
-                    };
-                    const updated = [...savingsAccounts, newAcct];
-                    setSavingsAccounts(updated);
-                    setLocalSynced('orca-savings-accounts', JSON.stringify(updated));
-                  }
-                  setActiveTab('savings');
-                  setTimeout(() => {
-                    savingsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 120);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
-                style={{ backgroundColor: '#fff', color: theme.accent }}
-              >
-                <TrendingUp className="w-4 h-4" />
-                Add Savings
-              </button>
-            </div>
-          </div>
-        </motion.div>
-
-        <div
-          style={{ backgroundColor: `${theme.accent}20`, border: `1px solid ${theme.accent}` }}
-          className="rounded-2xl p-1 mb-8 flex gap-2"
-        >
-          {(['income', 'savings'] as Tab[]).map((tab) => (
-            <motion.button
-              key={tab}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                backgroundColor: activeTab === tab ? theme.accent : 'transparent',
-                color: activeTab === tab ? '#fff' : theme.accent,
-              }}
-              className="flex-1 py-3 rounded-2xl font-bold capitalize transition-all"
-            >
-              {tab}
-            </motion.button>
-          ))}
-        </div>
-
-        {activeTab === 'income' && renderIncomeTab()}
-        {activeTab === 'savings' && renderSavingsTab()}
+            </Panel>
+          )
+        })}
       </div>
-    </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div style={{ backgroundColor: theme.bg }} className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-sm" style={{ color: theme.subtext }}>Loading…</div>
+      </div>
+    )
+  }
+
+  const sources = [
+    { key: 'lyft' as const, name: 'Lyft', value: summaryLyftNet, meta: `${summaryLyftSessions.length} week${summaryLyftSessions.length === 1 ? '' : 's'}, net of gas` },
+    { key: 'dj' as const, name: 'DJ Maskoff', value: summaryDjEarned, meta: `${summaryDjGigs.length} gig${summaryDjGigs.length === 1 ? '' : 's'}` },
+    { key: 'bizzplug' as const, name: 'BizzyPlug', value: summaryBizzplugEarned, meta: `${summaryBizzplugClients.length} client${summaryBizzplugClients.length === 1 ? '' : 's'}` },
+  ]
+  const maxSource = Math.max(...sources.map(x => x.value), 1)
+
+  return (
+    <PageShell>
+      <PageHeader
+        title="Smart Stack"
+        sub="Income from every business, and your savings"
+        right={<>
+          <MonthSwitcher month={metricsMonth} year={metricsYear} onChange={dir => { setSummaryAllTime(false); handleMetricsMonthChange(dir) }} />
+          <Segmented size="sm" value={summaryAllTime ? 'all' : 'month'} onChange={v => setSummaryAllTime(v === 'all')} options={[{ value: 'month', label: 'Month' }, { value: 'all', label: 'All time' }]} />
+        </>}
+      />
+
+      <Panel pad={false} className="mb-5">
+        <div className="grid md:grid-cols-[1.6fr_1fr]">
+          <div className="p-5">
+            <p className="text-xs font-medium" style={{ color: theme.subtext }}>Total income · {summaryAllTime ? 'all time' : `${monthLabel} ${metricsYear}`}</p>
+            <p className="mt-1 text-[30px] md:text-[34px] font-semibold tnum tracking-tight leading-tight" style={{ color: theme.text }}>{fmt(summaryTotalIncome)}</p>
+            <ul className="mt-4 space-y-3">
+              {sources.map(src => (
+                <li key={src.key}>
+                  <div className="flex items-baseline justify-between gap-3 text-[13px] mb-1.5">
+                    <span className="flex items-center gap-2 min-w-0" style={{ color: theme.text }}>
+                      <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ backgroundColor: streamColors[src.key] }} />
+                      {src.name}
+                      <span className="text-xs truncate" style={{ color: theme.subtext }}>{src.meta}</span>
+                    </span>
+                    <span className="font-medium tnum shrink-0" style={{ color: theme.text }}>{fmt(src.value)}</span>
+                  </div>
+                  <Bar pct={(src.value / maxSource) * 100} color={streamColors[src.key]} />
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="p-5 flex flex-col justify-between gap-4 border-t md:border-t-0 md:border-l" style={{ borderColor: theme.border }}>
+            <Stat label="Total savings" value={fmt(summaryTotals.totalSavings)} sub={`${savingsAccounts.length} account${savingsAccounts.length !== 1 ? 's' : ''}, current balance`} />
+            <div className="flex gap-2">
+              <Button variant="primary" className="flex-1" onClick={() => setNewAcctOpen(true)}><Plus size={15} /> New account</Button>
+              <Button className="flex-1" onClick={() => setActiveTab('savings')}>View savings</Button>
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      <div className="mb-4">
+        <Segmented value={activeTab} onChange={v => setActiveTab(v as Tab)} options={[{ value: 'income', label: 'Income' }, { value: 'savings', label: `Savings${savingsAccounts.length ? ` · ${savingsAccounts.length}` : ''}` }]} />
+      </div>
+
+      {activeTab === 'income' && renderIncomeTab()}
+      {activeTab === 'savings' && renderSavingsTab()}
+
+      <Sheet
+        open={lyftFormExpanded}
+        onClose={() => setLyftFormExpanded(false)}
+        title="Log a Lyft week"
+        footer={<>
+          <Button className="flex-1" onClick={() => setLyftFormExpanded(false)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!lyftAddEarnings || !lyftAddDate} onClick={addLyftSession}>Save week</Button>
+        </>}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Week ending"><input type="date" value={lyftAddDate} onChange={e => setLyftAddDate(e.target.value)} {...field} /></Field>
+          <Field label="Total earned ($)"><input type="number" inputMode="decimal" value={lyftAddEarnings} onChange={e => setLyftAddEarnings(e.target.value)} autoFocus {...field} /></Field>
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={newAcctOpen}
+        onClose={() => setNewAcctOpen(false)}
+        title="New savings account"
+        footer={<>
+          <Button className="flex-1" onClick={() => setNewAcctOpen(false)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!newAcctName.trim()} onClick={createAccount}>Create account</Button>
+        </>}
+      >
+        <div className="space-y-3">
+          <Field label="Name"><input value={newAcctName} onChange={e => setNewAcctName(e.target.value)} placeholder="e.g. Emergency fund" autoFocus onKeyDown={e => e.key === 'Enter' && createAccount()} {...field} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Starting balance ($)"><input type="number" inputMode="decimal" value={newAcctBalance} onChange={e => setNewAcctBalance(e.target.value)} placeholder="0" {...field} /></Field>
+            <Field label="Goal ($)" hint="Optional"><input type="number" inputMode="decimal" value={newAcctGoal} onChange={e => setNewAcctGoal(e.target.value)} {...field} /></Field>
+          </div>
+        </div>
+      </Sheet>
+    </PageShell>
   );
 }

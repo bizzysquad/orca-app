@@ -60,9 +60,14 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
     return subscribeSyncState(setSyncState)
   }, [])
 
+  // Only the very first load shows a loading state. Later reloads (after a
+  // cloud sync, or when the tab regains focus) refresh data in the background,
+  // so pages never flash back to a loading screen while you are using them.
+  const hasLoadedRef = useRef(false)
+
   const loadData = useCallback(async () => {
     try {
-      setLoading(true)
+      if (!hasLoadedRef.current) setLoading(true)
       setError(null)
 
       const { data: authData } = await supabase.auth.getUser()
@@ -245,6 +250,7 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
       console.error('Error loading user data:', err)
       setError(err.message || 'Failed to load data')
     } finally {
+      hasLoadedRef.current = true
       setLoading(false)
     }
   }, [supabase])
