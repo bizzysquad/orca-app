@@ -18,13 +18,13 @@ export function PageShell({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function PageHeader({ title, sub, right }: { title: string; sub?: string; right?: React.ReactNode }) {
+export function PageHeader({ title, sub, right }: { title: string; sub?: React.ReactNode; right?: React.ReactNode }) {
   const { theme } = useTheme()
   return (
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
       <div className="min-w-0">
         <h1 className="text-[26px] md:text-[30px] font-semibold tracking-tight leading-tight" style={{ color: theme.text }}>{title}</h1>
-        {sub && <p className="text-[13.5px] mt-1" style={{ color: theme.subtext }}>{sub}</p>}
+        {sub && <div className="text-[13.5px] mt-1" style={{ color: theme.subtext }}>{sub}</div>}
       </div>
       {right && <div className="flex items-center gap-2 flex-wrap">{right}</div>}
     </div>

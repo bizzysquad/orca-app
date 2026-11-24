@@ -350,7 +350,7 @@ export default function DashboardPage() {
     ...(newQuoteCount > 0 && !dismissedAt.quotes
       ? [{ key: 'quotes', label: plural(newQuoteCount, 'new DJ quote'), sub: 'Review in DJ Maskoff', href: '/dj', icon: Disc3 }] : []),
     ...(newTestimonialCount > 0 && !dismissedAt.reviews
-      ? [{ key: 'reviews', label: plural(newTestimonialCount, 'new review'), sub: 'See the Website tab', href: '/dj', icon: Star }] : []),
+      ? [{ key: 'reviews', label: plural(newTestimonialCount, 'new review'), sub: 'DJ Maskoff, Settings, Website', href: '/dj', icon: Star }] : []),
   ]
 
   // ── Today ──

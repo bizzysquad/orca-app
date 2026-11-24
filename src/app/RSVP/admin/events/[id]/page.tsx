@@ -67,7 +67,7 @@ function Section({ icon: Icon, title, action, children }: { icon: any; title: st
   return (
     <div className="bg-surface-card border border-surface-border rounded-2xl p-5 sm:p-6 mb-6">
       <div className="flex items-center justify-between mb-5">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-text-primary uppercase tracking-wide">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-text-primary">
           <Icon size={16} className="text-gold" /> {title}
         </h2>
         {action}
@@ -112,6 +112,7 @@ export default function EventEditorPage() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [publishing, setPublishing] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [tab, setTab] = useState<'basics' | 'venue' | 'voting' | 'tickets' | 'perks' | 'questions'>('basics')
   const [message, setMessage] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -376,73 +377,76 @@ Type DELETE to confirm:`
 
   return (
     <AdminShell>
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
-        <div>
-          <button onClick={() => router.push('/RSVP/admin')} className="text-2xs text-text-muted hover:text-text-secondary mb-1">← All events</button>
-          <h1 className="text-2xl font-extrabold text-text-primary">{event.name}</h1>
-          <p className="text-2xs text-text-muted mt-1">/RSVP/events/{event.slug}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {message && <span className="text-2xs text-emerald-400 font-semibold">{message}</span>}
-          {errorMsg && <span className="text-2xs text-danger font-semibold">{errorMsg}</span>}
-          <span className={`text-2xs font-bold px-2.5 py-1 rounded-full ${(PUBLISH_BADGE[event.status] || PUBLISH_BADGE.draft).cls}`}>
-            {(PUBLISH_BADGE[event.status] || PUBLISH_BADGE.draft).label}
-          </span>
-          <a
-            href={`/RSVP/events/${event.slug}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-surface-border text-xs font-semibold text-text-secondary hover:text-text-primary hover:border-gold/40 transition"
-          >
-            <Eye size={13} /> Preview <ExternalLink size={11} />
-          </a>
-          <button
-            onClick={deleteEvent}
-            disabled={deleting}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-danger/40 text-xs font-semibold text-danger hover:bg-danger/10 disabled:opacity-60 transition"
-          >
-            {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete
-          </button>
-          {LIVE_STATUSES.has(event.status) ? (
-            <>
-              <button
-                onClick={() => setStatus('draft')}
-                disabled={publishing}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-surface-border text-xs font-semibold text-text-secondary hover:text-text-primary disabled:opacity-60 transition"
-              >
-                {publishing ? <Loader2 size={13} className="animate-spin" /> : <EyeOff size={13} />} Unpublish
-              </button>
-              <div className="relative">
-                <button onClick={() => setMenuOpen(o => !o)} aria-label="More" className="p-2 rounded-lg border border-surface-border text-text-secondary hover:text-text-primary">
-                  <MoreHorizontal size={15} />
-                </button>
-                {menuOpen && (
-                  <div className="absolute right-0 z-30 mt-1.5 w-48 rounded-xl border border-surface-border bg-surface-elevated shadow-card-hover p-1">
-                    {event.status === 'sold_out' ? (
-                      <button onClick={() => setStatus(liveStageFor(event, dates))} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">Reopen Sales</button>
-                    ) : (
-                      <button onClick={() => setStatus('sold_out')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">Mark Sold Out</button>
-                    )}
-                    <button onClick={() => setStatus('completed', 'End this event? It moves to past events.')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">End Event</button>
-                    <button onClick={() => setStatus('cancelled', 'Cancel this event? It disappears from the public site.')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger/10">Cancel Event</button>
-                  </div>
-                )}
-              </div>
-            </>
-          ) : (
-            <button
-              onClick={() => setStatus(liveStageFor(event, dates))}
-              disabled={publishing}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gold-gradient text-brand-black text-xs font-bold disabled:opacity-60 hover:shadow-gold transition"
-            >
-              {publishing ? <Loader2 size={13} className="animate-spin" /> : <Rocket size={13} />} {event.status === 'draft' ? 'Publish' : 'Republish'}
+      <div className="sticky top-[104px] lg:top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-1 pb-3 mb-5" style={{ background: 'var(--body-bg)' }}>
+        <button onClick={() => router.push('/RSVP/admin')} className="text-xs text-text-muted hover:text-text-secondary mb-1">← All events</button>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-[24px] md:text-[28px] font-semibold tracking-tight text-text-primary truncate">{event.name}</h1>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className={`text-[11.5px] font-semibold px-2 py-0.5 rounded-full ${(PUBLISH_BADGE[event.status] || PUBLISH_BADGE.draft).cls}`}>
+                {(PUBLISH_BADGE[event.status] || PUBLISH_BADGE.draft).label}
+              </span>
+              <span className="text-xs text-text-muted truncate">/RSVP/events/{event.slug}</span>
+              {message && <span className="text-xs text-emerald-400 font-semibold">{message}</span>}
+              {errorMsg && <span className="text-xs text-danger font-semibold">{errorMsg}</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <a href={`/RSVP/events/${event.slug}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-surface-border text-[13px] font-medium text-text-secondary hover:text-text-primary transition">
+              <Eye size={14} /> Preview
+            </a>
+            <button onClick={saveCore} disabled={savingCore} className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-surface-border text-[13px] font-medium text-text-primary disabled:opacity-60 transition">
+              {savingCore ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
             </button>
-          )}
+            {LIVE_STATUSES.has(event.status) ? (
+              <button onClick={() => setStatus('draft')} disabled={publishing} className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-surface-border text-[13px] font-medium text-text-secondary hover:text-text-primary disabled:opacity-60 transition">
+                {publishing ? <Loader2 size={14} className="animate-spin" /> : <EyeOff size={14} />} Unpublish
+              </button>
+            ) : (
+              <button onClick={() => setStatus(liveStageFor(event, dates))} disabled={publishing} className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-gold-gradient text-brand-black text-[13px] font-semibold disabled:opacity-60 transition">
+                {publishing ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />} {event.status === 'draft' ? 'Publish' : 'Republish'}
+              </button>
+            )}
+            <div className="relative">
+              <button onClick={() => setMenuOpen(o => !o)} aria-label="More actions" className="w-9 h-9 flex items-center justify-center rounded-lg border border-surface-border text-text-secondary hover:text-text-primary">
+                <MoreHorizontal size={16} />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 z-30 mt-1.5 w-52 rounded-xl border border-surface-border bg-surface-elevated shadow-card-hover p-1">
+                  {LIVE_STATUSES.has(event.status) && (event.status === 'sold_out' ? (
+                    <button onClick={() => setStatus(liveStageFor(event, dates))} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">Reopen sales</button>
+                  ) : (
+                    <button onClick={() => setStatus('sold_out')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">Mark sold out</button>
+                  ))}
+                  {LIVE_STATUSES.has(event.status) && (
+                    <>
+                      <button onClick={() => setStatus('completed', 'End this event? It moves to past events.')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-primary hover:bg-white/5">End event</button>
+                      <button onClick={() => setStatus('cancelled', 'Cancel this event? It disappears from the public site.')} className="w-full text-left px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger/10">Cancel event</button>
+                    </>
+                  )}
+                  <button onClick={() => { setMenuOpen(false); deleteEvent() }} disabled={deleting} className="w-full text-left px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger/10 flex items-center gap-2">
+                    {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete event
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 flex gap-1 p-0.5 rounded-lg border border-surface-border overflow-x-auto no-scrollbar w-fit max-w-full" role="tablist">
+          {([
+            ['basics', 'Basics'], ['venue', 'Venue and time'], ['voting', 'Voting and polls'],
+            ['tickets', 'Tickets'], ['perks', 'Perks'], ['questions', 'Questions and FAQs'],
+          ] as const).map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+              className={`px-3 h-8 rounded-md text-[13px] font-medium whitespace-nowrap transition ${tab === k ? 'bg-surface-card text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* BASICS */}
-      <Section icon={Music2} title="Event Basics">
+      {tab === 'basics' && <Section icon={Music2} title="Event basics">
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Event Name">
             <input className={inputCls} value={event.name || ''} onChange={e => setField('name', e.target.value)} />
@@ -515,10 +519,10 @@ Type DELETE to confirm:`
             <textarea rows={2} className={inputCls} value={event.performer_info || ''} onChange={e => setField('performer_info', e.target.value)} />
           </Field>
         </div>
-      </Section>
+      </Section>}
 
       {/* VENUE & SCHEDULE */}
-      <Section icon={MapPin} title="Venue & Schedule">
+      {tab === 'venue' && <Section icon={MapPin} title="Venue and schedule">
         <div className="mb-4">
           <PresetMenu
             label="Saved venues"
@@ -580,10 +584,10 @@ Type DELETE to confirm:`
             </Field>
           </div>
         </div>
-      </Section>
+      </Section>}
 
       {/* VOTING: PROPOSED DATES */}
-      <Section
+      {tab === 'voting' && <><Section
         icon={Calendar}
         title="Proposed Dates (Voting)"
         action={<SaveButton onClick={saveDates} saving={savingDates} />}
@@ -631,7 +635,7 @@ Type DELETE to confirm:`
       </Section>
 
       {/* POLLS */}
-      <Section icon={ListChecks} title="Community Polls (DJ / Genre / Venue / Theme)" action={<SaveButton onClick={savePolls} saving={savingPolls} />}>
+      <Section icon={ListChecks} title="Community polls" action={<SaveButton onClick={savePolls} saving={savingPolls} />}>
         <div className="space-y-5">
           {pollQuestions.map((q, qi) => (
             <div key={q.id || qi} className="border border-surface-border rounded-xl p-4">
@@ -699,10 +703,10 @@ Type DELETE to confirm:`
         >
           <Plus size={13} /> Add Poll Question
         </button>
-      </Section>
+      </Section></>}
 
       {/* CAPACITY & PRICING */}
-      <Section icon={Ticket} title="RSVP / Ticketing">
+      {tab === 'tickets' && <Section icon={Ticket} title="RSVPs and ticketing">
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Community Goal (supporters)" hint="Momentum bar target on the /RSVP homepage. Falls back to RSVP capacity.">
             <input type="number" className={inputCls} value={event.rsvp_goal ?? ''} onChange={e => setField('rsvp_goal', e.target.value ? Number(e.target.value) : null)} />
@@ -749,12 +753,15 @@ Type DELETE to confirm:`
             <textarea rows={3} className={inputCls} value={event.policies || ''} onChange={e => setField('policies', e.target.value)} />
           </Field>
         </div>
-      </Section>
+      </Section>}
 
-      <PerksPanel eventId={id} flash={flash} />
+      {tab === 'perks' && <PerksPanel eventId={id} flash={flash} />}
 
       {/* TICKET TYPES */}
-      {event.is_paid && (
+      {tab === 'tickets' && !event.is_paid && (
+        <p className="text-[13px] text-text-secondary mb-6">Ticket types and promo codes appear when the event is set to Paid Tickets.</p>
+      )}
+      {tab === 'tickets' && event.is_paid && (
         <Section icon={Ticket} title="Ticket Types" action={<SaveButton onClick={saveTicketTypes} saving={savingTickets} />}>
           <div className="space-y-3">
             {ticketTypes.map((t, i) => (
@@ -804,7 +811,7 @@ Type DELETE to confirm:`
       )}
 
       {/* PROMO CODES */}
-      {event.is_paid && (
+      {tab === 'tickets' && event.is_paid && (
         <Section icon={Percent} title="Promo Codes" action={<SaveButton onClick={savePromoCodes} saving={savingPromo} />}>
           <div className="space-y-3">
             {promoCodes.map((c, i) => (
@@ -853,7 +860,7 @@ Type DELETE to confirm:`
       )}
 
       {/* CUSTOM RSVP QUESTIONS */}
-      <Section icon={HelpCircle} title="Custom RSVP Questions" action={<SaveButton onClick={saveCore} saving={savingCore} />}>
+      {tab === 'questions' && <><Section icon={HelpCircle} title="Custom RSVP questions" action={<SaveButton onClick={saveCore} saving={savingCore} />}>
         <div className="space-y-2">
           {customQuestions.map((q, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -928,17 +935,8 @@ Type DELETE to confirm:`
         >
           <Plus size={13} /> Add FAQ
         </button>
-      </Section>
+      </Section></>}
 
-      <div className="flex justify-end pb-12">
-        <button
-          onClick={saveCore}
-          disabled={savingCore}
-          className="flex items-center gap-2 px-6 py-3 rounded-lg bg-gold-gradient text-brand-black font-bold text-sm disabled:opacity-60 hover:shadow-gold transition"
-        >
-          {savingCore ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save All Changes
-        </button>
-      </div>
     </AdminShell>
   )
 }

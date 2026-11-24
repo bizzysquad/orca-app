@@ -41,7 +41,7 @@ export default function SuggestionsAdminPage() {
   return (
     <AdminShell>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-extrabold text-text-primary">Suggestions</h1>
+        <h1 className="text-[26px] md:text-[30px] font-semibold tracking-tight text-text-primary">Suggestions</h1>
         <div className="flex gap-1">
           <button
             onClick={() => setSortByVotes(v => !v)}

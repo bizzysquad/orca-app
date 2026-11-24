@@ -76,7 +76,7 @@ export default function StaffSettingsPage() {
 
   return (
     <AdminShell>
-      <h1 className="text-2xl font-extrabold text-text-primary mb-1">Staff Passwords</h1>
+      <h1 className="text-[26px] md:text-[30px] font-semibold tracking-tight text-text-primary mb-1">Staff Passwords</h1>
       <p className="text-sm text-text-secondary mb-6">
         Each role signs in with one shared password. Change any of them here — takes effect immediately, no redeploy needed.
       </p>

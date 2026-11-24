@@ -32,6 +32,7 @@ export default function EmailsAdminPage() {
   const [customEmails, setCustomEmails] = useState('')
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState('')
+  const [view, setView] = useState<'send' | 'templates'>('send')
 
   useEffect(() => {
     Promise.all([
@@ -100,11 +101,18 @@ export default function EmailsAdminPage() {
 
   return (
     <AdminShell>
-      <h1 className="text-2xl font-extrabold text-text-primary mb-6">Emails</h1>
+      <h1 className="text-[26px] md:text-[30px] font-semibold tracking-tight text-text-primary">Emails</h1>
+      <p className="text-[13.5px] text-text-secondary mt-1 mb-5">Send a campaign to a group of guests, or edit the emails sent automatically.</p>
+      <div className="mb-5 flex gap-1 p-0.5 rounded-lg border border-surface-border w-fit" role="tablist">
+        {([['send', 'Send campaign'], ['templates', `Templates · ${templates.length}`]] as const).map(([k, l]) => (
+          <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`px-3 h-8 rounded-md text-[13px] font-medium ${view === k ? 'bg-surface-card text-text-primary shadow-sm' : 'text-text-secondary'}`}>{l}</button>
+        ))}
+      </div>
 
       {/* Campaign sender */}
-      <div className="bg-surface-card border border-surface-border rounded-2xl p-5 sm:p-6 mb-8">
-        <h2 className="text-sm font-bold text-text-primary mb-4 flex items-center gap-2"><Send size={15} className="text-gold" /> Send Campaign</h2>
+      {view === 'send' && <div className="bg-surface-card border border-surface-border rounded-2xl p-5 sm:p-6 mb-8">
+        <h2 className="text-[15px] font-semibold text-text-primary mb-1 flex items-center gap-2"><Send size={15} className="text-gold" /> Send a campaign</h2>
+        <p className="text-xs text-text-secondary mb-4">Pick the event, who gets it, and which email to send.</p>
         <div className="grid sm:grid-cols-3 gap-3 mb-3">
           <select className={inputCls} value={campaignEvent} onChange={e => setCampaignEvent(e.target.value)}>
             {events.map(ev => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
@@ -131,12 +139,12 @@ export default function EmailsAdminPage() {
           disabled={sending || !campaignEvent}
           className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gold-gradient text-brand-black font-bold text-xs disabled:opacity-60"
         >
-          {sending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />} Send Now
+          {sending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />} Send now
         </button>
-      </div>
+      </div>}
 
       {/* Template editor */}
-      <div className="grid lg:grid-cols-[220px_1fr] gap-6">
+      {view === 'templates' && <div className="grid lg:grid-cols-[220px_1fr] gap-6">
         <div className="space-y-1">
           {templates.map(t => (
             <button
@@ -197,7 +205,7 @@ export default function EmailsAdminPage() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
     </AdminShell>
   )
 }

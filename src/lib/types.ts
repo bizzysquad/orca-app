@@ -651,6 +651,8 @@ export interface DJGig {
   notes?: string
   createdAt: string
   isLead?: boolean
+  // Set when the gig was created by a recurring series (DJ Settings).
+  seriesId?: string
 }
 
 export interface DJBookingRequest {

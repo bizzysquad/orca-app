@@ -1,38 +1,29 @@
 'use client'
 
+// DJ Maskoff admin (2026-11 redesign). Layout rebuilt on the shared UI kit;
+// gig, payment, sync, quote, email, client and website logic is unchanged.
+// New: Settings → Recurring events (see src/lib/djRecurring.ts).
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
 import {
-  Mic2, Plus, Calendar, DollarSign,
-  Check, Clock, MapPin, Phone, Mail, Trash2, ChevronRight,
-  Edit3, X, Users, FileText, ChevronDown, ChevronUp,
-  AlertCircle, Star, TrendingUp, CheckCircle, AlertTriangle,
-  Send, Copy, Loader2, CheckCircle2, XCircle, Ban, MessageSquare, RefreshCw, Globe,
+  Plus, Check, Clock, MapPin, Phone, Mail, Trash2, ChevronRight, Edit3, X, Users,
+  AlertCircle, AlertTriangle, Send, Copy, Loader2, CheckCircle2, RefreshCw, ExternalLink,
+  Pause, Play, Repeat, Upload, Star, Ban, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
 import type { DJGig, GigStatus, GigType, DJPartialPayment } from '@/lib/types'
 import { fmt } from '@/lib/utils'
-import { fullSync, syncDjCalendar, setLocalSynced, type SyncStatus as EngineSyncStatus } from '@/lib/syncEngine'
-
-const BENTLEY_GOLD = '#F59E0B'
-const BENTLEY_INDIGO = '#6366F1'
-const BENTLEY_GREEN = '#10B981'
-const BENTLEY_RED = '#EF4444'
-const DJ_PINK = '#F43F5E'
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 280, damping: 26 } },
-}
-
-const STATUS_CONFIG: Record<GigStatus, { label: string; color: string }> = {
-  inquiry:   { label: 'Inquiry',    color: '#94A3B8' },
-  pending:   { label: 'Pending',    color: BENTLEY_GOLD },
-  confirmed: { label: 'Confirmed',  color: BENTLEY_GREEN },
-  completed: { label: 'Completed',  color: BENTLEY_INDIGO },
-  cancelled: { label: 'Cancelled',  color: BENTLEY_RED },
-}
+import { syncDjCalendar, setLocalSynced } from '@/lib/syncEngine'
+import {
+  PageShell, PageHeader, Panel, PanelTitle, MiniStat, Bar, Button, IconButton, RowMenu,
+  Disclosure, EmptyState, useField, Field, Choice, Sheet,
+} from '@/components/ui/kit'
+import { Segmented } from '@/components/layout/CustomizePanel'
+import {
+  RECURRING_KEY, WEEKDAYS, type GigSeries, reconcileSeries, readSeries, describeSeries, localISO, isEditableOccurrence,
+} from '@/lib/djRecurring'
 
 const DEFAULT_GEAR = [
   'Controller / CDJs',
@@ -46,6 +37,16 @@ const DEFAULT_GEAR = [
   'Business cards',
   'Invoice ready',
 ]
+
+// Brand colors used only by the hidden calendar tools below.
+const BENTLEY_GOLD = '#F59E0B'
+const BENTLEY_GREEN = '#10B981'
+const BENTLEY_INDIGO = '#6366F1'
+const BENTLEY_RED = '#EF4444'
+const DJ_PINK = '#F43F5E'
+
+const GIG_TYPES: GigType[] = ['wedding', 'birthday', 'corporate', 'nightclub', 'bar', 'festival', 'private', 'other']
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '')
 
 interface EmailTemplate {
   id: string
@@ -73,15 +74,6 @@ interface BookingRequest {
   budget_range?: string
   status: 'pending' | 'confirmed' | 'declined'
   created_at: string
-}
-
-const REQUEST_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  pending:   { bg: '#451A0325', text: '#F97316' },
-  confirmed: { bg: '#052E1625', text: '#4ADE80' },
-  declined:  { bg: '#450A0A25', text: '#F87171' },
-}
-const REQUEST_STATUS_LABELS: Record<string, string> = {
-  pending: 'New', confirmed: 'Booked', declined: 'Declined',
 }
 
 const DEFAULT_TEMPLATES: EmailTemplate[] = [
@@ -116,9 +108,10 @@ function gid() { return Math.random().toString(36).slice(2, 10) }
 function to12Hour(time: string): string {
   if (!time) return ''
   const [h, m] = time.split(':').map(Number)
+  if (isNaN(h)) return time
   const period = h >= 12 ? 'PM' : 'AM'
   const hour = h % 12 || 12
-  return `${hour}:${String(m).padStart(2, '0')} ${period}`
+  return `${hour}:${String(m || 0).padStart(2, '0')} ${period}`
 }
 
 function BLANK_GIG(): Partial<DJGig> {
@@ -128,8 +121,8 @@ function BLANK_GIG(): Partial<DJGig> {
     clientPhone: '',
     eventType: 'private' as GigType,
     date: '',
-    startTime: '08:00 PM',
-    endTime: '11:00 PM',
+    startTime: '20:00',
+    endTime: '23:00',
     venue: '',
     eventAddress: '',
     status: 'confirmed' as GigStatus,
@@ -157,9 +150,28 @@ function calcTotalPaid(gig: DJGig): number {
   return deposit + partials
 }
 
-// ── Payment Tracker Panel ──
+function useStatusColor() {
+  const { theme } = useTheme()
+  return (s: GigStatus) => ({ confirmed: theme.ok, completed: theme.subtext, cancelled: theme.bad, pending: theme.warn, inquiry: theme.subtext }[s] || theme.subtext)
+}
+const STATUS_LABEL: Record<GigStatus, string> = { inquiry: 'Inquiry', pending: 'Pending', confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled' }
+
+function DateBlock({ date }: { date: string }) {
+  const { theme } = useTheme()
+  const d = date ? new Date(date + 'T00:00:00') : null
+  return (
+    <div className="w-11 text-center shrink-0">
+      <p className="text-[10px] uppercase tracking-wide" style={{ color: theme.subtext }}>{d ? d.toLocaleDateString('en-US', { month: 'short' }) : '—'}</p>
+      <p className="text-[17px] font-semibold tnum leading-tight" style={{ color: theme.text }}>{d ? d.getDate() : ''}</p>
+      <p className="text-[10px]" style={{ color: theme.subtext }}>{d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : ''}</p>
+    </div>
+  )
+}
+
+// ── Payments ──────────────────────────────────────────────────────────────
 function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig) => void }) {
   const { theme } = useTheme()
+  const field = useField()
   const [showAddPayment, setShowAddPayment] = useState(false)
   const [payAmount, setPayAmount] = useState('')
   const [payNote, setPayNote] = useState('')
@@ -172,9 +184,7 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
   const totalPaid = calcTotalPaid(gig)
   const paidPct = contract > 0 ? Math.min((totalPaid / contract) * 100, 100) : 0
 
-  const toggleDeposit = () => {
-    onUpdate({ ...gig, depositPaid: !gig.depositPaid })
-  }
+  const toggleDeposit = () => onUpdate({ ...gig, depositPaid: !gig.depositPaid })
 
   const addPartialPayment = () => {
     const amt = parseFloat(payAmount)
@@ -188,557 +198,263 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
     setShowAddPayment(false)
   }
 
-  const removePartial = (id: string) => {
-    const updated = { ...gig, partialPayments: (gig.partialPayments || []).filter(p => p.id !== id) }
-    onUpdate(updated)
-  }
-
-  const startEditPartial = (p: DJPartialPayment) => {
-    setEditingPartialId(p.id)
-    setEditingPartialAmount(String(p.amount))
-    setEditingPartialNote(p.note || '')
-  }
+  const removePartial = (id: string) => onUpdate({ ...gig, partialPayments: (gig.partialPayments || []).filter(p => p.id !== id) })
 
   const saveEditPartial = () => {
     if (!editingPartialId) return
     const amt = parseFloat(editingPartialAmount)
     if (!amt || amt <= 0) return
-    const updated = {
+    onUpdate({
       ...gig,
-      partialPayments: (gig.partialPayments || []).map(p =>
-        p.id === editingPartialId ? { ...p, amount: amt, note: editingPartialNote || undefined } : p
-      ),
-    }
-    onUpdate(updated)
+      partialPayments: (gig.partialPayments || []).map(p => (p.id === editingPartialId ? { ...p, amount: amt, note: editingPartialNote || undefined } : p)),
+    })
     setEditingPartialId(null)
   }
 
   return (
-    <div className="space-y-3">
-      {/* Balance header */}
-      <div className="rounded-xl p-4 space-y-2" style={{ background: `${BENTLEY_RED}10`, border: `1px solid ${BENTLEY_RED}25` }}>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Balance Remaining</span>
-          <span className="text-xl font-black" style={{ color: remaining <= 0 ? BENTLEY_GREEN : BENTLEY_RED }}>{fmt(remaining)}</span>
+    <div className="space-y-4">
+      <div>
+        <div className="flex items-baseline justify-between mb-2">
+          <span className="text-xs" style={{ color: theme.subtext }}>Balance due</span>
+          <span className="text-[24px] font-semibold tnum" style={{ color: remaining <= 0 ? theme.ok : theme.text }}>{remaining <= 0 ? 'Paid' : fmt(remaining)}</span>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center mt-2">
-          <div className="overflow-hidden">
-            <p className="text-[10px] font-semibold" style={{ color: theme.subtext }}>Contract</p>
-            <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{fmt(contract)}</p>
-          </div>
-          <div className="overflow-hidden">
-            <p className="text-[10px] font-semibold" style={{ color: theme.subtext }}>Paid</p>
-            <p className="text-sm font-bold truncate" style={{ color: BENTLEY_GREEN }}>{fmt(totalPaid)}</p>
-          </div>
-          <div className="overflow-hidden">
-            <p className="text-[10px] font-semibold" style={{ color: theme.subtext }}>Due</p>
-            <p className="text-sm font-bold truncate" style={{ color: remaining > 0 ? BENTLEY_RED : BENTLEY_GREEN }}>{remaining > 0 ? fmt(remaining) : 'PAID'}</p>
-          </div>
-        </div>
-        {/* Progress bar */}
-        <div className="h-2 rounded-full overflow-hidden mt-1" style={{ background: theme.border }}>
-          <div className="h-full rounded-full transition-all" style={{ width: `${paidPct}%`, background: paidPct >= 100 ? BENTLEY_GREEN : BENTLEY_GOLD }} />
+        <Bar pct={paidPct} color={paidPct >= 100 ? theme.ok : theme.accent} />
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <MiniStat label="Contract" value={fmt(contract)} />
+          <MiniStat label="Paid so far" value={fmt(totalPaid)} tone={totalPaid > 0 ? theme.ok : undefined} />
         </div>
       </div>
 
-      {/* Deposit row */}
-      <div className="flex items-center justify-between px-3 py-2.5 rounded-xl" style={{ background: theme.bg, border: `1px solid ${theme.border}` }}>
-        <div className="min-w-0 flex-1 mr-3">
-          <p className="text-sm font-semibold" style={{ color: theme.text }}>Deposit</p>
-          <p className="text-xs" style={{ color: theme.subtext }}>{fmt(gig.depositAmount || 0)}</p>
+      <div className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ border: `1px solid ${theme.border}` }}>
+        <div className="flex-1 min-w-0">
+          <p className="text-[13.5px] font-medium" style={{ color: theme.text }}>Deposit</p>
+          <p className="text-xs tnum" style={{ color: theme.subtext }}>{fmt(gig.depositAmount || 0)}</p>
         </div>
-        <button
-          onClick={toggleDeposit}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold shrink-0"
-          style={{ background: gig.depositPaid ? `${BENTLEY_GREEN}18` : `${BENTLEY_GOLD}18`, color: gig.depositPaid ? BENTLEY_GREEN : BENTLEY_GOLD }}
-        >
-          {gig.depositPaid ? <><Check size={11} /> RECEIVED</> : 'PENDING'}
-        </button>
+        <Button size="sm" variant={gig.depositPaid ? 'secondary' : 'primary'} onClick={toggleDeposit}>
+          {gig.depositPaid ? <><Check size={13} style={{ color: theme.ok }} /> Received</> : 'Mark received'}
+        </Button>
       </div>
 
-      {/* Partial payments list */}
       {(gig.partialPayments || []).length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Partial Payments</p>
-          {(gig.partialPayments || []).map(p => (
-            <div key={p.id}>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: `${BENTLEY_INDIGO}10`, border: `1px solid ${BENTLEY_INDIGO}20` }}>
-                <Check size={11} style={{ color: BENTLEY_INDIGO }} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold" style={{ color: theme.text }}>{fmt(p.amount)}</p>
-                  {p.note && <p className="text-[10px]" style={{ color: theme.subtext }}>{p.note}</p>}
-                </div>
-                <p className="text-[10px] shrink-0" style={{ color: theme.subtext }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-                <button
-                  onClick={() => editingPartialId === p.id ? setEditingPartialId(null) : startEditPartial(p)}
-                  className="p-1 rounded"
-                  style={{ color: BENTLEY_INDIGO }}
-                >
-                  <Edit3 size={10} />
-                </button>
-                <button onClick={() => removePartial(p.id)} className="p-1 rounded" style={{ color: BENTLEY_RED }}>
-                  <X size={10} />
-                </button>
-              </div>
-              {editingPartialId === p.id && (
-                <div className="mt-1 p-2.5 rounded-xl space-y-2" style={{ background: `${BENTLEY_INDIGO}08`, border: `1px solid ${BENTLEY_INDIGO}30` }}>
-                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BENTLEY_INDIGO }}>Edit Payment</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="number"
-                      value={editingPartialAmount}
-                      onChange={e => setEditingPartialAmount(e.target.value)}
-                      placeholder="Amount $"
-                      className="px-3 py-2 rounded-xl border text-sm"
-                      style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
-                    />
-                    <input
-                      type="text"
-                      value={editingPartialNote}
-                      onChange={e => setEditingPartialNote(e.target.value)}
-                      placeholder="Note (optional)"
-                      className="px-3 py-2 rounded-xl border text-sm"
-                      style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
-                    />
+        <div>
+          <p className="text-xs font-medium mb-1" style={{ color: theme.subtext }}>Payments</p>
+          <ul>
+            {(gig.partialPayments || []).map((p, i) => (
+              <li key={p.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                {editingPartialId === p.id ? (
+                  <div className="py-2 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" inputMode="decimal" value={editingPartialAmount} onChange={e => setEditingPartialAmount(e.target.value)} aria-label="Amount" {...field} />
+                      <input value={editingPartialNote} onChange={e => setEditingPartialNote(e.target.value)} placeholder="Note" aria-label="Note" {...field} />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button className="flex-1" size="sm" onClick={() => setEditingPartialId(null)}>Cancel</Button>
+                      <Button className="flex-1" size="sm" variant="primary" onClick={saveEditPartial}>Save</Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setEditingPartialId(null)} className="flex-1 py-1.5 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
-                    <button onClick={saveEditPartial} className="flex-1 py-1.5 rounded-xl text-xs font-semibold" style={{ background: BENTLEY_INDIGO, color: '#fff' }}>Save</button>
+                ) : (
+                  <div className="flex items-center gap-2 py-2">
+                    <Check size={13} style={{ color: theme.ok }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium tnum" style={{ color: theme.text }}>{fmt(p.amount)}</p>
+                      {p.note && <p className="text-[11.5px] truncate" style={{ color: theme.subtext }}>{p.note}</p>}
+                    </div>
+                    <span className="text-xs" style={{ color: theme.subtext }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <RowMenu label="Payment actions" items={[
+                      { label: 'Edit', icon: Edit3, onClick: () => { setEditingPartialId(p.id); setEditingPartialAmount(String(p.amount)); setEditingPartialNote(p.note || '') } },
+                      { label: 'Remove', icon: Trash2, danger: true, onClick: () => removePartial(p.id) },
+                    ]} />
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
-      {/* Payment quick actions + form */}
-      {remaining > 0 && !showAddPayment && (
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => { setPayAmount(String(remaining)); setShowAddPayment(true) }}
-            className="py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5"
-            style={{ background: `${BENTLEY_GREEN}18`, color: BENTLEY_GREEN, border: `1px solid ${BENTLEY_GREEN}35` }}
-          >
-            <Check size={13} />
-            Paid Full
-          </button>
-          <button
-            onClick={() => { setPayAmount(String(Math.round(remaining / 2 * 100) / 100)); setShowAddPayment(true) }}
-            className="py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5"
-            style={{ background: `${BENTLEY_GOLD}18`, color: BENTLEY_GOLD, border: `1px solid ${BENTLEY_GOLD}35` }}
-          >
-            <DollarSign size={13} />
-            Paid Half
-          </button>
-          <button
-            onClick={() => { setPayAmount(''); setShowAddPayment(true) }}
-            className="py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5"
-            style={{ background: `${BENTLEY_INDIGO}18`, color: BENTLEY_INDIGO, border: `1px dashed ${BENTLEY_INDIGO}40` }}
-          >
-            <Plus size={13} />
-            Custom
-          </button>
-        </div>
-      )}
-
-      {remaining <= 0 && !showAddPayment && (
-        <button
-          onClick={() => setShowAddPayment(true)}
-          className="w-full py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
-          style={{ background: `${BENTLEY_INDIGO}12`, color: BENTLEY_INDIGO, border: `1px dashed ${BENTLEY_INDIGO}40` }}
-        >
-          <Plus size={12} /> Log Payment
-        </button>
-      )}
-
-      {showAddPayment && (
-        <div className="rounded-xl p-3 space-y-2" style={{ background: `${BENTLEY_INDIGO}08`, border: `1px solid ${BENTLEY_INDIGO}30` }}>
-          <p className="text-xs font-bold" style={{ color: BENTLEY_INDIGO }}>Log Payment</p>
+      {showAddPayment ? (
+        <div className="rounded-xl p-3 space-y-2" style={{ border: `1px solid ${theme.border}` }}>
+          <p className="text-[13px] font-medium" style={{ color: theme.text }}>Log a payment</p>
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="number"
-              value={payAmount}
-              onChange={e => setPayAmount(e.target.value)}
-              placeholder="Amount $"
-              className="px-3 py-2 rounded-xl border text-sm"
-              style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
-            />
-            <input
-              type="text"
-              value={payNote}
-              onChange={e => setPayNote(e.target.value)}
-              placeholder="Note (optional)"
-              className="px-3 py-2 rounded-xl border text-sm"
-              style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
-            />
+            <input type="number" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="Amount" aria-label="Amount" autoFocus {...field} />
+            <input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="Note (optional)" aria-label="Note" {...field} />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowAddPayment(false)} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
-            <button onClick={addPartialPayment} disabled={!payAmount} className="flex-1 py-2 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: BENTLEY_INDIGO, color: '#fff' }}>Save</button>
+            <Button className="flex-1" size="sm" onClick={() => setShowAddPayment(false)}>Cancel</Button>
+            <Button className="flex-1" size="sm" variant="primary" disabled={!payAmount} onClick={addPartialPayment}>Save payment</Button>
           </div>
         </div>
+      ) : remaining > 0 ? (
+        <div className="grid grid-cols-3 gap-2">
+          <Button onClick={() => { setPayAmount(String(remaining)); setShowAddPayment(true) }}>Paid in full</Button>
+          <Button onClick={() => { setPayAmount(String(Math.round((remaining / 2) * 100) / 100)); setShowAddPayment(true) }}>Paid half</Button>
+          <Button onClick={() => { setPayAmount(''); setShowAddPayment(true) }}>Other amount</Button>
+        </div>
+      ) : (
+        <Button className="w-full" onClick={() => setShowAddPayment(true)}><Plus size={14} /> Log a payment</Button>
       )}
     </div>
   )
 }
 
-// ── Gig Edit Form ──
-function GigEditForm({ gig, onSave, onCancel }: {
-  gig: DJGig
-  onSave: (updated: DJGig) => void
-  onCancel: () => void
-}) {
-  const { theme } = useTheme()
+// ── Edit gig ──────────────────────────────────────────────────────────────
+function GigEditForm({ gig, onSave, onCancel }: { gig: DJGig; onSave: (updated: DJGig) => void; onCancel: () => void }) {
+  const field = useField()
   const [form, setForm] = useState<DJGig>({ ...gig })
-  const f = (field: Partial<DJGig>) => setForm(p => ({ ...p, ...field }))
-
-  const inputCls = "w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-  const inputStyle = { background: theme.card, borderColor: theme.border, color: theme.text }
+  const f = (patch: Partial<DJGig>) => setForm(p => ({ ...p, ...patch }))
 
   return (
-    <div className="space-y-3 pt-2">
+    <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Client Name</label>
-          <input className={inputCls} style={inputStyle} value={form.clientName} onChange={e => f({ clientName: e.target.value })} placeholder="Client name" />
-        </div>
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Phone</label>
-          <input className={inputCls} style={inputStyle} value={form.clientPhone || ''} onChange={e => f({ clientPhone: e.target.value })} placeholder="Phone number" />
-        </div>
+        <Field label="Client name"><input value={form.clientName} onChange={e => f({ clientName: e.target.value })} {...field} /></Field>
+        <Field label="Phone"><input value={form.clientPhone || ''} onChange={e => f({ clientPhone: e.target.value })} {...field} /></Field>
       </div>
-
-      <div>
-        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Email</label>
-        <input className={inputCls} style={inputStyle} type="email" value={form.clientEmail || ''} onChange={e => f({ clientEmail: e.target.value })} placeholder="Client email" />
-      </div>
-
-      <div>
-        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Venue</label>
-        <input className={inputCls} style={inputStyle} value={form.venue} onChange={e => f({ venue: e.target.value })} placeholder="Venue name" />
-      </div>
-
-      <div>
-        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Event Address</label>
-        <input className={inputCls} style={inputStyle} value={form.eventAddress || ''} onChange={e => f({ eventAddress: e.target.value })} placeholder="Full event address" />
-      </div>
-
+      <Field label="Email"><input type="email" value={form.clientEmail || ''} onChange={e => f({ clientEmail: e.target.value })} {...field} /></Field>
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Event Date</label>
-          <input className={inputCls} style={inputStyle} type="date" value={form.date} onChange={e => f({ date: e.target.value })} />
-        </div>
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Status</label>
-          <select className={inputCls} style={inputStyle} value={form.status} onChange={e => f({ status: e.target.value as GigStatus })}>
+        <Field label="Venue"><input value={form.venue} onChange={e => f({ venue: e.target.value })} {...field} /></Field>
+        <Field label="Address"><input value={form.eventAddress || ''} onChange={e => f({ eventAddress: e.target.value })} {...field} /></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Date"><input type="date" value={form.date} onChange={e => f({ date: e.target.value })} {...field} /></Field>
+        <Field label="Status">
+          <select value={form.status} onChange={e => f({ status: e.target.value as GigStatus })} {...field}>
             <option value="confirmed">Confirmed</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
-        </div>
+        </Field>
+        <Field label="Start time"><input type="time" value={form.startTime} onChange={e => f({ startTime: e.target.value })} {...field} /></Field>
+        <Field label="End time"><input type="time" value={form.endTime} onChange={e => f({ endTime: e.target.value })} {...field} /></Field>
+        <Field label="Contract ($)"><input type="number" inputMode="decimal" value={form.contractAmount || form.fee || ''} onChange={e => f({ contractAmount: Number(e.target.value), fee: Number(e.target.value) })} {...field} /></Field>
+        <Field label="Deposit ($)"><input type="number" inputMode="decimal" value={form.depositAmount || ''} onChange={e => f({ depositAmount: Number(e.target.value) })} {...field} /></Field>
       </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Start Time</label>
-          <input className={inputCls} style={inputStyle} type="time" value={form.startTime} onChange={e => f({ startTime: e.target.value })} />
-        </div>
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>End Time</label>
-          <input className={inputCls} style={inputStyle} type="time" value={form.endTime} onChange={e => f({ endTime: e.target.value })} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Contract $</label>
-          <input className={inputCls} style={inputStyle} type="number" value={form.contractAmount || form.fee || ''} onChange={e => f({ contractAmount: Number(e.target.value), fee: Number(e.target.value) })} placeholder="0" />
-        </div>
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Deposit $</label>
-          <input className={inputCls} style={inputStyle} type="number" value={form.depositAmount || ''} onChange={e => f({ depositAmount: Number(e.target.value) })} placeholder="0" />
-        </div>
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Event Type</label>
-          <select className={inputCls} style={inputStyle} value={form.customEventType !== undefined ? '__custom__' : form.eventType} onChange={e => {
+      <Field label="Event type">
+        <select
+          value={form.customEventType !== undefined ? '__custom__' : form.eventType}
+          onChange={e => {
             const val = e.target.value
-            if (val === '__custom__') {
-              f({ eventType: 'other', customEventType: form.customEventType || '' })
-            } else {
-              f({ eventType: val as GigType, customEventType: undefined })
-            }
-          }}>
-            {(['wedding','birthday','corporate','nightclub','bar','festival','private','other'] as GigType[]).map(t => (
-              <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-            ))}
-            <option value="__custom__">Custom...</option>
-          </select>
-          {form.customEventType !== undefined && (
-            <input className={inputCls} style={{ ...inputStyle, marginTop: 6 }} placeholder="Enter custom event name" value={form.customEventType || ''} onChange={e => f({ customEventType: e.target.value })} />
-          )}
-        </div>
-      </div>
-
-      <div>
-        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Ticket Link (optional)</label>
-        <input className={inputCls} style={inputStyle} placeholder="https://tickets.example.com" value={form.ticketLink || ''} onChange={e => f({ ticketLink: e.target.value })} />
-      </div>
-
-      <div>
-        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Notes</label>
-        <textarea
-          className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
-          style={{ background: theme.card, borderColor: theme.border, color: theme.text }}
-          rows={3}
-          value={form.notes || ''}
-          onChange={e => f({ notes: e.target.value })}
-          placeholder="Client notes, special requests, etc."
-        />
-      </div>
-
-      {/* Payment section edit */}
-      <div className="space-y-2 pt-1" style={{ borderTop: `1px solid ${theme.border}` }}>
-        <p className="text-[10px] font-bold uppercase tracking-wider pt-2" style={{ color: theme.subtext }}>Payment Details</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Deposit Amount $</label>
-            <input className={inputCls} style={inputStyle} type="number" value={form.depositAmount || ''} onChange={e => f({ depositAmount: Number(e.target.value) })} placeholder="0" />
-          </div>
-          <div className="flex items-end pb-0.5">
-            <button
-              onClick={() => f({ depositPaid: !form.depositPaid })}
-              className="w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
-              style={{ background: form.depositPaid ? `${BENTLEY_GREEN}18` : `${BENTLEY_GOLD}18`, color: form.depositPaid ? BENTLEY_GREEN : BENTLEY_GOLD, border: `1px solid ${form.depositPaid ? BENTLEY_GREEN : BENTLEY_GOLD}40` }}
-            >
-              {form.depositPaid ? <><Check size={11} /> Deposit Received</> : 'Mark Deposit Received'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex gap-3">
-        <button onClick={onCancel} className="flex-1 py-3 rounded-xl text-sm font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
-        <button onClick={() => onSave(form)} className="flex-1 py-3 rounded-xl text-sm font-semibold" style={{ background: DJ_PINK, color: '#fff' }}>Save Changes</button>
+            if (val === '__custom__') f({ eventType: 'other', customEventType: form.customEventType || '' })
+            else f({ eventType: val as GigType, customEventType: undefined })
+          }}
+          {...field}
+        >
+          {GIG_TYPES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
+          <option value="__custom__">Custom…</option>
+        </select>
+      </Field>
+      {form.customEventType !== undefined && (
+        <Field label="Custom event name"><input value={form.customEventType || ''} onChange={e => f({ customEventType: e.target.value })} {...field} /></Field>
+      )}
+      <Field label="Ticket link (optional)"><input value={form.ticketLink || ''} onChange={e => f({ ticketLink: e.target.value })} placeholder="https://" {...field} /></Field>
+      <Field label="Notes"><textarea rows={3} value={form.notes || ''} onChange={e => f({ notes: e.target.value })} {...field} className={`${field.className} h-auto py-2`} /></Field>
+      <Field label="Deposit received" group>
+        <Choice value={form.depositPaid ? 'yes' : 'no'} onChange={v => f({ depositPaid: v === 'yes' })} options={[{ value: 'no', label: 'Not yet' }, { value: 'yes', label: 'Received' }]} />
+      </Field>
+      <div className="flex gap-2 pt-1">
+        <Button className="flex-1" onClick={onCancel}>Cancel</Button>
+        <Button className="flex-1" variant="primary" onClick={() => onSave(form)}>Save changes</Button>
       </div>
     </div>
   )
 }
 
-// ── Gig Card ──
-function GigCard({ gig, onUpdate, onDelete }: {
-  gig: DJGig
-  onUpdate: (updated: DJGig) => void
-  onDelete: (id: string) => void
-}) {
+// ── Gig detail sheet ──────────────────────────────────────────────────────
+function GigSheet({ gig, onClose, onUpdate, onDelete }: { gig: DJGig | null; onClose: () => void; onUpdate: (g: DJGig) => void; onDelete: (id: string) => void }) {
   const { theme } = useTheme()
-  const [tab, setTab] = useState<'info' | 'payments' | 'gear' | 'edit'>('info')
-  const [expanded, setExpanded] = useState(false)
-  const status = STATUS_CONFIG[gig.status] || STATUS_CONFIG.confirmed
-  const today = new Date().toISOString().slice(0, 10)
-  const daysUntil = Math.ceil((new Date(gig.date + 'T00:00:00').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-  const isUpcoming = gig.date >= today && gig.status !== 'cancelled' && gig.status !== 'completed'
+  const statusColor = useStatusColor()
+  const [tab, setTab] = useState<'overview' | 'payments' | 'gear' | 'edit'>('overview')
+  useEffect(() => { setTab('overview') }, [gig?.id])
+  if (!gig) return <Sheet open={false} onClose={onClose} title="">{null}</Sheet>
+
   const gearDone = gig.gearChecklist.filter(g => g.checked).length
-  const remaining = calcRemaining(gig)
-  const contract = gig.contractAmount || gig.fee || 0
-
-  const toggleGear = (itemId: string) => {
-    const updated = { ...gig, gearChecklist: gig.gearChecklist.map(i => i.id === itemId ? { ...i, checked: !i.checked } : i) }
-    onUpdate(updated)
-  }
-
-  const eventTypeLabel = gig.eventType
-    ? gig.eventType.charAt(0).toUpperCase() + gig.eventType.slice(1)
-    : ''
+  const toggleGear = (itemId: string) => onUpdate({ ...gig, gearChecklist: gig.gearChecklist.map(i => (i.id === itemId ? { ...i, checked: !i.checked } : i)) })
+  const typeLabel = gig.customEventType || cap(gig.eventType)
 
   return (
-    <motion.div
-      variants={fadeUp}
-      className="rounded-2xl overflow-hidden"
-      style={{ background: theme.card, border: `1px solid ${isUpcoming && daysUntil <= 3 ? `${DJ_PINK}50` : theme.border}` }}
+    <Sheet
+      open
+      onClose={onClose}
+      title={gig.clientName || 'Gig'}
+      sub={<span>{new Date(gig.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}{typeLabel ? ` · ${typeLabel}` : ''}{gig.seriesId ? ' · Recurring' : ''}</span>}
     >
-      {/* Header row */}
-      <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
-        <div className="p-2 rounded-xl shrink-0" style={{ background: `${DJ_PINK}18` }}>
-          <Mic2 size={15} style={{ color: DJ_PINK }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-bold text-sm" style={{ color: theme.text }}>{gig.clientName}</p>
-            {eventTypeLabel && (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: `${DJ_PINK}12`, color: DJ_PINK }}>
-                {eventTypeLabel}
-              </span>
-            )}
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ background: `${status.color}18`, color: status.color }}>
-              {status.label}
-            </span>
-          </div>
-          <div className="flex items-center gap-3 mt-0.5 text-xs flex-wrap" style={{ color: theme.subtext }}>
-            <span className="flex items-center gap-1">
-              <Calendar size={10} />
-              {new Date(gig.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </span>
-            {isUpcoming && daysUntil >= 0 && (
-              <span style={{ color: daysUntil <= 3 ? DJ_PINK : BENTLEY_GOLD }}>
-                {daysUntil === 0 ? 'TODAY' : `${daysUntil}d away`}
-              </span>
-            )}
-            {contract > 0 && <span style={{ color: remaining <= 0 ? BENTLEY_GREEN : BENTLEY_RED }}>{remaining <= 0 ? '✓ Paid' : `${fmt(remaining)} due`}</span>}
-          </div>
-        </div>
-        {expanded ? <ChevronDown size={14} style={{ color: theme.subtext }} /> : <ChevronRight size={14} style={{ color: theme.subtext }} />}
+      <div className="mb-4 overflow-x-auto no-scrollbar">
+        <Segmented size="sm" value={tab} onChange={v => setTab(v as typeof tab)} options={[
+          { value: 'overview', label: 'Overview' }, { value: 'payments', label: 'Payments' },
+          { value: 'gear', label: `Gear ${gearDone}/${gig.gearChecklist.length}` }, { value: 'edit', label: 'Edit' },
+        ]} />
       </div>
 
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <div style={{ borderTop: `1px solid ${theme.border}` }}>
-              {/* Tabs */}
-              <div className="flex border-b" style={{ borderColor: theme.border }}>
-                {(['info', 'payments', 'gear', 'edit'] as const).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className="flex-1 py-2.5 text-xs font-bold capitalize transition-colors"
-                    style={{
-                      color: tab === t ? DJ_PINK : theme.subtext,
-                      borderBottom: tab === t ? `2px solid ${DJ_PINK}` : '2px solid transparent',
-                    }}
-                  >
-                    {t === 'info' ? 'Info' : t === 'payments' ? 'Payments' : t === 'gear' ? 'Gear' : 'Edit'}
-                  </button>
-                ))}
-              </div>
+      {tab === 'overview' && (
+        <div className="space-y-4">
+          <ul className="space-y-2.5 text-[13.5px]">
+            {gig.venue && <li className="flex items-start gap-2.5" style={{ color: theme.text }}><MapPin size={15} className="mt-0.5 shrink-0" style={{ color: theme.subtext }} />{gig.venue}{gig.eventAddress ? `, ${gig.eventAddress}` : ''}</li>}
+            <li className="flex items-center gap-2.5" style={{ color: theme.text }}><Clock size={15} style={{ color: theme.subtext }} />{to12Hour(gig.startTime)} to {to12Hour(gig.endTime)}</li>
+            {gig.clientEmail && <li className="flex items-center gap-2.5"><Mail size={15} style={{ color: theme.subtext }} /><a href={`mailto:${gig.clientEmail}`} style={{ color: theme.accent }}>{gig.clientEmail}</a></li>}
+            {gig.clientPhone && <li className="flex items-center gap-2.5"><Phone size={15} style={{ color: theme.subtext }} /><a href={`tel:${gig.clientPhone}`} style={{ color: theme.accent }}>{gig.clientPhone}</a></li>}
+            {gig.ticketLink && <li className="flex items-center gap-2.5"><ExternalLink size={15} style={{ color: theme.subtext }} /><a href={gig.ticketLink} target="_blank" rel="noreferrer" style={{ color: theme.accent }} className="truncate">Ticket link</a></li>}
+          </ul>
+          {gig.notes && <p className="text-[13px] rounded-xl px-3 py-2.5 whitespace-pre-wrap" style={{ backgroundColor: `${theme.text}08`, color: theme.text }}>{gig.notes}</p>}
+          <div className="grid grid-cols-2 gap-2">
+            <MiniStat label="Contract" value={fmt(gig.contractAmount || gig.fee || 0)} />
+            <MiniStat label="Balance due" value={calcRemaining(gig) > 0 ? fmt(calcRemaining(gig)) : 'Paid'} tone={calcRemaining(gig) > 0 ? undefined : theme.ok} />
+          </div>
+          <Field label="Status" group>
+            <Choice
+              value={gig.status}
+              onChange={v => onUpdate({ ...gig, status: v as GigStatus })}
+              options={(['confirmed', 'completed', 'cancelled'] as GigStatus[]).map(s => ({ value: s, label: STATUS_LABEL[s] }))}
+            />
+          </Field>
+          <p className="text-xs flex items-center gap-1.5" style={{ color: statusColor(gig.status) }}><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor(gig.status) }} />{STATUS_LABEL[gig.status]}</p>
+          <div className="pt-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+            <Button variant="danger" onClick={() => { onDelete(gig.id); onClose() }}><Trash2 size={14} /> Delete gig{gig.seriesId ? ' (skips this date)' : ''}</Button>
+          </div>
+        </div>
+      )}
 
-              <div className="p-4">
-                {/* INFO TAB */}
-                {tab === 'info' && (
-                  <div className="space-y-2.5">
-                    {gig.venue && (
-                      <div className="flex items-start gap-2 text-sm" style={{ color: theme.subtext }}>
-                        <MapPin size={13} className="shrink-0 mt-0.5" />
-                        <span>{gig.venue}{gig.eventAddress && ` · ${gig.eventAddress}`}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 text-sm" style={{ color: theme.subtext }}>
-                      <Clock size={13} />
-                      <span>{to12Hour(gig.startTime)} — {to12Hour(gig.endTime)}</span>
-                    </div>
-                    {gig.clientEmail && (
-                      <div className="flex items-center gap-2 text-sm" style={{ color: theme.subtext }}>
-                        <Mail size={13} /> <a href={`mailto:${gig.clientEmail}`} style={{ color: BENTLEY_INDIGO }}>{gig.clientEmail}</a>
-                      </div>
-                    )}
-                    {gig.clientPhone && (
-                      <div className="flex items-center gap-2 text-sm" style={{ color: theme.subtext }}>
-                        <Phone size={13} /> <a href={`tel:${gig.clientPhone}`} style={{ color: BENTLEY_INDIGO }}>{gig.clientPhone}</a>
-                      </div>
-                    )}
-                    {gig.notes && (
-                      <div className="rounded-xl p-3 text-sm" style={{ background: `${BENTLEY_INDIGO}08`, color: theme.text }}>
-                        <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.subtext }}>Notes</p>
-                        {gig.notes}
-                      </div>
-                    )}
+      {tab === 'payments' && <PaymentPanel gig={gig} onUpdate={onUpdate} />}
 
-                    {/* Status buttons */}
-                    <div className="flex gap-2 flex-wrap pt-1">
-                      {(['confirmed', 'completed', 'cancelled'] as GigStatus[]).map(s => (
-                        <button
-                          key={s}
-                          onClick={() => onUpdate({ ...gig, status: s })}
-                          className="px-3 py-1.5 rounded-xl text-xs font-semibold"
-                          style={{
-                            background: gig.status === s ? STATUS_CONFIG[s].color : `${STATUS_CONFIG[s].color}18`,
-                            color: gig.status === s ? '#fff' : STATUS_CONFIG[s].color,
-                          }}
-                        >
-                          {STATUS_CONFIG[s].label}
-                        </button>
-                      ))}
-                      <button onClick={() => onDelete(gig.id)} className="ml-auto p-1.5 rounded-xl" style={{ background: `${BENTLEY_RED}18`, color: BENTLEY_RED }}>
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                )}
+      {tab === 'gear' && (
+        <ul>
+          {gig.gearChecklist.length === 0 && <p className="text-[13px]" style={{ color: theme.subtext }}>No gear list on this gig.</p>}
+          {gig.gearChecklist.map((g, i) => (
+            <li key={g.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+              <button onClick={() => toggleGear(g.id)} className="w-full flex items-center gap-3 py-2.5 text-left">
+                <span className="w-[18px] h-[18px] rounded-[5px] flex items-center justify-center shrink-0" style={{ background: g.checked ? theme.accent : 'transparent', border: `1.5px solid ${g.checked ? theme.accent : theme.subtext}` }}>
+                  {g.checked && <Check size={11} color={theme.bg} strokeWidth={3} />}
+                </span>
+                <span className="text-[13.5px]" style={{ color: g.checked ? theme.subtext : theme.text, textDecoration: g.checked ? 'line-through' : undefined }}>{g.item}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
-                {/* PAYMENTS TAB */}
-                {tab === 'payments' && (
-                  <PaymentPanel gig={gig} onUpdate={onUpdate} />
-                )}
-
-                {/* GEAR TAB */}
-                {tab === 'gear' && (
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Gear Checklist</p>
-                      <span className="text-xs font-bold" style={{ color: gearDone === gig.gearChecklist.length ? BENTLEY_GREEN : BENTLEY_GOLD }}>
-                        {gearDone}/{gig.gearChecklist.length}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {gig.gearChecklist.map(g => (
-                        <button
-                          key={g.id}
-                          onClick={() => toggleGear(g.id)}
-                          className="w-full flex items-center gap-2.5 text-left"
-                        >
-                          <div
-                            className="w-4 h-4 rounded flex items-center justify-center shrink-0"
-                            style={{ background: g.checked ? BENTLEY_GREEN : 'transparent', border: `1.5px solid ${g.checked ? BENTLEY_GREEN : theme.border}` }}
-                          >
-                            {g.checked && <Check size={10} color="#fff" />}
-                          </div>
-                          <span className="text-sm" style={{ color: g.checked ? theme.subtext : theme.text }}>{g.item}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* EDIT TAB */}
-                {tab === 'edit' && (
-                  <GigEditForm
-                    gig={gig}
-                    onSave={updated => { onUpdate(updated); setTab('info') }}
-                    onCancel={() => setTab('info')}
-                  />
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      {tab === 'edit' && <GigEditForm key={gig.id} gig={gig} onSave={u => { onUpdate(u); setTab('overview') }} onCancel={() => setTab('overview')} />}
+    </Sheet>
   )
 }
 
-// ── CRM Client History ──
+// ── Clients ───────────────────────────────────────────────────────────────
 function CRMPanel({ gigs, quotes, onBookAgain }: { gigs: DJGig[]; quotes: BookingRequest[]; onBookAgain: (data: Partial<DJGig>) => void }) {
   const { theme } = useTheme()
+  const field = useField()
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
   const [clientDb, setClientDb] = useState<any[]>(() => { try { return JSON.parse(localStorage.getItem('orca-dj-client-db') || '[]') } catch { return [] } })
   const [deletedKeys, setDeletedKeys] = useState<Set<string>>(() => { try { const raw = localStorage.getItem('orca-dj-deleted-clients'); return raw ? new Set(JSON.parse(raw)) : new Set() } catch { return new Set() } })
-  const [showAddClient, setShowAddClient] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>({})
+  const [query, setQuery] = useState('')
 
   const saveDb = (db: any[]) => { setClientDb(db); try { setLocalSynced('orca-dj-client-db', JSON.stringify(db)) } catch {} }
-  const saveDeletedKeys = (keys: Set<string>) => { setDeletedKeys(keys); try { setLocalSynced('orca-dj-deleted-clients', JSON.stringify([...keys])) } catch {} }
+  const saveDeletedKeys = (keys: Set<string>) => { setDeletedKeys(keys); try { setLocalSynced('orca-dj-deleted-clients', JSON.stringify(Array.from(keys))) } catch {} }
 
   // Auto-import clients from gigs/quotes into the DB (skip deleted ones)
   useMemo(() => {
     let updated = false
     const db = [...clientDb]
     const existingKeys = new Set(db.map((c: any) => (c.email || c.name).toLowerCase()))
-
     gigs.forEach(g => {
       if (!g.clientName) return
       const key = (g.clientEmail || g.clientName).toLowerCase()
@@ -769,7 +485,6 @@ function CRMPanel({ gigs, quotes, onBookAgain }: { gigs: DJGig[]; quotes: Bookin
         }
       })
     } catch {}
-
     if (updated) saveDb(db)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gigs.length, quotes.length])
@@ -780,170 +495,130 @@ function CRMPanel({ gigs, quotes, onBookAgain }: { gigs: DJGig[]; quotes: Bookin
     return m
   }, [gigs])
 
-  const addClient = () => {
+  const submit = () => {
     if (!editForm.name) return
-    const c = { id: gid(), ...editForm }
-    saveDb([...clientDb, c])
-    setEditForm({})
-    setShowAddClient(false)
-  }
-
-  const updateClient = () => {
-    if (!editingId) return
-    saveDb(clientDb.map(c => c.id === editingId ? { ...c, ...editForm } : c))
+    if (editingId) saveDb(clientDb.map(c => (c.id === editingId ? { ...c, ...editForm } : c)))
+    else saveDb([...clientDb, { id: gid(), ...editForm }])
     setEditingId(null)
     setEditForm({})
+    setFormOpen(false)
   }
 
   const deleteClient = (id: string) => {
     const client = clientDb.find(c => c.id === id)
     if (client) {
-      const key = (client.email || client.name).toLowerCase()
       const next = new Set(deletedKeys)
-      next.add(key)
+      next.add((client.email || client.name).toLowerCase())
       saveDeletedKeys(next)
     }
     saveDb(clientDb.filter(c => c.id !== id))
     setExpandedClient(null)
   }
 
+  const shown = clientDb.filter((c: any) => !query || `${c.name} ${c.email} ${c.phone}`.toLowerCase().includes(query.toLowerCase()))
+
   return (
-    <div className="space-y-3">
-      {/* Add Client button */}
-      {!showAddClient ? (
-        <button onClick={() => { setShowAddClient(true); setEditForm({ name: '', email: '', phone: '', venue: '', rate: '' }) }} className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5" style={{ background: `${DJ_PINK}15`, color: DJ_PINK, border: `1px dashed ${DJ_PINK}50` }}>
-          <Plus size={12} /> Add Client
-        </button>
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search clients" aria-label="Search clients" {...field} />
+        <Button variant="primary" onClick={() => { setEditingId(null); setEditForm({ name: '', email: '', phone: '', venue: '', rate: '' }); setFormOpen(true) }}><Plus size={15} /> Add</Button>
+      </div>
+
+      {clientDb.length === 0 ? (
+        <EmptyState title="No clients yet" sub="Clients from gigs and quotes are added here automatically." />
       ) : (
-        <div className="rounded-xl p-3 space-y-2" style={{ background: `${DJ_PINK}08`, border: `1px solid ${DJ_PINK}30` }}>
-          <p className="text-[10px] font-bold uppercase" style={{ color: DJ_PINK }}>New Client</p>
-          <div className="grid grid-cols-2 gap-2">
-            <input value={editForm.name || ''} onChange={e => setEditForm({ ...editForm, name: e.target.value })} placeholder="Name *" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
-            <input value={editForm.phone || ''} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} placeholder="Phone" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
-          </div>
-          <input value={editForm.email || ''} onChange={e => setEditForm({ ...editForm, email: e.target.value })} placeholder="Email" className="w-full px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
-          <div className="grid grid-cols-2 gap-2">
-            <input value={editForm.venue || ''} onChange={e => setEditForm({ ...editForm, venue: e.target.value })} placeholder="Default venue" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
-            <input type="number" value={editForm.rate || ''} onChange={e => setEditForm({ ...editForm, rate: Number(e.target.value) })} placeholder="Rate $" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setShowAddClient(false)} className="flex-1 py-1.5 rounded-lg text-xs font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
-            <button onClick={addClient} disabled={!editForm.name} className="flex-1 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40" style={{ background: DJ_PINK, color: '#fff' }}>Save</button>
-          </div>
-        </div>
-      )}
-
-      {clientDb.length === 0 && (
-        <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-          <Users size={28} style={{ color: theme.subtext, margin: '0 auto 8px' }} />
-          <p className="text-sm" style={{ color: theme.subtext }}>No clients yet.</p>
-        </div>
-      )}
-
-      {clientDb.map((client: any) => {
-        const isExpanded = expandedClient === client.id
-        const isEditing = editingId === client.id
-        const clientGigs = gigsByClient.get((client.email || client.name).toLowerCase()) || []
-        const totalPaid = clientGigs.reduce((s, g) => s + calcTotalPaid(g), 0)
-        return (
-          <div key={client.id} className="rounded-xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <button className="w-full flex items-center gap-3 p-3 text-left" onClick={() => { setExpandedClient(isExpanded ? null : client.id); setEditingId(null) }}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-bold text-sm" style={{ background: `${DJ_PINK}18`, color: DJ_PINK }}>
-                {(client.name || '?').charAt(0).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm truncate" style={{ color: theme.text }}>{client.name}</p>
-                <p className="text-xs truncate" style={{ color: theme.subtext }}>{client.email || ''}{client.phone ? ` · ${client.phone}` : ''}</p>
-              </div>
-              <div className="text-right shrink-0">
-                {totalPaid > 0 && <p className="text-xs font-bold" style={{ color: BENTLEY_GREEN }}>{fmt(totalPaid)}</p>}
-                <p className="text-[10px]" style={{ color: theme.subtext }}>{clientGigs.length} gig{clientGigs.length !== 1 ? 's' : ''}</p>
-              </div>
-            </button>
-            {isExpanded && (
-              <div className="border-t px-3 pb-3 pt-2 space-y-2" style={{ borderColor: theme.border }}>
-                {isEditing ? (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <input value={editForm.name || ''} onChange={e => setEditForm({ ...editForm, name: e.target.value })} placeholder="Name" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                      <input value={editForm.phone || ''} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} placeholder="Phone" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                    </div>
-                    <input value={editForm.email || ''} onChange={e => setEditForm({ ...editForm, email: e.target.value })} placeholder="Email" className="w-full px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                    <div className="grid grid-cols-2 gap-2">
-                      <input value={editForm.venue || ''} onChange={e => setEditForm({ ...editForm, venue: e.target.value })} placeholder="Default venue" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                      <input type="number" value={editForm.rate || ''} onChange={e => setEditForm({ ...editForm, rate: Number(e.target.value) })} placeholder="Rate $" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 rounded-lg text-xs font-semibold" style={{ background: theme.bg, color: theme.subtext }}>Cancel</button>
-                      <button onClick={updateClient} className="flex-1 py-1.5 rounded-lg text-xs font-bold" style={{ background: BENTLEY_GREEN, color: '#fff' }}>Save</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {clientGigs.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Booking History</p>
-                        {clientGigs.sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(g => (
-                          <div key={g.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg text-xs" style={{ background: theme.bg }}>
-                            <span style={{ color: theme.text }}>{g.date ? new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
-                            <span className="truncate px-2" style={{ color: theme.subtext }}>{g.eventType}{g.venue ? ` · ${g.venue}` : ''}</span>
-                            <span className="text-[10px] font-bold" style={{ color: BENTLEY_GREEN }}>{fmt(g.contractAmount || 0)}</span>
-                          </div>
-                        ))}
+        <Panel pad={false}>
+          <ul>
+            {shown.map((client: any, i: number) => {
+              const isExpanded = expandedClient === client.id
+              const clientGigs = gigsByClient.get((client.email || client.name).toLowerCase()) || []
+              const totalPaid = clientGigs.reduce((s, g) => s + calcTotalPaid(g), 0)
+              const sorted = [...clientGigs].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+              return (
+                <li key={client.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                  <div className="flex items-center gap-3 px-4 sm:px-5 py-3">
+                    <button className="flex items-center gap-3 flex-1 min-w-0 text-left" onClick={() => setExpandedClient(isExpanded ? null : client.id)} aria-expanded={isExpanded}>
+                      <span className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-[13px] font-semibold" style={{ backgroundColor: `${theme.text}0d`, color: theme.text }}>{(client.name || '?').charAt(0).toUpperCase()}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>{client.name}</p>
+                        <p className="text-[12px] truncate" style={{ color: theme.subtext }}>{[client.email, client.phone].filter(Boolean).join(' · ') || 'No contact info'}</p>
                       </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      {client.email && <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>Email</p><p className="text-xs" style={{ color: theme.text }}>{client.email}</p></div>}
-                      {client.phone && <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>Phone</p><p className="text-xs" style={{ color: theme.text }}>{client.phone}</p></div>}
-                      {client.venue && <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>Venue</p><p className="text-xs" style={{ color: theme.text }}>{client.venue}</p></div>}
-                      {client.rate > 0 && <div><p className="text-[9px] font-bold uppercase" style={{ color: theme.subtext }}>Rate</p><p className="text-xs" style={{ color: theme.text }}>{fmt(client.rate)}</p></div>}
+                      <div className="text-right shrink-0">
+                        <p className="text-[13px] font-medium tnum" style={{ color: theme.text }}>{totalPaid > 0 ? fmt(totalPaid) : ''}</p>
+                        <p className="text-[11px]" style={{ color: theme.subtext }}>{clientGigs.length} gig{clientGigs.length !== 1 ? 's' : ''}</p>
+                      </div>
+                    </button>
+                    <Button size="sm" variant="primary" onClick={() => {
+                      const lastGig = sorted[0]
+                      onBookAgain(lastGig
+                        ? { clientName: lastGig.clientName, clientEmail: lastGig.clientEmail, clientPhone: lastGig.clientPhone, eventType: lastGig.eventType, venue: lastGig.venue, eventAddress: lastGig.eventAddress, contractAmount: lastGig.contractAmount, fee: lastGig.fee, depositAmount: lastGig.depositAmount, startTime: lastGig.startTime, endTime: lastGig.endTime, notes: lastGig.notes }
+                        : { clientName: client.name, clientEmail: client.email, clientPhone: client.phone, venue: client.venue, contractAmount: client.rate, fee: client.rate, depositAmount: client.deposit })
+                    }}>Book</Button>
+                    <RowMenu label={`More actions for ${client.name}`} items={[
+                      { label: 'Edit', icon: Edit3, onClick: () => { setEditingId(client.id); setEditForm({ name: client.name, email: client.email, phone: client.phone, venue: client.venue || '', rate: client.rate || '' }); setFormOpen(true) } },
+                      { label: 'Delete', icon: Trash2, danger: true, onClick: () => deleteClient(client.id) },
+                    ]} />
+                  </div>
+                  {isExpanded && (
+                    <div className="px-4 sm:px-5 pb-4 sm:pl-[68px] space-y-3">
+                      <div className="grid grid-cols-2 gap-2 text-[12.5px]">
+                        {client.venue && <p style={{ color: theme.subtext }}>Venue <span style={{ color: theme.text }}>{client.venue}</span></p>}
+                        {client.rate > 0 && <p style={{ color: theme.subtext }}>Rate <span className="tnum" style={{ color: theme.text }}>{fmt(client.rate)}</span></p>}
+                      </div>
+                      {sorted.length > 0 ? (
+                        <ul className="rounded-xl px-3" style={{ backgroundColor: `${theme.text}06` }}>
+                          {sorted.map((g, j) => (
+                            <li key={g.id} className="flex items-center justify-between gap-2 py-2 text-[12.5px]" style={{ borderTop: j ? `1px solid ${theme.border}` : undefined }}>
+                              <span style={{ color: theme.text }}>{g.date ? new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                              <span className="truncate flex-1 text-center" style={{ color: theme.subtext }}>{cap(g.eventType)}{g.venue ? ` · ${g.venue}` : ''}</span>
+                              <span className="tnum" style={{ color: theme.text }}>{fmt(g.contractAmount || 0)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <p className="text-[12.5px]" style={{ color: theme.subtext }}>No bookings yet.</p>}
                     </div>
-                    <div className="flex gap-2 pt-1">
-                      <button onClick={() => {
-                        const lastGig = clientGigs.sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0]
-                        onBookAgain(lastGig ? { clientName: lastGig.clientName, clientEmail: lastGig.clientEmail, clientPhone: lastGig.clientPhone, eventType: lastGig.eventType, venue: lastGig.venue, eventAddress: lastGig.eventAddress, contractAmount: lastGig.contractAmount, fee: lastGig.fee, depositAmount: lastGig.depositAmount, startTime: lastGig.startTime, endTime: lastGig.endTime, notes: lastGig.notes }
-                          : { clientName: client.name, clientEmail: client.email, clientPhone: client.phone, venue: client.venue, contractAmount: client.rate, fee: client.rate, depositAmount: client.deposit })
-                      }} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold" style={{ background: DJ_PINK, color: '#fff' }}>
-                        <Plus size={10} /> Book
-                      </button>
-                      <button onClick={() => { setEditingId(client.id); setEditForm({ name: client.name, email: client.email, phone: client.phone, venue: client.venue || '', rate: client.rate || '' }) }} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold" style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}>
-                        <Edit3 size={10} /> Edit
-                      </button>
-                      <button onClick={() => deleteClient(client.id)} className="px-3 py-1.5 rounded-lg text-[11px] font-bold" style={{ background: `${BENTLEY_RED}12`, color: BENTLEY_RED }}>
-                        <Trash2 size={10} />
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )
-      })}
+                  )}
+                </li>
+              )
+            })}
+            {shown.length === 0 && <li className="px-5 py-6 text-[13px]" style={{ color: theme.subtext }}>No clients match “{query}”.</li>}
+          </ul>
+        </Panel>
+      )}
+
+      <Sheet
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title={editingId ? 'Edit client' : 'Add client'}
+        footer={<>
+          <Button className="flex-1" onClick={() => setFormOpen(false)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!editForm.name} onClick={submit}>{editingId ? 'Save changes' : 'Save client'}</Button>
+        </>}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Name" className="col-span-2"><input value={editForm.name || ''} onChange={e => setEditForm({ ...editForm, name: e.target.value })} autoFocus {...field} /></Field>
+          <Field label="Email"><input type="email" value={editForm.email || ''} onChange={e => setEditForm({ ...editForm, email: e.target.value })} {...field} /></Field>
+          <Field label="Phone"><input value={editForm.phone || ''} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} {...field} /></Field>
+          <Field label="Usual venue"><input value={editForm.venue || ''} onChange={e => setEditForm({ ...editForm, venue: e.target.value })} {...field} /></Field>
+          <Field label="Usual rate ($)"><input type="number" inputMode="decimal" value={editForm.rate || ''} onChange={e => setEditForm({ ...editForm, rate: Number(e.target.value) })} {...field} /></Field>
+        </div>
+      </Sheet>
     </div>
   )
 }
 
-// ── Email & Invoice Panel ──
+// ── Email ─────────────────────────────────────────────────────────────────
 function EmailPanel({ gigs }: { gigs: DJGig[] }) {
   const { theme } = useTheme()
-
+  const field = useField()
   const [templates, setTemplates] = useState<EmailTemplate[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_TEMPLATES
-    try {
-      const saved = localStorage.getItem('orca-dj-email-templates')
-      if (saved) return JSON.parse(saved)
-    } catch {}
+    try { const saved = localStorage.getItem('orca-dj-email-templates'); if (saved) return JSON.parse(saved) } catch {}
     return DEFAULT_TEMPLATES
   })
-
-  const [emailSubTab, setEmailSubTab] = useState<'templates' | 'compose'>('templates')
+  const [emailSubTab, setEmailSubTab] = useState<'compose' | 'templates'>('compose')
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null)
-  const [showNewTemplate, setShowNewTemplate] = useState(false)
-  const [newTplName, setNewTplName] = useState('')
-  const [newTplSubject, setNewTplSubject] = useState('')
-  const [newTplBody, setNewTplBody] = useState('')
-  const [newTplType, setNewTplType] = useState<EmailTemplate['type']>('custom')
+  const [isNewTemplate, setIsNewTemplate] = useState(false)
 
   const [selectedGigId, setSelectedGigId] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
@@ -956,37 +631,12 @@ function EmailPanel({ gigs }: { gigs: DJGig[] }) {
     setTemplates(updated)
     try { setLocalSynced('orca-dj-email-templates', JSON.stringify(updated)) } catch {}
   }
-
-  const addTemplate = () => {
-    if (!newTplName.trim()) return
-    const t: EmailTemplate = {
-      id: gid(),
-      name: newTplName.trim(),
-      subject: newTplSubject.trim(),
-      body: newTplBody.trim(),
-      type: newTplType,
-      createdAt: new Date().toISOString(),
-    }
-    saveTemplates([...templates, t])
-    setNewTplName('')
-    setNewTplSubject('')
-    setNewTplBody('')
-    setNewTplType('custom')
-    setShowNewTemplate(false)
-  }
-
-  const duplicateTemplate = (t: EmailTemplate) => {
-    const copy: EmailTemplate = { ...t, id: gid(), name: `${t.name} (Copy)`, createdAt: new Date().toISOString() }
-    saveTemplates([...templates, copy])
-  }
-
-  const deleteTemplate = (id: string) => {
-    saveTemplates(templates.filter(t => t.id !== id))
-  }
-
-  const saveEditTemplate = () => {
-    if (!editingTemplate) return
-    saveTemplates(templates.map(t => t.id === editingTemplate.id ? editingTemplate : t))
+  const duplicateTemplate = (t: EmailTemplate) => saveTemplates([...templates, { ...t, id: gid(), name: `${t.name} (Copy)`, createdAt: new Date().toISOString() }])
+  const deleteTemplate = (id: string) => saveTemplates(templates.filter(t => t.id !== id))
+  const saveTemplate = () => {
+    if (!editingTemplate || !editingTemplate.name.trim()) return
+    if (isNewTemplate) saveTemplates([...templates, { ...editingTemplate, name: editingTemplate.name.trim(), subject: editingTemplate.subject.trim(), body: editingTemplate.body.trim() }])
+    else saveTemplates(templates.map(t => (t.id === editingTemplate.id ? editingTemplate : t)))
     setEditingTemplate(null)
   }
 
@@ -994,24 +644,21 @@ function EmailPanel({ gigs }: { gigs: DJGig[] }) {
     const template = templates.find(t => t.id === templateId)
     const gig = gigs.find(g => g.id === gigId)
     if (!template) return
-
     const replacements: Record<string, string> = {
       clientName: gig?.clientName || '',
-      eventType: gig?.eventType ? gig.eventType.charAt(0).toUpperCase() + gig.eventType.slice(1) : '',
+      eventType: gig?.eventType ? cap(gig.eventType) : '',
       date: gig?.date ? new Date(gig.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '',
       venue: gig?.venue || '',
       contractAmount: fmt(gig?.contractAmount || gig?.fee || 0),
       depositAmount: fmt(gig?.depositAmount || 0),
       balanceDue: fmt(gig ? calcRemaining(gig) : 0),
     }
-
     let subject = template.subject
     let body = template.body
     Object.entries(replacements).forEach(([key, val]) => {
       subject = subject.replace(new RegExp(`\\{${key}\\}`, 'g'), val)
       body = body.replace(new RegExp(`\\{${key}\\}`, 'g'), val)
     })
-
     setComposeSubject(subject)
     setComposeBody(body)
     if (gig?.clientEmail) setComposeTo(gig.clientEmail)
@@ -1024,12 +671,7 @@ function EmailPanel({ gigs }: { gigs: DJGig[] }) {
       const res = await fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: composeTo,
-          subject: composeSubject,
-          text: composeBody,
-          html: composeBody.replace(/\n/g, '<br/>'),
-        }),
+        body: JSON.stringify({ to: composeTo, subject: composeSubject, text: composeBody, html: composeBody.replace(/\n/g, '<br/>') }),
       })
       setSendStatus(res.ok ? 'sent' : 'error')
       if (res.ok) setTimeout(() => setSendStatus('idle'), 4000)
@@ -1038,358 +680,135 @@ function EmailPanel({ gigs }: { gigs: DJGig[] }) {
     }
   }
 
-  const inputCls = "w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-  const inputStyle = { background: theme.card, borderColor: theme.border, color: theme.text }
-
-  const TYPE_LABELS: Record<EmailTemplate['type'], string> = {
-    blast: 'Blast',
-    invoice: 'Invoice',
-    confirmation: 'Confirmation',
-    followup: 'Follow-up',
-    custom: 'Custom',
-  }
+  const TYPE_LABELS: Record<EmailTemplate['type'], string> = { blast: 'Blast', invoice: 'Invoice', confirmation: 'Confirmation', followup: 'Follow-up', custom: 'Custom' }
+  const area = { ...field, className: `${field.className} h-auto py-2 leading-relaxed` }
 
   return (
     <div className="space-y-4">
-      {/* Sub-tabs */}
-      <div className="flex gap-1 p-1 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-        {(['templates', 'compose'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setEmailSubTab(t)}
-            className="flex-1 py-2 rounded-lg text-xs font-bold capitalize transition-all"
-            style={{ background: emailSubTab === t ? DJ_PINK : 'transparent', color: emailSubTab === t ? '#fff' : theme.subtext }}
-          >
-            {t === 'templates' ? 'Templates' : 'Compose & Send'}
-          </button>
-        ))}
-      </div>
+      <Segmented size="sm" value={emailSubTab} onChange={v => setEmailSubTab(v as typeof emailSubTab)} options={[{ value: 'compose', label: 'Compose' }, { value: 'templates', label: `Templates · ${templates.length}` }]} />
 
-      {/* TEMPLATES TAB */}
-      {emailSubTab === 'templates' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Email Templates</p>
-            <button
-              onClick={() => setShowNewTemplate(!showNewTemplate)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold"
-              style={{ background: `${DJ_PINK}18`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}
-            >
-              <Plus size={11} /> New Template
-            </button>
-          </div>
-
-          {/* New Template form */}
-          {showNewTemplate && (
-            <div className="rounded-xl p-3 space-y-2" style={{ background: `${DJ_PINK}08`, border: `1px solid ${DJ_PINK}30` }}>
-              <p className="text-xs font-bold" style={{ color: DJ_PINK }}>New Template</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Name</label>
-                  <input className={inputCls} style={inputStyle} placeholder="Template name" value={newTplName} onChange={e => setNewTplName(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Type</label>
-                  <select className={inputCls} style={inputStyle} value={newTplType} onChange={e => setNewTplType(e.target.value as EmailTemplate['type'])}>
-                    {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Subject</label>
-                <input className={inputCls} style={inputStyle} placeholder="Email subject (use {clientName}, {date}, etc.)" value={newTplSubject} onChange={e => setNewTplSubject(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Body</label>
-                <textarea
-                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
-                  style={inputStyle}
-                  rows={5}
-                  placeholder="Email body — use {clientName}, {date}, {venue}, {contractAmount}, {depositAmount}, {balanceDue}, {eventType}"
-                  value={newTplBody}
-                  onChange={e => setNewTplBody(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setShowNewTemplate(false)} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
-                <button onClick={addTemplate} disabled={!newTplName.trim()} className="flex-1 py-2 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: DJ_PINK, color: '#fff' }}>Save Template</button>
-              </div>
-            </div>
-          )}
-
-          {/* Template list */}
-          {templates.length === 0 ? (
-            <div className="rounded-xl p-6 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-              <Mail size={24} style={{ color: theme.subtext, margin: '0 auto 8px' }} />
-              <p className="text-sm" style={{ color: theme.subtext }}>No templates yet.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {templates.map(t => (
-                <div key={t.id}>
-                  <div className="rounded-xl p-3" style={{ background: theme.card, border: `1px solid ${editingTemplate?.id === t.id ? DJ_PINK : theme.border}` }}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-bold text-sm" style={{ color: theme.text }}>{t.name}</p>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${DJ_PINK}18`, color: DJ_PINK }}>{TYPE_LABELS[t.type]}</span>
-                        </div>
-                        <p className="text-xs mt-0.5 truncate" style={{ color: theme.subtext }}>{t.subject}</p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={() => setEditingTemplate(editingTemplate?.id === t.id ? null : { ...t })}
-                          className="p-1.5 rounded-lg"
-                          style={{ color: BENTLEY_INDIGO, background: `${BENTLEY_INDIGO}15` }}
-                          title="Edit"
-                        >
-                          <Edit3 size={11} />
-                        </button>
-                        <button
-                          onClick={() => duplicateTemplate(t)}
-                          className="p-1.5 rounded-lg"
-                          style={{ color: BENTLEY_GOLD, background: `${BENTLEY_GOLD}15` }}
-                          title="Duplicate"
-                        >
-                          <Copy size={11} />
-                        </button>
-                        <button
-                          onClick={() => deleteTemplate(t.id)}
-                          className="p-1.5 rounded-lg"
-                          style={{ color: BENTLEY_RED, background: `${BENTLEY_RED}15` }}
-                          title="Delete"
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Inline editor */}
-                  {editingTemplate?.id === t.id && (
-                    <div className="mt-1 rounded-xl p-3 space-y-2" style={{ background: `${BENTLEY_INDIGO}08`, border: `1px solid ${BENTLEY_INDIGO}30` }}>
-                      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BENTLEY_INDIGO }}>Editing Template</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Name</label>
-                          <input className={inputCls} style={inputStyle} value={editingTemplate.name} onChange={e => setEditingTemplate({ ...editingTemplate, name: e.target.value })} />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Type</label>
-                          <select className={inputCls} style={inputStyle} value={editingTemplate.type} onChange={e => setEditingTemplate({ ...editingTemplate, type: e.target.value as EmailTemplate['type'] })}>
-                            {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Subject</label>
-                        <input className={inputCls} style={inputStyle} value={editingTemplate.subject} onChange={e => setEditingTemplate({ ...editingTemplate, subject: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Body</label>
-                        <textarea
-                          className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
-                          style={inputStyle}
-                          rows={6}
-                          value={editingTemplate.body}
-                          onChange={e => setEditingTemplate({ ...editingTemplate, body: e.target.value })}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => setEditingTemplate(null)} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
-                        <button onClick={saveEditTemplate} className="flex-1 py-2 rounded-xl text-xs font-semibold" style={{ background: BENTLEY_INDIGO, color: '#fff' }}>Update Template</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="rounded-xl p-3 mt-2" style={{ background: `${BENTLEY_GOLD}10`, border: `1px solid ${BENTLEY_GOLD}30` }}>
-            <p className="text-[10px] font-bold" style={{ color: BENTLEY_GOLD }}>Template Variables</p>
-            <p className="text-[10px] mt-1" style={{ color: theme.subtext }}>
-              Use these in your templates: <span style={{ color: BENTLEY_GOLD }}>{'{clientName}'} {'{date}'} {'{eventType}'} {'{venue}'} {'{contractAmount}'} {'{depositAmount}'} {'{balanceDue}'}</span>
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* COMPOSE TAB */}
       {emailSubTab === 'compose' && (
-        <div className="space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Compose & Send</p>
-
-          {/* Gig + Template picker */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Select Gig</label>
-              <select
-                className={inputCls}
-                style={inputStyle}
-                value={selectedGigId}
-                onChange={e => {
+        <Panel>
+          <div className="space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Gig">
+                <select value={selectedGigId} onChange={e => {
                   setSelectedGigId(e.target.value)
                   if (selectedTemplateId && e.target.value) applyTemplate(selectedTemplateId, e.target.value)
-                  else if (e.target.value) {
-                    const gig = gigs.find(g => g.id === e.target.value)
-                    if (gig?.clientEmail) setComposeTo(gig.clientEmail)
-                  }
-                }}
-              >
-                <option value="">— Select gig —</option>
-                {[...gigs].sort((a, b) => b.date.localeCompare(a.date)).map(g => (
-                  <option key={g.id} value={g.id}>
-                    {g.clientName} · {g.date ? new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'}
-                  </option>
-                ))}
-              </select>
+                  else if (e.target.value) { const gig = gigs.find(g => g.id === e.target.value); if (gig?.clientEmail) setComposeTo(gig.clientEmail) }
+                }} {...field}>
+                  <option value="">Choose a gig</option>
+                  {[...gigs].sort((a, b) => b.date.localeCompare(a.date)).map(g => (
+                    <option key={g.id} value={g.id}>{g.clientName} · {g.date ? new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Template">
+                <select value={selectedTemplateId} onChange={e => { setSelectedTemplateId(e.target.value); if (e.target.value) applyTemplate(e.target.value, selectedGigId) }} {...field}>
+                  <option value="">No template</option>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </Field>
             </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Apply Template</label>
-              <select
-                className={inputCls}
-                style={inputStyle}
-                value={selectedTemplateId}
-                onChange={e => {
-                  setSelectedTemplateId(e.target.value)
-                  if (e.target.value) applyTemplate(e.target.value, selectedGigId)
-                }}
-              >
-                <option value="">— Select template —</option>
-                {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+            <Field label="To" hint="Separate several addresses with commas"><input type="email" value={composeTo} onChange={e => setComposeTo(e.target.value)} placeholder="client@email.com" {...field} /></Field>
+            <Field label="Subject"><input value={composeSubject} onChange={e => setComposeSubject(e.target.value)} {...field} /></Field>
+            <Field label="Message"><textarea rows={9} value={composeBody} onChange={e => setComposeBody(e.target.value)} {...area} /></Field>
+            {sendStatus === 'error' && <p className="text-xs" style={{ color: theme.bad }}>Send failed. Check that the Gmail credentials are set in the environment variables.</p>}
+            <div className="flex gap-2">
+              {(composeSubject || composeBody || composeTo) && (
+                <Button onClick={() => { setComposeTo(''); setComposeSubject(''); setComposeBody(''); setSelectedGigId(''); setSelectedTemplateId(''); setSendStatus('idle') }}>Clear</Button>
+              )}
+              <Button className="flex-1" variant="primary" disabled={!composeTo.trim() || !composeSubject.trim() || sendStatus === 'sending'} onClick={sendEmail}>
+                {sendStatus === 'sending' ? <><Loader2 size={14} className="animate-spin" /> Sending</> : sendStatus === 'sent' ? <><Check size={14} /> Sent</> : sendStatus === 'error' ? 'Retry' : <><Send size={14} /> Send email</>}
+              </Button>
             </div>
           </div>
-
-          {/* To field */}
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>To (email address)</label>
-            <input
-              className={inputCls}
-              style={inputStyle}
-              type="email"
-              placeholder="recipient@email.com (separate multiple with commas)"
-              value={composeTo}
-              onChange={e => setComposeTo(e.target.value)}
-            />
-          </div>
-
-          {/* Subject */}
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Subject</label>
-            <input
-              className={inputCls}
-              style={inputStyle}
-              placeholder="Email subject"
-              value={composeSubject}
-              onChange={e => setComposeSubject(e.target.value)}
-            />
-          </div>
-
-          {/* Body */}
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Message</label>
-            <textarea
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
-              style={inputStyle}
-              rows={8}
-              placeholder="Type your message here..."
-              value={composeBody}
-              onChange={e => setComposeBody(e.target.value)}
-            />
-          </div>
-
-          {/* Send */}
-          <button
-            onClick={sendEmail}
-            disabled={!composeTo.trim() || !composeSubject.trim() || sendStatus === 'sending'}
-            className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-            style={{
-              background: sendStatus === 'sent' ? BENTLEY_GREEN : sendStatus === 'error' ? BENTLEY_RED : DJ_PINK,
-              color: '#fff',
-            }}
-          >
-            <Send size={14} />
-            {sendStatus === 'sending' ? 'Sending…' : sendStatus === 'sent' ? '✓ Sent!' : sendStatus === 'error' ? 'Failed — Retry' : 'Send Email'}
-          </button>
-
-          {sendStatus === 'error' && (
-            <p className="text-xs text-center" style={{ color: BENTLEY_RED }}>
-              Send failed. Check that your Gmail credentials are configured in environment variables.
-            </p>
-          )}
-
-          {/* Quick clear */}
-          {(composeSubject || composeBody || composeTo) && (
-            <button
-              onClick={() => { setComposeTo(''); setComposeSubject(''); setComposeBody(''); setSelectedGigId(''); setSelectedTemplateId(''); setSendStatus('idle'); }}
-              className="w-full py-2 rounded-xl text-xs font-semibold"
-              style={{ background: theme.card, color: theme.subtext, border: `1px solid ${theme.border}` }}
-            >
-              Clear Composer
-            </button>
-          )}
-        </div>
+        </Panel>
       )}
+
+      {emailSubTab === 'templates' && (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs" style={{ color: theme.subtext }}>Use {'{clientName} {date} {eventType} {venue} {contractAmount} {depositAmount} {balanceDue}'}</p>
+            <Button size="sm" variant="primary" onClick={() => { setIsNewTemplate(true); setEditingTemplate({ id: gid(), name: '', subject: '', body: '', type: 'custom', createdAt: new Date().toISOString() }) }}><Plus size={14} /> New</Button>
+          </div>
+          {templates.length === 0 ? <EmptyState title="No templates" /> : (
+            <Panel pad={false}>
+              <ul>
+                {templates.map((t, i) => (
+                  <li key={t.id} className="flex items-center gap-3 px-4 sm:px-5 py-3" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>{t.name} <span className="text-[11px] font-normal" style={{ color: theme.subtext }}>{TYPE_LABELS[t.type]}</span></p>
+                      <p className="text-[12px] truncate" style={{ color: theme.subtext }}>{t.subject}</p>
+                    </div>
+                    <RowMenu label={`Actions for ${t.name}`} items={[
+                      { label: 'Edit', icon: Edit3, onClick: () => { setIsNewTemplate(false); setEditingTemplate({ ...t }) } },
+                      { label: 'Duplicate', icon: Copy, onClick: () => duplicateTemplate(t) },
+                      { label: 'Delete', icon: Trash2, danger: true, onClick: () => deleteTemplate(t.id) },
+                    ]} />
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
+        </>
+      )}
+
+      <Sheet
+        open={!!editingTemplate}
+        onClose={() => setEditingTemplate(null)}
+        title={isNewTemplate ? 'New template' : 'Edit template'}
+        footer={<>
+          <Button className="flex-1" onClick={() => setEditingTemplate(null)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!editingTemplate?.name.trim()} onClick={saveTemplate}>Save template</Button>
+        </>}
+      >
+        {editingTemplate && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Name"><input value={editingTemplate.name} onChange={e => setEditingTemplate({ ...editingTemplate, name: e.target.value })} {...field} /></Field>
+              <Field label="Type">
+                <select value={editingTemplate.type} onChange={e => setEditingTemplate({ ...editingTemplate, type: e.target.value as EmailTemplate['type'] })} {...field}>
+                  {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="Subject"><input value={editingTemplate.subject} onChange={e => setEditingTemplate({ ...editingTemplate, subject: e.target.value })} {...field} /></Field>
+            <Field label="Body"><textarea rows={10} value={editingTemplate.body} onChange={e => setEditingTemplate({ ...editingTemplate, body: e.target.value })} {...area} /></Field>
+          </div>
+        )}
+      </Sheet>
     </div>
   )
 }
 
-// ── Add Gig Modal ──
-function AddGigModal({ onAdd, onClose, prefill }: { onAdd: (gig: DJGig) => void; onClose: () => void; prefill?: Partial<DJGig> | null }) {
-  const { theme } = useTheme()
-  const [form, setForm] = useState<Partial<DJGig>>(() => {
-    const base = BLANK_GIG()
-    if (prefill) return { ...base, ...prefill, date: '' }
-    return base
-  })
-  const f = (field: Partial<DJGig>) => setForm(p => ({ ...p, ...field }))
-
-  const parseTime = (t: string) => {
-    if (!t) return { h: '', m: '00', p: 'PM' }
-    const [hh, mm] = t.split(':').map(Number)
-    if (isNaN(hh)) return { h: '', m: '00', p: 'PM' }
-    return { h: String(hh % 12 || 12), m: String(mm || 0).padStart(2, '0'), p: hh >= 12 ? 'PM' : 'AM' }
-  }
-  const sp = parseTime(form.startTime || '')
-  const ep = parseTime(form.endTime || '')
-  const [startH, setStartH] = useState(sp.h)
-  const [startM, setStartM] = useState(sp.m)
-  const [startP, setStartP] = useState(sp.p)
-  const [endH, setEndH] = useState(ep.h)
-  const [endM, setEndM] = useState(ep.m)
-  const [endP, setEndP] = useState(ep.p)
-
-  const toTime = (h: string, m: string, p: string) => {
-    if (!h) return ''
-    let hr = parseInt(h)
-    if (p === 'PM' && hr !== 12) hr += 12
-    if (p === 'AM' && hr === 12) hr = 0
-    return `${String(hr).padStart(2, '0')}:${m}`
-  }
-  const setStart = (h: string, m: string, p: string) => { setStartH(h); setStartM(m); setStartP(p); f({ startTime: toTime(h, m, p) }) }
-  const setEnd = (h: string, m: string, p: string) => { setEndH(h); setEndM(m); setEndP(p); f({ endTime: toTime(h, m, p) }) }
-
-  // Client database for picker
-  const [savedClients] = useState<any[]>(() => { try { return JSON.parse(localStorage.getItem('orca-dj-client-db') || '[]') } catch { return [] } })
+// ── Add gig ───────────────────────────────────────────────────────────────
+function AddGigSheet({ open, onAdd, onClose, prefill }: { open: boolean; onAdd: (gig: DJGig) => void; onClose: () => void; prefill?: Partial<DJGig> | null }) {
+  const field = useField()
+  const [form, setForm] = useState<Partial<DJGig>>(BLANK_GIG())
+  const [savedClients, setSavedClients] = useState<any[]>([])
+  useEffect(() => {
+    if (!open) return
+    setForm(prefill ? { ...BLANK_GIG(), ...prefill, date: '' } : BLANK_GIG())
+    try { setSavedClients(JSON.parse(localStorage.getItem('orca-dj-client-db') || '[]')) } catch { setSavedClients([]) }
+  }, [open, prefill])
+  const f = (patch: Partial<DJGig>) => setForm(p => ({ ...p, ...patch }))
 
   const selectClient = (client: any) => {
     f({ clientName: client.name, clientEmail: client.email, clientPhone: client.phone, venue: client.venue || '', eventAddress: client.address || '', contractAmount: client.rate || 0, fee: client.rate || 0, depositAmount: client.deposit || 0, eventType: client.eventType || form.eventType })
   }
 
-  const inputCls = "w-full px-4 py-3 rounded-xl border text-sm outline-none"
-  const inputStyle = { background: theme.card, borderColor: theme.border, color: theme.text }
-
   const handleAdd = () => {
     if (!form.clientName || !form.date) return
     const contract = form.contractAmount || form.fee || 0
-    const gig: DJGig = {
+    onAdd({
       id: Date.now().toString(),
       clientName: form.clientName || '',
       clientEmail: form.clientEmail,
       clientPhone: form.clientPhone,
       eventType: form.eventType || 'private',
+      customEventType: form.customEventType,
+      ticketLink: form.ticketLink,
       date: form.date || '',
       startTime: form.startTime || '20:00',
       endTime: form.endTime || '23:00',
@@ -1405,172 +824,221 @@ function AddGigModal({ onAdd, onClose, prefill }: { onAdd: (gig: DJGig) => void;
       gearChecklist: DEFAULT_GEAR.map((item, i) => ({ id: String(i), item, checked: false })),
       notes: form.notes,
       createdAt: new Date().toISOString(),
-    }
-    onAdd(gig)
+    })
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.75)' }}
-      onClick={onClose}
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={prefill ? 'Book client again' : 'New gig'}
+      footer={<>
+        <Button className="flex-1" onClick={onClose}>Cancel</Button>
+        <Button className="flex-1" variant="primary" disabled={!form.clientName || !form.date} onClick={handleAdd}>{prefill ? 'Book' : 'Add gig'}</Button>
+      </>}
     >
-      <motion.div
-        initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }}
-        className="w-full max-w-lg rounded-2xl p-6 space-y-3 max-h-[90vh] overflow-y-auto"
-        style={{ background: theme.surface || theme.card, border: `1px solid ${theme.border}` }}
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold" style={{ color: theme.text }}>{prefill ? 'Rebook Client' : 'New Gig'}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-xl" style={{ color: theme.subtext }}><X size={16} /></button>
-        </div>
-
+      <div className="space-y-3">
         {savedClients.length > 0 && !prefill && (
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Select Existing Client</label>
-            <select className={inputCls} style={inputStyle} value="" onChange={e => { const c = savedClients.find((c: any) => c.id === e.target.value); if (c) selectClient(c) }}>
-              <option value="">— New client —</option>
+          <Field label="Existing client (optional)">
+            <select value="" onChange={e => { const c = savedClients.find((x: any) => x.id === e.target.value); if (c) selectClient(c) }} {...field}>
+              <option value="">New client</option>
               {savedClients.map((c: any) => <option key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ''}</option>)}
             </select>
-          </div>
+          </Field>
         )}
-
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Client Name *</label>
-            <input className={inputCls} style={inputStyle} placeholder="Client name" autoFocus value={form.clientName || ''} onChange={e => f({ clientName: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Phone</label>
-            <input className={inputCls} style={inputStyle} placeholder="Phone" value={form.clientPhone || ''} onChange={e => f({ clientPhone: e.target.value })} />
-          </div>
+          <Field label="Client name"><input value={form.clientName || ''} onChange={e => f({ clientName: e.target.value })} autoFocus {...field} /></Field>
+          <Field label="Phone"><input value={form.clientPhone || ''} onChange={e => f({ clientPhone: e.target.value })} {...field} /></Field>
         </div>
-
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Email</label>
-          <input className={inputCls} style={inputStyle} type="email" placeholder="Client email" value={form.clientEmail || ''} onChange={e => f({ clientEmail: e.target.value })} />
-        </div>
-
+        <Field label="Email"><input type="email" value={form.clientEmail || ''} onChange={e => f({ clientEmail: e.target.value })} {...field} /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Event Date *</label>
-            <input className={inputCls} style={inputStyle} type="date" value={form.date || ''} onChange={e => f({ date: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Event Type</label>
-            <select className={inputCls} style={inputStyle} value={form.eventType || 'private'} onChange={e => {
+          <Field label="Date"><input type="date" value={form.date || ''} onChange={e => f({ date: e.target.value })} {...field} /></Field>
+          <Field label="Event type">
+            <select value={form.customEventType !== undefined ? '__custom__' : form.eventType || 'private'} onChange={e => {
               const val = e.target.value
-              if (val === '__custom__') {
-                f({ eventType: 'other', customEventType: '' })
-              } else {
-                f({ eventType: val as GigType, customEventType: undefined })
-              }
-            }}>
-              {(['wedding','birthday','corporate','nightclub','bar','festival','private','other'] as GigType[]).map(t => (
-                <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-              ))}
-              <option value="__custom__">Custom...</option>
+              if (val === '__custom__') f({ eventType: 'other', customEventType: '' })
+              else f({ eventType: val as GigType, customEventType: undefined })
+            }} {...field}>
+              {GIG_TYPES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
+              <option value="__custom__">Custom…</option>
             </select>
-            {(form.eventType === 'other' && form.customEventType !== undefined) && (
-              <input className={inputCls} style={{ ...inputStyle, marginTop: 6 }} placeholder="Enter custom event name" value={form.customEventType || ''} onChange={e => f({ customEventType: e.target.value })} />
-            )}
-          </div>
+          </Field>
         </div>
-
+        {form.customEventType !== undefined && (
+          <Field label="Custom event name"><input value={form.customEventType || ''} onChange={e => f({ customEventType: e.target.value })} {...field} /></Field>
+        )}
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Venue</label>
-            <input className={inputCls} style={inputStyle} placeholder="Venue name" value={form.venue || ''} onChange={e => f({ venue: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Address</label>
-            <input className={inputCls} style={inputStyle} placeholder="Full address" value={form.eventAddress || ''} onChange={e => f({ eventAddress: e.target.value })} />
-          </div>
+          <Field label="Start time"><input type="time" value={form.startTime || ''} onChange={e => f({ startTime: e.target.value })} {...field} /></Field>
+          <Field label="End time"><input type="time" value={form.endTime || ''} onChange={e => f({ endTime: e.target.value })} {...field} /></Field>
+          <Field label="Venue"><input value={form.venue || ''} onChange={e => f({ venue: e.target.value })} {...field} /></Field>
+          <Field label="Address"><input value={form.eventAddress || ''} onChange={e => f({ eventAddress: e.target.value })} {...field} /></Field>
+          <Field label="Contract ($)"><input type="number" inputMode="decimal" value={form.contractAmount || ''} onChange={e => f({ contractAmount: Number(e.target.value), fee: Number(e.target.value) })} {...field} /></Field>
+          <Field label="Deposit ($)"><input type="number" inputMode="decimal" value={form.depositAmount || ''} onChange={e => f({ depositAmount: Number(e.target.value) })} {...field} /></Field>
         </div>
-
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Ticket Link (optional)</label>
-          <input className={inputCls} style={inputStyle} placeholder="https://tickets.example.com" value={form.ticketLink || ''} onChange={e => f({ ticketLink: e.target.value })} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Start Time</label>
-            <div className="flex gap-1">
-              <select className={inputCls} style={{ ...inputStyle, flex: 2 }} value={startH} onChange={e => setStart(e.target.value, startM, startP)}>
-                <option value="">Hr</option>
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(h => <option key={h} value={String(h)}>{h}</option>)}
-              </select>
-              <select className={inputCls} style={{ ...inputStyle, flex: 2 }} value={startM} onChange={e => setStart(startH, e.target.value, startP)}>
-                {['00','15','30','45'].map(m => <option key={m} value={m}>:{m}</option>)}
-              </select>
-              <select className={inputCls} style={{ ...inputStyle, flex: 2 }} value={startP} onChange={e => setStart(startH, startM, e.target.value)}>
-                <option value="AM">AM</option><option value="PM">PM</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>End Time</label>
-            <div className="flex gap-1">
-              <select className={inputCls} style={{ ...inputStyle, flex: 2 }} value={endH} onChange={e => setEnd(e.target.value, endM, endP)}>
-                <option value="">Hr</option>
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(h => <option key={h} value={String(h)}>{h}</option>)}
-              </select>
-              <select className={inputCls} style={{ ...inputStyle, flex: 2 }} value={endM} onChange={e => setEnd(endH, e.target.value, endP)}>
-                {['00','15','30','45'].map(m => <option key={m} value={m}>:{m}</option>)}
-              </select>
-              <select className={inputCls} style={{ ...inputStyle, flex: 2 }} value={endP} onChange={e => setEnd(endH, endM, e.target.value)}>
-                <option value="AM">AM</option><option value="PM">PM</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Contract Amount $</label>
-            <input className={inputCls} style={inputStyle} type="number" placeholder="Total contract" value={form.contractAmount || ''} onChange={e => f({ contractAmount: Number(e.target.value), fee: Number(e.target.value) })} />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Deposit Amount $</label>
-            <input className={inputCls} style={inputStyle} type="number" placeholder="Deposit" value={form.depositAmount || ''} onChange={e => f({ depositAmount: Number(e.target.value) })} />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: theme.subtext }}>Notes</label>
-          <textarea className="w-full px-4 py-3 rounded-xl border text-sm outline-none resize-none" style={inputStyle} rows={2} placeholder="Special requests, notes..." value={form.notes || ''} onChange={e => f({ notes: e.target.value })} />
-        </div>
-
-        <div className="flex gap-3 pt-1">
-          <button onClick={onClose} className="flex-1 py-3 rounded-xl font-semibold text-sm" style={{ background: theme.card, color: theme.subtext }}>Cancel</button>
-          <button onClick={handleAdd} disabled={!form.clientName || !form.date} className="flex-1 py-3 rounded-xl font-semibold text-sm disabled:opacity-40" style={{ background: DJ_PINK, color: '#fff' }}>{prefill ? 'Rebook' : 'Add Gig'}</button>
-        </div>
-      </motion.div>
-    </motion.div>
+        <Field label="Ticket link (optional)"><input value={form.ticketLink || ''} onChange={e => f({ ticketLink: e.target.value })} placeholder="https://" {...field} /></Field>
+        <Field label="Notes"><textarea rows={2} value={form.notes || ''} onChange={e => f({ notes: e.target.value })} {...field} className={`${field.className} h-auto py-2`} /></Field>
+      </div>
+    </Sheet>
   )
 }
 
-// ── Main Page ──
+// ── Recurring events (Settings) ───────────────────────────────────────────
+function blankSeries(): GigSeries {
+  return {
+    id: gid(), name: '', clientName: '', venue: '', eventAddress: '', eventType: 'nightclub',
+    days: [5, 6], startTime: '22:00', endTime: '02:00', rate: 0, depositAmount: 0,
+    startDate: localISO(new Date()), endDate: '', weeksAhead: 8, paused: false, skipped: [], notes: '',
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function RecurringPanel({ series, gigs, onSave, onDelete, onTogglePause }: {
+  series: GigSeries[]
+  gigs: DJGig[]
+  onSave: (s: GigSeries) => void
+  onDelete: (id: string) => void
+  onTogglePause: (id: string) => void
+}) {
+  const { theme } = useTheme()
+  const field = useField()
+  const [draft, setDraft] = useState<GigSeries | null>(null)
+  const [isNew, setIsNew] = useState(false)
+  const todayISO = localISO(new Date())
+  const d = (patch: Partial<GigSeries>) => setDraft(x => (x ? { ...x, ...patch } : x))
+
+  return (
+    <div className="space-y-4">
+      <Panel>
+        <PanelTitle
+          title="Recurring events"
+          sub="For nights you play every week, like Fridays and Saturdays at the same club. ORCA adds each night to your gigs automatically."
+          right={<Button variant="primary" size="sm" onClick={() => { setIsNew(true); setDraft(blankSeries()) }}><Plus size={14} /> New</Button>}
+        />
+        {series.length === 0 ? (
+          <EmptyState title="No recurring events yet" sub="Set one up once and every night shows in Gigs, on your website calendar, and in your income." action={<Button variant="primary" onClick={() => { setIsNew(true); setDraft(blankSeries()) }}><Repeat size={14} /> Add recurring event</Button>} />
+        ) : (
+          <ul>
+            {series.map((s, i) => {
+              const upcoming = gigs.filter(g => g.seriesId === s.id && g.date >= todayISO && g.status !== 'cancelled').sort((a, b) => a.date.localeCompare(b.date))
+              return (
+                <li key={s.id} className="flex items-center gap-3 py-3" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined, opacity: s.paused ? 0.6 : 1 }}>
+                  <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${theme.accent}18`, color: theme.accent }}><Repeat size={16} /></span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>{s.name || s.venue}{s.paused && <span className="ml-2 text-[11px] font-normal" style={{ color: theme.warn }}>Paused</span>}</p>
+                    <p className="text-[12px] truncate" style={{ color: theme.subtext }}>
+                      {describeSeries(s)} · {to12Hour(s.startTime)} to {to12Hour(s.endTime)}{s.rate ? ` · ${fmt(s.rate)} a night` : ''}
+                    </p>
+                    <p className="text-[11.5px] truncate" style={{ color: theme.subtext }}>
+                      {upcoming[0] ? `Next ${new Date(upcoming[0].date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${upcoming.length} upcoming` : 'No upcoming nights'}
+                      {s.endDate ? ` · ends ${new Date(s.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                    </p>
+                  </div>
+                  <RowMenu label={`Actions for ${s.name}`} items={[
+                    { label: 'Edit', icon: Edit3, onClick: () => { setIsNew(false); setDraft({ ...s, endDate: s.endDate || '' }) } },
+                    { label: s.paused ? 'Resume' : 'Pause', icon: s.paused ? Play : Pause, onClick: () => onTogglePause(s.id) },
+                    { label: 'Delete series', icon: Trash2, danger: true, onClick: () => { if (confirm(`Delete "${s.name || s.venue}"? Future unpaid nights are removed. Past and paid nights stay.`)) onDelete(s.id) } },
+                  ]} />
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Panel>
+
+      <Sheet
+        open={!!draft}
+        onClose={() => setDraft(null)}
+        title={isNew ? 'New recurring event' : 'Edit recurring event'}
+        sub={isNew ? undefined : 'Changes apply to future nights that are not paid yet.'}
+        footer={<>
+          <Button className="flex-1" onClick={() => setDraft(null)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!draft || !(draft.name || draft.venue) || draft.days.length === 0 || !draft.startDate} onClick={() => { if (draft) { onSave({ ...draft, endDate: draft.endDate || undefined }); setDraft(null) } }}>
+            {isNew ? 'Create' : 'Save changes'}
+          </Button>
+        </>}
+      >
+        {draft && (
+          <div className="space-y-4">
+            <Field label="Name"><input value={draft.name} onChange={e => d({ name: e.target.value })} placeholder="e.g. Club X weekends" autoFocus {...field} /></Field>
+            <Field label="Repeats every" group>
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 2, 3, 4, 5, 6, 0].map(day => {
+                  const on = draft.days.includes(day)
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => d({ days: on ? draft.days.filter(x => x !== day) : [...draft.days, day] })}
+                      className="w-11 h-10 rounded-lg text-[13px] font-medium transition-colors"
+                      style={{ backgroundColor: on ? `${theme.accent}22` : 'transparent', color: on ? theme.text : theme.subtext, border: `1px solid ${on ? theme.accent : theme.border}` }}
+                    >{WEEKDAYS[day]}</button>
+                  )
+                })}
+              </div>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Start time"><input type="time" value={draft.startTime} onChange={e => d({ startTime: e.target.value })} {...field} /></Field>
+              <Field label="End time"><input type="time" value={draft.endTime} onChange={e => d({ endTime: e.target.value })} {...field} /></Field>
+              <Field label="Venue"><input value={draft.venue} onChange={e => d({ venue: e.target.value })} {...field} /></Field>
+              <Field label="Address"><input value={draft.eventAddress || ''} onChange={e => d({ eventAddress: e.target.value })} {...field} /></Field>
+              <Field label="Pay per night ($)"><input type="number" inputMode="decimal" value={draft.rate || ''} onChange={e => d({ rate: Number(e.target.value) })} {...field} /></Field>
+              <Field label="Deposit per night ($)"><input type="number" inputMode="decimal" value={draft.depositAmount || ''} onChange={e => d({ depositAmount: Number(e.target.value) })} {...field} /></Field>
+              <Field label="Who pays" hint="Shown as the client on each night"><input value={draft.clientName} onChange={e => d({ clientName: e.target.value })} placeholder={draft.name || 'Club or promoter'} {...field} /></Field>
+              <Field label="Event type">
+                <select value={draft.eventType} onChange={e => d({ eventType: e.target.value as GigType })} {...field}>
+                  {GIG_TYPES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
+                </select>
+              </Field>
+              <Field label="Starts"><input type="date" value={draft.startDate} onChange={e => d({ startDate: e.target.value })} {...field} /></Field>
+              <Field label="Ends (optional)"><input type="date" value={draft.endDate || ''} onChange={e => d({ endDate: e.target.value })} {...field} /></Field>
+            </div>
+            <Field label="Keep nights created" group hint="How far ahead nights appear in Gigs and on your website.">
+              <Choice value={String(draft.weeksAhead)} onChange={v => d({ weeksAhead: Number(v) })} options={[{ value: '4', label: '4 weeks' }, { value: '8', label: '8 weeks' }, { value: '12', label: '12 weeks' }]} />
+            </Field>
+            <Field label="Notes (optional)"><textarea rows={2} value={draft.notes || ''} onChange={e => d({ notes: e.target.value })} {...field} className={`${field.className} h-auto py-2`} /></Field>
+            {draft.skipped.length > 0 && (
+              <Disclosure title={<span className="text-xs" style={{ color: theme.subtext }}>{draft.skipped.length} skipped date{draft.skipped.length === 1 ? '' : 's'}</span>}>
+                <ul className="space-y-1">
+                  {[...draft.skipped].sort().map(date => (
+                    <li key={date} className="flex items-center justify-between text-[13px]">
+                      <span style={{ color: theme.text }}>{new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                      <Button size="sm" variant="ghost" onClick={() => d({ skipped: draft.skipped.filter(x => x !== date) })}>Add back</Button>
+                    </li>
+                  ))}
+                </ul>
+              </Disclosure>
+            )}
+          </div>
+        )}
+      </Sheet>
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────
 export default function DJPage() {
   const { theme } = useTheme()
+  const field = useField()
+  const statusColor = useStatusColor()
   const { syncState, forceSync } = useOrcaData()
   const [gigs, setGigs] = useState<DJGig[]>([])
+  const [series, setSeries] = useState<GigSeries[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [rebookClient, setRebookClient] = useState<Partial<DJGig> | null>(null)
+  const [openGigId, setOpenGigId] = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState<GigStatus | 'all'>('confirmed')
-  const [activeSection, setActiveSection] = useState<'gigs' | 'quotes' | 'requests' | 'crm' | 'email'>('gigs')
+  const [activeSection, setActiveSection] = useState<'gigs' | 'quotes' | 'crm' | 'email' | 'settings'>('gigs')
+  const [settingsTab, setSettingsTab] = useState<'recurring' | 'website'>('recurring')
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
   const [syncDetail, setSyncDetail] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<{ date: string; clientName: string }[]>([])
+  const [online, setOnline] = useState(true)
 
   // Booking requests (from public website)
   const [requests, setRequests] = useState<BookingRequest[]>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<BookingRequest | null>(null)
-  const [requestFilter, setRequestFilter] = useState<string>('all')
   const [generatingReply, setGeneratingReply] = useState(false)
   const [generatedReply, setGeneratedReply] = useState('')
   const [replySubject, setReplySubject] = useState('')
@@ -1580,10 +1048,6 @@ export default function DJPage() {
   const [quoteAmount, setQuoteAmount] = useState('')
   const [depositAmount, setDepositAmount] = useState('')
   const [paymentLink, setPaymentLink] = useState('')
-  const [blockedDate, setBlockedDate] = useState('')
-  const [blockingDate, setBlockingDate] = useState(false)
-  const [blockSuccess, setBlockSuccess] = useState('')
-  const [websiteSubTab, setWebsiteSubTab] = useState<'photos' | 'gigs'>('photos')
   const [testimonials, setTestimonials] = useState<any[]>([])
   const [websitePhotos, setWebsitePhotos] = useState<any[]>([])
   const [photoUploadError, setPhotoUploadError] = useState('')
@@ -1608,6 +1072,15 @@ export default function DJPage() {
   })
   const [siteSaved, setSiteSaved] = useState(false)
 
+  useEffect(() => {
+    setOnline(navigator.onLine)
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+
   const saveWebsiteSettings = async () => {
     const settings = {
       bio: siteBio, services: siteServices, instagram: siteInstagram, tiktok: siteTiktok, phone: sitePhone,
@@ -1631,54 +1104,14 @@ export default function DJPage() {
     setSiteSaved(true)
     setTimeout(() => setSiteSaved(false), 3000)
   }
-  const [newPhotoUrl, setNewPhotoUrl] = useState('')
-  const [gCalMonth, setGCalMonth] = useState(new Date().getMonth())
-  const [gCalYear, setGCalYear] = useState(new Date().getFullYear())
-
-  // Load gigs: localStorage first, then listen for cloud sync to merge
-  useEffect(() => {
-    function loadGigsFromLocal() {
-      try {
-        const saved = localStorage.getItem('orca-dj-gigs')
-        if (saved) {
-          const parsed = JSON.parse(saved)
-          const migrated = parsed.map((g: any) => ({
-            ...g,
-            date: g.date || '',
-            status: g.status || 'confirmed',
-            contractAmount: g.contractAmount || g.fee || 0,
-            depositAmount: g.depositAmount || 0,
-            partialPayments: g.partialPayments || [],
-          }))
-          setGigs(migrated)
-          autoSyncGigs(migrated)
-        }
-      } catch {}
-    }
-
-    loadGigsFromLocal()
-
-    // Re-read after cloud sync completes (syncEngine merges cloud + local)
-    const handleSyncReady = () => loadGigsFromLocal()
-    window.addEventListener('orca-sync-ready', handleSyncReady)
-    return () => window.removeEventListener('orca-sync-ready', handleSyncReady)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const autoSyncGigs = useCallback((gigList: DJGig[]) => {
     setSyncStatus('syncing')
     setSyncDetail(null)
     setConflicts([])
-
     // Sync to both: cloud data (profiles.local_data) and calendar (booking_requests)
     Promise.all([
-      // 1. Push gigs to localStorage + cloud data sync
-      (async () => {
-        try {
-          setLocalSynced('orca-dj-gigs', JSON.stringify(gigList))
-        } catch {}
-      })(),
-      // 2. Sync to booking_requests for calendar blocking
+      (async () => { try { setLocalSynced('orca-dj-gigs', JSON.stringify(gigList)) } catch {} })(),
       syncDjCalendar(gigList),
     ]).then(([, calResult]) => {
       if (!calResult.ok) {
@@ -1687,9 +1120,7 @@ export default function DJPage() {
       } else {
         setSyncStatus('synced')
         setSyncDetail(null)
-        if (calResult.conflicts.length > 0) {
-          setConflicts(calResult.conflicts)
-        }
+        if (calResult.conflicts.length > 0) setConflicts(calResult.conflicts)
         try {
           const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
           log.unshift({ at: new Date().toISOString(), action: 'sync', synced: gigList.length })
@@ -1700,6 +1131,38 @@ export default function DJPage() {
       setSyncStatus('error')
       setSyncDetail('Network error — check your connection')
     })
+  }, [])
+
+  // Load gigs: localStorage first, then listen for cloud sync to merge.
+  // Recurring series are applied on every load so upcoming nights stay filled in.
+  useEffect(() => {
+    function loadGigsFromLocal() {
+      try {
+        const seriesList = readSeries()
+        setSeries(seriesList)
+        const saved = localStorage.getItem('orca-dj-gigs')
+        const parsed = saved ? JSON.parse(saved) : []
+        const migrated: DJGig[] = parsed.map((g: any) => ({
+          ...g,
+          date: g.date || '',
+          status: g.status || 'confirmed',
+          contractAmount: g.contractAmount || g.fee || 0,
+          depositAmount: g.depositAmount || 0,
+          partialPayments: g.partialPayments || [],
+          gearChecklist: g.gearChecklist || [],
+        }))
+        const { gigs: withSeries } = reconcileSeries(migrated, seriesList)
+        if (saved || withSeries.length) {
+          setGigs(withSeries)
+          autoSyncGigs(withSeries)
+        }
+      } catch {}
+    }
+    loadGigsFromLocal()
+    const handleSyncReady = () => loadGigsFromLocal()
+    window.addEventListener('orca-sync-ready', handleSyncReady)
+    return () => window.removeEventListener('orca-sync-ready', handleSyncReady)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleForceSync = useCallback(async () => {
@@ -1714,7 +1177,6 @@ export default function DJPage() {
           setGigs(parsed)
           autoSyncGigs(parsed)
         }
-        // Also push website settings to cloud
         try {
           const settings = {
             bio: localStorage.getItem('orca-dj-site-bio') || '',
@@ -1742,10 +1204,16 @@ export default function DJPage() {
   }, [forceSync, autoSyncGigs])
 
   const save = (g: DJGig[]) => {
-    try {
-      setLocalSynced('orca-dj-gigs', JSON.stringify(g))
-    } catch {}
+    try { setLocalSynced('orca-dj-gigs', JSON.stringify(g)) } catch {}
     autoSyncGigs(g)
+  }
+
+  const logActivity = (entry: Record<string, unknown>) => {
+    try {
+      const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
+      log.unshift({ at: new Date().toISOString(), ...entry })
+      setLocalSynced('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
+    } catch {}
   }
 
   const addGig = (gig: DJGig) => {
@@ -1753,25 +1221,16 @@ export default function DJPage() {
     setGigs(next)
     save(next)
     setShowAdd(false)
-    try {
-      const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
-      log.unshift({ at: new Date().toISOString(), action: 'created', gigId: gig.id, client: gig.clientName, date: gig.date })
-      setLocalSynced('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
-    } catch {}
+    setRebookClient(null)
+    logActivity({ action: 'created', gigId: gig.id, client: gig.clientName, date: gig.date })
   }
 
   const updateGig = (updated: DJGig) => {
     const prev = gigs.find(g => g.id === updated.id)
-    const next = gigs.map(g => g.id === updated.id ? updated : g)
+    const next = gigs.map(g => (g.id === updated.id ? updated : g))
     setGigs(next)
     save(next)
-    if (prev && prev.status !== updated.status) {
-      try {
-        const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
-        log.unshift({ at: new Date().toISOString(), action: 'status_changed', gigId: updated.id, client: updated.clientName, from: prev.status, to: updated.status })
-        setLocalSynced('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
-      } catch {}
-    }
+    if (prev && prev.status !== updated.status) logActivity({ action: 'status_changed', gigId: updated.id, client: updated.clientName, from: prev.status, to: updated.status })
   }
 
   const saveClientHistory = (gig: DJGig) => {
@@ -1793,23 +1252,36 @@ export default function DJPage() {
     } catch {}
   }
 
+  const persistSeries = (list: GigSeries[]) => {
+    setSeries(list)
+    try { setLocalSynced(RECURRING_KEY, JSON.stringify(list)) } catch {}
+  }
+
   const deleteGig = (id: string) => {
     const gig = gigs.find(g => g.id === id)
     const next = gigs.filter(g => g.id !== id)
     setGigs(next)
     save(next)
     if (gig) {
+      // A night removed from a recurring series is skipped, so it is not recreated.
+      if (gig.seriesId) persistSeries(series.map(s => (s.id === gig.seriesId && !s.skipped.includes(gig.date) ? { ...s, skipped: [...s.skipped, gig.date] } : s)))
       saveClientHistory(gig)
-      try {
-        const log = JSON.parse(localStorage.getItem('orca-dj-activity') || '[]')
-        log.unshift({ at: new Date().toISOString(), action: 'deleted', gigId: id, client: gig.clientName, date: gig.date })
-        setLocalSynced('orca-dj-activity', JSON.stringify(log.slice(0, 50)))
-      } catch {}
+      logActivity({ action: 'deleted', gigId: id, client: gig.clientName, date: gig.date })
       syncDjCalendar(next)
     }
   }
 
-  // Load booking requests when switching to requests tab
+  // Applies a change to the series list and brings the gigs in line with it.
+  const applySeries = (list: GigSeries[]) => {
+    persistSeries(list)
+    const { gigs: next, changed } = reconcileSeries(gigs, list)
+    if (changed) { setGigs(next); save(next) }
+  }
+  const saveSeriesItem = (s: GigSeries) => applySeries(series.some(x => x.id === s.id) ? series.map(x => (x.id === s.id ? s : x)) : [...series, s])
+  const deleteSeries = (id: string) => applySeries(series.filter(s => s.id !== id))
+  const toggleSeriesPause = (id: string) => applySeries(series.map(s => (s.id === id ? { ...s, paused: !s.paused } : s)))
+
+  // Booking requests from the public site
   const loadRequests = useCallback(async () => {
     setLoadingRequests(true)
     try {
@@ -1822,27 +1294,22 @@ export default function DJPage() {
     setLoadingRequests(false)
   }, [])
 
+  // Load once for the Requests badge.
+  useEffect(() => { loadRequests() }, [loadRequests])
+
   useEffect(() => {
-    if ((activeSection === 'quotes' || activeSection === 'requests' || activeSection === 'crm') && requests.length === 0) loadRequests()
-    if (activeSection === 'quotes' || activeSection === 'requests') {
-      fetch('/api/dj/testimonials').then(r => r.ok ? r.json() : null).then(d => {
-        if (d?.all) setTestimonials(d.all)
-      }).catch(() => {})
-    }
-    if (activeSection === 'requests') {
-      fetch('/api/dj/photos').then(r => r.ok ? r.json() : null).then(d => {
+    if (activeSection === 'settings') {
+      fetch('/api/dj/testimonials').then(r => (r.ok ? r.json() : null)).then(d => { if (d?.all) setTestimonials(d.all) }).catch(() => {})
+      fetch('/api/dj/photos').then(r => (r.ok ? r.json() : null)).then(d => {
         if (d?.photos) {
           setWebsitePhotos(d.photos)
           try { setLocalSynced('orca-dj-website-photos', JSON.stringify(d.photos)) } catch {}
         }
       }).catch(() => {
-        try {
-          const saved = localStorage.getItem('orca-dj-website-photos')
-          if (saved) setWebsitePhotos(JSON.parse(saved))
-        } catch {}
+        try { const saved = localStorage.getItem('orca-dj-website-photos'); if (saved) setWebsitePhotos(JSON.parse(saved)) } catch {}
       })
     }
-  }, [activeSection, loadRequests, requests.length])
+  }, [activeSection])
 
   const generateReply = async (type: 'inquiry' | 'decline' | 'invoice') => {
     if (!selectedRequest) return
@@ -1852,13 +1319,7 @@ export default function DJPage() {
       const res = await fetch('/api/dj/generate-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          booking: selectedRequest,
-          type,
-          quoteAmount: quoteAmount || undefined,
-          depositAmount: depositAmount || undefined,
-          paymentLink: paymentLink || undefined,
-        }),
+        body: JSON.stringify({ booking: selectedRequest, type, quoteAmount: quoteAmount || undefined, depositAmount: depositAmount || undefined, paymentLink: paymentLink || undefined }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -1902,18 +1363,13 @@ export default function DJPage() {
 
   const updateRequestStatus = async (id: string, status: BookingRequest['status']) => {
     try {
-      await fetch('/api/dj/bookings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status }),
-      })
+      await fetch('/api/dj/bookings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) })
       const req = requests.find(r => r.id === id)
-      setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r))
-      if (selectedRequest?.id === id) setSelectedRequest(prev => prev ? { ...prev, status } : prev)
-
-      // Auto-create a gig when quote is confirmed (booked)
+      setRequests(prev => prev.map(r => (r.id === id ? { ...r, status } : r)))
+      if (selectedRequest?.id === id) setSelectedRequest(prev => (prev ? { ...prev, status } : prev))
+      // Auto-create a gig when a quote is approved (booked)
       if (status === 'confirmed' && req) {
-        const newGig: DJGig = {
+        addGig({
           id: gid(),
           clientName: req.client_name || '',
           clientEmail: req.client_email || '',
@@ -1935,12 +1391,19 @@ export default function DJPage() {
           notes: `From quote: ${req.client_name}`,
           createdAt: new Date().toISOString(),
           isLead: true,
-        }
-        addGig(newGig)
+        })
       }
     } catch {}
   }
 
+  // ── Hidden before the 2026-11 redesign (was wrapped in `false &&` inside the
+  // Website tab). Kept intact and uncalled so it can be restored: public
+  // calendar preview, block-a-date, and the synced gig list.
+  const [blockedDate, setBlockedDate] = useState('')
+  const [blockingDate, setBlockingDate] = useState(false)
+  const [blockSuccess, setBlockSuccess] = useState('')
+  const [gCalMonth, setGCalMonth] = useState(new Date().getMonth())
+  const [gCalYear, setGCalYear] = useState(new Date().getFullYear())
   const blockDate = async () => {
     if (!blockedDate) return
     setBlockingDate(true)
@@ -1962,563 +1425,7 @@ export default function DJPage() {
     setBlockingDate(false)
   }
 
-  const today = new Date().toISOString().slice(0, 10)
-
-  const filtered = useMemo(() => {
-    const list = filterStatus === 'all' ? gigs : gigs.filter(g => g.status === filterStatus)
-    return [...list].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-  }, [gigs, filterStatus])
-
-  const stats = useMemo(() => {
-    const upcoming = gigs.filter(g => g.date >= today && g.status === 'confirmed')
-    const totalEarned = gigs.filter(g => g.status === 'completed').reduce((s, g) => s + calcTotalPaid(g), 0)
-    const bookedValue = upcoming.reduce((s, g) => s + (g.contractAmount || g.fee || 0), 0)
-    const balanceDue = gigs.filter(g => g.status !== 'cancelled').reduce((s, g) => s + calcRemaining(g), 0)
-    return { upcoming: upcoming.length, totalEarned, bookedValue, balanceDue, nextGig: upcoming.sort((a, b) => a.date.localeCompare(b.date))[0] }
-  }, [gigs, today])
-
-  const upcomingAlert = useMemo(() => {
-    if (!stats.nextGig) return null
-    const days = Math.ceil((new Date(stats.nextGig.date + 'T00:00:00').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-    if (days <= 7) return `Gig in ${days} day${days === 1 ? '' : 's'} — ${stats.nextGig.clientName} at ${stats.nextGig.venue || 'TBD'}. Confirm invoice, playlist, and gear.`
-    return null
-  }, [stats])
-
-  return (
-    <div className="min-h-screen pb-28" style={{ background: theme.bg, color: theme.text }}>
-      {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 py-4 sticky top-0 z-10"
-        style={{ background: `${theme.bg}f0`, backdropFilter: 'blur(12px)', borderBottom: `1px solid ${theme.border}` }}
-      >
-        <div>
-          <h1 className="text-lg font-bold" style={{ color: theme.text }}>DJ Maskoff</h1>
-          <div className="flex items-center gap-2">
-            <p className="text-xs" style={{ color: theme.subtext }}>{gigs.length} gig{gigs.length !== 1 ? 's' : ''}</p>
-            {syncStatus === 'syncing' && <span className="text-[10px] font-bold animate-pulse" style={{ color: BENTLEY_GOLD }}>Syncing…</span>}
-            {syncStatus === 'synced' && conflicts.length === 0 && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_GREEN }}><CheckCircle size={9} /> Synced</span>}
-            {syncStatus === 'error' && (
-              <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_RED }} title={syncDetail || syncState.lastError || 'Unknown error'}>
-                <AlertCircle size={9} /> {syncDetail ? syncDetail.slice(0, 40) : 'Sync error'}
-              </span>
-            )}
-            {!navigator.onLine && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_GOLD }}><AlertTriangle size={9} /> Offline</span>}
-            {conflicts.length > 0 && <span className="text-[10px] font-bold flex items-center gap-0.5" style={{ color: BENTLEY_RED }}><AlertTriangle size={9} /> Conflict</span>}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <motion.button
-            whileTap={{ scale: 0.94 }}
-            onClick={handleForceSync}
-            disabled={syncStatus === 'syncing'}
-            className="px-2 py-2 rounded-xl text-xs font-semibold flex items-center gap-1"
-            title="Full cloud sync — pull + push all data"
-            style={{ background: `${BENTLEY_GREEN}15`, color: BENTLEY_GREEN, border: `1px solid ${BENTLEY_GREEN}30`, opacity: syncStatus === 'syncing' ? 0.5 : 1 }}
-          >
-            <RefreshCw size={12} className={syncStatus === 'syncing' ? 'animate-spin' : ''} /> Sync Now
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.94 }}
-            onClick={() => {
-              save(gigs)
-              handleForceSync()
-            }}
-            className="px-2 py-2 rounded-xl text-xs font-semibold flex items-center gap-1"
-            title="Save all changes to cloud"
-            style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}
-          >
-            <FileText size={12} /> Save Changes
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.94 }}
-            onClick={() => setShowAdd(true)}
-            className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"
-            style={{ background: `${DJ_PINK}18`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}
-          >
-            <Plus size={12} /> Add Gig
-          </motion.button>
-        </div>
-      </div>
-
-      {/* Double-booking conflict banner */}
-      <AnimatePresence>
-        {conflicts.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="mx-4 mt-2 rounded-xl p-3 flex items-start gap-2"
-            style={{ background: `${BENTLEY_RED}15`, border: `1px solid ${BENTLEY_RED}30` }}
-          >
-            <AlertTriangle size={14} className="shrink-0 mt-0.5" style={{ color: BENTLEY_RED }} />
-            <div>
-              <p className="text-xs font-bold" style={{ color: BENTLEY_RED }}>Double-booking conflict detected</p>
-              <p className="text-[11px] mt-0.5" style={{ color: theme.subtext }}>
-                {conflicts.map(c => c.date).join(', ')} already has a client booking request. Review in Website tab.
-              </p>
-            </div>
-            <button onClick={() => setConflicts([])} className="ml-auto p-0.5" style={{ color: theme.subtext }}><X size={12} /></button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <motion.div
-        initial="hidden"
-        animate="show"
-        variants={{ show: { transition: { staggerChildren: 0.05 } } }}
-        className="px-4 pt-4 space-y-5 max-w-lg mx-auto lg:max-w-3xl"
-      >
-        {/* Stats */}
-        <motion.div variants={fadeUp} className="grid grid-cols-4 gap-2">
-          <div className="rounded-xl p-2.5 text-center overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <div className="text-lg font-bold" style={{ color: DJ_PINK }}>{stats.upcoming}</div>
-            <div className="text-[9px]" style={{ color: theme.subtext }}>Upcoming</div>
-          </div>
-          <div className="rounded-xl p-2.5 text-center overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <div className="text-lg font-bold" style={{ color: BENTLEY_GOLD }}>{gigs.length}</div>
-            <div className="text-[9px]" style={{ color: theme.subtext }}>Total</div>
-          </div>
-          <div className="rounded-xl p-2.5 text-center overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <div className="text-xs font-black leading-tight truncate" style={{ color: BENTLEY_INDIGO }}>{fmt(stats.bookedValue)}</div>
-            <div className="text-[9px]" style={{ color: theme.subtext }}>Booked</div>
-          </div>
-          <div className="rounded-xl p-2.5 text-center overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-            <div className="text-xs font-black leading-tight truncate" style={{ color: BENTLEY_GREEN }}>{fmt(stats.totalEarned)}</div>
-            <div className="text-[9px]" style={{ color: theme.subtext }}>Earned</div>
-          </div>
-        </motion.div>
-
-        {/* Upcoming gig alert */}
-        {upcomingAlert && (
-          <motion.div
-            variants={fadeUp}
-            className="rounded-2xl p-4 flex items-start gap-3"
-            style={{ background: `${DJ_PINK}12`, border: `1px solid ${DJ_PINK}30` }}
-          >
-            <AlertTriangle size={14} className="shrink-0 mt-0.5" style={{ color: DJ_PINK }} />
-            <p className="text-sm leading-snug flex-1" style={{ color: theme.text }}>{upcomingAlert}</p>
-          </motion.div>
-        )}
-
-        {/* Section Tabs */}
-        <motion.div variants={fadeUp} className="flex gap-1 p-1 rounded-xl overflow-x-auto" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-          {([
-            ['gigs', 'Gigs', Mic2],
-            ['quotes', 'Quotes', MessageSquare],
-            ['requests', 'Website', FileText],
-            ['crm', 'Clients', Users],
-            ['email', 'Email', Mail],
-          ] as const).map(([s, label, Icon]) => (
-            <button
-              key={s}
-              onClick={() => setActiveSection(s as typeof activeSection)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
-              style={{
-                background: activeSection === s ? DJ_PINK : 'transparent',
-                color: activeSection === s ? '#fff' : theme.subtext,
-                minWidth: 50,
-              }}
-            >
-              <Icon size={12} /> {label}
-              {s === 'quotes' && requests.filter(r => r.status === 'pending').length > 0 && (
-                <span className="ml-0.5 px-1 py-0 rounded-full text-[9px] font-black" style={{ background: DJ_PINK, color: '#fff', opacity: activeSection === 'quotes' ? 0.7 : 1 }}>
-                  {requests.filter(r => r.status === 'pending').length}
-                </span>
-              )}
-            </button>
-          ))}
-        </motion.div>
-
-        {activeSection === 'gigs' && (
-          <>
-            {/* Filter */}
-            <motion.div variants={fadeUp} className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {(['all', 'confirmed', 'completed'] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatus(s as GigStatus | 'all')}
-                  className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
-                  style={{
-                    background: filterStatus === s ? DJ_PINK : theme.card,
-                    color: filterStatus === s ? '#fff' : theme.subtext,
-                    border: `1px solid ${filterStatus === s ? DJ_PINK : theme.border}`,
-                  }}
-                >
-                  {s === 'all' ? 'All' : STATUS_CONFIG[s as GigStatus].label}
-                </button>
-              ))}
-            </motion.div>
-
-            {/* Gig List */}
-            {filtered.length === 0 ? (
-              <motion.div variants={fadeUp}>
-                <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                  <Mic2 size={32} style={{ color: theme.subtext, margin: '0 auto 12px' }} />
-                  <p className="text-sm font-medium" style={{ color: theme.text }}>No gigs here.</p>
-                  <p className="text-xs mt-1" style={{ color: theme.subtext }}>Tap "Add Gig" to get started.</p>
-                </div>
-              </motion.div>
-            ) : (
-              <div className="space-y-3">
-                {filtered.map(gig => (
-                  <GigCard key={gig.id} gig={gig} onUpdate={updateGig} onDelete={deleteGig} />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {activeSection === 'crm' && (
-          <motion.div variants={fadeUp}>
-            <div className="flex items-center gap-2 mb-3">
-              <Users size={14} style={{ color: DJ_PINK }} />
-              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Client Database</span>
-            </div>
-            <CRMPanel gigs={gigs} quotes={requests} onBookAgain={(data) => {
-              setRebookClient(data)
-              setShowAdd(true)
-            }} />
-          </motion.div>
-        )}
-
-        {activeSection === 'email' && (
-          <motion.div variants={fadeUp}>
-            <EmailPanel gigs={gigs} />
-          </motion.div>
-        )}
-
-        {activeSection === 'quotes' && (
-          <motion.div variants={fadeUp} className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Quote Requests</span>
-              <a href="/maskoffdadj" target="_blank" className="flex items-center gap-1 text-xs font-semibold" style={{ color: DJ_PINK }}>
-                Public Website <ChevronRight size={12} />
-              </a>
-            </div>
-
-            {/* ── QUOTES CONTENT (standalone tab) ── */}
-            <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <button onClick={loadRequests} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-                    style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}>
-                    <RefreshCw size={11} /> Refresh
-                  </button>
-                  <span className="text-xs ml-auto" style={{ color: theme.subtext }}>{requests.length} total</span>
-                </div>
-
-                {loadingRequests && <div className="flex items-center justify-center py-8 gap-2" style={{ color: theme.subtext }}><Loader2 size={16} className="animate-spin" /> Loading…</div>}
-
-                {!loadingRequests && requests.filter(r => r.status === 'pending').length === 0 && (
-                  <div className="rounded-2xl p-8 text-center" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                    <MessageSquare size={28} style={{ color: theme.subtext, margin: '0 auto 8px' }} />
-                    <p className="text-sm font-semibold" style={{ color: theme.text }}>No pending quotes</p>
-                    <p className="text-xs mt-1" style={{ color: theme.subtext }}>New customer requests from your website will appear here.</p>
-                  </div>
-                )}
-
-                {!loadingRequests && requests.filter(r => r.status === 'pending').map(r => {
-                  const isExpanded = selectedRequest?.id === r.id
-                  const colors = REQUEST_STATUS_COLORS[r.status] || REQUEST_STATUS_COLORS['reviewed']
-                  return (
-                    <div key={r.id} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                      <button className="w-full flex items-center gap-3 px-4 py-3 text-left" onClick={() => {
-                        if (isExpanded) { setSelectedRequest(null) } else { setSelectedRequest(r); setGeneratedReply(''); setReplySubject(''); setReplyError(''); setReplySent('') }
-                      }}>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0" style={{ background: colors.bg, color: colors.text }}>{REQUEST_STATUS_LABELS[r.status] || r.status}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold truncate" style={{ color: theme.text }}>{r.client_name}</p>
-                          <p className="text-xs truncate" style={{ color: theme.subtext }}>{r.event_type} · {r.date} · {r.city}</p>
-                        </div>
-                        {isExpanded ? <ChevronUp size={14} style={{ color: theme.subtext }} /> : <ChevronDown size={14} style={{ color: theme.subtext }} />}
-                      </button>
-                      {isExpanded && (
-                        <div className="border-t px-4 pb-4 pt-3 space-y-4" style={{ borderColor: theme.border }}>
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                            {[['Email', r.client_email], ['Phone', r.client_phone || '—'], ['Date', r.date], ['City', r.city], ['Venue', r.location || '—'], ['Guests', r.guest_count ? String(r.guest_count) : '—'], ['Budget', r.budget_range || '—'], ['MC', r.mc_needed ? 'Yes' : 'No']].map(([label, val]) => (
-                              <div key={label}><p className="text-[10px] font-semibold" style={{ color: theme.subtext }}>{label}</p><p className="text-xs font-medium" style={{ color: theme.text }}>{val}</p></div>
-                            ))}
-                          </div>
-                          {r.special_requests && <div><p className="text-[10px] font-semibold" style={{ color: theme.subtext }}>Notes</p><p className="text-xs whitespace-pre-wrap" style={{ color: theme.text }}>{r.special_requests}</p></div>}
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>Send Quote / Reply</p>
-                            {!generatedReply && (
-                              <div className="space-y-3">
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div>
-                                    <label className="block text-[10px] font-bold uppercase mb-1" style={{ color: theme.subtext }}>Quote Amount ($)</label>
-                                    <input type="number" placeholder="500" value={quoteAmount} onChange={e => { setQuoteAmount(e.target.value); if (e.target.value) setDepositAmount(String(Math.round(Number(e.target.value) * 0.25))) }} className="w-full px-2 py-1.5 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] font-bold uppercase mb-1" style={{ color: theme.subtext }}>Deposit ($)</label>
-                                    <input type="number" placeholder="125" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full px-2 py-1.5 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                                  </div>
-                                </div>
-                                {quoteAmount && (
-                                  <div className="rounded-xl px-3 py-2 mt-1" style={{ background: `${BENTLEY_GOLD}10`, border: `1px solid ${BENTLEY_GOLD}25` }}>
-                                    <p className="text-[10px] font-bold" style={{ color: BENTLEY_GOLD }}>PayPal Fee Preview</p>
-                                    <p className="text-xs" style={{ color: theme.text }}>
-                                      Deposit ${depositAmount || Math.round(Number(quoteAmount) * 0.25)}: customer sends <strong>${(Number(depositAmount || Math.round(Number(quoteAmount) * 0.25)) * 1.0349 + 0.49).toFixed(2)}</strong> (includes ${(Number(depositAmount || Math.round(Number(quoteAmount) * 0.25)) * 0.0349 + 0.49).toFixed(2)} PayPal fee)
-                                    </p>
-                                  </div>
-                                )}
-                                <div className="flex gap-2">
-                                  <button onClick={() => generateReply('invoice')} disabled={generatingReply} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: `${BENTLEY_GREEN}15`, color: BENTLEY_GREEN, border: `1px solid ${BENTLEY_GREEN}30` }}>
-                                    {generatingReply ? <Loader2 size={11} className="animate-spin" /> : <DollarSign size={11} />} Generate Invoice
-                                  </button>
-                                  <button onClick={() => generateReply('inquiry')} disabled={generatingReply} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: `${BENTLEY_INDIGO}15`, color: BENTLEY_INDIGO, border: `1px solid ${BENTLEY_INDIGO}30` }}>
-                                    {generatingReply ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />} Quick Reply
-                                  </button>
-                                  <button onClick={() => generateReply('decline')} disabled={generatingReply} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-40" style={{ background: `${BENTLEY_RED}15`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}>
-                                    Decline
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                            {replyError && <p className="text-xs mb-2" style={{ color: BENTLEY_RED }}>{replyError}</p>}
-                            {generatedReply && (
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <AlertCircle size={12} style={{ color: BENTLEY_GOLD }} />
-                                  <p className="text-[10px] font-bold" style={{ color: BENTLEY_GOLD }}>Review before sending — edit anything below</p>
-                                </div>
-                                <input value={replySubject} onChange={e => setReplySubject(e.target.value)} placeholder="Subject" className="w-full px-3 py-2 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                                <textarea value={generatedReply} onChange={e => setGeneratedReply(e.target.value)} rows={10} className="w-full px-3 py-2 rounded-xl border text-sm resize-none font-mono" style={{ background: theme.bg, borderColor: theme.border, color: theme.text, lineHeight: 1.6 }} />
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <button onClick={sendReply} disabled={sendingReply} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-40" style={{ background: BENTLEY_GREEN, color: '#fff' }}>
-                                    {sendingReply ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />} Approve & Send
-                                  </button>
-                                  <button onClick={() => { setGeneratedReply(''); setReplySubject(''); setQuoteAmount(''); setDepositAmount(''); setPaymentLink('') }} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext, border: `1px solid ${theme.border}` }}>
-                                    <X size={11} /> Discard
-                                  </button>
-                                  <button onClick={() => navigator.clipboard.writeText(generatedReply)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={{ background: theme.card, color: theme.subtext, border: `1px solid ${theme.border}` }}>
-                                    <Copy size={11} /> Copy
-                                  </button>
-                                  {replySent && <span className="text-xs flex items-center gap-1" style={{ color: BENTLEY_GREEN }}><CheckCircle2 size={11} /> {replySent}</span>}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => updateRequestStatus(r.id, 'confirmed')} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold" style={{ background: BENTLEY_GREEN, color: '#fff' }}>
-                              <Check size={12} /> Approve & Book
-                            </button>
-                            <button onClick={() => updateRequestStatus(r.id, 'declined')} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold" style={{ background: `${BENTLEY_RED}15`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}>
-                              <X size={12} /> Deny
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-
-                {testimonials.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: theme.subtext }}>Customer Reviews ({testimonials.length})</p>
-                    {testimonials.map((t: any) => (
-                      <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1.5" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold truncate" style={{ color: theme.text }}>{t.name} — {t.event_type}</p>
-                          <p className="text-[11px] truncate" style={{ color: theme.subtext }}>{t.review}</p>
-                        </div>
-                        <div className="flex gap-1.5 shrink-0">
-                          <span className="text-[10px] font-bold" style={{ color: BENTLEY_GREEN }}>Live</span>
-                          <button onClick={() => { fetch('/api/dj/testimonials', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.id, status: 'deleted' }) }).then(() => setTestimonials(prev => prev.filter(x => x.id !== t.id))) }}
-                            className="px-2 py-1 rounded-lg text-[10px] font-bold" style={{ background: `${BENTLEY_RED}18`, color: BENTLEY_RED }}>Delete</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-            </div>
-          </motion.div>
-        )}
-
-        {activeSection === 'requests' && (
-          <motion.div variants={fadeUp} className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Public Website Settings</span>
-              <a href="/maskoffdadj" target="_blank" className="flex items-center gap-1 text-xs font-semibold" style={{ color: DJ_PINK }}>
-                View Live Site <ChevronRight size={12} />
-              </a>
-            </div>
-
-            {/* Sync status */}
-            <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: `${BENTLEY_GREEN}08`, border: `1px solid ${BENTLEY_GREEN}20` }}>
-              <CheckCircle size={14} style={{ color: BENTLEY_GREEN }} />
-              <div className="flex-1">
-                <p className="text-xs font-semibold" style={{ color: theme.text }}>Active Gigs: {gigs.filter(g => g.status !== 'cancelled' && g.status !== 'completed').length}</p>
-                <p className="text-[10px]" style={{ color: theme.subtext }}>Gigs from the Gigs tab are synced to the public calendar, posterboard, and Live Dates when you click Sync Now.</p>
-              </div>
-            </div>
-
-            {/* ── POSTERBOARD HEADINGS ── */}
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Posterboard Headings</p>
-              <div className="grid grid-cols-1 gap-2">
-                <div>
-                  <label className="text-[9px] font-bold uppercase block mb-1" style={{ color: theme.subtext }}>Subtitle (small text above title)</label>
-                  <input value={sitePosterSubtitle} onChange={e => setSitePosterSubtitle(e.target.value)} placeholder="Upcoming Events" className="w-full px-2 py-1.5 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold uppercase block mb-1" style={{ color: theme.subtext }}>Main Title (large text)</label>
-                  <input value={sitePosterTitle} onChange={e => setSitePosterTitle(e.target.value)} placeholder="MASK OFF DA DJ" className="w-full px-2 py-1.5 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold uppercase block mb-1" style={{ color: theme.subtext }}>Tagline (below title)</label>
-                  <input value={sitePosterTagline} onChange={e => setSitePosterTagline(e.target.value)} placeholder="UPCOMING BOOKINGS" className="w-full px-2 py-1.5 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                </div>
-              </div>
-            </div>
-
-            {/* ── PHOTOS ── */}
-            <div className="space-y-3">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Website Photos</p>
-              <p className="text-[11px]" style={{ color: theme.subtext }}>Hero photo appears in the banner. About photo appears in the bio section.</p>
-              {photoUploadError && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold" style={{ background: `${BENTLEY_RED}12`, color: BENTLEY_RED, border: `1px solid ${BENTLEY_RED}30` }}>
-                  <AlertCircle size={12} /> {photoUploadError}
-                  <button onClick={() => setPhotoUploadError('')} className="ml-auto"><X size={12} /></button>
-                </div>
-              )}
-
-              {(['hero', 'about'] as const).map(slot => {
-                const photo = websitePhotos.find((p: any) => typeof p === 'object' && p.slot === slot)
-                const photoUrl = typeof photo === 'object' ? (photo as any).url : null
-                return (
-                  <div key={slot} className="rounded-2xl overflow-hidden" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                    <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${theme.border}` }}>
-                      <p className="text-sm font-bold capitalize" style={{ color: theme.text }}>{slot} Photo</p>
-                      {photoUrl && (
-                        <button onClick={async () => {
-                          await fetch('/api/dj/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot }) })
-                          setWebsitePhotos((prev: any[]) => {
-                            const updated = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
-                            try { setLocalSynced('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
-                            return updated
-                          })
-                        }} className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ color: BENTLEY_RED, background: `${BENTLEY_RED}12` }}>Remove</button>
-                      )}
-                    </div>
-                    {photoUrl ? (
-                      <img src={photoUrl} alt={`${slot} photo`} className="w-full h-40 object-cover" />
-                    ) : (
-                      <div className="h-40 flex items-center justify-center" style={{ background: theme.bg }}>
-                        <p className="text-xs" style={{ color: theme.subtext }}>No {slot} photo uploaded</p>
-                      </div>
-                    )}
-                    <div className="p-3">
-                      <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer" style={{ background: `${DJ_PINK}15`, color: DJ_PINK, border: `1px solid ${DJ_PINK}30` }}>
-                        <Plus size={12} /> {photoUrl ? 'Replace' : 'Upload'} Photo
-                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                          const file = e.target.files?.[0]
-                          if (!file) return
-                          setPhotoUploadError('')
-                          const fd = new FormData()
-                          fd.append('file', file)
-                          fd.append('slot', slot)
-                          try {
-                            const res = await fetch('/api/dj/photos', { method: 'POST', body: fd })
-                            const data = await res.json()
-                            if (data.ok && data.url) {
-                              setWebsitePhotos((prev: any[]) => {
-                                const filtered = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
-                                const updated = [...filtered, { slot, url: data.url, uploadedAt: new Date().toISOString() }]
-                                try { setLocalSynced('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
-                                return updated
-                              })
-                            } else {
-                              setPhotoUploadError(data.error || 'Upload failed')
-                            }
-                          } catch (err: any) {
-                            setPhotoUploadError(err.message || 'Upload failed — check connection')
-                          }
-                          e.target.value = ''
-                        }} />
-                      </label>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* ── CUSTOMER REVIEWS ── */}
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Customer Reviews ({testimonials.length})</p>
-              {testimonials.length === 0 && <p className="text-[11px]" style={{ color: theme.subtext }}>Customer reviews post directly to your website. They will appear here so you can manage them.</p>}
-              {testimonials.map((t: any) => (
-                <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ background: theme.card, border: `1px solid ${theme.border}` }}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold truncate" style={{ color: theme.text }}>{t.name} — {t.event_type}</p>
-                    <p className="text-[11px] truncate" style={{ color: theme.subtext }}>{t.review}</p>
-                    <p className="text-[9px] mt-0.5" style={{ color: theme.subtext }}>{t.created_at ? new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</p>
-                  </div>
-                  <button onClick={() => { fetch('/api/dj/testimonials', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.id, status: 'deleted' }) }).then(() => setTestimonials(prev => prev.filter(x => x.id !== t.id))) }}
-                    className="px-2 py-1 rounded-lg text-[10px] font-bold shrink-0" style={{ background: `${BENTLEY_RED}18`, color: BENTLEY_RED }}>Delete</button>
-                </div>
-              ))}
-            </div>
-
-            {/* ── BIO ── */}
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>About / Bio</p>
-              <textarea rows={4} value={siteBio} onChange={e => setSiteBio(e.target.value)} placeholder="Write your DJ bio for the public website..." className="w-full px-3 py-2.5 rounded-xl border text-sm resize-none" style={{ background: theme.bg, borderColor: theme.border, color: theme.text, lineHeight: 1.6 }} />
-            </div>
-
-            {/* ── SERVICES ── */}
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Services (one per line)</p>
-              <textarea rows={4} value={siteServices} onChange={e => setSiteServices(e.target.value)} placeholder={"Private Parties\nCorporate Events\nWeddings\nLounges & Brunches"} className="w-full px-3 py-2.5 rounded-xl border text-sm resize-none" style={{ background: theme.bg, borderColor: theme.border, color: theme.text, lineHeight: 1.6 }} />
-            </div>
-
-            {/* ── SOCIAL LINKS ── */}
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Social Links & Contact</p>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-[9px] font-bold uppercase block mb-1" style={{ color: theme.subtext }}>Instagram</label>
-                  <input value={siteInstagram} onChange={e => setSiteInstagram(e.target.value)} placeholder="@handle" className="w-full px-2 py-1.5 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold uppercase block mb-1" style={{ color: theme.subtext }}>TikTok</label>
-                  <input value={siteTiktok} onChange={e => setSiteTiktok(e.target.value)} placeholder="@handle" className="w-full px-2 py-1.5 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold uppercase block mb-1" style={{ color: theme.subtext }}>Phone</label>
-                  <input value={sitePhone} onChange={e => setSitePhone(e.target.value)} placeholder="(919) 555-0123" className="w-full px-2 py-1.5 rounded-xl border text-sm" style={{ background: theme.bg, borderColor: theme.border, color: theme.text }} />
-                </div>
-              </div>
-            </div>
-
-            {/* ── SAMPLE TESTIMONIALS ── */}
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.subtext }}>Website Testimonials</p>
-              <p className="text-[10px]" style={{ color: theme.subtext }}>These show on the public site when no customer reviews are submitted.</p>
-              {siteTestimonials.map((t: any, i: number) => (
-                <div key={i} className="rounded-xl p-3 space-y-2" style={{ background: theme.bg, border: `1px solid ${theme.border}` }}>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={t.name} onChange={e => { const u = [...siteTestimonials]; u[i] = { ...u[i], name: e.target.value }; setSiteTestimonials(u) }} placeholder="Name" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
-                    <input value={t.event} onChange={e => { const u = [...siteTestimonials]; u[i] = { ...u[i], event: e.target.value }; setSiteTestimonials(u) }} placeholder="Event Type" className="px-2 py-1.5 rounded-lg border text-xs" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
-                  </div>
-                  <textarea value={t.quote} onChange={e => { const u = [...siteTestimonials]; u[i] = { ...u[i], quote: e.target.value }; setSiteTestimonials(u) }} rows={2} className="w-full px-2 py-1.5 rounded-lg border text-xs resize-none" style={{ background: theme.card, borderColor: theme.border, color: theme.text }} />
-                  <button onClick={() => setSiteTestimonials(siteTestimonials.filter((_: any, j: number) => j !== i))} className="text-[10px] font-bold" style={{ color: BENTLEY_RED }}>Remove</button>
-                </div>
-              ))}
-              <button onClick={() => setSiteTestimonials([...siteTestimonials, { name: '', event: '', quote: '' }])} className="flex items-center gap-1 text-xs font-semibold" style={{ color: DJ_PINK }}>
-                <Plus size={11} /> Add Testimonial
-              </button>
-            </div>
-
-            {/* ── SAVE ALL ── */}
-            <button
-              onClick={saveWebsiteSettings}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold"
-              style={{ background: siteSaved ? BENTLEY_GREEN : DJ_PINK, color: '#fff' }}
-            >
-              {siteSaved ? <><CheckCircle size={14} /> Saved</> : <><Check size={14} /> Save All Website Settings</>}
-            </button>
-
-            {false && (() => {
+  const renderHiddenCalendarTools = () => {
               const gigDates = new Set(gigs.filter(g => g.status === 'confirmed' || g.status === 'pending').map(g => g.date))
               const daysInMonth = new Date(gCalYear, gCalMonth + 1, 0).getDate()
               const firstDay = new Date(gCalYear, gCalMonth, 1).getDay()
@@ -2594,15 +1501,385 @@ export default function DJPage() {
                   ))}
                 </div>
               )
-            })()}
-          </motion.div>
-        )}  {/* end activeSection === 'requests' */}
-      </motion.div>
+  }
+  void renderHiddenCalendarTools
 
-      {/* Add Gig Modal */}
-      <AnimatePresence>
-        {showAdd && <AddGigModal onAdd={addGig} onClose={() => { setShowAdd(false); setRebookClient(null) }} prefill={rebookClient} />}
-      </AnimatePresence>
-    </div>
+  const today = new Date().toISOString().slice(0, 10)
+
+  const filtered = useMemo(() => {
+    const list = filterStatus === 'all' ? gigs : gigs.filter(g => g.status === filterStatus)
+    return [...list].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  }, [gigs, filterStatus])
+
+  const stats = useMemo(() => {
+    const upcoming = gigs.filter(g => g.date >= today && g.status === 'confirmed')
+    const totalEarned = gigs.filter(g => g.status === 'completed').reduce((s, g) => s + calcTotalPaid(g), 0)
+    const bookedValue = upcoming.reduce((s, g) => s + (g.contractAmount || g.fee || 0), 0)
+    const balanceDue = gigs.filter(g => g.status !== 'cancelled').reduce((s, g) => s + calcRemaining(g), 0)
+    return { upcoming: upcoming.length, totalEarned, bookedValue, balanceDue, nextGig: upcoming.sort((a, b) => a.date.localeCompare(b.date))[0] }
+  }, [gigs, today])
+
+  const upcomingAlert = useMemo(() => {
+    if (!stats.nextGig) return null
+    const days = Math.ceil((new Date(stats.nextGig.date + 'T00:00:00').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    if (days <= 7) return `${days <= 0 ? 'Gig today' : `Gig in ${days} day${days === 1 ? '' : 's'}`}: ${stats.nextGig.clientName} at ${stats.nextGig.venue || 'TBD'}. Confirm invoice, playlist and gear.`
+    return null
+  }, [stats])
+
+  const pendingRequests = requests.filter(r => r.status === 'pending')
+  const openGig = gigs.find(g => g.id === openGigId) || null
+  const area = { ...field, className: `${field.className} h-auto py-2 leading-relaxed` }
+
+  const syncLabel = syncStatus === 'syncing' ? 'Syncing' : syncStatus === 'error' ? 'Sync problem' : !online ? 'Offline' : conflicts.length ? 'Date conflict' : syncStatus === 'synced' ? 'Synced' : 'Not synced yet'
+  const syncTone = syncStatus === 'error' || conflicts.length ? theme.bad : !online ? theme.warn : syncStatus === 'synced' ? theme.ok : theme.subtext
+
+  return (
+    <PageShell>
+      <PageHeader
+        title="DJ Maskoff"
+        sub={<span className="inline-flex items-center gap-1.5" title={syncDetail || syncState.lastError || undefined}><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: syncTone }} />{syncLabel} · {gigs.length} gig{gigs.length !== 1 ? 's' : ''}</span> }
+        right={<>
+          <Button onClick={() => { save(gigs); handleForceSync() }} disabled={syncStatus === 'syncing'}><RefreshCw size={14} className={syncStatus === 'syncing' ? 'animate-spin' : ''} /> Sync</Button>
+          <Link href="/maskoffdadj" target="_blank"><Button><ExternalLink size={14} /> Website</Button></Link>
+          <Button variant="primary" onClick={() => { setRebookClient(null); setShowAdd(true) }}><Plus size={15} /> Add gig</Button>
+        </>}
+      />
+
+      {conflicts.length > 0 && (
+        <div className="mb-4 rounded-xl px-4 py-3 flex items-start gap-3" style={{ backgroundColor: theme.badBg }}>
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" style={{ color: theme.bad }} />
+          <p className="flex-1 text-[13px]" style={{ color: theme.text }}><strong>Double booking:</strong> {conflicts.map(c => c.date).join(', ')} already has a client request. Check Requests.</p>
+          <IconButton onClick={() => setConflicts([])} label="Dismiss"><X size={14} /></IconButton>
+        </div>
+      )}
+
+      <Panel pad={false} className="mb-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: 'Upcoming gigs', value: String(stats.upcoming), sub: stats.nextGig ? `Next ${new Date(stats.nextGig.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'None booked' },
+            { label: 'Booked value', value: fmt(stats.bookedValue), sub: 'Upcoming confirmed' },
+            { label: 'Balance due', value: fmt(stats.balanceDue), sub: 'Still owed to you', tone: stats.balanceDue > 0 ? theme.warn : undefined },
+            { label: 'Earned', value: fmt(stats.totalEarned), sub: 'Completed gigs' },
+          ].map((s, i) => (
+            <div key={s.label} className={`px-4 sm:px-5 py-4 min-w-0 ${i % 2 ? 'border-l' : ''} ${i > 0 ? 'lg:border-l' : ''} ${i >= 2 ? 'border-t lg:border-t-0' : ''}`} style={{ borderColor: theme.border }}>
+              <p className="text-xs font-medium flex items-center gap-1.5 truncate" style={{ color: theme.subtext }}>{s.tone && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.tone }} />}{s.label}</p>
+              <p className="mt-1 text-[20px] md:text-[24px] font-semibold tnum tracking-tight leading-tight truncate" style={{ color: theme.text }}>{s.value}</p>
+              <p className="mt-1 text-[11.5px] truncate" style={{ color: theme.subtext }}>{s.sub}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      {upcomingAlert && (
+        <button onClick={() => stats.nextGig && setOpenGigId(stats.nextGig.id)} className="w-full mb-4 rounded-xl px-4 py-3 flex items-center gap-3 text-left" style={{ backgroundColor: `${theme.accent}14` }}>
+          <Star size={16} style={{ color: theme.accent }} className="shrink-0" />
+          <span className="flex-1 text-[13px]" style={{ color: theme.text }}>{upcomingAlert}</span>
+          <ChevronRight size={15} style={{ color: theme.subtext }} />
+        </button>
+      )}
+
+      <div className="mb-4 overflow-x-auto no-scrollbar">
+        <Segmented value={activeSection} onChange={v => setActiveSection(v as typeof activeSection)} options={[
+          { value: 'gigs', label: 'Gigs' },
+          { value: 'quotes', label: `Requests${pendingRequests.length ? ` · ${pendingRequests.length}` : ''}` },
+          { value: 'crm', label: 'Clients' },
+          { value: 'email', label: 'Email' },
+          { value: 'settings', label: 'Settings' },
+        ]} />
+      </div>
+
+      {/* ═══ GIGS ═══ */}
+      {activeSection === 'gigs' && (
+        <div className="space-y-4">
+          <Segmented size="sm" value={filterStatus} onChange={v => setFilterStatus(v as GigStatus | 'all')} options={[
+            { value: 'confirmed', label: `Confirmed · ${gigs.filter(g => g.status === 'confirmed').length}` },
+            { value: 'completed', label: 'Completed' },
+            { value: 'all', label: 'All' },
+          ]} />
+          {filtered.length === 0 ? (
+            <EmptyState title="No gigs here" sub="Add a gig, or set up a recurring event in Settings." action={<Button variant="primary" onClick={() => setShowAdd(true)}><Plus size={15} /> Add gig</Button>} />
+          ) : (
+            <Panel pad={false}>
+              <ul>
+                {filtered.map((gig, i) => {
+                  const remaining = calcRemaining(gig)
+                  const contract = gig.contractAmount || gig.fee || 0
+                  const daysUntil = Math.ceil((new Date(gig.date + 'T00:00:00').getTime() - Date.now()) / 86400000)
+                  const soon = gig.status === 'confirmed' && gig.date >= today && daysUntil <= 3
+                  return (
+                    <li key={gig.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                      <button onClick={() => setOpenGigId(gig.id)} className="w-full flex items-center gap-3 px-4 sm:px-5 py-3 text-left transition-colors"
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = `${theme.text}06`)} onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}>
+                        <DateBlock date={gig.date} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-medium truncate flex items-center gap-1.5" style={{ color: theme.text }}>
+                            {gig.clientName}
+                            {gig.seriesId && <Repeat size={12} style={{ color: theme.subtext }} aria-label="Recurring" />}
+                          </p>
+                          <p className="text-[12px] truncate" style={{ color: theme.subtext }}>
+                            {[gig.venue, gig.startTime ? `${to12Hour(gig.startTime)}` : '', gig.customEventType || cap(gig.eventType)].filter(Boolean).join(' · ')}
+                          </p>
+                          <p className="text-[11.5px] flex items-center gap-1.5 mt-0.5" style={{ color: statusColor(gig.status) }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor(gig.status) }} />{STATUS_LABEL[gig.status]}
+                            {soon && <span style={{ color: theme.accent }}>· {daysUntil <= 0 ? 'Today' : `${daysUntil}d away`}</span>}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {contract > 0 && <p className="text-[14px] font-semibold tnum" style={{ color: theme.text }}>{fmt(contract)}</p>}
+                          {contract > 0 && <p className="text-[11.5px] tnum" style={{ color: remaining <= 0 ? theme.ok : theme.subtext }}>{remaining <= 0 ? 'Paid' : `${fmt(remaining)} due`}</p>}
+                        </div>
+                        <ChevronRight size={15} className="shrink-0" style={{ color: theme.subtext }} />
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </Panel>
+          )}
+        </div>
+      )}
+
+      {/* ═══ REQUESTS (quotes from the website) ═══ */}
+      {activeSection === 'quotes' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px]" style={{ color: theme.subtext }}>{pendingRequests.length} waiting for a reply · {requests.length} total</p>
+            <Button size="sm" onClick={loadRequests}><RefreshCw size={13} className={loadingRequests ? 'animate-spin' : ''} /> Refresh</Button>
+          </div>
+          {loadingRequests && requests.length === 0 ? (
+            <div className="flex items-center justify-center py-10 gap-2 text-[13px]" style={{ color: theme.subtext }}><Loader2 size={16} className="animate-spin" /> Loading</div>
+          ) : pendingRequests.length === 0 ? (
+            <EmptyState title="No new requests" sub="Booking requests from your website show up here." />
+          ) : (
+            <Panel pad={false}>
+              <ul>
+                {pendingRequests.map((r, i) => {
+                  const isExpanded = selectedRequest?.id === r.id
+                  const dep = depositAmount || String(Math.round(Number(quoteAmount) * 0.25))
+                  return (
+                    <li key={r.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                      <button className="w-full flex items-center gap-3 px-4 sm:px-5 py-3 text-left" aria-expanded={isExpanded} onClick={() => {
+                        if (isExpanded) setSelectedRequest(null)
+                        else { setSelectedRequest(r); setGeneratedReply(''); setReplySubject(''); setReplyError(''); setReplySent('') }
+                      }}>
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: theme.accent }} aria-label="New" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>{r.client_name}</p>
+                          <p className="text-[12px] truncate" style={{ color: theme.subtext }}>{[cap(r.event_type), r.date, r.city].filter(Boolean).join(' · ')}</p>
+                        </div>
+                        <ChevronRight size={15} style={{ color: theme.subtext, transform: isExpanded ? 'rotate(90deg)' : undefined }} className="transition-transform" />
+                      </button>
+                      {isExpanded && (
+                        <div className="px-4 sm:px-5 pb-5 space-y-4">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2">
+                            {[['Email', r.client_email], ['Phone', r.client_phone || '—'], ['Date', r.date], ['City', r.city], ['Venue', r.location || '—'], ['Guests', r.guest_count ? String(r.guest_count) : '—'], ['Budget', r.budget_range || '—'], ['MC', r.mc_needed ? 'Yes' : 'No']].map(([label, val]) => (
+                              <div key={label} className="min-w-0"><p className="text-[11px]" style={{ color: theme.subtext }}>{label}</p><p className="text-[13px] truncate" style={{ color: theme.text }}>{val}</p></div>
+                            ))}
+                          </div>
+                          {r.special_requests && <p className="text-[13px] rounded-xl px-3 py-2.5 whitespace-pre-wrap" style={{ backgroundColor: `${theme.text}08`, color: theme.text }}>{r.special_requests}</p>}
+
+                          {!generatedReply ? (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <Field label="Quote ($)"><input type="number" inputMode="decimal" placeholder="500" value={quoteAmount} onChange={e => { setQuoteAmount(e.target.value); if (e.target.value) setDepositAmount(String(Math.round(Number(e.target.value) * 0.25))) }} {...field} /></Field>
+                                <Field label="Deposit ($)"><input type="number" inputMode="decimal" placeholder="125" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} {...field} /></Field>
+                              </div>
+                              {quoteAmount && (
+                                <p className="text-xs" style={{ color: theme.subtext }}>
+                                  PayPal: for a {fmt(Number(dep))} deposit the customer sends <span className="tnum" style={{ color: theme.text }}>${(Number(dep) * 1.0349 + 0.49).toFixed(2)}</span> (includes ${(Number(dep) * 0.0349 + 0.49).toFixed(2)} fee).
+                                </p>
+                              )}
+                              <div className="flex flex-wrap gap-2">
+                                <Button variant="primary" disabled={generatingReply} onClick={() => generateReply('invoice')}>{generatingReply ? <Loader2 size={13} className="animate-spin" /> : null} Draft quote with invoice</Button>
+                                <Button disabled={generatingReply} onClick={() => generateReply('inquiry')}>Draft quick reply</Button>
+                                <Button variant="ghost" disabled={generatingReply} onClick={() => generateReply('decline')}>Draft decline</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-xs flex items-center gap-1.5" style={{ color: theme.warn }}><AlertCircle size={13} /> Review before sending. You can edit anything.</p>
+                              <input value={replySubject} onChange={e => setReplySubject(e.target.value)} placeholder="Subject" aria-label="Subject" {...field} />
+                              <textarea rows={10} value={generatedReply} onChange={e => setGeneratedReply(e.target.value)} aria-label="Reply" {...area} />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button variant="primary" disabled={sendingReply} onClick={sendReply}>{sendingReply ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Send reply</Button>
+                                <Button onClick={() => navigator.clipboard.writeText(generatedReply)}><Copy size={13} /> Copy</Button>
+                                <Button variant="ghost" onClick={() => { setGeneratedReply(''); setReplySubject(''); setQuoteAmount(''); setDepositAmount(''); setPaymentLink('') }}>Discard</Button>
+                              </div>
+                            </div>
+                          )}
+                          {replyError && <p className="text-xs" style={{ color: theme.bad }}>{replyError}</p>}
+                          {replySent && <p className="text-xs flex items-center gap-1" style={{ color: theme.ok }}><CheckCircle2 size={13} /> {replySent}</p>}
+
+                          <div className="flex gap-2 pt-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                            <Button className="flex-1" variant="primary" onClick={() => updateRequestStatus(r.id, 'confirmed')}><Check size={14} /> Approve and book</Button>
+                            <Button className="flex-1" variant="danger" onClick={() => updateRequestStatus(r.id, 'declined')}><X size={14} /> Decline</Button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </Panel>
+          )}
+        </div>
+      )}
+
+      {activeSection === 'crm' && <CRMPanel gigs={gigs} quotes={requests} onBookAgain={(data) => { setRebookClient(data); setShowAdd(true) }} />}
+
+      {activeSection === 'email' && <EmailPanel gigs={gigs} />}
+
+      {/* ═══ SETTINGS ═══ */}
+      {activeSection === 'settings' && (
+        <div className="space-y-4">
+          <Segmented size="sm" value={settingsTab} onChange={v => setSettingsTab(v as typeof settingsTab)} options={[{ value: 'recurring', label: `Recurring events${series.length ? ` · ${series.length}` : ''}` }, { value: 'website', label: 'Website' }]} />
+
+          {settingsTab === 'recurring' && (
+            <RecurringPanel series={series} gigs={gigs} onSave={saveSeriesItem} onDelete={deleteSeries} onTogglePause={toggleSeriesPause} />
+          )}
+
+          {settingsTab === 'website' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-[13px]" style={{ color: theme.subtext }}>
+                  {gigs.filter(g => g.status !== 'cancelled' && g.status !== 'completed').length} active gigs show on your public calendar after you sync.
+                </p>
+                <div className="flex gap-2">
+                  <Link href="/maskoffdadj" target="_blank"><Button size="sm"><ExternalLink size={13} /> View site</Button></Link>
+                  <Button size="sm" variant="primary" onClick={saveWebsiteSettings}>{siteSaved ? <><Check size={13} /> Saved</> : 'Save website'}</Button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 items-start">
+                <Panel>
+                  <PanelTitle title="Posterboard" sub="Headings above your upcoming dates" />
+                  <div className="space-y-3">
+                    <Field label="Small text above the title"><input value={sitePosterSubtitle} onChange={e => setSitePosterSubtitle(e.target.value)} {...field} /></Field>
+                    <Field label="Main title"><input value={sitePosterTitle} onChange={e => setSitePosterTitle(e.target.value)} {...field} /></Field>
+                    <Field label="Tagline below the title"><input value={sitePosterTagline} onChange={e => setSitePosterTagline(e.target.value)} {...field} /></Field>
+                  </div>
+                </Panel>
+
+                <Panel>
+                  <PanelTitle title="Social links and contact" />
+                  <div className="space-y-3">
+                    <Field label="Instagram"><input value={siteInstagram} onChange={e => setSiteInstagram(e.target.value)} placeholder="@handle" {...field} /></Field>
+                    <Field label="TikTok"><input value={siteTiktok} onChange={e => setSiteTiktok(e.target.value)} placeholder="@handle" {...field} /></Field>
+                    <Field label="Phone"><input value={sitePhone} onChange={e => setSitePhone(e.target.value)} placeholder="(919) 555-0123" {...field} /></Field>
+                  </div>
+                </Panel>
+
+                <Panel className="md:col-span-2">
+                  <PanelTitle title="Photos" sub="Hero shows in the banner; About shows next to your bio" />
+                  {photoUploadError && (
+                    <p className="mb-3 text-xs flex items-center gap-2" style={{ color: theme.bad }}><AlertCircle size={13} /> {photoUploadError} <button onClick={() => setPhotoUploadError('')} aria-label="Dismiss"><X size={12} /></button></p>
+                  )}
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {(['hero', 'about'] as const).map(slot => {
+                      const photo = websitePhotos.find((p: any) => typeof p === 'object' && p.slot === slot)
+                      const photoUrl = typeof photo === 'object' ? (photo as any).url : null
+                      return (
+                        <div key={slot} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
+                          {photoUrl ? <img src={photoUrl} alt={`${slot} photo`} className="w-full h-40 object-cover" /> : (
+                            <div className="h-40 flex items-center justify-center text-xs" style={{ backgroundColor: `${theme.text}06`, color: theme.subtext }}>No {slot} photo yet</div>
+                          )}
+                          <div className="flex items-center gap-2 p-3">
+                            <span className="flex-1 text-[13px] font-medium capitalize" style={{ color: theme.text }}>{slot} photo</span>
+                            {photoUrl && (
+                              <Button size="sm" variant="ghost" onClick={async () => {
+                                await fetch('/api/dj/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot }) })
+                                setWebsitePhotos((prev: any[]) => {
+                                  const updated = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
+                                  try { setLocalSynced('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
+                                  return updated
+                                })
+                              }}>Remove</Button>
+                            )}
+                            <label className="h-8 px-3 rounded-lg inline-flex items-center gap-1.5 text-xs font-medium cursor-pointer" style={{ border: `1px solid ${theme.border}`, color: theme.text }}>
+                              <Upload size={13} /> {photoUrl ? 'Replace' : 'Upload'}
+                              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                setPhotoUploadError('')
+                                const fd = new FormData()
+                                fd.append('file', file)
+                                fd.append('slot', slot)
+                                try {
+                                  const res = await fetch('/api/dj/photos', { method: 'POST', body: fd })
+                                  const data = await res.json()
+                                  if (data.ok && data.url) {
+                                    setWebsitePhotos((prev: any[]) => {
+                                      const kept = prev.filter((p: any) => !(typeof p === 'object' && p.slot === slot))
+                                      const updated = [...kept, { slot, url: data.url, uploadedAt: new Date().toISOString() }]
+                                      try { setLocalSynced('orca-dj-website-photos', JSON.stringify(updated)) } catch {}
+                                      return updated
+                                    })
+                                  } else setPhotoUploadError(data.error || 'Upload failed')
+                                } catch (err: any) {
+                                  setPhotoUploadError(err.message || 'Upload failed — check connection')
+                                }
+                                e.target.value = ''
+                              }} />
+                            </label>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </Panel>
+
+                <Panel>
+                  <PanelTitle title="About you" />
+                  <div className="space-y-3">
+                    <Field label="Bio"><textarea rows={5} value={siteBio} onChange={e => setSiteBio(e.target.value)} placeholder="Write your DJ bio for the public website" {...area} /></Field>
+                    <Field label="Services" hint="One per line"><textarea rows={4} value={siteServices} onChange={e => setSiteServices(e.target.value)} placeholder={'Private Parties\nCorporate Events\nWeddings'} {...area} /></Field>
+                  </div>
+                </Panel>
+
+                <Panel>
+                  <PanelTitle title="Customer reviews" sub="Posted by customers from your website" right={<span className="text-[13px] tnum" style={{ color: theme.subtext }}>{testimonials.length}</span>} />
+                  {testimonials.length === 0 ? <p className="text-[13px]" style={{ color: theme.subtext }}>No customer reviews yet.</p> : (
+                    <ul>
+                      {testimonials.map((t: any, i: number) => (
+                        <li key={t.id} className="flex items-start gap-3 py-2.5" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium truncate" style={{ color: theme.text }}>{t.name} <span className="font-normal" style={{ color: theme.subtext }}>{t.event_type}</span></p>
+                            <p className="text-[12px] line-clamp-2" style={{ color: theme.subtext }}>{t.review}</p>
+                          </div>
+                          <Button size="sm" variant="ghost" onClick={() => { fetch('/api/dj/testimonials', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.id, status: 'deleted' }) }).then(() => setTestimonials(prev => prev.filter(x => x.id !== t.id))) }}>Delete</Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Panel>
+
+                <Panel className="md:col-span-2">
+                  <PanelTitle title="Sample testimonials" sub="Shown on the site when there are no customer reviews" right={<Button size="sm" onClick={() => setSiteTestimonials([...siteTestimonials, { name: '', event: '', quote: '' }])}><Plus size={13} /> Add</Button>} />
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {siteTestimonials.map((t: any, i: number) => (
+                      <div key={i} className="rounded-xl p-3 space-y-2" style={{ border: `1px solid ${theme.border}` }}>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input value={t.name} onChange={e => { const u = [...siteTestimonials]; u[i] = { ...u[i], name: e.target.value }; setSiteTestimonials(u) }} placeholder="Name" aria-label="Name" {...field} />
+                          <input value={t.event} onChange={e => { const u = [...siteTestimonials]; u[i] = { ...u[i], event: e.target.value }; setSiteTestimonials(u) }} placeholder="Event" aria-label="Event" {...field} />
+                        </div>
+                        <textarea rows={3} value={t.quote} onChange={e => { const u = [...siteTestimonials]; u[i] = { ...u[i], quote: e.target.value }; setSiteTestimonials(u) }} aria-label="Quote" {...area} />
+                        <Button size="sm" variant="ghost" onClick={() => setSiteTestimonials(siteTestimonials.filter((_: any, j: number) => j !== i))}>Remove</Button>
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              </div>
+
+              <div className="sticky bottom-4 flex justify-end">
+                <Button variant="primary" onClick={saveWebsiteSettings}>{siteSaved ? <><Check size={14} /> Saved</> : 'Save website'}</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <GigSheet gig={openGig} onClose={() => setOpenGigId(null)} onUpdate={updateGig} onDelete={deleteGig} />
+      <AddGigSheet open={showAdd} onAdd={addGig} onClose={() => { setShowAdd(false); setRebookClient(null) }} prefill={rebookClient} />
+    </PageShell>
   )
 }

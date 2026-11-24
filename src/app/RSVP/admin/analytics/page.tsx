@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Loader2, Download, Eye, Users, Ticket, DollarSign, CheckCircle2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
 import AdminShell from '../_components/AdminShell'
+import { useTheme } from '@/context/ThemeContext'
 
 const EXPORTS = [
   { type: 'guest-list', label: 'Guest List' },
@@ -30,6 +31,7 @@ function fmtUsd(cents: number) {
 }
 
 export default function AnalyticsPage() {
+  const { theme } = useTheme()
   const [events, setEvents] = useState<any[]>([])
   const [eventId, setEventId] = useState('')
   const [data, setData] = useState<any>(null)
@@ -51,7 +53,7 @@ export default function AnalyticsPage() {
   return (
     <AdminShell>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-extrabold text-text-primary">Analytics</h1>
+        <h1 className="text-[26px] md:text-[30px] font-semibold tracking-tight text-text-primary">Analytics</h1>
         <select
           className="px-3 py-2 rounded-lg bg-brand-soft border border-surface-border text-text-primary text-sm"
           value={eventId}
@@ -81,11 +83,11 @@ export default function AnalyticsPage() {
               <h3 className="text-sm font-bold text-text-primary mb-4">Votes By Date</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={data.votesByDate}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
-                  <XAxis dataKey="label" stroke="#A1A1A1" fontSize={11} />
-                  <YAxis stroke="#A1A1A1" fontSize={11} />
-                  <Tooltip contentStyle={{ background: '#181818', border: '1px solid #2A2A2A', borderRadius: 8 }} />
-                  <Bar dataKey="votes" fill="#D4AF37" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme.border} />
+                  <XAxis dataKey="label" stroke={theme.subtext} fontSize={11} />
+                  <YAxis stroke={theme.subtext} fontSize={11} />
+                  <Tooltip contentStyle={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text }} />
+                  <Bar dataKey="votes" fill={theme.accent} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -96,11 +98,11 @@ export default function AnalyticsPage() {
               <h3 className="text-sm font-bold text-text-primary mb-4">{p.question}</h3>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={p.options}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
-                  <XAxis dataKey="label" stroke="#A1A1A1" fontSize={11} />
-                  <YAxis stroke="#A1A1A1" fontSize={11} />
-                  <Tooltip contentStyle={{ background: '#181818', border: '1px solid #2A2A2A', borderRadius: 8 }} />
-                  <Bar dataKey="votes" fill="#D4AF37" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme.border} />
+                  <XAxis dataKey="label" stroke={theme.subtext} fontSize={11} />
+                  <YAxis stroke={theme.subtext} fontSize={11} />
+                  <Tooltip contentStyle={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text }} />
+                  <Bar dataKey="votes" fill={theme.accent} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -1,17 +1,20 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
 import {
   Palette, Plus, Trash2, Edit3, DollarSign, CheckCircle,
   Clock, X, Mail, Inbox, Globe, Instagram, Phone, User,
   ExternalLink, Save, Eye, Layers, RefreshCw, ChevronRight,
   FileText, Database, Send, Upload, Paperclip, ChevronUp, ChevronDown, Package, EyeOff, Eye as EyeIcon,
+  Check, Loader2,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { fmt } from '@/lib/utils'
 import { setLocalSynced } from '@/lib/syncLocal'
 import { pullFromCloud } from '@/lib/syncEngine'
+import { PageShell, PageHeader, Panel, PanelTitle, Bar, Button, IconButton, RowMenu, EmptyState, useField, Field, Choice, Sheet } from '@/components/ui/kit'
+import { Segmented } from '@/components/layout/CustomizePanel'
 
 const BIZ_PURPLE = '#9333EA'
 const BIZ_GOLD = '#F59E0B'
@@ -172,8 +175,11 @@ const DEFAULT_REPLY_TEMPLATES: ReplyTemplate[] = [
 
 const TEMPLATES_KEY = 'orca-bizzplug-reply-templates'
 
-function DeliveryTab({ theme, clients, inputCls, inputStyle }: { theme: any; clients: BizClientProfile[]; inputCls: string; inputStyle: any }) {
+function DeliveryTab({ clients }: { clients: BizClientProfile[] }) {
+  const { theme } = useTheme()
+  const field = useField()
   const [selectedClient, setSelectedClient] = useState<string | null>(null)
+  const [clientQuery, setClientQuery] = useState('')
   const [deliverEmail, setDeliverEmail] = useState('')
   const [deliverMessage, setDeliverMessage] = useState('')
   const [deliverSubject, setDeliverSubject] = useState('')
@@ -184,7 +190,6 @@ function DeliveryTab({ theme, clients, inputCls, inputStyle }: { theme: any; cli
   const [showManageTemplates, setShowManageTemplates] = useState(false)
   const [newTplLabel, setNewTplLabel] = useState('')
   const [newTplText, setNewTplText] = useState('')
-  // Inline edit state
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState('')
   const [editText, setEditText] = useState('')
@@ -199,30 +204,21 @@ function DeliveryTab({ theme, clients, inputCls, inputStyle }: { theme: any; cli
 
   const client = clients.find(c => c.id === selectedClient)
 
+  // Synced across devices (was saved to this device only before the redesign).
   const saveTemplates = (updated: ReplyTemplate[]) => {
     setTemplates(updated)
-    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated)) } catch {}
-  }
-
-  const startEdit = (t: ReplyTemplate) => {
-    setEditingId(t.id)
-    setEditLabel(t.label)
-    setEditText(t.text)
+    try { setLocalSynced(TEMPLATES_KEY, JSON.stringify(updated)) } catch {}
   }
 
   const saveEdit = () => {
     if (!editLabel.trim() || !editText.trim() || !editingId) return
-    saveTemplates(templates.map(t => t.id === editingId ? { ...t, label: editLabel.trim(), text: editText.trim() } : t))
+    saveTemplates(templates.map(t => (t.id === editingId ? { ...t, label: editLabel.trim(), text: editText.trim() } : t)))
     setEditingId(null)
   }
-
-  const cancelEdit = () => setEditingId(null)
-
   const deleteTemplate = (id: string) => {
     if (editingId === id) setEditingId(null)
     saveTemplates(templates.filter(t => t.id !== id))
   }
-
   const moveTemplate = (idx: number, dir: -1 | 1) => {
     const updated = [...templates]
     const target = idx + dir
@@ -230,19 +226,13 @@ function DeliveryTab({ theme, clients, inputCls, inputStyle }: { theme: any; cli
     ;[updated[idx], updated[target]] = [updated[target], updated[idx]]
     saveTemplates(updated)
   }
-
   const addTemplate = () => {
     if (!newTplLabel.trim() || !newTplText.trim()) return
     saveTemplates([...templates, { id: gid(), label: newTplLabel.trim(), text: newTplText.trim() }])
     setNewTplLabel('')
     setNewTplText('')
   }
-
-  const resetToDefaults = () => {
-    saveTemplates(DEFAULT_REPLY_TEMPLATES)
-    setEditingId(null)
-  }
-
+  const resetToDefaults = () => { saveTemplates(DEFAULT_REPLY_TEMPLATES); setEditingId(null) }
   const applyTemplate = (id: string) => {
     const tpl = templates.find(t => t.id === id)
     if (tpl) { setDeliverMessage(tpl.text); setDeliverSubject(tpl.label) }
@@ -295,247 +285,139 @@ function DeliveryTab({ theme, clients, inputCls, inputStyle }: { theme: any; cli
     setSending(false)
   }
 
+  const shownClients = clients.filter(c => !clientQuery || `${c.artistName} ${c.email || ''} ${c.instagram || ''}`.toLowerCase().includes(clientQuery.toLowerCase()))
+  const Step = ({ n, title, done }: { n: number; title: string; done?: boolean }) => (
+    <div className="flex items-center gap-2.5 mb-3">
+      <span className="w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-semibold" style={{ backgroundColor: done ? theme.accent : `${theme.text}0d`, color: done ? theme.bg : theme.text }}>{done ? <Check size={13} /> : n}</span>
+      <h3 className="text-[14px] font-semibold" style={{ color: theme.text }}>{title}</h3>
+    </div>
+  )
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Send completed work via Buzyplug@gmail.com</p>
-      </div>
+      <p className="text-[13px]" style={{ color: theme.subtext }}>Send finished work from Buzyplug@gmail.com. The email includes download links and a link to leave a review.</p>
 
-      {/* ── Reply Templates Manager ── */}
-      <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-        <button
-          onClick={() => setShowManageTemplates(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3"
-          style={{ borderBottom: showManageTemplates ? `1px solid ${theme.border}` : 'none' }}>
-          <div className="flex items-center gap-2">
-            <FileText size={13} style={{ color: '#9333EA' }} />
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.text }}>Reply Templates</span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#9333EA15', color: '#9333EA' }}>{templates.length}</span>
-          </div>
-          {showManageTemplates
-            ? <ChevronUp size={14} style={{ color: theme.textM }} />
-            : <ChevronDown size={14} style={{ color: theme.textM }} />}
-        </button>
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] items-start">
+        <Panel>
+          <Step n={1} title="Pick a client" done={!!client} />
+          {clients.length === 0 ? (
+            <p className="text-[13px]" style={{ color: theme.subtext }}>No clients yet. Clients are added when you create projects.</p>
+          ) : (
+            <>
+              <input value={clientQuery} onChange={e => setClientQuery(e.target.value)} placeholder="Search clients" aria-label="Search clients" {...field} />
+              <ul className="mt-2 max-h-[360px] overflow-y-auto">
+                {shownClients.map(c => {
+                  const on = selectedClient === c.id
+                  return (
+                    <li key={c.id}>
+                      <button onClick={() => { setSelectedClient(c.id); setDeliverEmail(c.email || '') }} className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-left" style={{ backgroundColor: on ? `${theme.accent}18` : undefined }}>
+                        <span className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-semibold shrink-0" style={{ backgroundColor: `${theme.text}0d`, color: theme.text }}>{c.artistName.charAt(0).toUpperCase()}</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[13.5px] font-medium truncate" style={{ color: theme.text }}>{c.artistName}</span>
+                          <span className="block text-[11.5px] truncate" style={{ color: theme.subtext }}>{c.email || c.instagram || 'No email saved'}</span>
+                        </span>
+                        {on && <Check size={15} style={{ color: theme.accent }} />}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
+        </Panel>
 
-        {showManageTemplates && (
-          <div className="p-4 space-y-3">
-
-            {/* Template list */}
-            <div className="space-y-2">
-              {templates.map((t, idx) => (
-                <div key={t.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${editingId === t.id ? '#9333EA' : theme.border}` }}>
-                  {editingId === t.id ? (
-                    /* ── Inline edit mode ── */
-                    <div className="p-3 space-y-2" style={{ backgroundColor: '#9333EA08' }}>
-                      <input
-                        className={inputCls} style={{ ...inputStyle, fontSize: 12 }}
-                        placeholder="Template name"
-                        value={editLabel}
-                        onChange={e => setEditLabel(e.target.value)} />
-                      <textarea
-                        rows={3} className={inputCls}
-                        style={{ ...inputStyle, fontSize: 12, resize: 'vertical' as any }}
-                        placeholder="Message text"
-                        value={editText}
-                        onChange={e => setEditText(e.target.value)} />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={saveEdit}
-                          disabled={!editLabel.trim() || !editText.trim()}
-                          className="flex-1 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 disabled:opacity-40"
-                          style={{ backgroundColor: '#9333EA', color: '#fff' }}>
-                          <Save size={11} /> Save
-                        </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="flex-1 py-1.5 rounded-lg text-[11px] font-bold"
-                          style={{ backgroundColor: theme.border, color: theme.textM }}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    /* ── Normal view mode ── */
-                    <div className="flex items-center gap-2 px-3 py-2.5" style={{ backgroundColor: theme.bg }}>
-                      {/* Reorder arrows */}
-                      <div className="flex flex-col gap-0.5 shrink-0">
-                        <button
-                          onClick={() => moveTemplate(idx, -1)}
-                          disabled={idx === 0}
-                          className="p-0.5 rounded disabled:opacity-20"
-                          style={{ color: theme.textM }}>
-                          <ChevronUp size={12} />
-                        </button>
-                        <button
-                          onClick={() => moveTemplate(idx, 1)}
-                          disabled={idx === templates.length - 1}
-                          className="p-0.5 rounded disabled:opacity-20"
-                          style={{ color: theme.textM }}>
-                          <ChevronDown size={12} />
-                        </button>
-                      </div>
-                      {/* Label + preview */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate" style={{ color: theme.text }}>{t.label}</p>
-                        <p className="text-[10px] mt-0.5 truncate" style={{ color: theme.textM }}>{t.text}</p>
-                      </div>
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={() => startEdit(t)}
-                          className="p-1.5 rounded-lg"
-                          style={{ backgroundColor: `#9333EA12`, color: '#9333EA' }}
-                          title="Edit">
-                          <Edit3 size={11} />
-                        </button>
-                        <button
-                          onClick={() => deleteTemplate(t.id)}
-                          className="p-1.5 rounded-lg"
-                          style={{ backgroundColor: '#EF444412', color: '#EF4444' }}
-                          title="Delete">
-                          <Trash2 size={11} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
+        <Panel>
+          {!client ? (
+            <div className="py-10 text-center text-[13px]" style={{ color: theme.subtext }}>Pick a client to write their delivery email.</div>
+          ) : (
+            <div className="space-y-5">
+              <div>
+                <Step n={2} title={`Write to ${client.artistName}`} done={!!deliverMessage} />
+                <div className="space-y-3">
+                  <Field label="Email"><input type="email" value={deliverEmail} onChange={e => setDeliverEmail(e.target.value)} placeholder="client@email.com" {...field} /></Field>
+                  <div className="flex items-end gap-2">
+                    <Field label="Start from a template" className="flex-1">
+                      <select value="" onChange={e => { if (e.target.value) applyTemplate(e.target.value) }} {...field}>
+                        <option value="">Choose a template</option>
+                        {templates.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                      </select>
+                    </Field>
+                    <Button onClick={() => setShowManageTemplates(true)}>Edit templates</Button>
+                  </div>
+                  <Field label="Message">
+                    <textarea rows={5} value={deliverMessage} onChange={e => setDeliverMessage(e.target.value)} placeholder="Pick a template or write a message" {...field} className={`${field.className} h-auto py-2 leading-relaxed`} />
+                  </Field>
                 </div>
-              ))}
-
-              {templates.length === 0 && (
-                <p className="text-xs text-center py-3" style={{ color: theme.textM }}>No templates. Add one below or reset to defaults.</p>
-              )}
-            </div>
-
-            {/* Reset + Add */}
-            <div className="pt-2 border-t space-y-3" style={{ borderColor: theme.border }}>
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Add New Template</p>
-                <button
-                  onClick={resetToDefaults}
-                  className="text-[10px] font-bold px-2 py-1 rounded-lg"
-                  style={{ backgroundColor: theme.border, color: theme.textM }}>
-                  Reset to Defaults
-                </button>
               </div>
-              <input
-                className={inputCls} style={inputStyle}
-                placeholder="Template name (e.g. Album Cover Done)"
-                value={newTplLabel}
-                onChange={e => setNewTplLabel(e.target.value)} />
-              <textarea
-                rows={2} className={inputCls}
-                style={{ ...inputStyle, resize: 'vertical' as any }}
-                placeholder="Message text..."
-                value={newTplText}
-                onChange={e => setNewTplText(e.target.value)} />
-              <button
-                onClick={addTemplate}
-                disabled={!newTplLabel.trim() || !newTplText.trim()}
-                className="w-full py-2 rounded-xl text-xs font-bold disabled:opacity-40"
-                style={{ backgroundColor: '#9333EA', color: '#fff' }}>
-                + Save Template
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Select Client ── */}
-      <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Select Client</p>
-        {clients.length === 0 ? (
-          <p className="text-sm" style={{ color: theme.textM }}>No clients yet. Clients are auto-added when projects are created.</p>
-        ) : (
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {clients.map(c => (
-              <button key={c.id} onClick={() => { setSelectedClient(c.id); setDeliverEmail(c.email || '') }}
-                className="w-full text-left px-3 py-2.5 rounded-xl text-sm flex items-center justify-between"
-                style={{ backgroundColor: selectedClient === c.id ? '#9333EA15' : theme.bg, border: `1px solid ${selectedClient === c.id ? '#9333EA' : theme.border}`, color: theme.text }}>
-                <div>
-                  <span className="font-semibold">{c.artistName}</span>
-                  {c.instagram && <span className="text-xs ml-2" style={{ color: theme.textM }}>{c.instagram}</span>}
-                </div>
-                {c.email && <span className="text-[10px]" style={{ color: theme.textM }}>{c.email}</span>}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Compose & Send ── */}
-      {selectedClient && client && (
-        <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9333EA' }}>Deliver to {client.artistName}</p>
-
-          <div>
-            <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Client Email</label>
-            <input className={inputCls} style={inputStyle} value={deliverEmail} onChange={e => setDeliverEmail(e.target.value)} placeholder="client@email.com" />
-          </div>
-
-          {/* Quick Reply Dropdown */}
-          <div>
-            <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Quick Reply Template</label>
-            <select
-              className={inputCls}
-              style={inputStyle}
-              value=""
-              onChange={e => { if (e.target.value) applyTemplate(e.target.value) }}>
-              <option value="">— Select a template to fill message —</option>
-              {templates.map(t => (
-                <option key={t.id} value={t.id}>{t.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] font-semibold" style={{ color: theme.textM }}>Message</label>
-              {deliverMessage && (
-                <button onClick={() => { setDeliverMessage(''); setDeliverSubject('') }} className="text-[10px]" style={{ color: theme.textM }}>Clear</button>
-              )}
-            </div>
-            <textarea
-              rows={4}
-              className={inputCls}
-              style={{ ...inputStyle, resize: 'vertical' as any }}
-              value={deliverMessage}
-              onChange={e => setDeliverMessage(e.target.value)}
-              placeholder="Select a template above or write a custom message..." />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Upload Artwork Files</label>
-            <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer" style={{ backgroundColor: '#9333EA12', color: '#9333EA', border: '1px dashed #9333EA40' }}>
-              <Upload size={14} /> {deliverFiles.length > 0 ? `${deliverFiles.length} file${deliverFiles.length > 1 ? 's' : ''} ready` : 'Choose files to send'}
-              <input type="file" accept="image/*,video/*,.pdf,.psd,.ai,.zip" multiple className="hidden" onChange={e => { if (e.target.files) setDeliverFiles(Array.from(e.target.files)) }} />
-            </label>
-            {deliverFiles.length > 0 && (
-              <div className="flex gap-2 flex-wrap mt-2">
-                {deliverFiles.map((f, i) => (
-                  <span key={i} className="text-[10px] px-2 py-1 rounded-lg flex items-center gap-1" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, color: theme.textM }}>
-                    <Paperclip size={10} /> {f.name.length > 18 ? f.name.slice(0, 15) + '...' : f.name}
-                    <button onClick={() => setDeliverFiles(deliverFiles.filter((_, j) => j !== i))} style={{ color: '#EF4444' }}><X size={10} /></button>
-                  </span>
-                ))}
+              <div>
+                <Step n={3} title="Attach files and send" done={sent} />
+                <label className="flex items-center justify-center gap-2 h-11 rounded-lg text-[13px] font-medium cursor-pointer" style={{ border: `1px dashed ${theme.border}`, color: theme.text }}>
+                  <Upload size={15} /> {deliverFiles.length > 0 ? `${deliverFiles.length} file${deliverFiles.length > 1 ? 's' : ''} ready, choose again to replace` : 'Choose files'}
+                  <input type="file" accept="image/*,video/*,.pdf,.psd,.ai,.zip" multiple className="hidden" onChange={e => { if (e.target.files) setDeliverFiles(Array.from(e.target.files)) }} />
+                </label>
+                {deliverFiles.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap mt-2">
+                    {deliverFiles.map((f, i) => (
+                      <span key={i} className="text-[11.5px] pl-2 pr-1 h-7 rounded-md flex items-center gap-1" style={{ backgroundColor: `${theme.text}0a`, color: theme.text }}>
+                        <Paperclip size={11} /> {f.name.length > 22 ? f.name.slice(0, 19) + '…' : f.name}
+                        <button onClick={() => setDeliverFiles(deliverFiles.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`} className="p-1" style={{ color: theme.subtext }}><X size={11} /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {sendError && <p className="text-xs mt-3" style={{ color: theme.bad }}>{sendError}</p>}
+                <Button className="w-full mt-3" variant="primary" disabled={sending || !deliverEmail} onClick={handleDeliver}>
+                  {sent ? <><Check size={15} /> Delivered</> : sending ? <><Loader2 size={15} className="animate-spin" /> Sending</> : <><Send size={15} /> Send to {client.artistName}</>}
+                </Button>
               </div>
-            )}
-          </div>
-
-          <p className="text-[9px]" style={{ color: theme.textM }}>Email will include artwork download links + a "Thank you for shopping with BizzyPlug" message with a link to leave a review.</p>
-
-          {sendError && (
-            <div className="px-3 py-2 rounded-xl text-xs font-semibold" style={{ backgroundColor: '#EF444415', color: '#EF4444', border: '1px solid #EF444430' }}>
-              {sendError}
             </div>
           )}
+        </Panel>
+      </div>
 
-          <button onClick={handleDeliver} disabled={sending || !deliverEmail}
-            className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
-            style={{ backgroundColor: sent ? '#10B981' : '#9333EA', color: '#fff', opacity: sending ? 0.6 : 1 }}>
-            {sent ? <><CheckCircle size={16} /> Delivered!</> : sending ? 'Sending...' : <><Send size={16} /> Send to Client</>}
-          </button>
+      <Sheet open={showManageTemplates} onClose={() => { setShowManageTemplates(false); setEditingId(null) }} title="Reply templates" sub={`${templates.length} saved`}>
+        <div className="space-y-4">
+          <ul>
+            {templates.map((t, idx) => (
+              <li key={t.id} style={{ borderTop: idx ? `1px solid ${theme.border}` : undefined }}>
+                {editingId === t.id ? (
+                  <div className="py-3 space-y-2">
+                    <input value={editLabel} onChange={e => setEditLabel(e.target.value)} placeholder="Template name" aria-label="Template name" {...field} />
+                    <textarea rows={3} value={editText} onChange={e => setEditText(e.target.value)} aria-label="Message" {...field} className={`${field.className} h-auto py-2`} />
+                    <div className="flex gap-2">
+                      <Button className="flex-1" size="sm" onClick={() => setEditingId(null)}>Cancel</Button>
+                      <Button className="flex-1" size="sm" variant="primary" disabled={!editLabel.trim() || !editText.trim()} onClick={saveEdit}>Save</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13.5px] font-medium truncate" style={{ color: theme.text }}>{t.label}</p>
+                      <p className="text-[11.5px] truncate" style={{ color: theme.subtext }}>{t.text}</p>
+                    </div>
+                    <RowMenu label={`Actions for ${t.label}`} items={[
+                      { label: 'Edit', icon: Edit3, onClick: () => { setEditingId(t.id); setEditLabel(t.label); setEditText(t.text) } },
+                      ...(idx > 0 ? [{ label: 'Move up', icon: ChevronUp, onClick: () => moveTemplate(idx, -1) }] : []),
+                      ...(idx < templates.length - 1 ? [{ label: 'Move down', icon: ChevronDown, onClick: () => moveTemplate(idx, 1) }] : []),
+                      { label: 'Delete', icon: Trash2, danger: true, onClick: () => deleteTemplate(t.id) },
+                    ]} />
+                  </div>
+                )}
+              </li>
+            ))}
+            {templates.length === 0 && <li className="py-3 text-[13px]" style={{ color: theme.subtext }}>No templates. Add one below or reset to the defaults.</li>}
+          </ul>
+          <div className="pt-4 space-y-2" style={{ borderTop: `1px solid ${theme.border}` }}>
+            <p className="text-[13px] font-medium" style={{ color: theme.text }}>Add a template</p>
+            <input value={newTplLabel} onChange={e => setNewTplLabel(e.target.value)} placeholder="Name, e.g. Album cover done" aria-label="New template name" {...field} />
+            <textarea rows={3} value={newTplText} onChange={e => setNewTplText(e.target.value)} placeholder="Message" aria-label="New template message" {...field} className={`${field.className} h-auto py-2`} />
+            <div className="flex gap-2">
+              <Button onClick={resetToDefaults}>Reset to defaults</Button>
+              <Button className="flex-1" variant="primary" disabled={!newTplLabel.trim() || !newTplText.trim()} onClick={addTemplate}><Plus size={14} /> Add template</Button>
+            </div>
+          </div>
         </div>
-      )}
+      </Sheet>
     </div>
   )
 }
@@ -821,926 +703,711 @@ export default function BizzyPlugPage() {
     return projects.filter(p => (p.email || p.artistName).toLowerCase() === key)
   }
 
-  const inputCls = "w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-  const inputStyle = { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }
+  // ── Layout (2026-11 redesign) ──
+  const field = useField()
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null)
+  const [projectQuery, setProjectQuery] = useState('')
+  const [clientQuery, setClientQuery] = useState('')
+  const area = { ...field, className: `${field.className} h-auto py-2 leading-relaxed` }
+  const small = { ...field, className: 'w-full h-9 px-2.5 rounded-lg text-[13px] outline-none focus:ring-2' }
+  const setSite = (patch: Record<string, any>) => setSiteSettings((s: any) => ({ ...s, ...patch }))
+  const setStatus = (id: string, status: ProjectStatus) => persistProjects(projects.map(x => (x.id === id ? { ...x, status } : x)))
+  const typeLabel = (v: string) => PROJECT_TYPES.find(t => t.value === v)?.label || v
+  const openProject = projects.find(p => p.id === openProjectId) || null
+  const pendingValue = projects.filter(p => p.status === 'new-lead').reduce((s, p) => s + Math.max(0, (p.quote || 0) - (p.paid || 0)), 0)
 
-  function accHead(id: string, label: string, Ic: any) {
-    const open = websiteSection === id
-    return (
-      <button key={'acc-' + id} onClick={() => setWebsiteSection(open ? null : id)}
-        className="w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all"
-        style={{ backgroundColor: open ? BIZ_PURPLE + '12' : theme.card, border: '1px solid ' + (open ? BIZ_PURPLE + '40' : theme.border) }}>
-        <div className="flex items-center gap-2">
-          <Ic size={14} style={{ color: BIZ_PURPLE }} />
-          <span className="text-xs font-bold" style={{ color: theme.text }}>{label}</span>
-        </div>
-        {open ? <ChevronUp size={14} style={{ color: BIZ_PURPLE }} /> : <ChevronDown size={14} style={{ color: theme.textM }} />}
-      </button>
-    )
+  const shownProjects = visible.filter(p => !projectQuery || `${p.artistName} ${p.email || ''} ${p.instagram || ''} ${p.songName || ''}`.toLowerCase().includes(projectQuery.toLowerCase()))
+  const shownClients = clientDb.filter(c => !clientQuery || `${c.artistName} ${c.email || ''} ${c.instagram || ''} ${c.phone || ''}`.toLowerCase().includes(clientQuery.toLowerCase()))
+
+  const WEBSITE_SECTIONS: { id: string; label: string; icon: any }[] = [
+    { id: 'theme', label: 'Branding', icon: Palette },
+    { id: 'hero', label: 'Hero', icon: FileText },
+    { id: 'about', label: 'About', icon: User },
+    { id: 'portfolio', label: `Portfolio · ${portfolioPhotos.length}`, icon: Layers },
+    { id: 'services', label: `Services · ${services.length}`, icon: DollarSign },
+    { id: 'rollout', label: 'Rollout packages', icon: Package },
+    { id: 'links', label: 'Payment and social', icon: ExternalLink },
+    { id: 'order', label: 'Page layout', icon: Layers },
+  ]
+  const section = websiteSection || 'theme'
+
+  const openNewProject = () => { setForm(BLANK_PROJECT()); setEditId(null); setSelectedClientId(''); setShowForm(true) }
+  const openNewClient = () => { setClientForm({ artistName: '', email: '', phone: '', instagram: '', notes: '' }); setEditClientId(null); setShowClientForm(true) }
+
+  const saveClientForm = () => {
+    if (!clientForm.artistName) return
+    if (editClientId) persistClients(clientDb.map(c => (c.id === editClientId ? { ...c, ...clientForm } as BizClientProfile : c)))
+    else persistClients([...clientDb, { id: gid(), ...clientForm, createdAt: new Date().toISOString().slice(0, 10) } as BizClientProfile])
+    setShowClientForm(false); setEditClientId(null); setClientForm({})
   }
 
   return (
-    <div style={{ backgroundColor: theme.bg }} className="min-h-screen pb-12">
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-30 backdrop-blur-xl border-b px-4 py-4 sm:px-6"
-        style={{ backgroundColor: `${theme.bg}95`, borderColor: theme.border }}>
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold" style={{ color: theme.text }}>BizzyPlug</h1>
-            <p className="text-sm mt-0.5" style={{ color: theme.textM }}>Client & project management</p>
-          </div>
-          {activeTab === 'projects' && (
-            <button onClick={() => { setForm(BLANK_PROJECT()); setEditId(null); setSelectedClientId(''); setShowForm(true) }}
-              className="px-4 py-2.5 rounded-xl text-sm font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>
-              + New Project
-            </button>
-          )}
-          {activeTab === 'clients' && (
-            <button onClick={() => { setClientForm({ artistName: '', email: '', phone: '', instagram: '', notes: '' }); setEditClientId(null); setShowClientForm(true) }}
-              className="px-4 py-2.5 rounded-xl text-sm font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>
-              + Add Client
-            </button>
-          )}
-        </div>
-      </motion.div>
+    <PageShell>
+      <PageHeader
+        title="BizzyPlug"
+        sub="Design projects, clients and your website"
+        right={<>
+          <Link href="/bizzyplug" target="_blank"><Button><Eye size={14} /> Website</Button></Link>
+          {activeTab === 'clients'
+            ? <Button variant="primary" onClick={openNewClient}><Plus size={15} /> Add client</Button>
+            : <Button variant="primary" onClick={openNewProject}><Plus size={15} /> New project</Button>}
+        </>}
+      />
 
-      <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
+      <Panel pad={false} className="mb-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4">
           {[
-            { label: 'Revenue', value: fmt(totalRevenue), color: '#10B981' },
-            { label: 'New Leads', value: String(newLeadCount), color: BIZ_PURPLE },
-            { label: 'Completed', value: String(completedCount), color: '#10B981' },
+            { label: 'Revenue', value: fmt(totalRevenue), sub: 'Paid across all projects' },
+            { label: 'Open projects', value: String(newLeadCount), sub: 'Leads and in progress' },
+            { label: 'Waiting on payment', value: fmt(pendingValue), sub: 'Quoted but unpaid', tone: pendingValue > 0 ? theme.warn : undefined },
+            { label: 'Completed', value: String(completedCount), sub: `${clientDb.length} clients` },
           ].map((s, i) => (
-            <div key={i} className="rounded-2xl p-3 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-medium mb-0.5" style={{ color: theme.textM }}>{s.label}</p>
-              <p className="text-lg font-bold" style={{ color: s.color }}>{s.value}</p>
+            <div key={s.label} className={`px-4 sm:px-5 py-4 min-w-0 ${i % 2 ? 'border-l' : ''} ${i > 0 ? 'lg:border-l' : ''} ${i >= 2 ? 'border-t lg:border-t-0' : ''}`} style={{ borderColor: theme.border }}>
+              <p className="text-xs font-medium flex items-center gap-1.5 truncate" style={{ color: theme.subtext }}>{s.tone && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.tone }} />}{s.label}</p>
+              <p className="mt-1 text-[20px] md:text-[24px] font-semibold tnum tracking-tight leading-tight truncate" style={{ color: theme.text }}>{s.value}</p>
+              <p className="mt-1 text-[11.5px] truncate" style={{ color: theme.subtext }}>{s.sub}</p>
             </div>
           ))}
         </div>
+      </Panel>
 
-        {/* Tabs */}
-        <div className="flex rounded-2xl overflow-hidden p-1" style={{ backgroundColor: `${BIZ_PURPLE}15`, border: `1px solid ${BIZ_PURPLE}30` }}>
-          {([
-            { key: 'projects' as DashTab, label: 'Projects', icon: Layers },
-            { key: 'clients' as DashTab, label: 'Clients', icon: Database },
-            { key: 'website' as DashTab, label: 'Website', icon: Globe },
-            { key: 'delivery' as DashTab, label: 'Deliver', icon: Send },
-          ]).map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setActiveTab(key)}
-              className="flex-1 flex items-center justify-center gap-1 py-2.5 px-1 text-[11px] rounded-xl transition-all"
-              style={{
-                backgroundColor: activeTab === key ? BIZ_PURPLE : 'transparent',
-                color: activeTab === key ? '#fff' : BIZ_PURPLE,
-                fontWeight: activeTab === key ? 700 : 500,
-              }}>
-              <Icon size={13} /> {label}
-            </button>
-          ))}
-        </div>
+      <div className="mb-4 overflow-x-auto no-scrollbar">
+        <Segmented value={activeTab} onChange={v => setActiveTab(v as DashTab)} options={[
+          { value: 'projects', label: `Projects${newLeadCount ? ` · ${newLeadCount}` : ''}` },
+          { value: 'clients', label: 'Clients' },
+          { value: 'delivery', label: 'Deliver' },
+          { value: 'website', label: 'Website' },
+        ]} />
+      </div>
 
-        {/* ── PROJECTS TAB ── */}
-        {activeTab === 'projects' && (
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              {(['all', 'new-lead', 'completed'] as const).map(s => (
-                <button key={s} onClick={() => setFilterStatus(s)}
-                  className="px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all"
-                  style={{
-                    backgroundColor: filterStatus === s ? BIZ_PURPLE : theme.card,
-                    color: filterStatus === s ? '#fff' : theme.textM,
-                    border: `1px solid ${filterStatus === s ? BIZ_PURPLE : theme.border}`,
-                  }}>
-                  {s === 'all' ? `All (${projects.length})` : `${STATUS_CONFIG[s].label} (${projects.filter(p => p.status === s).length})`}
-                </button>
-              ))}
-            </div>
-
-            {visible.length === 0 ? (
-              <div className="rounded-2xl p-10 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                <Palette size={32} className="mx-auto mb-3 opacity-30" style={{ color: BIZ_PURPLE }} />
-                <p className="text-sm" style={{ color: theme.textM }}>No projects yet</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {visible.map(p => {
-                  const cfg = STATUS_CONFIG[p.status] || { label: p.status, color: '#94A3B8' }
+      {/* ═══ PROJECTS ═══ */}
+      {activeTab === 'projects' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <Segmented size="sm" value={filterStatus} onChange={v => setFilterStatus(v as ProjectStatus | 'all')} options={[
+              { value: 'new-lead', label: `Open · ${newLeadCount}` },
+              { value: 'completed', label: `Completed · ${completedCount}` },
+              { value: 'all', label: `All · ${projects.length}` },
+            ]} />
+            <input value={projectQuery} onChange={e => setProjectQuery(e.target.value)} placeholder="Search projects" aria-label="Search projects" {...field} className={`${field.className} sm:max-w-[260px] sm:ml-auto`} />
+          </div>
+          {shownProjects.length === 0 ? (
+            <EmptyState title={projects.length ? 'No projects match' : 'No projects yet'} sub={projects.length ? undefined : 'New website orders land here, or add one yourself.'} action={!projects.length ? <Button variant="primary" onClick={openNewProject}><Plus size={15} /> New project</Button> : undefined} />
+          ) : (
+            <Panel pad={false}>
+              <ul>
+                {shownProjects.map((p, i) => {
                   const pct = p.quote > 0 ? Math.min(100, Math.round((p.paid / p.quote) * 100)) : 0
+                  const done = p.status === 'completed'
                   return (
-                    <motion.div key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                      className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                      <button onClick={() => setExpandedProject(expandedProject === p.id ? null : p.id)} className="w-full p-4 text-left">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1 min-w-0 mr-3">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-bold text-sm" style={{ color: theme.text }}>{p.artistName}</h3>
-                              <button onClick={e => { e.stopPropagation(); persistProjects(projects.map(x => x.id === p.id ? { ...x, status: x.status === 'completed' ? 'new-lead' : 'completed' } : x)) }}
-                                className="px-2 py-0.5 rounded-full text-[10px] font-bold transition-all"
-                                style={{ backgroundColor: `${cfg.color}18`, color: cfg.color, border: 'none', cursor: 'pointer' }}>
-                                {cfg.label}
-                              </button>
-                              {(p as any).paymentStatus === 'paid' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: '#10B98118', color: '#10B981' }}>Paid</span>}
-                            </div>
-                            <p className="text-xs mt-0.5" style={{ color: theme.textM }}>
-                              {PROJECT_TYPES.find(t => t.value === p.projectType)?.label || p.projectType}
-                              {p.deadline ? ` · Due ${p.deadline}` : ''}
-                            </p>
-                            <div className="flex items-center gap-3 mt-1 flex-wrap">
-                              {p.email && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Mail size={10} />{p.email}</span>}
-                              {p.instagram && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Instagram size={10} />{p.instagram}</span>}
-                              {p.phone && <span className="text-[10px] flex items-center gap-1" style={{ color: theme.textM }}><Phone size={10} />{p.phone}</span>}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <ChevronDown size={14} style={{ color: theme.textM, transform: expandedProject === p.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                          </div>
-                        </div>
-                        {p.quote > 0 && (
-                          <div className="mt-2">
-                            <div className="flex justify-between text-xs mb-1" style={{ color: theme.textM }}>
-                              <span>Paid: <span className="font-bold" style={{ color: '#10B981' }}>{fmt(p.paid)}</span></span>
-                              <span>Quote: <span className="font-bold" style={{ color: BIZ_GOLD }}>{fmt(p.quote)}</span></span>
-                            </div>
-                            <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
-                              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#10B981' : BIZ_PURPLE }} />
-                            </div>
-                          </div>
-                        )}
-                      </button>
-                      {expandedProject === p.id && (
-                        <div className="px-4 pb-4 space-y-3" style={{ borderTop: `1px solid ${theme.border}` }}>
-                          <div className="flex items-center gap-1 pt-3 flex-wrap">
-                            {p.status === 'new-lead' ? (
-                              <button
-                                onClick={() => { persistProjects(projects.map(x => x.id === p.id ? { ...x, status: 'completed' as ProjectStatus } : x)); setExpandedProject(null) }}
-                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1"
-                                style={{ backgroundColor: '#10B98118', color: '#10B981' }}>
-                                <CheckCircle size={11} />Mark Complete
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => { persistProjects(projects.map(x => x.id === p.id ? { ...x, status: 'new-lead' as ProjectStatus } : x)); setExpandedProject(null) }}
-                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold"
-                                style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
-                                Move to Active
-                              </button>
-                            )}
-                            <button onClick={() => handleEdit(p)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}><Edit3 size={11} className="inline mr-1" />Edit</button>
-                            <button onClick={() => handleDelete(p.id)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold" style={{ backgroundColor: '#EF444418', color: '#EF4444' }}><Trash2 size={11} className="inline mr-1" />Delete</button>
-                          </div>
-
-                          {p.songName && (
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Song / Project</p>
-                              <p className="text-xs" style={{ color: theme.text }}>{p.songName}</p>
+                    <li key={p.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                      <div className="flex items-center gap-3 px-4 sm:px-5 py-3">
+                        <button className="flex-1 min-w-0 text-left" onClick={() => setOpenProjectId(p.id)}>
+                          <p className="text-[14px] font-medium truncate flex items-center gap-2" style={{ color: theme.text }}>
+                            {p.artistName}
+                            {(p as any).paymentStatus === 'paid' && <span className="text-[11px] font-normal" style={{ color: theme.ok }}>Paid online</span>}
+                          </p>
+                          <p className="text-[12px] truncate" style={{ color: theme.subtext }}>{[typeLabel(p.projectType), p.songName, p.deadline ? `Due ${p.deadline}` : ''].filter(Boolean).join(' · ')}</p>
+                          {p.quote > 0 && (
+                            <div className="mt-1.5 flex items-center gap-2 max-w-[280px]">
+                              <div className="flex-1"><Bar pct={pct} color={pct >= 100 ? theme.ok : theme.accent} height={4} /></div>
+                              <span className="text-[11px] tnum shrink-0" style={{ color: theme.subtext }}>{fmt(p.paid)} of {fmt(p.quote)}</span>
                             </div>
                           )}
-
-                          {p.details && (
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Project Details</p>
-                              <p className="text-xs whitespace-pre-wrap" style={{ color: theme.text }}>{p.details}</p>
-                            </div>
-                          )}
-
-                          {p.notes && (
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Notes</p>
-                              <p className="text-xs whitespace-pre-wrap" style={{ color: theme.text }}>{p.notes}</p>
-                            </div>
-                          )}
-
-                          {(p as any).serviceDescriptions && Object.keys((p as any).serviceDescriptions).length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Service Details</p>
-                              <div className="space-y-1.5">
-                                {Object.entries((p as any).serviceDescriptions).map(([key, val]) => (
-                                  <div key={key} className="rounded-lg px-3 py-2" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                                    <p className="text-[10px] font-bold" style={{ color: BIZ_PURPLE }}>{key.includes('::') ? key.split('::').join(' — ') : key}</p>
-                                    <p className="text-xs mt-0.5" style={{ color: theme.text }}>{val as string}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {(p as any).referenceUrls && (p as any).referenceUrls.length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.textS || theme.textM }}>Uploaded Files ({(p as any).referenceUrls.length})</p>
-                              <div className="grid grid-cols-3 gap-2">
-                                {(p as any).referenceUrls.map((url: string, idx: number) => (
-                                  <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
-                                    <img src={url} alt={`Reference ${idx + 1}`} style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />
-                                  </a>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {(p as any).paymentMethod && (
-                            <div className="flex items-center gap-2 text-[10px]" style={{ color: theme.textM }}>
-                              <DollarSign size={10} />
-                              <span>Payment: <span className="font-bold" style={{ color: '#10B981' }}>{(p as any).paymentMethod}</span></span>
-                              {(p as any).paidDate && <span>· {new Date((p as any).paidDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
-                            </div>
-                          )}
-
-                          <p className="text-[9px]" style={{ color: theme.textM }}>Created {p.createdAt}</p>
-                        </div>
-                      )}
-                    </motion.div>
+                        </button>
+                        <span className="hidden sm:inline-flex items-center gap-1.5 text-[11.5px] shrink-0" style={{ color: done ? theme.subtext : theme.accent }}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: done ? theme.subtext : theme.accent }} />{STATUS_CONFIG[p.status]?.label || p.status}
+                        </span>
+                        <Button size="sm" onClick={() => setStatus(p.id, done ? 'new-lead' : 'completed')}>{done ? 'Reopen' : <><Check size={13} /> Done</>}</Button>
+                        <RowMenu label={`More actions for ${p.artistName}`} items={[
+                          { label: 'Details', icon: Eye, onClick: () => setOpenProjectId(p.id) },
+                          { label: 'Edit', icon: Edit3, onClick: () => handleEdit(p) },
+                          { label: 'Delete', icon: Trash2, danger: true, onClick: () => handleDelete(p.id) },
+                        ]} />
+                      </div>
+                    </li>
                   )
                 })}
-              </div>
-            )}
-          </div>
-        )}
+              </ul>
+            </Panel>
+          )}
+        </div>
+      )}
 
-        {/* ── CLIENTS TAB ── */}
-        {activeTab === 'clients' && (
-          <div className="space-y-4">
-            {clientDb.length === 0 ? (
-              <div className="rounded-2xl p-10 text-center" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                <Database size={32} className="mx-auto mb-3 opacity-30" style={{ color: BIZ_PURPLE }} />
-                <p className="text-sm" style={{ color: theme.textM }}>No clients yet. Import from Inbox or add manually.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {clientDb.map(client => {
+      {/* ═══ CLIENTS ═══ */}
+      {activeTab === 'clients' && (
+        <div className="space-y-4">
+          <input value={clientQuery} onChange={e => setClientQuery(e.target.value)} placeholder="Search clients" aria-label="Search clients" {...field} />
+          {clientDb.length === 0 ? (
+            <EmptyState title="No clients yet" sub="Clients are added automatically when you create a project." action={<Button variant="primary" onClick={openNewClient}><Plus size={15} /> Add client</Button>} />
+          ) : (
+            <Panel pad={false}>
+              <ul>
+                {shownClients.map((client, i) => {
                   const clientProjects = getClientProjects(client)
                   const isExpanded = expandedClient === client.id
+                  const spent = clientProjects.reduce((s, cp) => s + (cp.paid || 0), 0)
                   return (
-                    <div key={client.id} className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-                      <button onClick={() => setExpandedClient(isExpanded ? null : client.id)}
-                        className="w-full flex items-center gap-3 p-4 text-left">
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: `${BIZ_PURPLE}15` }}>
-                          <User size={16} style={{ color: BIZ_PURPLE }} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-sm" style={{ color: theme.text }}>{client.artistName}</p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {client.email && <span className="text-[10px]" style={{ color: theme.textM }}>{client.email}</span>}
-                            {client.instagram && <span className="text-[10px]" style={{ color: theme.textM }}>{client.instagram}</span>}
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
-                          {clientProjects.length} project{clientProjects.length !== 1 ? 's' : ''}
-                        </span>
-                        <ChevronRight size={14} style={{ color: theme.textM, transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
-                      </button>
+                    <li key={client.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                      <div className="flex items-center gap-3 px-4 sm:px-5 py-3">
+                        <button className="flex items-center gap-3 flex-1 min-w-0 text-left" onClick={() => setExpandedClient(isExpanded ? null : client.id)} aria-expanded={isExpanded}>
+                          <span className="w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-semibold shrink-0" style={{ backgroundColor: `${theme.text}0d`, color: theme.text }}>{client.artistName.charAt(0).toUpperCase()}</span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[14px] font-medium truncate" style={{ color: theme.text }}>{client.artistName}</span>
+                            <span className="block text-[12px] truncate" style={{ color: theme.subtext }}>{[client.email, client.instagram, client.phone].filter(Boolean).join(' · ') || 'No contact info'}</span>
+                          </span>
+                          <span className="text-right shrink-0">
+                            <span className="block text-[13px] font-medium tnum" style={{ color: theme.text }}>{spent > 0 ? fmt(spent) : ''}</span>
+                            <span className="block text-[11px]" style={{ color: theme.subtext }}>{clientProjects.length} project{clientProjects.length !== 1 ? 's' : ''}</span>
+                          </span>
+                        </button>
+                        <RowMenu label={`More actions for ${client.artistName}`} items={[
+                          { label: 'New project', icon: Plus, onClick: () => { setForm({ ...BLANK_PROJECT(), artistName: client.artistName, email: client.email || '', phone: client.phone || '', instagram: client.instagram || '', clientId: client.id }); setEditId(null); setSelectedClientId(client.id); setShowForm(true) } },
+                          { label: 'Edit', icon: Edit3, onClick: () => { setClientForm(client); setEditClientId(client.id); setShowClientForm(true) } },
+                          { label: 'Delete', icon: Trash2, danger: true, onClick: () => { persistClients(clientDb.filter(c => c.id !== client.id)); setExpandedClient(null) } },
+                        ]} />
+                      </div>
                       {isExpanded && (
-                        <div className="px-4 pb-4 space-y-3 border-t" style={{ borderColor: theme.border }}>
-                          <div className="pt-3 flex items-center gap-3 flex-wrap">
-                            {client.phone && <span className="text-xs flex items-center gap-1" style={{ color: theme.textM }}><Phone size={11} />{client.phone}</span>}
-                            {client.email && <span className="text-xs flex items-center gap-1" style={{ color: theme.textM }}><Mail size={11} />{client.email}</span>}
-                            {client.instagram && <span className="text-xs flex items-center gap-1" style={{ color: theme.textM }}><Instagram size={11} />{client.instagram}</span>}
-                          </div>
-                          {clientProjects.length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: theme.textM }}>Project History</p>
-                              <div className="space-y-1.5">
-                                {clientProjects.map(cp => {
-                                  const cfg = STATUS_CONFIG[cp.status] || { label: cp.status, color: '#94A3B8' }
-                                  return (
-                                    <div key={cp.id} className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ backgroundColor: theme.bg }}>
-                                      <div>
-                                        <p className="text-xs font-semibold" style={{ color: theme.text }}>{PROJECT_TYPES.find(t => t.value === cp.projectType)?.label || cp.projectType}</p>
-                                        <p className="text-[10px]" style={{ color: theme.textM }}>{cp.createdAt}{cp.deadline ? ` · Due ${cp.deadline}` : ''}</p>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        {cp.quote > 0 && <span className="text-xs font-bold" style={{ color: '#10B981' }}>{fmt(cp.paid)}/{fmt(cp.quote)}</span>}
-                                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>{cfg.label}</span>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
+                        <div className="px-4 sm:px-5 pb-4 sm:pl-[68px] space-y-2">
+                          {client.notes && <p className="text-[12.5px]" style={{ color: theme.subtext }}>{client.notes}</p>}
+                          {clientProjects.length === 0 ? <p className="text-[12.5px]" style={{ color: theme.subtext }}>No projects yet.</p> : (
+                            <ul className="rounded-xl px-3" style={{ backgroundColor: `${theme.text}06` }}>
+                              {clientProjects.map((cp, j) => (
+                                <li key={cp.id} style={{ borderTop: j ? `1px solid ${theme.border}` : undefined }}>
+                                  <button className="w-full flex items-center justify-between gap-2 py-2 text-[12.5px] text-left" onClick={() => setOpenProjectId(cp.id)}>
+                                    <span className="min-w-0">
+                                      <span className="block truncate" style={{ color: theme.text }}>{typeLabel(cp.projectType)}</span>
+                                      <span className="block" style={{ color: theme.subtext }}>{cp.createdAt}{cp.deadline ? ` · Due ${cp.deadline}` : ''} · {STATUS_CONFIG[cp.status]?.label || cp.status}</span>
+                                    </span>
+                                    {cp.quote > 0 && <span className="tnum shrink-0" style={{ color: theme.text }}>{fmt(cp.paid)} / {fmt(cp.quote)}</span>}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
                           )}
-                          <div className="flex gap-2">
-                            <button onClick={() => { setClientForm(client); setEditClientId(client.id); setShowClientForm(true) }}
-                              className="flex-1 py-2 rounded-xl text-xs font-bold" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>Edit</button>
-                            <button onClick={() => { persistClients(clientDb.filter(c => c.id !== client.id)); setExpandedClient(null) }}
-                              className="flex-1 py-2 rounded-xl text-xs font-bold" style={{ backgroundColor: '#EF444415', color: '#EF4444' }}>Delete</button>
-                          </div>
                         </div>
                       )}
-                    </div>
+                    </li>
                   )
                 })}
-              </div>
-            )}
-          </div>
-        )}
+                {shownClients.length === 0 && <li className="px-5 py-6 text-[13px]" style={{ color: theme.subtext }}>No clients match “{clientQuery}”.</li>}
+              </ul>
+            </Panel>
+          )}
+        </div>
+      )}
 
+      {/* ═══ DELIVER ═══ */}
+      {activeTab === 'delivery' && <DeliveryTab clients={clientDb} />}
 
-        {/* ── WEBSITE TAB ── */}
-        {activeTab === 'website' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.textM }}>Manage orcafin.app/bizzyplug</p>
-              <a href="/bizzyplug" target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl"
-                style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE, border: `1px solid ${BIZ_PURPLE}30` }}>
-                <Eye size={12} /> Preview
-              </a>
+      {/* ═══ WEBSITE ═══ */}
+      {activeTab === 'website' && (
+        <div className="grid gap-4 md:grid-cols-[200px_minmax(0,1fr)] items-start">
+          <nav className="md:sticky md:top-20" aria-label="Website sections">
+            <div className="md:hidden overflow-x-auto no-scrollbar">
+              <Segmented size="sm" value={section} onChange={v => setWebsiteSection(v)} options={WEBSITE_SECTIONS.map(s => ({ value: s.id, label: s.label }))} />
             </div>
-
-            {/* Theme & Branding */}
-            {accHead('theme', 'Theme & Branding', Palette)}
-            {websiteSection === 'theme' && (
-            <div className="rounded-2xl p-4 space-y-4" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-
-              {/* Logo Upload */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-semibold block" style={{ color: theme.textM }}>Logo</label>
-                {siteSettings.logoUrl && (
-                  <div className="flex items-center gap-3">
-                    <img src={siteSettings.logoUrl} alt="Logo" style={{ height: 40, objectFit: 'contain', borderRadius: 6, border: `1px solid ${theme.border}` }} />
-                    <button onClick={() => setSiteSettings((s: any) => ({ ...s, logoUrl: '' }))}
-                      className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ backgroundColor: '#EF444415', color: '#EF4444' }}>
-                      Remove Logo
+            <ul className="hidden md:block space-y-px">
+              {WEBSITE_SECTIONS.map(s => {
+                const on = s.id === section
+                return (
+                  <li key={s.id}>
+                    <button onClick={() => setWebsiteSection(s.id)} className="w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13px] text-left" style={{ backgroundColor: on ? `${theme.text}0d` : undefined, color: on ? theme.text : theme.subtext, fontWeight: on ? 600 : 500 }}>
+                      <s.icon size={15} style={{ color: on ? theme.accent : undefined }} /> {s.label}
                     </button>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="hidden md:block mt-4 space-y-2">
+              <Button className="w-full" variant="primary" onClick={saveSiteSettings}>{siteSaved ? <><CheckCircle size={14} /> Published</> : <><Save size={14} /> Save and publish</>}</Button>
+              <a href="/bizzyplug" target="_blank" rel="noopener noreferrer" className="block"><Button className="w-full"><Eye size={14} /> Preview</Button></a>
+            </div>
+          </nav>
+
+          <div className="min-w-0 space-y-4">
+            {section === 'theme' && (
+              <Panel>
+                <PanelTitle title="Branding" sub="Logo, color theme and background effects" />
+                <div className="space-y-5">
+                  <Field label="Logo" group>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {siteSettings.logoUrl && <img src={siteSettings.logoUrl} alt="Logo" className="h-12 rounded-md object-contain" style={{ border: `1px solid ${theme.border}` }} />}
+                      <label className="h-9 px-3.5 rounded-lg inline-flex items-center gap-1.5 text-[13px] font-medium cursor-pointer" style={{ border: `1px solid ${theme.border}`, color: theme.text }}>
+                        <Upload size={14} /> {siteSettings.logoUrl ? 'Change logo' : 'Upload logo'}
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const fd = new FormData()
+                          fd.append('file', file)
+                          fd.append('title', `bizzyplug-logo-${Date.now()}`)
+                          fd.append('category', 'branding')
+                          fd.append('skipDb', 'true')
+                          try {
+                            const res = await fetch('/api/bizzyplug/photos', { method: 'POST', body: fd })
+                            if (res.ok) { const d = await res.json(); if (d.photo?.url) setSite({ logoUrl: d.photo.url }) }
+                          } catch {}
+                          e.target.value = ''
+                        }} />
+                      </label>
+                      {siteSettings.logoUrl && <Button variant="ghost" onClick={() => setSite({ logoUrl: '' })}>Remove</Button>}
+                    </div>
+                  </Field>
+                  <Field label="Theme" group>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {THEME_PRESETS.map(preset => {
+                        const isActive = (siteSettings.activeTheme || 'dark-modern') === preset.id
+                        return (
+                          <button key={preset.id} onClick={() => setSite({ activeTheme: preset.id })} aria-pressed={isActive} className="rounded-xl p-3 text-left" style={{ border: `1px solid ${isActive ? theme.accent : theme.border}`, backgroundColor: isActive ? `${theme.accent}10` : undefined }}>
+                            <p className="text-[13px] font-medium mb-2 flex items-center justify-between" style={{ color: theme.text }}>{preset.name}{isActive && <Check size={14} style={{ color: theme.accent }} />}</p>
+                            <div className="flex gap-1.5">
+                              {[preset.colors.bg, preset.colors.purple, preset.colors.white, preset.colors.bgCard].map((c, i) => (
+                                <span key={i} className="w-5 h-5 rounded-full" style={{ backgroundColor: c, border: `1px solid ${theme.border}` }} />
+                              ))}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </Field>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <Field label="Glow effects" group>
+                      <Choice value={siteSettings.glowEnabled ? 'on' : 'off'} onChange={v => setSite({ glowEnabled: v === 'on' })} options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} />
+                    </Field>
+                    <Field label="Background">
+                      <select value={siteSettings.gradientStyle || 'radial'} onChange={e => setSite({ gradientStyle: e.target.value })} {...field}>
+                        <option value="radial">Radial gradient</option>
+                        <option value="linear">Linear gradient</option>
+                        <option value="none">None</option>
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+              </Panel>
+            )}
+
+            {section === 'hero' && (
+              <Panel>
+                <PanelTitle title="Hero" sub="The first thing visitors see" />
+                <div className="space-y-3">
+                  <Field label="Headline"><input value={siteSettings.heroHeadline || ''} onChange={e => setSite({ heroHeadline: e.target.value })} placeholder="Tired Of The AI Covers, Lets Get You Something Authentic" {...field} /></Field>
+                  <Field label="Sub-headline"><input value={siteSettings.heroSubheadline || ''} onChange={e => setSite({ heroSubheadline: e.target.value })} placeholder="PREMIUM DESIGN. REAL IMPACT." {...field} /></Field>
+                  <Field label="Description"><textarea rows={3} value={siteSettings.bio || ''} onChange={e => setSite({ bio: e.target.value })} {...area} /></Field>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <Field label="Main button text"><input value={siteSettings.ctaText || ''} onChange={e => setSite({ ctaText: e.target.value })} placeholder="BOOK A DESIGN" {...field} /></Field>
+                    <Field label="Second button text"><input value={siteSettings.ctaSecondaryText || ''} onChange={e => setSite({ ctaSecondaryText: e.target.value })} placeholder="VIEW PORTFOLIO" {...field} /></Field>
+                  </div>
+                </div>
+              </Panel>
+            )}
+
+            {section === 'about' && (
+              <Panel>
+                <PanelTitle title="About" />
+                <div className="space-y-3">
+                  <Field label="Headline"><input value={siteSettings.aboutHeadline || ''} onChange={e => setSite({ aboutHeadline: e.target.value })} placeholder="Creativity. Culture. Branding That Hits." {...field} /></Field>
+                  <Field label="Text"><textarea rows={5} value={siteSettings.aboutText || ''} onChange={e => setSite({ aboutText: e.target.value })} {...area} /></Field>
+                </div>
+              </Panel>
+            )}
+
+            {section === 'portfolio' && (
+              <Panel>
+                <PanelTitle
+                  title="Portfolio"
+                  sub={`${portfolioPhotos.length} of 40 photos. Photos save the moment you upload them.`}
+                  right={<RowMenu label="Portfolio options" items={[
+                    { label: showCatManager ? 'Hide categories' : 'Manage categories', icon: Layers, onClick: () => setShowCatManager(!showCatManager) },
+                    ...(portfolioPhotos.length ? [{ label: 'Delete all photos', icon: Trash2, danger: true, onClick: () => { if (confirm('Delete ALL portfolio photos?')) purgeAllPhotos() } }] : []),
+                  ]} />}
+                />
+
+                {showCatManager && (
+                  <div className="rounded-xl p-3 mb-4 space-y-2" style={{ border: `1px solid ${theme.border}` }}>
+                    <p className="text-[13px] font-medium" style={{ color: theme.text }}>Categories</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {portfolioCategories.map(cat => (
+                        <span key={cat} className="inline-flex items-center gap-1 pl-2.5 pr-1 h-7 rounded-md text-[12px]" style={{ backgroundColor: `${theme.text}0a`, color: theme.text }}>
+                          {fmtCat(cat)}
+                          <button onClick={() => setPortfolioCategories(c => c.filter(x => x !== cat))} aria-label={`Remove ${fmtCat(cat)}`} className="p-1" style={{ color: theme.subtext }}><X size={11} /></button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="New category" aria-label="New category"
+                        onKeyDown={e => { if (e.key === 'Enter' && newCatName.trim()) { const slug = slugCat(newCatName); if (slug && !portfolioCategories.includes(slug)) { setPortfolioCategories(c => [...c, slug]); setNewCatName('') } } }} {...field} />
+                      <Button onClick={() => { const slug = slugCat(newCatName); if (slug && !portfolioCategories.includes(slug)) { setPortfolioCategories(c => [...c, slug]); setNewCatName('') } }}><Plus size={14} /> Add</Button>
+                    </div>
+                    <p className="text-[11.5px]" style={{ color: theme.subtext }}>Category changes are kept when you save and publish.</p>
                   </div>
                 )}
-                <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer"
-                  style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40` }}>
-                  <Upload size={14} /> {siteSettings.logoUrl ? 'Change Logo' : 'Upload Logo'}
-                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    const fd = new FormData()
-                    fd.append('file', file)
-                    fd.append('title', `bizzyplug-logo-${Date.now()}`)
-                    fd.append('category', 'branding')
-                    fd.append('skipDb', 'true')
-                    try {
-                      const res = await fetch('/api/bizzyplug/photos', { method: 'POST', body: fd })
-                      if (res.ok) {
-                        const d = await res.json()
-                        if (d.photo?.url) setSiteSettings((s: any) => ({ ...s, logoUrl: d.photo.url }))
-                      }
-                    } catch {}
-                    e.target.value = ''
-                  }} />
-                </label>
-              </div>
 
-              {/* Theme Selector */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-semibold block" style={{ color: theme.textM }}>Theme</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {THEME_PRESETS.map(preset => {
-                    const isActive = (siteSettings.activeTheme || 'dark-modern') === preset.id
-                    return (
-                      <button key={preset.id} onClick={() => setSiteSettings((s: any) => ({ ...s, activeTheme: preset.id }))}
-                        className="rounded-xl p-3 text-left relative"
-                        style={{
-                          backgroundColor: theme.bg,
-                          border: isActive ? `2px solid ${BIZ_PURPLE}` : `1px solid ${theme.border}`,
-                        }}>
-                        {isActive && (
-                          <span className="absolute top-1.5 right-1.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full"
-                            style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>Active</span>
+                <div className="rounded-xl p-3 mb-4 grid sm:grid-cols-[1fr_1fr_auto] gap-2 items-end" style={{ backgroundColor: `${theme.text}06` }}>
+                  <Field label="Title (optional)"><input value={newPhotoTitle} onChange={e => setNewPhotoTitle(e.target.value)} {...field} /></Field>
+                  <Field label="Category">
+                    <select value={newPhotoCategory} onChange={e => setNewPhotoCategory(e.target.value)} {...field}>
+                      {portfolioCategories.map(c => <option key={c} value={c}>{fmtCat(c)}</option>)}
+                    </select>
+                  </Field>
+                  <label className="h-10 px-4 rounded-lg inline-flex items-center justify-center gap-1.5 text-[13px] font-medium cursor-pointer" style={{ backgroundColor: theme.accent, color: theme.bg, opacity: uploadingPortfolio ? 0.6 : 1 }}>
+                    {uploadingPortfolio ? <><RefreshCw size={14} className="animate-spin" /> {uploadProgress.current} of {uploadProgress.total}</> : <><Upload size={14} /> Upload photos</>}
+                    <input type="file" accept="image/*" multiple className="hidden" disabled={uploadingPortfolio} onChange={e => { const files = e.target.files; if (files && files.length > 0) uploadPortfolioPhotos(Array.from(files)); e.target.value = '' }} />
+                  </label>
+                </div>
+                {uploadingPortfolio && uploadProgress.total > 1 && <div className="mb-3"><Bar pct={(uploadProgress.current / uploadProgress.total) * 100} color={theme.accent} /></div>}
+                {uploadStatus && <p className="text-xs mb-3" style={{ color: uploadStatus.type === 'success' ? theme.ok : theme.bad }}>{uploadStatus.message}</p>}
+
+                <div className="mb-3 overflow-x-auto no-scrollbar">
+                  <Segmented size="sm" value={adminPortfolioFilter} onChange={v => setAdminPortfolioFilter(v)} options={[
+                    { value: 'all', label: `All · ${portfolioPhotos.length}` },
+                    ...portfolioCategories.map(cat => ({ value: cat, label: `${fmtCat(cat)} · ${portfolioPhotos.filter(p => p.category === cat).length}` })),
+                  ]} />
+                </div>
+                {filteredAdminPhotos.length === 0 ? <p className="text-[13px] py-4" style={{ color: theme.subtext }}>No photos here yet.</p> : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {filteredAdminPhotos.map(p => (
+                      <div key={p.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
+                        <img src={p.url} alt={p.title} className="w-full h-32 object-cover block" />
+                        {editingPhotoId === p.id ? (
+                          <div className="p-2 space-y-1.5">
+                            <input value={editPhotoTitle} onChange={e => setEditPhotoTitle(e.target.value)} placeholder="Title" aria-label="Title" {...small} />
+                            <select value={editPhotoCategory} onChange={e => setEditPhotoCategory(e.target.value)} aria-label="Category" {...small}>
+                              {portfolioCategories.map(c => <option key={c} value={c}>{fmtCat(c)}</option>)}
+                            </select>
+                            <div className="flex gap-1.5">
+                              <Button size="sm" className="flex-1" onClick={() => setEditingPhotoId(null)}>Cancel</Button>
+                              <Button size="sm" className="flex-1" variant="primary" onClick={() => updatePhoto(p.id, { title: editPhotoTitle, category: editPhotoCategory })}>Save</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 pl-2.5 pr-1 py-1.5">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[12.5px] font-medium truncate" style={{ color: theme.text }}>{p.title}</p>
+                              <p className="text-[11px]" style={{ color: theme.subtext }}>{fmtCat(p.category)}</p>
+                            </div>
+                            <label className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" title="Replace image" style={{ color: theme.subtext }}>
+                              <RefreshCw size={14} />
+                              <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) updatePhoto(p.id, { file: f }); e.target.value = '' }} />
+                            </label>
+                            <RowMenu label={`Actions for ${p.title}`} items={[
+                              { label: 'Edit title and category', icon: Edit3, onClick: () => startEditPhoto(p) },
+                              { label: 'Delete', icon: Trash2, danger: true, onClick: () => deletePortfolioPhoto(p.id) },
+                            ]} />
+                          </div>
                         )}
-                        <p className="text-xs font-bold mb-2" style={{ color: theme.text }}>{preset.name}</p>
-                        <div className="flex gap-1.5">
-                          {[preset.colors.bg, preset.colors.purple, preset.colors.white, preset.colors.bgCard].map((c, i) => (
-                            <div key={i} style={{
-                              width: 18, height: 18, borderRadius: '50%', backgroundColor: c,
-                              border: `1px solid ${theme.border}`,
-                            }} />
-                          ))}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Glow & Effects */}
-              <div className="space-y-3">
-                <label className="text-[10px] font-semibold block" style={{ color: theme.textM }}>Effects</label>
-                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                  <span className="text-xs font-semibold" style={{ color: theme.text }}>Glow Effects</span>
-                  <button onClick={() => setSiteSettings((s: any) => ({ ...s, glowEnabled: !s.glowEnabled }))}
-                    className="relative w-10 h-5 rounded-full transition-colors"
-                    style={{ backgroundColor: siteSettings.glowEnabled ? BIZ_PURPLE : theme.border }}>
-                    <div className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
-                      style={{ left: siteSettings.glowEnabled ? 22 : 2 }} />
-                  </button>
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Background Style</label>
-                  <select className={inputCls} style={inputStyle} value={siteSettings.gradientStyle || 'radial'}
-                    onChange={e => setSiteSettings((s: any) => ({ ...s, gradientStyle: e.target.value }))}>
-                    <option value="radial">Radial Gradient</option>
-                    <option value="linear">Linear Gradient</option>
-                    <option value="none">None</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            )}
-
-            {/* Hero Section */}
-            {accHead('hero', 'Hero & Content', FileText)}
-            {websiteSection === 'hero' && (
-            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <div>
-                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Headline</label>
-                <input className={inputCls} style={inputStyle} value={siteSettings.heroHeadline || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, heroHeadline: e.target.value }))} placeholder="Tired Of The AI Covers, Lets Get You Something Authentic" />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Sub-headline</label>
-                <input className={inputCls} style={inputStyle} value={siteSettings.heroSubheadline || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, heroSubheadline: e.target.value }))} placeholder="PREMIUM DESIGN. REAL IMPACT." />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Description</label>
-                <textarea rows={3} value={siteSettings.bio || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, bio: e.target.value }))}
-                  className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} placeholder="Stand out with custom album covers, logos, flyers..." />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Primary CTA Text</label>
-                  <input className={inputCls} style={inputStyle} value={siteSettings.ctaText || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, ctaText: e.target.value }))} placeholder="BOOK A DESIGN" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Secondary CTA Text</label>
-                  <input className={inputCls} style={inputStyle} value={siteSettings.ctaSecondaryText || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, ctaSecondaryText: e.target.value }))} placeholder="VIEW PORTFOLIO" />
-                </div>
-              </div>
-            </div>
-            )}
-
-            {/* About Section — merged into Hero */}
-            {accHead('about', 'About Section', User)}
-            {websiteSection === 'about' && (
-            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <div>
-                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>About Headline</label>
-                <input className={inputCls} style={inputStyle} value={siteSettings.aboutHeadline || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, aboutHeadline: e.target.value }))} placeholder="Creativity. Culture. Branding That Hits." />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>About Text</label>
-                <textarea rows={3} value={siteSettings.aboutText || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, aboutText: e.target.value }))}
-                  className={inputCls} style={{ ...inputStyle, resize: 'vertical' as any }} placeholder="Bizzyplug is more than a design studio..." />
-              </div>
-            </div>
-            )}
-
-            {/* Portfolio Photos */}
-            {accHead('portfolio', `Portfolio Photos (${portfolioPhotos.length}/40)`, Layers)}
-            {websiteSection === 'portfolio' && (
-            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Portfolio Photos ({portfolioPhotos.length}/40)</p>
-                <div className="flex gap-1.5">
-                  {portfolioPhotos.length > 0 && (
-                    <button onClick={() => { if (confirm('Delete ALL portfolio photos?')) purgeAllPhotos() }} className="text-[10px] font-bold px-2 py-1 rounded-lg"
-                      style={{ backgroundColor: '#EF444415', color: '#EF4444' }}>
-                      Clear All
-                    </button>
-                  )}
-                  <button onClick={() => setShowCatManager(!showCatManager)} className="text-[10px] font-bold px-2 py-1 rounded-lg"
-                    style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
-                    {showCatManager ? 'Done' : 'Manage Categories'}
-                  </button>
-                </div>
-              </div>
-
-              {showCatManager && (
-                <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                  <div className="flex flex-wrap gap-2">
-                    {portfolioCategories.map(cat => (
-                      <div key={cat} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
-                        {fmtCat(cat)}
-                        <button onClick={() => setPortfolioCategories(c => c.filter(x => x !== cat))} className="ml-0.5" style={{ color: '#EF4444' }}><X size={10} /></button>
                       </div>
                     ))}
                   </div>
-                  <div className="flex gap-2">
-                    <input className={inputCls} style={{ ...inputStyle, fontSize: 11 }} placeholder="New category name" value={newCatName} onChange={e => setNewCatName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && newCatName.trim()) { const slug = slugCat(newCatName); if (slug && !portfolioCategories.includes(slug)) { setPortfolioCategories(c => [...c, slug]); setNewCatName('') } } }} />
-                    <button onClick={() => { const slug = slugCat(newCatName); if (slug && !portfolioCategories.includes(slug)) { setPortfolioCategories(c => [...c, slug]); setNewCatName('') } }}
-                      className="px-3 py-1.5 rounded-xl text-[10px] font-bold shrink-0" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>+ Add</button>
+                )}
+              </Panel>
+            )}
+
+            {section === 'links' && (
+              <Panel>
+                <PanelTitle title="Payment and social links" />
+                <div className="space-y-4">
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <Field label="Cash App"><input value={siteSettings.cashAppTag || ''} onChange={e => setSite({ cashAppTag: e.target.value })} placeholder="$BizzyPlug" {...field} /></Field>
+                    <Field label="PayPal"><input value={siteSettings.paypalEmail || ''} onChange={e => setSite({ paypalEmail: e.target.value })} {...field} /></Field>
+                    <Field label="Venmo"><input value={siteSettings.venmoHandle || ''} onChange={e => setSite({ venmoHandle: e.target.value })} {...field} /></Field>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <Field label="Instagram URL"><input value={siteSettings.instagramUrl || ''} onChange={e => setSite({ instagramUrl: e.target.value })} placeholder="https://instagram.com/bizzyplug" {...field} /></Field>
+                    <Field label="Contact email"><input value={siteSettings.contactEmail || ''} onChange={e => setSite({ contactEmail: e.target.value })} {...field} /></Field>
                   </div>
                 </div>
-              )}
+              </Panel>
+            )}
 
-              <div className="flex gap-1.5 flex-wrap">
-                <button onClick={() => setAdminPortfolioFilter('all')}
-                  className="px-2.5 py-1 rounded-full text-[10px] font-bold"
-                  style={{ backgroundColor: adminPortfolioFilter === 'all' ? BIZ_PURPLE : theme.bg, color: adminPortfolioFilter === 'all' ? '#fff' : theme.textM, border: `1px solid ${adminPortfolioFilter === 'all' ? BIZ_PURPLE : theme.border}` }}>
-                  All ({portfolioPhotos.length})
-                </button>
-                {portfolioCategories.map(cat => {
-                  const count = portfolioPhotos.filter(p => p.category === cat).length
-                  return (
-                    <button key={cat} onClick={() => setAdminPortfolioFilter(cat)}
-                      className="px-2.5 py-1 rounded-full text-[10px] font-bold"
-                      style={{ backgroundColor: adminPortfolioFilter === cat ? BIZ_PURPLE : theme.bg, color: adminPortfolioFilter === cat ? '#fff' : theme.textM, border: `1px solid ${adminPortfolioFilter === cat ? BIZ_PURPLE : theme.border}` }}>
-                      {fmtCat(cat)} ({count})
-                    </button>
-                  )
-                })}
-              </div>
-
-              {filteredAdminPhotos.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {filteredAdminPhotos.map(p => (
-                    <div key={p.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
-                      <div className="relative">
-                        <img src={p.url} alt={p.title} style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
-                        <div className="absolute inset-0 flex items-end" style={{ background: 'linear-gradient(transparent 40%, rgba(0,0,0,0.8))' }}>
-                          <div className="p-2 w-full flex items-end justify-between">
-                            <div className="min-w-0 flex-1 mr-1">
-                              <p className="text-[10px] font-bold text-white truncate">{p.title}</p>
-                              <p className="text-[9px]" style={{ color: '#94A3B8' }}>{fmtCat(p.category)}</p>
-                            </div>
-                            <div className="flex gap-1 shrink-0">
-                              <button onClick={() => startEditPhoto(p)} className="p-1 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}60` }}>
-                                <Edit3 size={10} style={{ color: '#fff' }} />
-                              </button>
-                              <label className="p-1 rounded-lg cursor-pointer" style={{ backgroundColor: '#3B82F640' }}>
-                                <RefreshCw size={10} style={{ color: '#93C5FD' }} />
-                                <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) updatePhoto(p.id, { file: f }); e.target.value = '' }} />
-                              </label>
-                              <button onClick={() => deletePortfolioPhoto(p.id)} className="p-1 rounded-lg" style={{ backgroundColor: '#EF444440' }}>
-                                <Trash2 size={10} style={{ color: '#EF4444' }} />
-                              </button>
-                            </div>
+            {section === 'services' && (
+              <Panel>
+                <PanelTitle title="Services and pricing" sub="What customers can order on your site" />
+                <ul>
+                  {services.map((s, i) => (
+                    <li key={i} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                      {editingService === i ? (
+                        <div className="py-3 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Field label="Name"><input value={s.name} onChange={e => { const u = [...services]; u[i] = { ...u[i], name: e.target.value }; setServices(u) }} {...field} /></Field>
+                            <Field label="Price ($)"><input type="number" value={s.price} onChange={e => { const u = [...services]; u[i] = { ...u[i], price: Number(e.target.value) }; setServices(u) }} {...field} /></Field>
+                            <Field label="Tag">
+                              <select value={(s as any).tag || ''} onChange={e => { const u = [...services]; u[i] = { ...u[i], tag: e.target.value, popular: e.target.value === 'Popular' } as any; setServices(u) }} {...field}>
+                                <option value="">No tag</option>
+                                {['Popular', 'Discount', '50% Off', 'Limited Time', 'New', 'Bundle'].map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </Field>
+                            <Field label="Sale price ($)"><input type="number" value={(s as any).salePrice || ''} onChange={e => { const u = [...services]; u[i] = { ...u[i], salePrice: e.target.value ? Number(e.target.value) : undefined } as any; setServices(u) }} {...field} /></Field>
                           </div>
+                          <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: `${theme.text}06` }}>
+                            <p className="text-[12.5px] font-medium" style={{ color: theme.text }}>Extra questions on the order form</p>
+                            {((s as any).customFields || []).map((f: any, fi: number) => (
+                              <div key={fi} className="flex items-center gap-1.5">
+                                <input placeholder="Question" aria-label="Question" value={f.label} onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], label: e.target.value }; u[i] = { ...u[i], customFields: cf } as any; setServices(u) }} {...small} />
+                                <select aria-label="Answer type" value={f.type} onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], type: e.target.value }; u[i] = { ...u[i], customFields: cf } as any; setServices(u) }} {...small} className={`${small.className} max-w-[110px]`}>
+                                  <option value="text">Short text</option>
+                                  <option value="textarea">Long text</option>
+                                  <option value="select">Dropdown</option>
+                                </select>
+                                {f.type === 'select' && (
+                                  <input placeholder="Options, comma separated" aria-label="Options" value={f.options || ''} onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], options: e.target.value }; u[i] = { ...u[i], customFields: cf } as any; setServices(u) }} {...small} />
+                                )}
+                                <IconButton label="Remove question" onClick={() => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf.splice(fi, 1); u[i] = { ...u[i], customFields: cf } as any; setServices(u) }}><X size={14} /></IconButton>
+                              </div>
+                            ))}
+                            <Button size="sm" onClick={() => { const u = [...services]; u[i] = { ...u[i], customFields: [...((u[i] as any).customFields || []), { label: '', type: 'text', options: '' }] } as any; setServices(u) }}><Plus size={13} /> Add question</Button>
+                          </div>
+                          <Button className="w-full" variant="primary" onClick={() => setEditingService(null)}>Done</Button>
                         </div>
-                      </div>
-                      {editingPhotoId === p.id && (
-                        <div className="p-2 space-y-1.5" style={{ backgroundColor: theme.bg }}>
-                          <input className={inputCls} style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }} value={editPhotoTitle} onChange={e => setEditPhotoTitle(e.target.value)} placeholder="Title" />
-                          <select className={inputCls} style={{ ...inputStyle, fontSize: 11, padding: '6px 8px' }} value={editPhotoCategory} onChange={e => setEditPhotoCategory(e.target.value)}>
-                            {portfolioCategories.map(c => <option key={c} value={c}>{fmtCat(c)}</option>)}
-                          </select>
-                          <div className="flex gap-1.5">
-                            <button onClick={() => updatePhoto(p.id, { title: editPhotoTitle, category: editPhotoCategory })}
-                              className="flex-1 py-1.5 rounded-lg text-[10px] font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>Save</button>
-                            <button onClick={() => setEditingPhotoId(null)}
-                              className="flex-1 py-1.5 rounded-lg text-[10px] font-bold" style={{ backgroundColor: theme.border, color: theme.textM }}>Cancel</button>
+                      ) : (
+                        <div className="flex items-center gap-3 py-2.5">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13.5px] font-medium truncate" style={{ color: theme.text }}>{s.name}{(s as any).tag && <span className="ml-2 text-[11px] font-normal" style={{ color: theme.accent }}>{(s as any).tag}</span>}</p>
+                            {((s as any).customFields || []).length > 0 && <p className="text-[11.5px]" style={{ color: theme.subtext }}>{(s as any).customFields.length} extra question{(s as any).customFields.length === 1 ? '' : 's'}</p>}
                           </div>
+                          <span className="text-[13.5px] tnum shrink-0" style={{ color: theme.text }}>
+                            {(s as any).salePrice ? <><span style={{ color: theme.ok }}>${(s as any).salePrice}</span> <span className="line-through text-xs" style={{ color: theme.subtext }}>${s.price}</span></> : `$${s.price}`}
+                          </span>
+                          <RowMenu label={`Actions for ${s.name}`} items={[
+                            { label: 'Edit', icon: Edit3, onClick: () => setEditingService(i) },
+                            ...(i > 0 ? [{ label: 'Move up', icon: ChevronUp, onClick: () => { const u = [...services]; [u[i - 1], u[i]] = [u[i], u[i - 1]]; setServices(u) } }] : []),
+                            ...(i < services.length - 1 ? [{ label: 'Move down', icon: ChevronDown, onClick: () => { const u = [...services]; [u[i], u[i + 1]] = [u[i + 1], u[i]]; setServices(u) } }] : []),
+                            { label: 'Delete', icon: Trash2, danger: true, onClick: () => setServices(services.filter((_, j) => j !== i)) },
+                          ]} />
                         </div>
                       )}
-                    </div>
+                    </li>
                   ))}
+                </ul>
+                <div className="flex gap-2 mt-3 pt-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                  <input placeholder="New service" aria-label="New service name" value={newService.name} onChange={e => setNewService(s => ({ ...s, name: e.target.value }))} {...field} />
+                  <input type="number" placeholder="$" aria-label="New service price" value={newService.price} onChange={e => setNewService(s => ({ ...s, price: e.target.value }))} {...field} className={`${field.className} max-w-[90px]`} />
+                  <Button onClick={() => {
+                    if (!newService.name || !newService.price) return
+                    setServices([...services, { name: newService.name, price: Number(newService.price) }])
+                    setNewService({ name: '', price: '' })
+                  }}><Plus size={14} /> Add</Button>
+                </div>
+              </Panel>
+            )}
+
+            {section === 'rollout' && (
+              <div className="space-y-4">
+                {rolloutPackages.map((pkg: any, pi: number) => (
+                  <Panel key={pkg.id}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <input value={pkg.label} onChange={e => { const u = [...rolloutPackages]; u[pi] = { ...u[pi], label: e.target.value }; setRolloutPackages(u) }} aria-label="Package name" {...field} className={`${field.className} font-semibold`} />
+                      <Button onClick={() => { const u = [...rolloutPackages]; u[pi] = { ...u[pi], tiers: [...u[pi].tiers, { id: gid(), name: 'New Tier', price: 0, period: '/mo', campaigns: 1, description: '', badge: '', active: true, salePrice: null, services: ['Custom Cover Artwork'], extras: [] }] }; setRolloutPackages(u) }}><Plus size={14} /> Tier</Button>
+                    </div>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {pkg.tiers.map((tier: any, ti: number) => {
+                        const setTier = (patch: any) => { const u = [...rolloutPackages]; const tiers = [...u[pi].tiers]; tiers[ti] = { ...tier, ...patch }; u[pi] = { ...u[pi], tiers }; setRolloutPackages(u) }
+                        return (
+                          <div key={tier.id} className="rounded-xl p-3 space-y-2" style={{ border: `1px solid ${theme.border}`, opacity: tier.active ? 1 : 0.55 }}>
+                            <div className="flex items-center gap-2">
+                              <input value={tier.name} onChange={e => setTier({ name: e.target.value })} aria-label="Tier name" {...small} className={`${small.className} font-medium`} />
+                              <input type="number" value={tier.price} onChange={e => setTier({ price: Number(e.target.value) })} aria-label="Price" {...small} className={`${small.className} max-w-[80px]`} />
+                              <RowMenu label={`Actions for ${tier.name}`} items={[
+                                { label: tier.active ? 'Hide on site' : 'Show on site', icon: tier.active ? EyeOff : EyeIcon, onClick: () => setTier({ active: !tier.active }) },
+                                ...(ti > 0 ? [{ label: 'Move up', icon: ChevronUp, onClick: () => { const u = [...rolloutPackages]; const t = [...u[pi].tiers]; [t[ti - 1], t[ti]] = [t[ti], t[ti - 1]]; u[pi] = { ...u[pi], tiers: t }; setRolloutPackages(u) } }] : []),
+                                ...(ti < pkg.tiers.length - 1 ? [{ label: 'Move down', icon: ChevronDown, onClick: () => { const u = [...rolloutPackages]; const t = [...u[pi].tiers]; [t[ti], t[ti + 1]] = [t[ti + 1], t[ti]]; u[pi] = { ...u[pi], tiers: t }; setRolloutPackages(u) } }] : []),
+                                { label: 'Delete tier', icon: Trash2, danger: true, onClick: () => { const u = [...rolloutPackages]; const t = [...u[pi].tiers]; t.splice(ti, 1); u[pi] = { ...u[pi], tiers: t }; setRolloutPackages(u) } },
+                              ]} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input placeholder="Badge, e.g. Best Value" aria-label="Badge" value={tier.badge} onChange={e => setTier({ badge: e.target.value })} {...small} />
+                              <input type="number" placeholder="Sale price" aria-label="Sale price" value={tier.salePrice || ''} onChange={e => setTier({ salePrice: e.target.value ? Number(e.target.value) : null })} {...small} />
+                            </div>
+                            <input placeholder="Description" aria-label="Description" value={tier.description} onChange={e => setTier({ description: e.target.value })} {...small} />
+                            <label className="flex items-center gap-2 text-[12px]" style={{ color: theme.subtext }}>Campaigns a month
+                              <input type="number" value={tier.campaigns} onChange={e => setTier({ campaigns: Number(e.target.value) })} {...small} className={`${small.className} max-w-[70px]`} />
+                            </label>
+                            <textarea rows={4} aria-label="Included services, one per line" value={[...tier.services, ...tier.extras].join('\n')}
+                              onChange={e => setTier({ services: e.target.value.split('\n').filter((l: string) => l.trim()), extras: [] })} {...small} className={`${small.className} h-auto py-2`} />
+                            <p className="text-[11px]" style={{ color: theme.subtext }}>Included services, one per line</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </Panel>
+                ))}
+                <Button className="w-full" onClick={() => setRolloutPackages([...rolloutPackages, { id: gid(), label: 'New Package', tiers: [] }])}><Plus size={14} /> Add package type</Button>
+              </div>
+            )}
+
+            {section === 'order' && (
+              <Panel>
+                <PanelTitle title="Page layout" sub="Order and visibility of the sections on your site" />
+                <ul>
+                  {sectionOrder.map((sec, i) => {
+                    const labels: Record<string, string> = { booking: 'Book your design', portfolio: 'Featured work', rollout: 'Monthly rollout plans', testimonials: 'Reviews and testimonials' }
+                    const isHidden = hiddenSections.includes(sec)
+                    return (
+                      <li key={sec} className="flex items-center gap-2 py-2.5" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                        <span className="w-6 text-center text-xs tnum" style={{ color: theme.subtext }}>{i + 1}</span>
+                        <span className="flex-1 text-[13.5px]" style={{ color: isHidden ? theme.subtext : theme.text, textDecoration: isHidden ? 'line-through' : undefined }}>{labels[sec] || sec}</span>
+                        <IconButton label={isHidden ? 'Show section' : 'Hide section'} onClick={() => setHiddenSections(h => (h.includes(sec) ? h.filter(s => s !== sec) : [...h, sec]))}>{isHidden ? <EyeOff size={15} /> : <Eye size={15} />}</IconButton>
+                        <IconButton label="Move up" onClick={() => { if (i === 0) return; const u = [...sectionOrder]; [u[i - 1], u[i]] = [u[i], u[i - 1]]; setSectionOrder(u) }}><ChevronUp size={15} /></IconButton>
+                        <IconButton label="Move down" onClick={() => { if (i === sectionOrder.length - 1) return; const u = [...sectionOrder]; [u[i], u[i + 1]] = [u[i + 1], u[i]]; setSectionOrder(u) }}><ChevronDown size={15} /></IconButton>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </Panel>
+            )}
+
+            <div className="md:hidden sticky bottom-4 flex gap-2">
+              <a href="/bizzyplug" target="_blank" rel="noopener noreferrer"><Button><Eye size={14} /> Preview</Button></a>
+              <Button className="flex-1" variant="primary" onClick={saveSiteSettings}>{siteSaved ? <><CheckCircle size={14} /> Published</> : <><Save size={14} /> Save and publish</>}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ PROJECT DETAILS ═══ */}
+      <Sheet
+        open={!!openProject}
+        onClose={() => setOpenProjectId(null)}
+        title={openProject?.artistName || ''}
+        sub={openProject ? `${typeLabel(openProject.projectType)} · ${STATUS_CONFIG[openProject.status]?.label || openProject.status}` : undefined}
+        footer={openProject ? <>
+          <Button variant="danger" ariaLabel="Delete project" onClick={() => { handleDelete(openProject.id); setOpenProjectId(null) }}><Trash2 size={14} /></Button>
+          <Button className="flex-1" onClick={() => { handleEdit(openProject); setOpenProjectId(null) }}><Edit3 size={14} /> Edit</Button>
+          <Button className="flex-1" variant="primary" onClick={() => setStatus(openProject.id, openProject.status === 'completed' ? 'new-lead' : 'completed')}>
+            {openProject.status === 'completed' ? 'Reopen' : <><Check size={14} /> Mark complete</>}
+          </Button>
+        </> : undefined}
+      >
+        {openProject && (() => {
+          const p: any = openProject
+          const pct = p.quote > 0 ? Math.min(100, Math.round((p.paid / p.quote) * 100)) : 0
+          return (
+            <div className="space-y-4">
+              {p.quote > 0 && (
+                <div>
+                  <div className="flex items-baseline justify-between mb-1.5">
+                    <span className="text-[22px] font-semibold tnum" style={{ color: theme.text }}>{fmt(p.paid)}</span>
+                    <span className="text-xs tnum" style={{ color: theme.subtext }}>of {fmt(p.quote)} quoted</span>
+                  </div>
+                  <Bar pct={pct} color={pct >= 100 ? theme.ok : theme.accent} />
                 </div>
               )}
-
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <input className={inputCls} style={inputStyle} placeholder="Photo title (optional)" value={newPhotoTitle} onChange={e => setNewPhotoTitle(e.target.value)} />
-                  <select className={inputCls} style={inputStyle} value={newPhotoCategory} onChange={e => setNewPhotoCategory(e.target.value)}>
-                    {portfolioCategories.map(c => <option key={c} value={c}>{fmtCat(c)}</option>)}
-                  </select>
+              <ul className="space-y-2 text-[13.5px]">
+                {p.email && <li className="flex items-center gap-2.5"><Mail size={15} style={{ color: theme.subtext }} /><a href={`mailto:${p.email}`} style={{ color: theme.accent }}>{p.email}</a></li>}
+                {p.phone && <li className="flex items-center gap-2.5"><Phone size={15} style={{ color: theme.subtext }} /><a href={`tel:${p.phone}`} style={{ color: theme.accent }}>{p.phone}</a></li>}
+                {p.instagram && <li className="flex items-center gap-2.5" style={{ color: theme.text }}><Instagram size={15} style={{ color: theme.subtext }} />{p.instagram}</li>}
+                {p.deadline && <li className="flex items-center gap-2.5" style={{ color: theme.text }}><Clock size={15} style={{ color: theme.subtext }} />Due {p.deadline}</li>}
+                {p.paymentMethod && <li className="flex items-center gap-2.5" style={{ color: theme.text }}><DollarSign size={15} style={{ color: theme.subtext }} />Paid by {p.paymentMethod}{p.paidDate ? ` on ${new Date(p.paidDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}</li>}
+              </ul>
+              {p.songName && <div><p className="text-[11.5px] mb-0.5" style={{ color: theme.subtext }}>Song or project</p><p className="text-[13.5px]" style={{ color: theme.text }}>{p.songName}</p></div>}
+              {p.details && <div><p className="text-[11.5px] mb-0.5" style={{ color: theme.subtext }}>Details</p><p className="text-[13.5px] whitespace-pre-wrap" style={{ color: theme.text }}>{p.details}</p></div>}
+              {p.notes && <div><p className="text-[11.5px] mb-0.5" style={{ color: theme.subtext }}>Notes</p><p className="text-[13.5px] whitespace-pre-wrap" style={{ color: theme.text }}>{p.notes}</p></div>}
+              {p.serviceDescriptions && Object.keys(p.serviceDescriptions).length > 0 && (
+                <div>
+                  <p className="text-[11.5px] mb-1" style={{ color: theme.subtext }}>Service details</p>
+                  <ul className="rounded-xl px-3" style={{ backgroundColor: `${theme.text}06` }}>
+                    {Object.entries(p.serviceDescriptions).map(([key, val], i) => (
+                      <li key={key} className="py-2" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                        <p className="text-[12px] font-medium" style={{ color: theme.text }}>{key.includes('::') ? key.split('::').join(' · ') : key}</p>
+                        <p className="text-[12.5px]" style={{ color: theme.subtext }}>{val as string}</p>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <label className="flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold cursor-pointer" style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40`, opacity: uploadingPortfolio ? 0.6 : 1 }}>
-                  {uploadingPortfolio
-                    ? <><RefreshCw size={14} className="animate-spin" /> Uploading {uploadProgress.current} of {uploadProgress.total}...</>
-                    : <><Plus size={14} /> Upload Photos</>}
-                  <input type="file" accept="image/*" multiple className="hidden" disabled={uploadingPortfolio} onChange={e => { const files = e.target.files; if (files && files.length > 0) uploadPortfolioPhotos(Array.from(files)); e.target.value = '' }} />
-                </label>
-                {uploadingPortfolio && uploadProgress.total > 1 && (
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.border }}>
-                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%`, backgroundColor: BIZ_PURPLE }} />
+              )}
+              {p.referenceUrls && p.referenceUrls.length > 0 && (
+                <div>
+                  <p className="text-[11.5px] mb-1" style={{ color: theme.subtext }}>Reference files · {p.referenceUrls.length}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {p.referenceUrls.map((url: string, idx: number) => (
+                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden" style={{ border: `1px solid ${theme.border}` }}>
+                        <img src={url} alt={`Reference ${idx + 1}`} className="w-full h-20 object-cover block" />
+                      </a>
+                    ))}
                   </div>
-                )}
-                {uploadStatus && (
-                  <p className="text-xs font-bold text-center py-1" style={{ color: uploadStatus.type === 'success' ? '#10B981' : '#EF4444' }}>
-                    {uploadStatus.type === 'success' ? <CheckCircle size={12} className="inline mr-1" /> : null}
-                    {uploadStatus.message}
-                  </p>
-                )}
-              </div>
+                </div>
+              )}
+              <p className="text-[11.5px]" style={{ color: theme.subtext }}>Created {p.createdAt}</p>
             </div>
+          )
+        })()}
+      </Sheet>
 
-            )}
+      {/* ═══ PROJECT FORM ═══ */}
+      <Sheet
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editId ? 'Edit project' : 'New project'}
+        footer={<>
+          <Button className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!form.artistName} onClick={handleSaveProject}>{editId ? 'Save changes' : 'Save project'}</Button>
+        </>}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          {!editId && clientDb.length > 0 && (
+            <Field label="Existing client (optional)" className="col-span-2">
+              <select value={selectedClientId} onChange={e => {
+                const cid = e.target.value
+                setSelectedClientId(cid)
+                if (cid) {
+                  const c = clientDb.find(x => x.id === cid)
+                  if (c) setForm(f => ({ ...f, artistName: c.artistName || '', email: c.email || '', phone: c.phone || '', instagram: c.instagram || '', clientId: c.id }))
+                } else setForm(f => ({ ...f, artistName: '', email: '', phone: '', instagram: '', clientId: undefined }))
+              }} {...field}>
+                <option value="">New client</option>
+                {[...clientDb].sort((a, b) => a.artistName.localeCompare(b.artistName)).map(c => <option key={c.id} value={c.id}>{c.artistName}{c.email ? ` · ${c.email}` : ''}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Artist or brand"><input value={form.artistName || ''} onChange={e => setForm(f => ({ ...f, artistName: e.target.value }))} autoFocus {...field} /></Field>
+          <Field label="Instagram"><input value={form.instagram || ''} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} placeholder="@handle" {...field} /></Field>
+          <Field label="Email"><input type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} {...field} /></Field>
+          <Field label="Phone"><input type="tel" value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} {...field} /></Field>
+          <Field label="Service">
+            <select value={form.projectType || 'custom-artwork'} onChange={e => setForm(f => ({ ...f, projectType: e.target.value }))} {...field}>
+              {PROJECT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={form.status || 'new-lead'} onChange={e => setForm(f => ({ ...f, status: e.target.value as ProjectStatus }))} {...field}>
+              {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Quote ($)"><input type="number" inputMode="decimal" value={form.quote || ''} onChange={e => setForm(f => ({ ...f, quote: Number(e.target.value) }))} {...field} /></Field>
+          <Field label="Paid ($)"><input type="number" inputMode="decimal" value={form.paid || ''} onChange={e => setForm(f => ({ ...f, paid: Number(e.target.value) }))} {...field} /></Field>
+          <Field label="Deadline"><input type="date" value={form.deadline || ''} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} {...field} /></Field>
+          <Field label="Paid with">
+            <select value={form.paymentMethod || ''} onChange={e => setForm(f => ({ ...f, paymentMethod: e.target.value }))} {...field}>
+              <option value="">Not paid</option>
+              <option value="cashapp">Cash App</option>
+              <option value="paypal">PayPal</option>
+              <option value="venmo">Venmo</option>
+              <option value="other">Other</option>
+            </select>
+          </Field>
+          <Field label="Song or project name" className="col-span-2"><input value={form.songName || ''} onChange={e => setForm(f => ({ ...f, songName: e.target.value }))} {...field} /></Field>
+          <Field label="Details" className="col-span-2"><textarea rows={3} value={form.details || ''} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} {...area} /></Field>
+          <Field label="Private notes" className="col-span-2"><textarea rows={2} value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} {...area} /></Field>
+        </div>
+      </Sheet>
 
-            {/* Payment & Social Links */}
-            {accHead('links', 'Payment & Social Links', ExternalLink)}
-            {websiteSection === 'links' && (
-            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: BIZ_PURPLE }}>Payment Links</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Cash App</label>
-                  <input className={inputCls} style={inputStyle} value={siteSettings.cashAppTag || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, cashAppTag: e.target.value }))} placeholder="$BizzyPlug" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>PayPal</label>
-                  <input className={inputCls} style={inputStyle} value={siteSettings.paypalEmail || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, paypalEmail: e.target.value }))} placeholder="buzyplug@gmail.com" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Venmo</label>
-                  <input className={inputCls} style={inputStyle} value={siteSettings.venmoHandle || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, venmoHandle: e.target.value }))} placeholder="@Buzyplug" />
-                </div>
-              </div>
-
-              <p className="text-[10px] font-bold uppercase tracking-wider mt-4" style={{ color: BIZ_PURPLE }}>Social & Contact</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Instagram URL</label>
-                  <input className={inputCls} style={inputStyle} value={siteSettings.instagramUrl || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, instagramUrl: e.target.value }))} placeholder="https://instagram.com/bizzyplug" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold block mb-1" style={{ color: theme.textM }}>Contact Email</label>
-                  <input className={inputCls} style={inputStyle} value={siteSettings.contactEmail || ''} onChange={e => setSiteSettings((s: any) => ({ ...s, contactEmail: e.target.value }))} placeholder="buzyplug@gmail.com" />
-                </div>
-              </div>
-            </div>
-            )}
-
-            {/* Services & Pricing */}
-            {accHead('services', `Services & Pricing (${services.length})`, DollarSign)}
-            {websiteSection === 'services' && (
-            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <div className="space-y-2">
-                {services.map((s, i) => (
-                  <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}` }}>
-                    {editingService === i ? (
-                      <div className="flex-1 space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <input className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} placeholder="Name" value={s.name} onChange={e => { const u = [...services]; u[i] = { ...u[i], name: e.target.value }; setServices(u) }} />
-                          <input type="number" className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} placeholder="Price" value={s.price} onChange={e => { const u = [...services]; u[i] = { ...u[i], price: Number(e.target.value) }; setServices(u) }} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <select className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} value={(s as any).tag || ''} onChange={e => { const u = [...services]; u[i] = { ...u[i], tag: e.target.value, popular: e.target.value === 'Popular' } as any; setServices(u) }}>
-                            <option value="">No tag</option>
-                            <option value="Popular">Popular</option>
-                            <option value="Discount">Discount</option>
-                            <option value="50% Off">50% Off</option>
-                            <option value="Limited Time">Limited Time</option>
-                            <option value="New">New</option>
-                            <option value="Bundle">Bundle</option>
-                          </select>
-                          <input type="number" className="px-2 py-1.5 rounded-lg border text-xs" style={inputStyle} placeholder="Sale $" value={(s as any).salePrice || ''} onChange={e => { const u = [...services]; u[i] = { ...u[i], salePrice: e.target.value ? Number(e.target.value) : undefined } as any; setServices(u) }} />
-                        </div>
-                        <div className="border-t pt-2 mt-1" style={{ borderColor: theme.border }}>
-                          <p className="text-[9px] font-bold uppercase tracking-wider mb-1.5" style={{ color: BIZ_PURPLE }}>Custom Form Fields</p>
-                          {((s as any).customFields || []).map((f: any, fi: number) => (
-                            <div key={fi} className="flex items-center gap-1.5 mb-1">
-                              <input className="flex-1 px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Field label" value={f.label}
-                                onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], label: e.target.value }; (u[i] as any).customFields = cf; setServices(u) }} />
-                              <select className="px-1.5 py-1 rounded-lg border text-[10px]" style={inputStyle} value={f.type}
-                                onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], type: e.target.value }; (u[i] as any).customFields = cf; setServices(u) }}>
-                                <option value="text">Text</option>
-                                <option value="textarea">Textarea</option>
-                                <option value="select">Dropdown</option>
-                              </select>
-                              {f.type === 'select' && (
-                                <input className="flex-1 px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Options (comma separated)" value={f.options || ''}
-                                  onChange={e => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf[fi] = { ...cf[fi], options: e.target.value }; (u[i] as any).customFields = cf; setServices(u) }} />
-                              )}
-                              <button onClick={() => { const u = [...services]; const cf = [...((u[i] as any).customFields || [])]; cf.splice(fi, 1); (u[i] as any).customFields = cf; setServices(u) }}
-                                className="p-0.5" style={{ color: '#EF4444' }}><X size={10} /></button>
-                            </div>
-                          ))}
-                          <button onClick={() => { const u = [...services]; (u[i] as any).customFields = [...((u[i] as any).customFields || []), { label: '', type: 'text', options: '' }]; setServices(u) }}
-                            className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}10`, color: BIZ_PURPLE }}>+ Add Field</button>
-                        </div>
-                        <button onClick={() => setEditingService(null)} className="w-full px-2 py-1.5 rounded-lg text-xs font-bold" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>Done</button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate" style={{ color: theme.text }}>{s.name}</p>
-                          {(s as any).tag && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${BIZ_PURPLE}20`, color: BIZ_PURPLE }}>{(s as any).tag}</span>}
-                        </div>
-                        <div className="text-right shrink-0">
-                          {(s as any).salePrice ? (
-                            <><span className="text-sm font-bold" style={{ color: '#10B981' }}>${(s as any).salePrice}</span><span className="text-xs ml-1 line-through" style={{ color: theme.textM }}>${s.price}</span></>
-                          ) : (
-                            <span className="text-sm font-bold" style={{ color: BIZ_PURPLE }}>${s.price}</span>
-                          )}
-                        </div>
-                        {i > 0 && <button onClick={() => { const u = [...services]; [u[i-1], u[i]] = [u[i], u[i-1]]; setServices(u) }} className="p-1 rounded-lg" style={{ color: theme.textM }}><ChevronUp size={12} /></button>}
-                        {i < services.length - 1 && <button onClick={() => { const u = [...services]; [u[i], u[i+1]] = [u[i+1], u[i]]; setServices(u) }} className="p-1 rounded-lg" style={{ color: theme.textM }}><ChevronDown size={12} /></button>}
-                        <button onClick={() => setEditingService(i)} className="p-1 rounded-lg" style={{ color: theme.textM }}><Edit3 size={12} /></button>
-                        <button onClick={() => setServices(services.filter((_, j) => j !== i))} className="p-1 rounded-lg" style={{ color: '#EF4444' }}><Trash2 size={12} /></button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input className="flex-1 px-3 py-2 rounded-xl border text-xs" style={inputStyle} placeholder="Service name" value={newService.name} onChange={e => setNewService(s => ({ ...s, name: e.target.value }))} />
-                <input type="number" className="w-20 px-3 py-2 rounded-xl border text-xs" style={inputStyle} placeholder="$" value={newService.price} onChange={e => setNewService(s => ({ ...s, price: e.target.value }))} />
-                <button onClick={() => {
-                  if (!newService.name || !newService.price) return
-                  setServices([...services, { name: newService.name, price: Number(newService.price) }])
-                  setNewService({ name: '', price: '' })
-                }} className="px-3 py-2 rounded-xl text-xs font-bold shrink-0" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>
-                  <Plus size={14} />
-                </button>
-              </div>
-            </div>
-
-            )}
-
-            {/* Rollout Packages */}
-            {accHead('rollout', `Rollout Packages (${rolloutPackages.length})`, Package)}
-            {websiteSection === 'rollout' && (
-            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              {rolloutPackages.map((pkg: any, pi: number) => (
-                <div key={pkg.id} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input className="flex-1 px-2 py-1.5 rounded-lg border text-xs font-bold" style={inputStyle} value={pkg.label} onChange={e => { const u = [...rolloutPackages]; u[pi] = { ...u[pi], label: e.target.value }; setRolloutPackages(u) }} />
-                    <button onClick={() => { const u = [...rolloutPackages]; u[pi] = { ...u[pi], tiers: [...u[pi].tiers, { id: gid(), name: 'New Tier', price: 0, period: '/mo', campaigns: 1, description: '', badge: '', active: true, salePrice: null, services: ['Custom Cover Artwork'], extras: [] }] }; setRolloutPackages(u) }}
-                      className="px-2 py-1.5 rounded-lg text-[10px] font-bold shrink-0" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}>+ Tier</button>
-                  </div>
-                  {pkg.tiers.map((tier: any, ti: number) => (
-                    <div key={tier.id} className="rounded-xl p-3 space-y-2" style={{ backgroundColor: theme.bg, border: `1px solid ${theme.border}`, opacity: tier.active ? 1 : 0.5 }}>
-                      <div className="flex items-center gap-2">
-                        <input className="flex-1 px-2 py-1 rounded-lg border text-xs" style={inputStyle} value={tier.name} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, name: e.target.value }; setRolloutPackages(u) }} />
-                        <input type="number" className="w-16 px-2 py-1 rounded-lg border text-xs" style={inputStyle} value={tier.price} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, price: Number(e.target.value) }; setRolloutPackages(u) }} />
-                        <button onClick={() => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, active: !tier.active }; setRolloutPackages(u) }}
-                          className="p-1 rounded-lg" style={{ color: tier.active ? '#10B981' : theme.textM }}>{tier.active ? <EyeIcon size={12} /> : <EyeOff size={12} />}</button>
-                        <button onClick={() => { const u = [...rolloutPackages]; u[pi].tiers.splice(ti, 1); setRolloutPackages(u) }}
-                          className="p-1 rounded-lg" style={{ color: '#EF4444' }}><Trash2 size={12} /></button>
-                        {ti > 0 && <button onClick={() => { const u = [...rolloutPackages]; const t = u[pi].tiers; [t[ti-1], t[ti]] = [t[ti], t[ti-1]]; setRolloutPackages(u) }}
-                          className="p-1 rounded-lg" style={{ color: theme.textM }}><ChevronUp size={12} /></button>}
-                        {ti < pkg.tiers.length - 1 && <button onClick={() => { const u = [...rolloutPackages]; const t = u[pi].tiers; [t[ti], t[ti+1]] = [t[ti+1], t[ti]]; setRolloutPackages(u) }}
-                          className="p-1 rounded-lg" style={{ color: theme.textM }}><ChevronDown size={12} /></button>}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input className="px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Badge (e.g. Best Value)" value={tier.badge} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, badge: e.target.value }; setRolloutPackages(u) }} />
-                        <input type="number" className="px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Sale price" value={tier.salePrice || ''} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, salePrice: e.target.value ? Number(e.target.value) : null }; setRolloutPackages(u) }} />
-                      </div>
-                      <input className="w-full px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Description" value={tier.description} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, description: e.target.value }; setRolloutPackages(u) }} />
-                      <input type="number" className="w-full px-2 py-1 rounded-lg border text-[10px]" style={inputStyle} placeholder="Campaigns per month" value={tier.campaigns} onChange={e => { const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, campaigns: Number(e.target.value) }; setRolloutPackages(u) }} />
-                      <div>
-                        <p className="text-[9px] font-bold uppercase mb-1" style={{ color: theme.textM }}>Services (one per line)</p>
-                        <textarea rows={3} className="w-full px-2 py-1 rounded-lg border text-[10px]" style={{ ...inputStyle, resize: 'vertical' as any }}
-                          value={[...tier.services, ...tier.extras].join('\n')}
-                          onChange={e => {
-                            const lines = e.target.value.split('\n').filter((l: string) => l.trim())
-                            const u = [...rolloutPackages]; u[pi].tiers[ti] = { ...tier, services: lines, extras: [] }; setRolloutPackages(u)
-                          }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              <button onClick={() => setRolloutPackages([...rolloutPackages, { id: gid(), label: 'New Package', tiers: [] }])}
-                className="w-full py-2 rounded-xl text-xs font-bold" style={{ backgroundColor: `${BIZ_PURPLE}12`, color: BIZ_PURPLE, border: `1px dashed ${BIZ_PURPLE}40` }}>+ Add Package Type</button>
-            </div>
-
-            )}
-
-            {/* Section Order */}
-            {accHead('order', 'Page Section Order', Layers)}
-            {websiteSection === 'order' && (
-            <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
-              <div className="space-y-1.5">
-                {sectionOrder.map((sec, i) => {
-                  const labels: Record<string, string> = { booking: 'Book Your Design', portfolio: 'Featured Work', rollout: 'Monthly Rollout Plans', testimonials: 'Reviews & Testimonials' }
-                  const isHidden = hiddenSections.includes(sec)
-                  return (
-                    <div key={sec} className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ backgroundColor: theme.bg, border: `1px solid ${isHidden ? '#EF444430' : theme.border}`, opacity: isHidden ? 0.5 : 1 }}>
-                      <span className="text-sm font-semibold flex-1" style={{ color: theme.text }}>{labels[sec] || sec}</span>
-                      <div className="flex gap-1">
-                        <button onClick={() => setHiddenSections(h => h.includes(sec) ? h.filter(s => s !== sec) : [...h, sec])}
-                          className="p-1.5 rounded-lg" style={{ backgroundColor: isHidden ? '#EF444415' : `${BIZ_PURPLE}15`, color: isHidden ? '#EF4444' : BIZ_PURPLE }}>
-                          {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </button>
-                        {i > 0 && <button onClick={() => { const u = [...sectionOrder]; [u[i-1], u[i]] = [u[i], u[i-1]]; setSectionOrder(u) }}
-                          className="p-1.5 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}><ChevronUp size={14} /></button>}
-                        {i < sectionOrder.length - 1 && <button onClick={() => { const u = [...sectionOrder]; [u[i], u[i+1]] = [u[i+1], u[i]]; setSectionOrder(u) }}
-                          className="p-1.5 rounded-lg" style={{ backgroundColor: `${BIZ_PURPLE}15`, color: BIZ_PURPLE }}><ChevronDown size={14} /></button>}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-            )}
-
-            <button onClick={saveSiteSettings}
-              className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 mt-3"
-              style={{ backgroundColor: siteSaved ? '#10B981' : BIZ_PURPLE, color: '#fff' }}>
-              {siteSaved ? <><CheckCircle size={16} /> Saved!</> : <><Save size={16} /> Save & Publish</>}
-            </button>
-          </div>
-        )}
-
-        {/* ── DELIVERY TAB ── */}
-        {activeTab === 'delivery' && (
-          <DeliveryTab theme={theme} clients={clientDb} inputCls={inputCls} inputStyle={inputStyle} />
-        )}
-      </div>
-
-      {/* Project Add/Edit Modal */}
-      <AnimatePresence>
-        {showForm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end" onClick={() => setShowForm(false)}>
-            <motion.div initial={{ y: 120 }} animate={{ y: 0 }} exit={{ y: 120 }}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="w-full border-t rounded-t-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center">
-                <h2 className="font-bold text-xl" style={{ color: theme.text }}>{editId ? 'Edit Project' : 'New Project'}</h2>
-                <button onClick={() => setShowForm(false)} className="p-2 rounded-xl" style={{ backgroundColor: theme.border }}><X size={16} style={{ color: theme.text }} /></button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Existing client picker — only shown for new projects */}
-                {!editId && clientDb.length > 0 && (
-                  <div className="sm:col-span-2 pb-3 border-b" style={{ borderColor: theme.border }}>
-                    <label className="text-[10px] font-bold uppercase block mb-1.5" style={{ color: BIZ_PURPLE }}>
-                      Fill From Existing Client
-                    </label>
-                    <select
-                      className={inputCls}
-                      style={{ ...inputStyle, borderColor: selectedClientId ? BIZ_PURPLE : undefined }}
-                      value={selectedClientId}
-                      onChange={e => {
-                        const cid = e.target.value
-                        setSelectedClientId(cid)
-                        if (cid) {
-                          const c = clientDb.find(x => x.id === cid)
-                          if (c) setForm(f => ({ ...f, artistName: c.artistName || '', email: c.email || '', phone: c.phone || '', instagram: c.instagram || '', clientId: c.id }))
-                        } else {
-                          setForm(f => ({ ...f, artistName: '', email: '', phone: '', instagram: '', clientId: undefined }))
-                        }
-                      }}
-                    >
-                      <option value="">— Select a client to auto-fill —</option>
-                      {[...clientDb].sort((a, b) => a.artistName.localeCompare(b.artistName)).map(c => (
-                        <option key={c.id} value={c.id}>{c.artistName}{c.email ? ` · ${c.email}` : ''}</option>
-                      ))}
-                    </select>
-                    {selectedClientId && (
-                      <p className="text-[10px] mt-1.5 flex items-center gap-1" style={{ color: BIZ_PURPLE }}>
-                        <CheckCircle size={10} /> Fields pre-filled — edit anything below as needed.
-                      </p>
-                    )}
-                  </div>
-                )}
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Artist / Brand *</label><input className={inputCls} style={inputStyle} placeholder="Artist name" value={form.artistName || ''} onChange={e => setForm(f => ({ ...f, artistName: e.target.value }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Instagram</label><input className={inputCls} style={inputStyle} placeholder="@handle" value={form.instagram || ''} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Email</label><input className={inputCls} style={inputStyle} type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Phone</label><input className={inputCls} style={inputStyle} type="tel" value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Service</label><select className={inputCls} style={inputStyle} value={form.projectType || 'custom-artwork'} onChange={e => setForm(f => ({ ...f, projectType: e.target.value }))}>{PROJECT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Status</label><select className={inputCls} style={inputStyle} value={form.status || 'new-lead'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>{Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Quote ($)</label><input className={inputCls} style={inputStyle} type="number" placeholder="0" value={form.quote || ''} onChange={e => setForm(f => ({ ...f, quote: Number(e.target.value) }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Paid ($)</label><input className={inputCls} style={inputStyle} type="number" placeholder="0" value={form.paid || ''} onChange={e => setForm(f => ({ ...f, paid: Number(e.target.value) }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Deadline</label><input className={inputCls} style={inputStyle} type="date" value={form.deadline || ''} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Payment Method</label><select className={inputCls} style={inputStyle} value={form.paymentMethod || ''} onChange={e => setForm(f => ({ ...f, paymentMethod: e.target.value }))}><option value="">Not paid</option><option value="cashapp">Cash App</option><option value="paypal">PayPal</option><option value="venmo">Venmo</option><option value="other">Other</option></select></div>
-                <div className="sm:col-span-2"><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Song / Project Name</label><input className={inputCls} style={inputStyle} placeholder="Song or project name" value={form.songName || ''} onChange={e => setForm(f => ({ ...f, songName: e.target.value }))} /></div>
-                <div className="sm:col-span-2"><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Details</label><textarea rows={3} className={`${inputCls} resize-none`} style={inputStyle} placeholder="Project details..." value={form.details || ''} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} /></div>
-                <div className="sm:col-span-2"><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Notes</label><textarea rows={2} className={`${inputCls} resize-none`} style={inputStyle} placeholder="Internal notes..." value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
-              </div>
-              <button onClick={handleSaveProject} disabled={!form.artistName}
-                className="w-full py-3 rounded-xl font-bold text-sm disabled:opacity-50" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>
-                {editId ? '✓ Update' : '+ Save Project'}
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Client Add/Edit Modal */}
-      <AnimatePresence>
-        {showClientForm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end" onClick={() => setShowClientForm(false)}>
-            <motion.div initial={{ y: 120 }} animate={{ y: 0 }} exit={{ y: 120 }}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              style={{ backgroundColor: theme.card, borderColor: theme.border }}
-              className="w-full border-t rounded-t-3xl p-5 space-y-4">
-              <div className="flex justify-between items-center">
-                <h2 className="font-bold text-xl" style={{ color: theme.text }}>{editClientId ? 'Edit Client' : 'Add Client'}</h2>
-                <button onClick={() => setShowClientForm(false)} className="p-2 rounded-xl" style={{ backgroundColor: theme.border }}><X size={16} style={{ color: theme.text }} /></button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Artist / Brand *</label><input className={inputCls} style={inputStyle} value={clientForm.artistName || ''} onChange={e => setClientForm(f => ({ ...f, artistName: e.target.value }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Instagram</label><input className={inputCls} style={inputStyle} value={clientForm.instagram || ''} onChange={e => setClientForm(f => ({ ...f, instagram: e.target.value }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Email</label><input className={inputCls} style={inputStyle} type="email" value={clientForm.email || ''} onChange={e => setClientForm(f => ({ ...f, email: e.target.value }))} /></div>
-                <div><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Phone</label><input className={inputCls} style={inputStyle} type="tel" value={clientForm.phone || ''} onChange={e => setClientForm(f => ({ ...f, phone: e.target.value }))} /></div>
-                <div className="sm:col-span-2"><label className="text-[10px] font-bold uppercase block mb-1" style={{ color: theme.textM }}>Notes</label><textarea rows={2} className={`${inputCls} resize-none`} style={inputStyle} value={clientForm.notes || ''} onChange={e => setClientForm(f => ({ ...f, notes: e.target.value }))} /></div>
-              </div>
-              <button onClick={() => {
-                if (!clientForm.artistName) return
-                if (editClientId) {
-                  persistClients(clientDb.map(c => c.id === editClientId ? { ...c, ...clientForm } as BizClientProfile : c))
-                } else {
-                  persistClients([...clientDb, { id: gid(), ...clientForm, createdAt: new Date().toISOString().slice(0, 10) } as BizClientProfile])
-                }
-                setShowClientForm(false); setEditClientId(null); setClientForm({})
-              }} disabled={!clientForm.artistName}
-                className="w-full py-3 rounded-xl font-bold text-sm disabled:opacity-50" style={{ backgroundColor: BIZ_PURPLE, color: '#fff' }}>
-                {editClientId ? '✓ Update Client' : '+ Save Client'}
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+      {/* ═══ CLIENT FORM ═══ */}
+      <Sheet
+        open={showClientForm}
+        onClose={() => setShowClientForm(false)}
+        title={editClientId ? 'Edit client' : 'Add client'}
+        footer={<>
+          <Button className="flex-1" onClick={() => setShowClientForm(false)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!clientForm.artistName} onClick={saveClientForm}>{editClientId ? 'Save changes' : 'Save client'}</Button>
+        </>}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Artist or brand" className="col-span-2"><input value={clientForm.artistName || ''} onChange={e => setClientForm(f => ({ ...f, artistName: e.target.value }))} autoFocus {...field} /></Field>
+          <Field label="Instagram"><input value={clientForm.instagram || ''} onChange={e => setClientForm(f => ({ ...f, instagram: e.target.value }))} {...field} /></Field>
+          <Field label="Phone"><input type="tel" value={clientForm.phone || ''} onChange={e => setClientForm(f => ({ ...f, phone: e.target.value }))} {...field} /></Field>
+          <Field label="Email" className="col-span-2"><input type="email" value={clientForm.email || ''} onChange={e => setClientForm(f => ({ ...f, email: e.target.value }))} {...field} /></Field>
+          <Field label="Notes" className="col-span-2"><textarea rows={3} value={clientForm.notes || ''} onChange={e => setClientForm(f => ({ ...f, notes: e.target.value }))} {...area} /></Field>
+        </div>
+      </Sheet>
+    </PageShell>
   )
 }

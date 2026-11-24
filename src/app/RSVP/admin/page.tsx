@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Calendar, MapPin, Users, Loader2, ImageOff, Trash2 } from 'lucide-react'
+import { Plus, Calendar, MapPin, Users, Loader2, ImageOff, Trash2, Pencil, ExternalLink } from 'lucide-react'
 import AdminShell from './_components/AdminShell'
+import { useTheme } from '@/context/ThemeContext'
+import { PageHeader, Button, RowMenu, EmptyState, Sheet, Field, useField } from '@/components/ui/kit'
+import { Segmented } from '@/components/layout/CustomizePanel'
 
 interface RsvpEvent {
   id: string
@@ -20,17 +23,7 @@ interface RsvpEvent {
   created_at: string
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  draft: 'bg-white/10 text-text-secondary',
-  collecting_interest: 'bg-blue-500/15 text-blue-300',
-  voting_open: 'bg-purple-500/15 text-purple-300',
-  date_selected: 'bg-amber-500/15 text-amber-300',
-  rsvp_open: 'bg-emerald-500/15 text-emerald-300',
-  tickets_on_sale: 'bg-gold/15 text-gold',
-  sold_out: 'bg-red-500/15 text-red-300',
-  completed: 'bg-white/10 text-text-secondary',
-  cancelled: 'bg-red-900/30 text-red-400',
-}
+const LIVE = new Set(['collecting_interest', 'voting_open', 'date_selected', 'rsvp_open', 'tickets_on_sale', 'sold_out'])
 
 function statusLabel(s: string) {
   return s.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
@@ -38,9 +31,14 @@ function statusLabel(s: string) {
 
 export default function AdminEventsPage() {
   const router = useRouter()
+  const { theme } = useTheme()
+  const field = useField()
   const [events, setEvents] = useState<RsvpEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [newOpen, setNewOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [filter, setFilter] = useState<'all' | 'live' | 'draft' | 'past'>('all')
   const [error, setError] = useState('')
 
   const load = () => {
@@ -54,15 +52,15 @@ export default function AdminEventsPage() {
   useEffect(load, [])
 
   const createEvent = async () => {
-    const name = window.prompt('New event name (you can change this later):')
-    if (!name || !name.trim()) return
+    const name = newName.trim()
+    if (!name) return
     setCreating(true)
     setError('')
     try {
       const res = await fetch('/api/rsvp/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to create event')
@@ -90,91 +88,82 @@ Type DELETE to confirm:`
     setEvents(list => list.filter(x => x.id !== ev.id))
   }
 
+  const bucket = (s: string) => (LIVE.has(s) ? 'live' : s === 'draft' ? 'draft' : 'past')
+  const counts = { live: events.filter(e => bucket(e.status) === 'live').length, draft: events.filter(e => bucket(e.status) === 'draft').length, past: events.filter(e => bucket(e.status) === 'past').length }
+  const shown = filter === 'all' ? events : events.filter(e => bucket(e.status) === filter)
+  const tone = (s: string) => (LIVE.has(s) ? (s === 'sold_out' ? theme.warn : theme.ok) : s === 'cancelled' ? theme.bad : theme.subtext)
+
   return (
     <AdminShell>
-      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-extrabold text-text-primary">Events</h1>
-          <p className="text-sm text-text-secondary mt-1">Create, preview, and manage DJ Maskoff events.</p>
-        </div>
-        <button
-          onClick={createEvent}
-          disabled={creating}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gold-gradient text-brand-black font-bold text-sm disabled:opacity-60 hover:shadow-gold transition"
-        >
-          {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} New Event
-        </button>
-      </div>
+      <PageHeader
+        title="Events"
+        sub="Create, publish and manage DJ Maskoff events"
+        right={<Button variant="primary" onClick={() => { setNewName(''); setNewOpen(true) }}><Plus size={15} /> New event</Button>}
+      />
 
-      {error && <p className="text-sm text-danger font-semibold mb-4">{error}</p>}
+      {error && <p className="text-[13px] mb-4" style={{ color: theme.bad }}>{error}</p>}
+
+      {!loading && events.length > 0 && (
+        <div className="mb-4 overflow-x-auto no-scrollbar">
+          <Segmented size="sm" value={filter} onChange={v => setFilter(v as typeof filter)} options={[
+            { value: 'all', label: `All · ${events.length}` },
+            { value: 'live', label: `Live · ${counts.live}` },
+            { value: 'draft', label: `Drafts · ${counts.draft}` },
+            { value: 'past', label: `Ended · ${counts.past}` },
+          ]} />
+        </div>
+      )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="animate-spin text-gold" size={28} />
-        </div>
+        <div className="flex items-center justify-center py-24"><Loader2 className="animate-spin" size={24} style={{ color: theme.subtext }} /></div>
       ) : events.length === 0 ? (
-        <div className="text-center py-24 border border-dashed border-surface-border rounded-2xl">
-          <p className="text-text-secondary text-sm">No events yet. Create your first one to get started.</p>
-        </div>
+        <EmptyState title="No events yet" sub="Create your first event to start collecting RSVPs." action={<Button variant="primary" onClick={() => setNewOpen(true)}><Plus size={15} /> New event</Button>} />
+      ) : shown.length === 0 ? (
+        <EmptyState title="Nothing in this list" />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {events.map(ev => (
-            <div
-              key={ev.id}
-              role="link"
-              tabIndex={0}
-              onClick={() => router.push(`/RSVP/admin/events/${ev.id}`)}
-              onKeyDown={e => { if (e.key === 'Enter') router.push(`/RSVP/admin/events/${ev.id}`) }}
-              className="cursor-pointer text-left bg-surface-card border border-surface-border rounded-2xl overflow-hidden hover:border-gold/40 hover:shadow-card-hover transition group"
-            >
-              <div className="aspect-[4/3] bg-brand-soft flex items-center justify-center relative overflow-hidden">
-                {ev.flyer_url ? (
-                  <img
-                    src={ev.flyer_url}
-                    alt={ev.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                  />
-                ) : (
-                  <ImageOff className="text-text-muted" size={28} />
-                )}
-                <span
-                  className={`absolute top-2 right-2 text-2xs font-bold px-2 py-1 rounded-full ${STATUS_STYLES[ev.status] || 'bg-white/10 text-text-secondary'}`}
-                >
-                  {statusLabel(ev.status)}
-                </span>
-                <button
-                  onClick={e => { e.stopPropagation(); deleteEvent(ev) }}
-                  aria-label={`Delete ${ev.name}`}
-                  title="Delete event"
-                  className="absolute top-2 left-2 p-2 rounded-full bg-black/60 text-text-secondary hover:text-danger hover:bg-black/80 transition"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-              <div className="p-4">
-                <h3 className="font-bold text-text-primary truncate">{ev.name}</h3>
-                <div className="flex items-center gap-3 mt-2 text-2xs text-text-secondary">
-                  {ev.start_time && (
-                    <span className="flex items-center gap-1">
-                      <Calendar size={11} /> {new Date(ev.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
-                  )}
-                  {(ev.city || ev.state) && (
-                    <span className="flex items-center gap-1 truncate">
-                      <MapPin size={11} /> {[ev.city, ev.state].filter(Boolean).join(', ')}
-                    </span>
-                  )}
-                  {ev.ticket_capacity && (
-                    <span className="flex items-center gap-1">
-                      <Users size={11} /> {ev.ticket_capacity}
-                    </span>
-                  )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {shown.map(ev => (
+            <div key={ev.id} className="rounded-2xl overflow-hidden flex flex-col" style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}` }}>
+              <button onClick={() => router.push(`/RSVP/admin/events/${ev.id}`)} className="text-left">
+                <div className="aspect-[16/10] flex items-center justify-center overflow-hidden" style={{ backgroundColor: `${theme.text}08` }}>
+                  {ev.flyer_url ? <img src={ev.flyer_url} alt={ev.name} className="w-full h-full object-cover" /> : <ImageOff size={26} style={{ color: theme.subtext }} />}
                 </div>
+              </button>
+              <div className="flex items-start gap-2 p-4">
+                <button className="flex-1 min-w-0 text-left" onClick={() => router.push(`/RSVP/admin/events/${ev.id}`)}>
+                  <p className="text-[11.5px] flex items-center gap-1.5 mb-1" style={{ color: tone(ev.status) }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tone(ev.status) }} />{LIVE.has(ev.status) ? `Live · ${statusLabel(ev.status)}` : statusLabel(ev.status)}
+                  </p>
+                  <h3 className="text-[15px] font-semibold truncate" style={{ color: theme.text }}>{ev.name}</h3>
+                  <div className="flex items-center gap-3 mt-1.5 text-[12px] flex-wrap" style={{ color: theme.subtext }}>
+                    {ev.start_time && <span className="flex items-center gap-1"><Calendar size={12} />{new Date(ev.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                    {(ev.city || ev.state) && <span className="flex items-center gap-1 truncate"><MapPin size={12} />{[ev.city, ev.state].filter(Boolean).join(', ')}</span>}
+                    {ev.ticket_capacity ? <span className="flex items-center gap-1"><Users size={12} />{ev.ticket_capacity}</span> : null}
+                  </div>
+                </button>
+                <RowMenu label={`Actions for ${ev.name}`} items={[
+                  { label: 'Edit', icon: Pencil, onClick: () => router.push(`/RSVP/admin/events/${ev.id}`) },
+                  { label: 'View public page', icon: ExternalLink, onClick: () => window.open(`/RSVP/events/${ev.slug}`, '_blank') },
+                  { label: 'Delete', icon: Trash2, danger: true, onClick: () => deleteEvent(ev) },
+                ]} />
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <Sheet
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        title="New event"
+        sub="Start with a name. You can change it and fill in everything else next."
+        footer={<>
+          <Button className="flex-1" onClick={() => setNewOpen(false)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!newName.trim() || creating} onClick={createEvent}>{creating ? <Loader2 size={14} className="animate-spin" /> : null} Create and edit</Button>
+        </>}
+      >
+        <Field label="Event name"><input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createEvent()} autoFocus placeholder="e.g. Maskoff Friday Vol. 3" {...field} /></Field>
+      </Sheet>
     </AdminShell>
   )
 }

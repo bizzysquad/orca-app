@@ -1,21 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, Search, Send, Ban, Flag, RefreshCw, UserPlus, DollarSign, X } from 'lucide-react'
+import { Loader2, Search, Send, Ban, Flag, RefreshCw, UserPlus, DollarSign } from 'lucide-react'
 import AdminShell from '../_components/AdminShell'
-
-const STATUS_COLOR: Record<string, string> = {
-  valid: 'text-emerald-400',
-  checked_in: 'text-gold',
-  cancelled: 'text-danger',
-  refunded: 'text-danger',
-  flagged: 'text-amber-400',
-  invalid: 'text-danger',
-  transferred: 'text-text-muted',
-  expired: 'text-text-muted',
-}
+import { useTheme } from '@/context/ThemeContext'
+import { PageHeader, Panel, Button, RowMenu, EmptyState, Sheet, Field, useField } from '@/components/ui/kit'
 
 export default function GuestsAdminPage() {
+  const { theme } = useTheme()
+  const field = useField()
   const [events, setEvents] = useState<any[]>([])
   const [eventId, setEventId] = useState('')
   const [guests, setGuests] = useState<any[]>([])
@@ -69,91 +62,83 @@ export default function GuestsAdminPage() {
     return g.name?.toLowerCase().includes(q) || g.email?.toLowerCase().includes(q) || g.ticket_number?.toLowerCase().includes(q)
   })
 
+  const label = (s: string) => (s || '').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+  const tone = (s: string) => ({ valid: theme.ok, checked_in: theme.accent, flagged: theme.warn, cancelled: theme.bad, refunded: theme.bad, invalid: theme.bad } as Record<string, string>)[s] || theme.subtext
+  const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const checkedIn = guests.filter(g => g.checked_in_at).length
+  const actionsFor = (g: any) => [
+    { label: 'Resend invitation', icon: Send, onClick: () => runAction(g.id, g.qr_token, 'resend') },
+    ...(g.rsvp_status !== 'cancelled' ? [{ label: 'Cancel ticket', icon: Ban, onClick: () => runAction(g.id, g.qr_token, 'cancel') }] : []),
+    g.rsvp_status !== 'flagged'
+      ? { label: 'Flag', icon: Flag, onClick: () => runAction(g.id, g.qr_token, 'flag', { flagged_reason: 'Manually flagged' }) }
+      : { label: 'Remove flag', icon: Flag, onClick: () => runAction(g.id, g.qr_token, 'unflag') },
+    { label: 'Reissue (new QR)', icon: RefreshCw, onClick: () => runAction(g.id, g.qr_token, 'reissue') },
+    ...(g.payment_status === 'paid' ? [{ label: 'Refund through Stripe', icon: DollarSign, danger: true, onClick: () => refund(g.id, g.qr_token) }] : []),
+  ]
+
   return (
     <AdminShell>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-extrabold text-text-primary">Guests</h1>
-        <div className="flex items-center gap-2">
-          <select className="px-3 py-2 rounded-lg bg-brand-soft border border-surface-border text-text-primary text-sm" value={eventId} onChange={e => setEventId(e.target.value)}>
+      <PageHeader
+        title="Guests"
+        sub={guests.length ? `${guests.length} guests · ${checkedIn} checked in` : 'Everyone who RSVPd or bought a ticket'}
+        right={<>
+          <select value={eventId} onChange={e => setEventId(e.target.value)} aria-label="Event" {...field} className={`${field.className} max-w-[240px]`}>
             {events.map(ev => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
           </select>
-          <button onClick={() => setShowWalkIn(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gold-gradient text-brand-black text-xs font-bold">
-            <UserPlus size={14} /> Add Walk-In
-          </button>
-        </div>
-      </div>
+          <Button variant="primary" onClick={() => setShowWalkIn(true)}><UserPlus size={15} /> Add walk-in</Button>
+        </>}
+      />
 
-      <div className="relative mb-4 max-w-sm">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search name, email, ticket #"
-          className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-brand-soft border border-surface-border text-text-primary text-sm placeholder:text-text-muted outline-none"
-        />
+      <div className="relative mb-4 max-w-md">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: theme.subtext }} />
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name, email or ticket #" aria-label="Search guests" {...field} className={`${field.className} pl-9`} />
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gold" size={26} /></div>
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin" size={24} style={{ color: theme.subtext }} /></div>
+      ) : filtered.length === 0 ? (
+        <EmptyState title={guests.length ? 'No guests match' : 'No guests yet'} />
       ) : (
-        <div className="overflow-x-auto border border-surface-border rounded-2xl">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-surface-card text-text-muted text-left">
-                <th className="p-3 font-semibold">Name</th>
-                <th className="p-3 font-semibold">Email</th>
-                <th className="p-3 font-semibold">Ticket Type</th>
-                <th className="p-3 font-semibold">Amount</th>
-                <th className="p-3 font-semibold">Status</th>
-                <th className="p-3 font-semibold">Checked In</th>
-                <th className="p-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(g => (
-                <tr key={g.id} className="border-t border-surface-border">
-                  <td className="p-3 text-text-primary font-semibold">{g.name}</td>
-                  <td className="p-3 text-text-secondary">{g.email}</td>
-                  <td className="p-3 text-text-secondary">{g.ticket_type}</td>
-                  <td className="p-3 text-text-secondary">${(g.amount_paid_cents / 100).toFixed(2)}</td>
-                  <td className={`p-3 font-semibold ${STATUS_COLOR[g.rsvp_status] || 'text-text-secondary'}`}>{g.rsvp_status}</td>
-                  <td className="p-3 text-text-muted">{g.checked_in_at ? new Date(g.checked_in_at).toLocaleTimeString() : '—'}</td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-1">
-                      <button disabled={busyId === g.id} onClick={() => runAction(g.id, g.qr_token, 'resend')} title="Resend invitation" className="p-1.5 rounded hover:bg-white/10 text-text-secondary"><Send size={13} /></button>
-                      {g.rsvp_status !== 'cancelled' && (
-                        <button disabled={busyId === g.id} onClick={() => runAction(g.id, g.qr_token, 'cancel')} title="Cancel ticket" className="p-1.5 rounded hover:bg-white/10 text-text-secondary"><Ban size={13} /></button>
-                      )}
-                      {g.rsvp_status !== 'flagged' ? (
-                        <button disabled={busyId === g.id} onClick={() => runAction(g.id, g.qr_token, 'flag', { flagged_reason: 'Manually flagged' })} title="Flag" className="p-1.5 rounded hover:bg-white/10 text-text-secondary"><Flag size={13} /></button>
-                      ) : (
-                        <button disabled={busyId === g.id} onClick={() => runAction(g.id, g.qr_token, 'unflag')} title="Unflag" className="p-1.5 rounded hover:bg-white/10 text-amber-400"><Flag size={13} /></button>
-                      )}
-                      <button disabled={busyId === g.id} onClick={() => runAction(g.id, g.qr_token, 'reissue')} title="Reissue (new QR)" className="p-1.5 rounded hover:bg-white/10 text-text-secondary"><RefreshCw size={13} /></button>
-                      {g.payment_status === 'paid' && (
-                        <button disabled={busyId === g.id} onClick={() => refund(g.id, g.qr_token)} title="Refund via Stripe" className="p-1.5 rounded hover:bg-white/10 text-danger"><DollarSign size={13} /></button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={7} className="p-8 text-center text-text-muted">No guests yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Panel pad={false}>
+          <div className="hidden md:grid grid-cols-[1.4fr_1fr_0.7fr_0.8fr_0.8fr_40px] gap-3 px-5 py-2.5 text-[11.5px] font-medium" style={{ color: theme.subtext, borderBottom: `1px solid ${theme.border}` }}>
+            <span>Guest</span><span>Ticket</span><span className="text-right">Paid</span><span>Status</span><span>Checked in</span><span />
+          </div>
+          <ul>
+            {filtered.map((g, i) => (
+              <li key={g.id} className="grid grid-cols-[1fr_auto] md:grid-cols-[1.4fr_1fr_0.7fr_0.8fr_0.8fr_40px] gap-x-3 gap-y-1 items-center px-4 md:px-5 py-3" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined, opacity: busyId === g.id ? 0.5 : 1 }}>
+                <div className="min-w-0">
+                  <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>{g.name}</p>
+                  <p className="text-[12px] truncate" style={{ color: theme.subtext }}>{g.email}</p>
+                </div>
+                <div className="md:hidden row-span-3 self-start"><RowMenu label={`Actions for ${g.name}`} items={actionsFor(g)} /></div>
+                <p className="text-[12.5px] truncate" style={{ color: theme.subtext }}>
+                  {g.ticket_type}{g.ticket_number ? ` · ${g.ticket_number}` : ''}
+                  <span className="md:hidden"> · ${(g.amount_paid_cents / 100).toFixed(2)}</span>
+                </p>
+                <p className="hidden md:block text-[13px] tnum text-right" style={{ color: theme.text }}>${(g.amount_paid_cents / 100).toFixed(2)}</p>
+                <p className="text-[12.5px] flex items-center gap-1.5" style={{ color: tone(g.rsvp_status) }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tone(g.rsvp_status) }} />{label(g.rsvp_status)}
+                  {g.checked_in_at && <span className="md:hidden" style={{ color: theme.subtext }}> · in at {timeOf(g.checked_in_at)}</span>}
+                </p>
+                <p className="hidden md:block text-[12.5px] tnum" style={{ color: theme.subtext }}>{g.checked_in_at ? timeOf(g.checked_in_at) : '—'}</p>
+                <div className="hidden md:block"><RowMenu label={`Actions for ${g.name}`} items={actionsFor(g)} /></div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
       )}
 
-      {showWalkIn && <WalkInModal eventId={eventId} onClose={() => setShowWalkIn(false)} onDone={() => { setShowWalkIn(false); load() }} />}
+      <WalkInSheet open={showWalkIn} eventId={eventId} onClose={() => setShowWalkIn(false)} onDone={() => { setShowWalkIn(false); load() }} />
     </AdminShell>
   )
 }
 
-function WalkInModal({ eventId, onClose, onDone }: { eventId: string; onClose: () => void; onDone: () => void }) {
+function WalkInSheet({ open, eventId, onClose, onDone }: { open: boolean; eventId: string; onClose: () => void; onDone: () => void }) {
+  const field = useField()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  useEffect(() => { if (open) { setName(''); setEmail('') } }, [open])
 
   const submit = async () => {
     if (!name.trim()) return
@@ -171,18 +156,14 @@ function WalkInModal({ eventId, onClose, onDone }: { eventId: string; onClose: (
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center px-4 z-50" onClick={onClose}>
-      <div className="bg-surface-card border border-surface-border rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-text-primary text-sm">Add Walk-In</h3>
-          <button onClick={onClose} className="text-text-muted"><X size={16} /></button>
-        </div>
-        <input className="w-full mb-3 px-3 py-2.5 rounded-lg bg-brand-soft border border-surface-border text-text-primary text-sm outline-none" placeholder="Guest name" value={name} onChange={e => setName(e.target.value)} />
-        <input className="w-full mb-4 px-3 py-2.5 rounded-lg bg-brand-soft border border-surface-border text-text-primary text-sm outline-none" placeholder="Email (optional)" value={email} onChange={e => setEmail(e.target.value)} />
-        <button onClick={submit} disabled={submitting} className="w-full py-2.5 rounded-lg bg-gold-gradient text-brand-black font-bold text-sm disabled:opacity-60">
-          {submitting ? 'Adding…' : 'Add Guest'}
-        </button>
+    <Sheet open={open} onClose={onClose} title="Add walk-in" footer={<>
+      <Button className="flex-1" onClick={onClose}>Cancel</Button>
+      <Button className="flex-1" variant="primary" disabled={submitting || !name.trim()} onClick={submit}>{submitting ? 'Adding' : 'Add guest'}</Button>
+    </>}>
+      <div className="space-y-3">
+        <Field label="Guest name"><input value={name} onChange={e => setName(e.target.value)} autoFocus {...field} /></Field>
+        <Field label="Email (optional)"><input type="email" value={email} onChange={e => setEmail(e.target.value)} {...field} /></Field>
       </div>
-    </div>
+    </Sheet>
   )
 }
