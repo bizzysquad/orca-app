@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
+import { countedLyft } from '@/lib/lyft'
 import { Loader2, Disc3, PenTool, Star, SlidersHorizontal } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -224,9 +225,10 @@ export default function DashboardPage() {
   const monthKey = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`
 
   // ── Income for the viewed month (same formulas as before) ──
-  const lyftNetIncome = useMemo(() => lyftSessions
+  const lyftCounted = useMemo(() => countedLyft(lyftSessions), [lyftSessions])
+  const lyftNetIncome = useMemo(() => lyftCounted
     .filter((s: any) => s.date?.startsWith(monthKey))
-    .reduce((sum: number, s: any) => sum + (s.earnings || 0) - (s.gasExpense || 0), 0), [lyftSessions, monthKey])
+    .reduce((sum: number, s: any) => sum + (s.earnings || 0) - (s.gasExpense || 0), 0), [lyftCounted, monthKey])
 
   const djEarnedIncome = useMemo(() => gigs
     .filter((g: any) => g.date?.startsWith(monthKey))
@@ -246,13 +248,13 @@ export default function DashboardPage() {
       let y = cy
       if (m < 0) { m += 12; y-- }
       const key = `${y}-${String(m + 1).padStart(2, '0')}`
-      const lyft = lyftSessions.filter((s: any) => s.date?.startsWith(key)).reduce((s: number, x: any) => s + (x.earnings || 0), 0)
+      const lyft = lyftCounted.filter((s: any) => s.date?.startsWith(key)).reduce((s: number, x: any) => s + (x.earnings || 0), 0)
       const dj = gigs.filter((g: any) => g.date?.startsWith(key)).reduce((s: number, g: any) => s + (g.depositPaid ? (g.depositAmount || 0) : 0) + (g.partialPayments || []).reduce((sp: number, p: any) => sp + p.amount, 0), 0)
       const bizzplug = bizzplugClientsList.filter((c: any) => { const dt = c?.paidDate || c?.createdAt || ''; return dt.startsWith(key) && (c.paid || 0) > 0 }).reduce((s: number, c: any) => s + (c.paid || 0), 0)
       out.push({ month: MONTH_NAMES[m], year: y, lyft, dj, bizzplug, total: lyft + dj + bizzplug })
     }
     return out
-  }, [lyftSessions, gigs, bizzplugClientsList])
+  }, [lyftCounted, gigs, bizzplugClientsList])
 
   // Bills still owed in the viewed calendar month (recurrence + partial payments aware)
   const totalDue = useMemo(() => {
@@ -390,7 +392,7 @@ export default function DashboardPage() {
 
   const openLeads = bizzplugClientsList.filter((p: any) => p.status === 'new-lead')
   const pendingValue = openLeads.reduce((s: number, p: any) => s + (p.quote || 0), 0)
-  const lyftCount = lyftSessions.filter((s: any) => s.date?.startsWith(monthKey)).length
+  const lyftCount = lyftCounted.filter((s: any) => s.date?.startsWith(monthKey)).length
   const nextGig = upcomingGigs[0]
   const businesses: BusinessRow[] = [
     {

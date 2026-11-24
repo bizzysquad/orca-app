@@ -622,6 +622,8 @@ export interface DJPartialPayment {
   amount: number
   date: string
   note?: string
+  // How it was paid (Cash, Zelle, Cash App, Venmo, Card, Check, Other)
+  method?: string
 }
 
 export interface DJGig {

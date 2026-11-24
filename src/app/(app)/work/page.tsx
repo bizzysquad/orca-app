@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { countedLyft, weeklyLyft } from '@/lib/lyft'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Mic2, Car, Palette, ArrowRight, DollarSign, TrendingUp, Users, Calendar, Building2, Inbox } from 'lucide-react'
@@ -43,11 +44,11 @@ export default function WorkHubPage() {
       const sessions: LyftSession[] = JSON.parse(localStorage.getItem('orca-lyft-sessions') || '[]')
       const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
       const weekStr = weekAgo.toISOString().slice(0, 10)
-      const weekSessions = sessions.filter(s => s.date >= weekStr)
+      const weekSessions = weeklyLyft(sessions).filter(s => s.date >= weekStr)
       setLyftStats({
         sessions: sessions.length,
         weekEarnings: weekSessions.reduce((s, sess) => s + (sess.earnings || 0), 0),
-        totalTrips: sessions.reduce((s, sess) => s + (sess.trips || 0), 0),
+        totalTrips: countedLyft(sessions).reduce((s, sess) => s + (sess.trips || 0), 0),
       })
     } catch {}
 

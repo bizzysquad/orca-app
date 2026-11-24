@@ -21,8 +21,17 @@ import { orcaEvents } from '@/lib/eventBus';
 import { PageShell, PageHeader, Panel, PanelTitle, Stat, MiniStat, Bar, Button, RowMenu, MonthSwitcher, EmptyState, useField, Field, Sheet } from '@/components/ui/kit';
 import { Segmented } from '@/components/layout/CustomizePanel';
 import { useStreamColors } from '@/app/(app)/dashboard/widgets';
+import { countedLyft, monthsWithTotal, isCovered, isMonthly } from '@/lib/lyft';
 
 type Tab = 'income' | 'savings';
+
+// Local calendar date / month for an ISO timestamp (avoids UTC rolling to the next day)
+const localISODate = (iso: string) => { const d = new Date(iso); return isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const localMonthKey = (iso: string) => localISODate(iso).slice(0, 7)
+const CR_STATUS: Record<string, string> = {
+  quote_requested: 'Quote requested', quoted: 'Quote sent', pending_payment: 'Awaiting payment', deposit_paid: 'Deposit paid',
+  paid: 'Paid in full', scheduled: 'Scheduled', in_production: 'In production', delivered: 'Delivered', completed: 'Completed', cancelled: 'Cancelled',
+}
 
 interface Obligation {
   id: string;
@@ -240,7 +249,7 @@ function ProjectionCalculator({ theme }: { theme: any }) {
 }
 
 export default function SmartStackPage() {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { data, setData, loading } = useOrcaData();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -263,6 +272,15 @@ export default function SmartStackPage() {
     try { const ls = localStorage.getItem('orca-lyft-sessions'); if (ls) setLyftSessions(JSON.parse(ls)) } catch {}
     try { const dj = localStorage.getItem('orca-dj-gigs'); if (dj) setDjGigs(JSON.parse(dj)) } catch {}
     try { const biz = localStorage.getItem('orca-bizzplug-clients'); if (biz) setBizzplugClients(JSON.parse(biz)) } catch {}
+    fetch('/api/crookedrumors/summary', { cache: 'no-store' })
+      .then(async r => {
+        if (r.status === 401) { setCrState('denied'); return }
+        if (!r.ok) { setCrState('error'); return }
+        const d = await r.json()
+        setCrData({ bookings: d.bookings || [], payments: d.payments || [] })
+        setCrState('ok')
+      })
+      .catch(() => setCrState('error'))
   }, [])
 
   const [budgetLocked, setBudgetLocked] = useState(false);
@@ -286,10 +304,15 @@ export default function SmartStackPage() {
     return [];
   });
   const [newAccountName, setNewAccountName] = useState('');
-  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj' | 'bizzplug'>('lyft');
+  const [projectionMode, setProjectionMode] = useState<'lyft' | 'dj' | 'bizzplug' | 'crooked'>('lyft');
 
   // ── Income source data from localStorage ──
-  const [lyftSessions, setLyftSessions] = useState<{id:string;date:string;earnings:number;trips:number;miles?:number;gasExpense?:number}[]>([])
+  const [lyftSessions, setLyftSessions] = useState<{id:string;date:string;earnings:number;trips:number;miles?:number;gasExpense?:number;period?:'week'|'month'}[]>([])
+  const [lyftAddPeriod, setLyftAddPeriod] = useState<'week' | 'month'>('week')
+  const [lyftAddMonth, setLyftAddMonth] = useState('')
+  // Crooked Rumor bookings and Stripe payments (read only, from the server)
+  const [crData, setCrData] = useState<{ bookings: { id: string; ref: string; status: string; package_name: string | null; client_name: string; project_date: string | null; total_cents: number; amount_paid_cents: number; created_at: string }[]; payments: { booking_id: string; amount_cents: number; created_at: string }[] } | null>(null)
+  const [crState, setCrState] = useState<'loading' | 'ok' | 'denied' | 'error'>('loading')
   const [lyftFormExpanded, setLyftFormExpanded] = useState(false)
   const [lyftAddDate, setLyftAddDate] = useState('')
   const [lyftAddEarnings, setLyftAddEarnings] = useState('')
@@ -553,10 +576,12 @@ export default function SmartStackPage() {
   const checkAmount = projectedCheckAmount;
 
   // ── Consolidated income totals across all income sources ──
-  const lyftGross = useMemo(() => lyftSessions.reduce((s, sess) => s + (sess.earnings || 0), 0), [lyftSessions])
-  const lyftGas = useMemo(() => lyftSessions.reduce((s, sess) => s + (sess.gasExpense || 0), 0), [lyftSessions])
+  const lyftCounted = useMemo(() => countedLyft(lyftSessions), [lyftSessions])
+  const lyftCovered = useMemo(() => monthsWithTotal(lyftSessions), [lyftSessions])
+  const lyftGross = useMemo(() => lyftCounted.reduce((s, sess) => s + (sess.earnings || 0), 0), [lyftCounted])
+  const lyftGas = useMemo(() => lyftCounted.reduce((s, sess) => s + (sess.gasExpense || 0), 0), [lyftCounted])
   const lyftNet = useMemo(() => lyftGross - lyftGas, [lyftGross, lyftGas])
-  const lyftTrips = useMemo(() => lyftSessions.reduce((s, sess) => s + (sess.trips || 0), 0), [lyftSessions])
+  const lyftTrips = useMemo(() => lyftCounted.reduce((s, sess) => s + (sess.trips || 0), 0), [lyftCounted])
 
   const djEarned = useMemo(() => djGigs.reduce((s, gig) => {
     const deposit = gig.depositPaid ? (gig.depositAmount || 0) : 0
@@ -574,7 +599,8 @@ export default function SmartStackPage() {
   const bizzplugEarned = useMemo(() => bizzplugClients.reduce((s, c) => s + (c.paid || 0), 0), [bizzplugClients])
   const bizzplugPending = useMemo(() => bizzplugClients.reduce((s, c) => s + Math.max(0, (c.quote || 0) - (c.paid || 0)), 0), [bizzplugClients])
 
-  const totalIncome = lyftNet + djEarned + bizzplugEarned
+  const crEarned = useMemo(() => (crData?.payments || []).reduce((s, p) => s + (p.amount_cents || 0), 0) / 100, [crData])
+  const totalIncome = lyftNet + djEarned + bizzplugEarned + crEarned
 
   // ── Metrics month navigation (Lyft / DJ / BizzyPlug metrics reset each month, like Bill Boss) ──
   const handleMetricsMonthChange = (dir: number) => {
@@ -587,7 +613,9 @@ export default function SmartStackPage() {
   }
   const metricsMonthKey = useMemo(() => `${metricsYear}-${String(metricsMonth + 1).padStart(2, '0')}`, [metricsMonth, metricsYear])
 
-  const lyftSessionsMonth = useMemo(() => lyftSessions.filter(s => (s.date || '').startsWith(metricsMonthKey)), [lyftSessions, metricsMonthKey])
+  // Every entry in the month (for the list) and the ones that count (for totals)
+  const lyftEntriesMonth = useMemo(() => lyftSessions.filter(s => (s.date || '').startsWith(metricsMonthKey)), [lyftSessions, metricsMonthKey])
+  const lyftSessionsMonth = useMemo(() => lyftCounted.filter(s => (s.date || '').startsWith(metricsMonthKey)), [lyftCounted, metricsMonthKey])
   const lyftGrossMonth = useMemo(() => lyftSessionsMonth.reduce((s, sess) => s + (sess.earnings || 0), 0), [lyftSessionsMonth])
   const lyftGasMonth = useMemo(() => lyftSessionsMonth.reduce((s, sess) => s + (sess.gasExpense || 0), 0), [lyftSessionsMonth])
   const lyftNetMonth = useMemo(() => lyftGrossMonth - lyftGasMonth, [lyftGrossMonth, lyftGasMonth])
@@ -611,12 +639,20 @@ export default function SmartStackPage() {
   const bizzplugEarnedMonth = useMemo(() => bizzplugClientsMonth.reduce((s: number, c: any) => s + (c.paid || 0), 0), [bizzplugClientsMonth])
   const bizzplugPendingMonth = useMemo(() => bizzplugClientsMonth.reduce((s: number, c: any) => s + Math.max(0, (c.quote || 0) - (c.paid || 0)), 0), [bizzplugClientsMonth])
 
-  const totalIncomeMonth = lyftNetMonth + djEarnedMonth + bizzplugEarnedMonth
+  // Crooked Rumor: money in = Stripe payments received this month; booked = bookings whose shoot is this month
+  const crPaymentsMonth = useMemo(() => (crData?.payments || []).filter(p => localMonthKey(p.created_at) === metricsMonthKey), [crData, metricsMonthKey])
+  const crEarnedMonth = useMemo(() => crPaymentsMonth.reduce((s, p) => s + (p.amount_cents || 0), 0) / 100, [crPaymentsMonth])
+  const crBookingsMonth = useMemo(() => (crData?.bookings || []).filter(b => b.status !== 'cancelled' && (b.project_date || localISODate(b.created_at)).startsWith(metricsMonthKey)), [crData, metricsMonthKey])
+  const crBookedMonth = useMemo(() => crBookingsMonth.reduce((s, b) => s + (b.total_cents || 0), 0) / 100, [crBookingsMonth])
+  const crOwed = useMemo(() => (crData?.bookings || []).filter(b => b.status !== 'cancelled' && b.total_cents > 0).reduce((s, b) => s + Math.max(0, b.total_cents - (b.amount_paid_cents || 0)), 0) / 100, [crData])
+  const totalIncomeMonth = lyftNetMonth + djEarnedMonth + bizzplugEarnedMonth + crEarnedMonth
 
   // ── Financial Summary Banner data — All Time or scoped to the selected month ──
   const summaryLyftNet = summaryAllTime ? lyftNet : lyftNetMonth
   const summaryLyftTrips = summaryAllTime ? lyftTrips : lyftTripsMonth
-  const summaryLyftSessions = summaryAllTime ? lyftSessions : lyftSessionsMonth
+  const summaryLyftSessions = summaryAllTime ? lyftCounted : lyftSessionsMonth
+  const summaryCrEarned = summaryAllTime ? crEarned : crEarnedMonth
+  const summaryCrPayments = summaryAllTime ? (crData?.payments || []).length : crPaymentsMonth.length
   const summaryDjEarned = summaryAllTime ? djEarned : djEarnedMonth
   const summaryDjGigs = summaryAllTime ? djGigs : djGigsMonth
   const summaryBizzplugEarned = summaryAllTime ? bizzplugEarned : bizzplugEarnedMonth
@@ -629,15 +665,27 @@ export default function SmartStackPage() {
     return { totalIncome, totalSavings };
   }, [totalIncome, savingsAccounts]);
 
+  // Duplicate checks for the Log sheet
+  const lyftDupWeek = lyftAddPeriod === 'week' && !!lyftAddDate && lyftSessions.some(x => !isMonthly(x) && x.date === lyftAddDate)
+  const lyftDupMonth = lyftAddPeriod === 'month' && !!lyftAddMonth && lyftSessions.some(x => isMonthly(x) && x.date.slice(0, 7) === lyftAddMonth)
+  const lyftWeeksInAddMonth = lyftAddPeriod === 'month' && lyftAddMonth ? lyftSessions.filter(x => !isMonthly(x) && x.date.slice(0, 7) === lyftAddMonth) : []
+  const lyftWeekInCoveredMonth = lyftAddPeriod === 'week' && !!lyftAddDate && lyftCovered.has(lyftAddDate.slice(0, 7))
+  const lyftCanSave = !!parseFloat(lyftAddEarnings) && (lyftAddPeriod === 'week' ? !!lyftAddDate && !lyftDupWeek : !!lyftAddMonth && !lyftDupMonth)
+
+  const openLyftLog = (period: 'week' | 'month' = 'week') => {
+    setLyftAddPeriod(period)
+    setLyftAddDate(localISODate(new Date().toISOString()))
+    setLyftAddMonth(metricsMonthKey)
+    setLyftAddEarnings('')
+    setLyftFormExpanded(true)
+  }
+
   const addLyftSession = () => {
     const earnings = parseFloat(lyftAddEarnings)
-    if (!earnings || !lyftAddDate) return
-    const newSession = {
-      id: Date.now().toString(),
-      date: lyftAddDate,
-      earnings,
-      trips: 0,
-    }
+    if (!lyftCanSave || !earnings) return
+    const newSession = lyftAddPeriod === 'month'
+      ? { id: Date.now().toString(), date: `${lyftAddMonth}-01`, earnings, trips: 0, period: 'month' as const }
+      : { id: Date.now().toString(), date: lyftAddDate, earnings, trips: 0, period: 'week' as const }
     const updated = [...lyftSessions, newSession]
     setLyftSessions(updated)
     try { setLocalSynced('orca-lyft-sessions', JSON.stringify(updated)) } catch {}
@@ -1307,7 +1355,7 @@ export default function SmartStackPage() {
             size="sm"
             value={projectionMode}
             onChange={v => setProjectionMode(v as typeof projectionMode)}
-            options={[{ value: 'lyft', label: 'Lyft' }, { value: 'dj', label: 'DJ Maskoff' }, { value: 'bizzplug', label: 'BizzyPlug' }]}
+            options={[{ value: 'lyft', label: 'Lyft' }, { value: 'dj', label: 'DJ Maskoff' }, { value: 'bizzplug', label: 'BizzyPlug' }, { value: 'crooked', label: 'Crooked Rumor' }]}
           />
         </div>
 
@@ -1315,8 +1363,8 @@ export default function SmartStackPage() {
           <Panel>
             <PanelTitle
               title={`Lyft · ${monthLabel}`}
-              sub={`${lyftSessionsMonth.length} week${lyftSessionsMonth.length !== 1 ? 's' : ''} logged`}
-              right={<Button size="sm" variant="primary" onClick={() => { setLyftFormExpanded(true); setLyftAddDate(new Date().toISOString().split('T')[0]) }}><Plus size={14} /> Log a week</Button>}
+              sub={lyftCovered.has(metricsMonthKey) ? 'Monthly total logged' : `${lyftSessionsMonth.length} week${lyftSessionsMonth.length !== 1 ? 's' : ''} logged`}
+              right={<Button size="sm" variant="primary" onClick={() => openLyftLog('week')}><Plus size={14} /> Log earnings</Button>}
             />
             <div className="grid grid-cols-3 gap-2 mb-5">
               <MiniStat label="Earned" value={fmt(lyftGrossMonth)} />
@@ -1324,18 +1372,24 @@ export default function SmartStackPage() {
               <MiniStat label="Net" value={fmt(lyftNetMonth)} tone={lyftNetMonth > 0 ? theme.ok : undefined} />
             </div>
 
-            {lyftSessionsMonth.length === 0 ? (
-              <p className="text-[13px] py-2" style={{ color: theme.subtext }}>No weeks logged in {monthLabel}.</p>
+            {lyftEntriesMonth.length === 0 ? (
+              <div className="py-2 flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-[13px]" style={{ color: theme.subtext }}>Nothing logged in {monthLabel}.</p>
+                <Button size="sm" onClick={() => openLyftLog('month')}>Log the whole month</Button>
+              </div>
             ) : (
               <ul>
-                {[...lyftSessionsMonth].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6).map((sess, i) => (
+                {[...lyftEntriesMonth].sort((a, b) => Number(isMonthly(b)) - Number(isMonthly(a)) || (b.date || '').localeCompare(a.date || '')).slice(0, 8).map((sess, i) => {
+                  const entryLabel = isMonthly(sess) ? `${monthLabel} total` : `Week ending ${shortDay(sess.date)}`
+                  const covered = isCovered(sess, lyftCovered)
+                  return (
                   <li key={sess.id} style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
                     {lyftEditId === sess.id ? (
                       <div className="py-3 space-y-2">
-                        <p className="text-[13px] font-medium" style={{ color: theme.text }}>Week of {shortDay(sess.date)}</p>
+                        <p className="text-[13px] font-medium" style={{ color: theme.text }}>{entryLabel}</p>
                         <div className="flex gap-2">
                           <input type="number" inputMode="decimal" value={lyftEditEarnings} onChange={e => setLyftEditEarnings(e.target.value)} autoFocus aria-label="Amount earned" {...field} />
-                          <Button variant="danger" ariaLabel="Delete week" onClick={() => deleteLyftSession(sess.id)}><Trash2 size={14} /></Button>
+                          <Button variant="danger" ariaLabel="Delete entry" onClick={() => deleteLyftSession(sess.id)}><Trash2 size={14} /></Button>
                         </div>
                         <div className="flex gap-2">
                           <Button className="flex-1" onClick={() => { setLyftEditId(null); setLyftEditEarnings('') }}>Cancel</Button>
@@ -1343,18 +1397,63 @@ export default function SmartStackPage() {
                         </div>
                       </div>
                     ) : (
-                      <button className="w-full flex items-center justify-between gap-3 py-3 text-left" onClick={() => { setLyftEditId(sess.id); setLyftEditEarnings(String(sess.earnings)) }} aria-label={`Edit week of ${shortDay(sess.date)}`}>
-                        <span className="text-[13.5px]" style={{ color: theme.text }}>Week of {shortDay(sess.date)}</span>
+                      <button className="w-full flex items-center justify-between gap-3 py-3 text-left" onClick={() => { setLyftEditId(sess.id); setLyftEditEarnings(String(sess.earnings)) }} aria-label={`Edit ${entryLabel}`}>
+                        <span className="min-w-0">
+                          <span className="block text-[13.5px]" style={{ color: covered ? theme.subtext : theme.text }}>{entryLabel}</span>
+                          {covered && <span className="block text-[11.5px]" style={{ color: theme.subtext }}>Covered by monthly total, not counted</span>}
+                        </span>
                         <span className="flex items-center gap-2">
-                          <span className="text-[13.5px] font-semibold tnum" style={{ color: theme.text }}>{fmt(sess.earnings)}</span>
+                          <span className={`text-[13.5px] font-semibold tnum ${covered ? 'line-through' : ''}`} style={{ color: covered ? theme.subtext : theme.text }}>{fmt(sess.earnings)}</span>
                           <Edit3 size={13} style={{ color: theme.subtext }} />
                         </span>
                       </button>
                     )}
                   </li>
-                ))}
+                  )
+                })}
               </ul>
             )}
+          </Panel>
+        )}
+
+        {projectionMode === 'crooked' && (
+          <Panel>
+            <PanelTitle
+              title={`Crooked Rumor · ${monthLabel}`}
+              sub={crState === 'ok' ? `${crBookingsMonth.length} booking${crBookingsMonth.length !== 1 ? 's' : ''} this month · read only` : 'Bookings and payments from your Crooked Rumor site'}
+              right={<Link href="/crookedrumor/admin"><Button size="sm">Open Crooked Rumor <ArrowUpRight size={13} /></Button></Link>}
+            />
+            {crState === 'loading' && <p className="text-[13px] py-2" style={{ color: theme.subtext }}>Loading bookings…</p>}
+            {crState === 'denied' && <p className="text-[13px] py-2" style={{ color: theme.subtext }}>Sign in to the Crooked Rumor admin once on this device to connect it here.</p>}
+            {crState === 'error' && <p className="text-[13px] py-2" style={{ color: theme.bad }}>Couldn&apos;t load Crooked Rumor right now. Try again in a moment.</p>}
+            {crState === 'ok' && (<>
+              <div className="grid grid-cols-3 gap-2 mb-5">
+                <MiniStat label="Received" value={fmt(crEarnedMonth)} tone={crEarnedMonth > 0 ? theme.ok : undefined} />
+                <MiniStat label="Booked" value={fmt(crBookedMonth)} />
+                <MiniStat label="Still owed" value={fmt(crOwed)} />
+              </div>
+              {crBookingsMonth.length === 0 ? (
+                <p className="text-[13px] py-2" style={{ color: theme.subtext }}>No bookings in {monthLabel}.</p>
+              ) : (
+                <ul>
+                  {[...crBookingsMonth].sort((a, b) => (b.project_date || b.created_at).localeCompare(a.project_date || a.created_at)).slice(0, 8).map((bk, i) => {
+                    const owed = Math.max(0, (bk.total_cents || 0) - (bk.amount_paid_cents || 0)) / 100
+                    return (
+                      <li key={bk.id} className="flex items-center justify-between gap-3 py-3" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+                        <div className="min-w-0">
+                          <p className="text-[13.5px] truncate" style={{ color: theme.text }}>{bk.client_name || 'Client'}{bk.package_name ? ` · ${bk.package_name}` : ''}</p>
+                          <p className="text-[12px]" style={{ color: theme.subtext }}>{bk.project_date ? shortDay(bk.project_date) : 'Date TBD'} · {CR_STATUS[bk.status] || bk.status}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-[13.5px] font-semibold tnum" style={{ color: theme.text }}>{fmt((bk.total_cents || 0) / 100)}</p>
+                          {bk.total_cents > 0 && <p className="text-[11.5px] tnum" style={{ color: owed <= 0 ? theme.ok : theme.subtext }}>{owed <= 0 ? 'Paid' : `${fmt(owed)} owed`}</p>}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </>)}
           </Panel>
         )}
 
@@ -1501,11 +1600,13 @@ export default function SmartStackPage() {
   }
 
   const sources = [
-    { key: 'lyft' as const, name: 'Lyft', value: summaryLyftNet, meta: `${summaryLyftSessions.length} week${summaryLyftSessions.length === 1 ? '' : 's'}, net of gas` },
+    { key: 'lyft' as const, name: 'Lyft', value: summaryLyftNet, meta: !summaryAllTime && lyftCovered.has(metricsMonthKey) ? 'monthly total, net of gas' : summaryAllTime ? `${summaryLyftSessions.length} entr${summaryLyftSessions.length === 1 ? 'y' : 'ies'}, net of gas` : `${summaryLyftSessions.length} week${summaryLyftSessions.length === 1 ? '' : 's'}, net of gas` },
     { key: 'dj' as const, name: 'DJ Maskoff', value: summaryDjEarned, meta: `${summaryDjGigs.length} gig${summaryDjGigs.length === 1 ? '' : 's'}` },
     { key: 'bizzplug' as const, name: 'BizzyPlug', value: summaryBizzplugEarned, meta: `${summaryBizzplugClients.length} client${summaryBizzplugClients.length === 1 ? '' : 's'}` },
+    ...(crState === 'ok' ? [{ key: 'crooked' as const, name: 'Crooked Rumor', value: summaryCrEarned, meta: `${summaryCrPayments} payment${summaryCrPayments === 1 ? '' : 's'}` }] : []),
   ]
   const maxSource = Math.max(...sources.map(x => x.value), 1)
+  const sourceColor = (k: string) => (k === 'crooked' ? (isDark ? '#9b7cf0' : '#7c5ce0') : streamColors[k as keyof typeof streamColors])
 
   return (
     <PageShell>
@@ -1528,13 +1629,13 @@ export default function SmartStackPage() {
                 <li key={src.key}>
                   <div className="flex items-baseline justify-between gap-3 text-[13px] mb-1.5">
                     <span className="flex items-center gap-2 min-w-0" style={{ color: theme.text }}>
-                      <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ backgroundColor: streamColors[src.key] }} />
+                      <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ backgroundColor: sourceColor(src.key) }} />
                       {src.name}
                       <span className="text-xs truncate" style={{ color: theme.subtext }}>{src.meta}</span>
                     </span>
                     <span className="font-medium tnum shrink-0" style={{ color: theme.text }}>{fmt(src.value)}</span>
                   </div>
-                  <Bar pct={(src.value / maxSource) * 100} color={streamColors[src.key]} />
+                  <Bar pct={(src.value / maxSource) * 100} color={sourceColor(src.key)} />
                 </li>
               ))}
             </ul>
@@ -1559,15 +1660,29 @@ export default function SmartStackPage() {
       <Sheet
         open={lyftFormExpanded}
         onClose={() => setLyftFormExpanded(false)}
-        title="Log a Lyft week"
+        title="Log Lyft earnings"
+        sub="Log each week, or one total for a month you missed."
         footer={<>
           <Button className="flex-1" onClick={() => setLyftFormExpanded(false)}>Cancel</Button>
-          <Button className="flex-1" variant="primary" disabled={!lyftAddEarnings || !lyftAddDate} onClick={addLyftSession}>Save week</Button>
+          <Button className="flex-1" variant="primary" disabled={!lyftCanSave} onClick={addLyftSession}>{lyftAddPeriod === 'month' ? 'Save month' : 'Save week'}</Button>
         </>}
       >
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Week ending"><input type="date" value={lyftAddDate} onChange={e => setLyftAddDate(e.target.value)} {...field} /></Field>
-          <Field label="Total earned ($)"><input type="number" inputMode="decimal" value={lyftAddEarnings} onChange={e => setLyftAddEarnings(e.target.value)} autoFocus {...field} /></Field>
+        <div className="space-y-3">
+          <Segmented value={lyftAddPeriod} onChange={v => setLyftAddPeriod(v as 'week' | 'month')} options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Whole month' }]} />
+          <div className="grid grid-cols-2 gap-3">
+            {lyftAddPeriod === 'week'
+              ? <Field label="Week ending"><input type="date" value={lyftAddDate} onChange={e => setLyftAddDate(e.target.value)} {...field} /></Field>
+              : <Field label="Month"><input type="month" value={lyftAddMonth} onChange={e => setLyftAddMonth(e.target.value)} {...field} /></Field>}
+            <Field label="Total earned ($)"><input type="number" inputMode="decimal" value={lyftAddEarnings} onChange={e => setLyftAddEarnings(e.target.value)} autoFocus {...field} /></Field>
+          </div>
+          {lyftDupWeek && <p className="text-[12.5px]" style={{ color: theme.bad }}>That week is already logged. Tap it in the list to change the amount.</p>}
+          {lyftDupMonth && <p className="text-[12.5px]" style={{ color: theme.bad }}>That month already has a total. Tap it in the list to change the amount.</p>}
+          {!lyftDupMonth && lyftWeeksInAddMonth.length > 0 && (
+            <p className="text-[12.5px]" style={{ color: theme.warn }}>
+              You logged {fmt(lyftWeeksInAddMonth.reduce((t, x) => t + (x.earnings || 0), 0))} across {lyftWeeksInAddMonth.length} week{lyftWeeksInAddMonth.length === 1 ? '' : 's'} in this month. This total will replace them so nothing counts twice.
+            </p>
+          )}
+          {!lyftDupWeek && lyftWeekInCoveredMonth && <p className="text-[12.5px]" style={{ color: theme.warn }}>This month already has a monthly total, so this week will be saved but not counted.</p>}
         </div>
       </Sheet>
 

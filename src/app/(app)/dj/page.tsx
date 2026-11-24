@@ -9,7 +9,7 @@ import Link from 'next/link'
 import {
   Plus, Check, Clock, MapPin, Phone, Mail, Trash2, ChevronRight, Edit3, X, Users,
   AlertCircle, AlertTriangle, Send, Copy, Loader2, CheckCircle2, RefreshCw, ExternalLink,
-  Pause, Play, Repeat, Upload, Star, Ban, ChevronDown, ChevronUp,
+  Pause, Play, Repeat, Upload, Star, Ban, ChevronDown, ChevronUp, History,
 } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { useOrcaData } from '@/context/OrcaDataContext'
@@ -21,6 +21,8 @@ import {
   Disclosure, EmptyState, useField, Field, Choice, Sheet,
 } from '@/components/ui/kit'
 import { Segmented } from '@/components/layout/CustomizePanel'
+import { MonthSwitcher } from '@/components/ui/kit'
+import LogGigSheet, { PAY_METHODS } from './LogGigSheet'
 import {
   RECURRING_KEY, WEEKDAYS, type GigSeries, reconcileSeries, readSeries, describeSeries, localISO, isEditableOccurrence,
 } from '@/lib/djRecurring'
@@ -175,6 +177,7 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
   const [showAddPayment, setShowAddPayment] = useState(false)
   const [payAmount, setPayAmount] = useState('')
   const [payNote, setPayNote] = useState('')
+  const [payMethod, setPayMethod] = useState('')
   const [editingPartialId, setEditingPartialId] = useState<string | null>(null)
   const [editingPartialAmount, setEditingPartialAmount] = useState('')
   const [editingPartialNote, setEditingPartialNote] = useState('')
@@ -189,12 +192,13 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
   const addPartialPayment = () => {
     const amt = parseFloat(payAmount)
     if (!amt || amt <= 0) return
-    const payment: DJPartialPayment = { id: gid(), amount: amt, date: new Date().toISOString().slice(0, 10), note: payNote || undefined }
+    const payment: DJPartialPayment = { id: gid(), amount: amt, date: localISO(new Date()), note: payNote || undefined, method: payMethod || undefined }
     const updated = { ...gig, partialPayments: [...(gig.partialPayments || []), payment] }
     if (calcRemaining(updated) <= 0) updated.balancePaid = true
     onUpdate(updated)
     setPayAmount('')
     setPayNote('')
+    setPayMethod('')
     setShowAddPayment(false)
   }
 
@@ -257,7 +261,7 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
                     <Check size={13} style={{ color: theme.ok }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium tnum" style={{ color: theme.text }}>{fmt(p.amount)}</p>
-                      {p.note && <p className="text-[11.5px] truncate" style={{ color: theme.subtext }}>{p.note}</p>}
+                      {(p.note || p.method) && <p className="text-[11.5px] truncate" style={{ color: theme.subtext }}>{[p.method, p.note].filter(Boolean).join(' · ')}</p>}
                     </div>
                     <span className="text-xs" style={{ color: theme.subtext }}>{new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                     <RowMenu label="Payment actions" items={[
@@ -279,6 +283,10 @@ function PaymentPanel({ gig, onUpdate }: { gig: DJGig; onUpdate: (updated: DJGig
             <input type="number" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="Amount" aria-label="Amount" autoFocus {...field} />
             <input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="Note (optional)" aria-label="Note" {...field} />
           </div>
+          <select value={payMethod} onChange={e => setPayMethod(e.target.value)} aria-label="Paid with" {...field}>
+            <option value="">Paid with (optional)</option>
+            {PAY_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
           <div className="flex gap-2">
             <Button className="flex-1" size="sm" onClick={() => setShowAddPayment(false)}>Cancel</Button>
             <Button className="flex-1" size="sm" variant="primary" disabled={!payAmount} onClick={addPartialPayment}>Save payment</Button>
@@ -1027,7 +1035,9 @@ export default function DJPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [rebookClient, setRebookClient] = useState<Partial<DJGig> | null>(null)
   const [openGigId, setOpenGigId] = useState<string | null>(null)
-  const [filterStatus, setFilterStatus] = useState<GigStatus | 'all'>('confirmed')
+  const [gigView, setGigView] = useState<'upcoming' | 'confirmed' | 'completed' | 'all'>('upcoming')
+  const [upMonth, setUpMonth] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }))
+  const [showLog, setShowLog] = useState(false)
   const [activeSection, setActiveSection] = useState<'gigs' | 'quotes' | 'crm' | 'email' | 'settings'>('gigs')
   const [settingsTab, setSettingsTab] = useState<'recurring' | 'website'>('recurring')
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
@@ -1224,6 +1234,19 @@ export default function DJPage() {
     setRebookClient(null)
     logActivity({ action: 'created', gigId: gig.id, client: gig.clientName, date: gig.date })
   }
+
+  // Log gig: one or many past gigs at once
+  const logGigs = (newGigs: DJGig[]) => {
+    if (!newGigs.length) return
+    const next = [...gigs, ...newGigs]
+    setGigs(next)
+    save(next)
+    setShowLog(false)
+    setGigView('completed')
+    logActivity({ action: 'logged', count: newGigs.length, client: newGigs[0].clientName, dates: newGigs.map(g => g.date) })
+  }
+
+  const markCompleted = (gig: DJGig) => updateGig({ ...gig, status: 'completed' })
 
   const updateGig = (updated: DJGig) => {
     const prev = gigs.find(g => g.id === updated.id)
@@ -1504,12 +1527,30 @@ export default function DJPage() {
   }
   void renderHiddenCalendarTools
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localISO(new Date())
+  const upMonthKey = `${upMonth.y}-${String(upMonth.m + 1).padStart(2, '0')}`
+  // A confirmed gig whose date has passed belongs with Completed until it's marked done.
+  const isPastConfirmed = (g: DJGig) => g.status === 'confirmed' && !!g.date && g.date < today
+  const isUpcoming = (g: DJGig) => !!g.date && g.date >= today && g.status !== 'cancelled' && g.status !== 'completed'
+  const gigCounts = useMemo(() => ({
+    upcoming: gigs.filter(isUpcoming).length,
+    confirmed: gigs.filter(g => g.status === 'confirmed' && !isPastConfirmed(g)).length,
+    completed: gigs.filter(g => g.status === 'completed' || isPastConfirmed(g)).length,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [gigs, today])
+
+  const laterUpcoming = gigs.filter(g => isUpcoming(g) && g.date.slice(0, 7) > upMonthKey).length
 
   const filtered = useMemo(() => {
-    const list = filterStatus === 'all' ? gigs : gigs.filter(g => g.status === filterStatus)
-    return [...list].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-  }, [gigs, filterStatus])
+    const list =
+      gigView === 'upcoming' ? gigs.filter(g => isUpcoming(g) && g.date.startsWith(upMonthKey))
+      : gigView === 'confirmed' ? gigs.filter(g => g.status === 'confirmed' && !isPastConfirmed(g))
+      : gigView === 'completed' ? gigs.filter(g => g.status === 'completed' || isPastConfirmed(g))
+      : gigs
+    const asc = [...list].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    return gigView === 'completed' || gigView === 'all' ? asc.reverse() : asc
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gigs, gigView, upMonthKey, today])
 
   const stats = useMemo(() => {
     const upcoming = gigs.filter(g => g.date >= today && g.status === 'confirmed')
@@ -1541,6 +1582,7 @@ export default function DJPage() {
         right={<>
           <Button onClick={() => { save(gigs); handleForceSync() }} disabled={syncStatus === 'syncing'}><RefreshCw size={14} className={syncStatus === 'syncing' ? 'animate-spin' : ''} /> Sync</Button>
           <Link href="/maskoffdadj" target="_blank"><Button><ExternalLink size={14} /> Website</Button></Link>
+          <Button onClick={() => setShowLog(true)}><History size={14} /> Log gig</Button>
           <Button variant="primary" onClick={() => { setRebookClient(null); setShowAdd(true) }}><Plus size={15} /> Add gig</Button>
         </>}
       />
@@ -1591,13 +1633,25 @@ export default function DJPage() {
       {/* ═══ GIGS ═══ */}
       {activeSection === 'gigs' && (
         <div className="space-y-4">
-          <Segmented size="sm" value={filterStatus} onChange={v => setFilterStatus(v as GigStatus | 'all')} options={[
-            { value: 'confirmed', label: `Confirmed · ${gigs.filter(g => g.status === 'confirmed').length}` },
-            { value: 'completed', label: 'Completed' },
-            { value: 'all', label: 'All' },
-          ]} />
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="overflow-x-auto no-scrollbar max-w-full">
+              <Segmented size="sm" value={gigView} onChange={v => setGigView(v as typeof gigView)} options={[
+                { value: 'upcoming', label: `Upcoming · ${gigCounts.upcoming}` },
+                { value: 'confirmed', label: `Confirmed · ${gigCounts.confirmed}` },
+                { value: 'completed', label: `Completed · ${gigCounts.completed}` },
+                { value: 'all', label: 'All' },
+              ]} />
+            </div>
+            {gigView === 'upcoming' && (
+              <MonthSwitcher month={upMonth.m} year={upMonth.y} onChange={dir => setUpMonth(v => { const d = new Date(v.y, v.m + dir, 1); return { y: d.getFullYear(), m: d.getMonth() } })} />
+            )}
+          </div>
           {filtered.length === 0 ? (
-            <EmptyState title="No gigs here" sub="Add a gig, or set up a recurring event in Settings." action={<Button variant="primary" onClick={() => setShowAdd(true)}><Plus size={15} /> Add gig</Button>} />
+            gigView === 'completed'
+              ? <EmptyState title="No completed gigs" sub="Played a gig you never entered? Log it here." action={<Button variant="primary" onClick={() => setShowLog(true)}><History size={15} /> Log gig</Button>} />
+              : gigView === 'upcoming'
+                ? <EmptyState title={`Nothing coming up in ${new Date(upMonth.y, upMonth.m).toLocaleDateString('en-US', { month: 'long' })}`} sub="Add a gig, or set up a recurring event in Settings." action={<Button variant="primary" onClick={() => setShowAdd(true)}><Plus size={15} /> Add gig</Button>} />
+                : <EmptyState title="No gigs here" sub="Add a gig, or set up a recurring event in Settings." action={<Button variant="primary" onClick={() => setShowAdd(true)}><Plus size={15} /> Add gig</Button>} />
           ) : (
             <Panel pad={false}>
               <ul>
@@ -1622,6 +1676,7 @@ export default function DJPage() {
                           <p className="text-[11.5px] flex items-center gap-1.5 mt-0.5" style={{ color: statusColor(gig.status) }}>
                             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor(gig.status) }} />{STATUS_LABEL[gig.status]}
                             {soon && <span style={{ color: theme.accent }}>· {daysUntil <= 0 ? 'Today' : `${daysUntil}d away`}</span>}
+                            {isPastConfirmed(gig) && <span style={{ color: theme.subtext }}>· date passed</span>}
                           </p>
                         </div>
                         <div className="text-right shrink-0">
@@ -1630,11 +1685,21 @@ export default function DJPage() {
                         </div>
                         <ChevronRight size={15} className="shrink-0" style={{ color: theme.subtext }} />
                       </button>
+                      {isPastConfirmed(gig) && (
+                        <div className="px-4 sm:px-5 pb-3 -mt-1 pl-[68px] sm:pl-[76px]">
+                          <Button size="sm" onClick={() => markCompleted(gig)}><Check size={13} /> Mark completed</Button>
+                        </div>
+                      )}
                     </li>
                   )
                 })}
               </ul>
             </Panel>
+          )}
+          {gigView === 'upcoming' && laterUpcoming > 0 && (
+            <button onClick={() => setUpMonth(v => { const d = new Date(v.y, v.m + 1, 1); return { y: d.getFullYear(), m: d.getMonth() } })} className="text-[13px] flex items-center gap-1" style={{ color: theme.accent }}>
+              {laterUpcoming} more upcoming after {new Date(upMonth.y, upMonth.m).toLocaleDateString('en-US', { month: 'long' })} <ChevronRight size={14} />
+            </button>
           )}
         </div>
       )}
@@ -1880,6 +1945,7 @@ export default function DJPage() {
 
       <GigSheet gig={openGig} onClose={() => setOpenGigId(null)} onUpdate={updateGig} onDelete={deleteGig} />
       <AddGigSheet open={showAdd} onAdd={addGig} onClose={() => { setShowAdd(false); setRebookClient(null) }} prefill={rebookClient} />
+      <LogGigSheet open={showLog} gigs={gigs} gear={DEFAULT_GEAR} onClose={() => setShowLog(false)} onLog={logGigs} />
     </PageShell>
   )
 }

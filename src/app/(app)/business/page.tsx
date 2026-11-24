@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { countedLyft, weeklyLyft as weeklyOnly } from '@/lib/lyft'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Briefcase, Plus, TrendingUp, ArrowLeft, Sparkles,
@@ -332,7 +333,7 @@ export default function BusinessPage() {
     try { setLocalSynced('orca-lyft-sessions', JSON.stringify(next)) } catch {}
 
     // Also update Lyft business revenue
-    const totalThisMonth = next
+    const totalThisMonth = countedLyft(next)
       .filter(s => s.date.slice(0, 7) === new Date().toISOString().slice(0, 7))
       .reduce((sum, s) => sum + s.earnings, 0)
     updateRevenue('lyft', totalThisMonth)
@@ -345,7 +346,7 @@ export default function BusinessPage() {
     const monday = new Date()
     monday.setDate(monday.getDate() - monday.getDay() + 1)
     const weekStr = monday.toISOString().slice(0, 10)
-    return lyftSessions
+    return weeklyOnly(lyftSessions)
       .filter(s => s.date >= weekStr)
       .reduce((sum, s) => sum + s.earnings, 0)
   }, [lyftSessions])
