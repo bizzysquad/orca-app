@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
+import { billsOwedInMonth, cycleRemaining, getBillEffectiveStatus } from '@/lib/billStatus'
 import { countedLyft } from '@/lib/lyft'
 import { Loader2, Disc3, PenTool, Star, SlidersHorizontal } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
@@ -256,32 +257,8 @@ export default function DashboardPage() {
     return out
   }, [lyftCounted, gigs, bizzplugClientsList])
 
-  // Bills still owed in the viewed calendar month (recurrence + partial payments aware)
-  const totalDue = useMemo(() => {
-    const monthEnd = new Date(calYear, calMonth + 1, 0)
-    let total = 0
-    bills.forEach(b => {
-      const rec = b.recurrence || 'one-time'
-      const dueDate = new Date(b.due + 'T00:00:00')
-      let appears = false
-      if (rec === 'one-time') appears = dueDate.getMonth() === calMonth && dueDate.getFullYear() === calYear
-      else if (rec === 'monthly') appears = dueDate <= monthEnd
-      else if (rec === 'yearly') appears = dueDate.getMonth() === calMonth && calYear >= dueDate.getFullYear()
-      if (!appears) return
-      const cycleAllocs = rec !== 'one-time' && b.alloc.length > 0
-        ? b.alloc.filter(a => { const ad = new Date(a.date + 'T00:00:00'); return ad.getMonth() === calMonth && ad.getFullYear() === calYear })
-        : b.alloc
-      const paid = cycleAllocs.filter(a => a.paid).reduce((s, a) => s + a.amount, 0)
-      if (paid >= b.amount) return
-      if (b.status === 'paid' && rec === 'one-time') return
-      if (rec === 'monthly' && b.status === 'paid' && b.paidDate) {
-        const pd = new Date(b.paidDate + 'T00:00:00')
-        if (pd.getMonth() === calMonth && pd.getFullYear() === calYear) return
-      }
-      total += Math.max(0, b.amount - paid)
-    })
-    return total
-  }, [bills, calMonth, calYear])
+  // Bills still owed in the viewed month: the same number Bill Boss shows.
+  const totalDue = useMemo(() => billsOwedInMonth(bills, calMonth, calYear), [bills, calMonth, calYear])
 
   const upcomingGigs = useMemo(() => {
     const monthEnd = `${monthKey}-${String(new Date(calYear, calMonth + 1, 0).getDate()).padStart(2, '0')}`
@@ -311,24 +288,14 @@ export default function DashboardPage() {
           else break
           guard++
         }
-        const cycleAllocs = b.alloc.filter(a => { const ad = new Date(a.date + 'T00:00:00'); return ad.getMonth() === due.getMonth() && ad.getFullYear() === due.getFullYear() })
-        if (cycleAllocs.filter(a => a.paid).reduce((s, a) => s + a.amount, 0) >= b.amount) return
-        if (b.status === 'paid' && b.paidDate) {
-          const pd = new Date(b.paidDate + 'T00:00:00')
-          if (pd.getMonth() === due.getMonth() && pd.getFullYear() === due.getFullYear()) return
-        }
+        if (getBillEffectiveStatus(b, due.getMonth(), due.getFullYear()) === 'paid') return
       }
       items.push({ bill: b, due })
     })
     return items.sort((a, b) => a.due.getTime() - b.due.getTime()).slice(0, 5)
   }, [bills])
 
-  const upcomingBillsOwed = useMemo(() => upcomingBills.reduce((s, { bill: b, due }) => {
-    const cycleAllocs = (b.recurrence || 'one-time') !== 'one-time'
-      ? b.alloc.filter(a => { const ad = new Date(a.date + 'T00:00:00'); return ad.getMonth() === due.getMonth() && ad.getFullYear() === due.getFullYear() })
-      : b.alloc
-    return s + Math.max(0, b.amount - cycleAllocs.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0))
-  }, 0), [upcomingBills])
+  const upcomingBillsOwed = useMemo(() => upcomingBills.reduce((s, { bill: b, due }) => s + cycleRemaining(b, due.getMonth(), due.getFullYear()), 0), [upcomingBills])
 
   if (loading || !ready) {
     return (

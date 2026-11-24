@@ -26,81 +26,14 @@ import {
   RowMenu, Disclosure, EmptyState, useField, Field, Choice, Sheet, localISO,
 } from '@/components/ui/kit'
 import { Segmented } from '@/components/layout/CustomizePanel'
+import {
+  getBillEffectiveStatus, isBillOccurrenceActive, isBillVisibleInCycle, monthlyOccurrenceIndex, yearlyOccurrenceIndex,
+  cycleRemaining, unpaidBillsInMonth, billsOwedInMonth, cycleDueDate, markBillPaid, localDate,
+} from '@/lib/billStatus'
 
 // ── Progressive form step type ──
 type FormStep = 1 | 2 | 3
 
-/**
- * Returns the effective display status of a bill for a given calendar month/year.
- * For recurring bills that are stored as 'paid', the paid status only applies
- * to the specific cycle in which payment was made. All other cycles show as 'upcoming'.
- * This prevents recurring bills from disappearing permanently after being paid once.
- */
-function getBillEffectiveStatus(bill: Bill, calMonth: number, calYear: number): 'upcoming' | 'paid' {
-  const recurrence = bill.recurrence || 'one-time'
-  const cycleAllocs = (recurrence !== 'one-time' && bill.alloc.length > 0)
-    ? bill.alloc.filter(a => {
-        const ad = new Date(a.date + 'T00:00:00')
-        return ad.getMonth() === calMonth && ad.getFullYear() === calYear
-      })
-    : bill.alloc
-
-  const totalAllocPaid = cycleAllocs.filter(a => a.paid).reduce((sum, a) => sum + a.amount, 0)
-  if (cycleAllocs.length > 0 && totalAllocPaid >= bill.amount) return 'paid'
-
-  if (bill.status !== 'paid') return bill.status as 'upcoming' | 'paid'
-  // One-time bills: paid is permanent
-  if (!bill.recurrence || bill.recurrence === 'one-time') return 'paid'
-  // No paidDate means legacy data — treat as paid
-  if (!bill.paidDate) return 'paid'
-
-  const pd = new Date(bill.paidDate + 'T00:00:00')
-
-  if (bill.recurrence === 'monthly') {
-    if (pd.getMonth() === calMonth && pd.getFullYear() === calYear) return 'paid'
-    return 'upcoming'
-  }
-  if (bill.recurrence === 'yearly') {
-    if (pd.getFullYear() === calYear) return 'paid'
-    return 'upcoming'
-  }
-  if (bill.recurrence === 'weekly' || bill.recurrence === 'custom') {
-    // Use the first day of the viewed month as the reference point so that
-    // viewing past/future months gives a stable, cycle-correct result.
-    const intervalDays = bill.recurrence === 'weekly' ? 7 : (bill.customRecurrenceDays || 30)
-    const viewRef = new Date(calYear, calMonth, 1)
-    viewRef.setHours(0, 0, 0, 0)
-    const diffDays = Math.floor((viewRef.getTime() - pd.getTime()) / 86400000)
-    // Paid if the viewRef falls within one interval after the paidDate
-    if (diffDays >= 0 && diffDays < intervalDays) return 'paid'
-    return 'upcoming'
-  }
-  return 'paid'
-}
-
-// Returns true if a recurring bill occurrence falls within its active start/end window.
-// `occurrenceDate` is the candidate date for this cycle; `occurrenceIndex` is the
-// zero-based count of this occurrence since the bill's start date (used for the
-// "after N times" end condition).
-function isBillOccurrenceActive(bill: Bill, occurrenceDate: Date, occurrenceIndex: number): boolean {
-  const start = new Date(bill.due + 'T00:00:00')
-  if (occurrenceDate < start) return false
-  if (bill.recurrenceEndType === 'after-date' && bill.recurrenceEndDate) {
-    if (occurrenceDate > new Date(bill.recurrenceEndDate + 'T00:00:00')) return false
-  }
-  if (bill.recurrenceEndType === 'after-count' && bill.recurrenceEndAfter) {
-    if (occurrenceIndex >= bill.recurrenceEndAfter) return false
-  }
-  return true
-}
-
-function monthlyOccurrenceIndex(start: Date, y: number, m: number): number {
-  return (y - start.getFullYear()) * 12 + (m - start.getMonth())
-}
-
-function yearlyOccurrenceIndex(start: Date, y: number): number {
-  return y - start.getFullYear()
-}
 
 // Category to icon mapping with Figma colors
 const CATEGORY_ICONS: Record<string, { Icon: React.ComponentType<any>, color: string }> = {
@@ -496,8 +429,7 @@ export default function BillBossPage() {
   const [partialPayMode, setPartialPayMode] = useState<'full' | 'half' | 'custom'>('full')
   // Target date for future-month bill payments (so paidDate maps to the right cycle)
   const [paymentTargetDate, setPaymentTargetDate] = useState<string | null>(null)
-  // Index for cycling through upcoming bills in the hero card
-  const [nextDueIndex, setNextDueIndex] = useState(0)
+  const [showPayAll, setShowPayAll] = useState(false)
 
   // Credit card debt payoff
   interface CreditCardDebt {
@@ -921,142 +853,14 @@ export default function BillBossPage() {
     return `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
-  // Returns true if a bill has any relevant occurrence in the given calendar month/year —
-  // i.e. it is on/after its start date and not yet past its end date (or occurrence count).
-  const isBillVisibleInCycle = (b: Bill, cMonth: number, cYear: number): boolean => {
-    const recurrence = b.recurrence || 'one-time'
-    const monthStart = new Date(cYear, cMonth, 1)
-    const monthEnd = new Date(cYear, cMonth + 1, 0)
-
-    if (b.alloc.length > 0) {
-      const hasCurrentCycleAlloc = b.alloc.some(a => {
-        const ad = new Date(a.date + 'T00:00:00')
-        return ad.getMonth() === cMonth && ad.getFullYear() === cYear
-      })
-      // One-time bills: their alloc entries are the sole source of truth
-      if (recurrence === 'one-time') return hasCurrentCycleAlloc
-      // Recurring bills: current-cycle allocs keep the bill visible this month,
-      // but stale (past-cycle) allocs must NOT hide the bill in future months —
-      // fall through to recurrence-based logic below in either case.
-      if (hasCurrentCycleAlloc) return true
-    }
-
-    const dueDate = new Date(b.due + 'T00:00:00')
-
-    if (recurrence === 'monthly') {
-      const day = Math.min(dueDate.getDate(), monthEnd.getDate())
-      const candidate = new Date(cYear, cMonth, day)
-      return isBillOccurrenceActive(b, candidate, monthlyOccurrenceIndex(dueDate, cYear, cMonth))
-    }
-    if (recurrence === 'yearly') {
-      if (dueDate.getMonth() !== cMonth) return false
-      const candidate = new Date(cYear, cMonth, dueDate.getDate())
-      return isBillOccurrenceActive(b, candidate, yearlyOccurrenceIndex(dueDate, cYear))
-    }
-    if (recurrence === 'one-time' || !recurrence) {
-      return dueDate.getMonth() === cMonth && dueDate.getFullYear() === cYear
-    }
-    // Weekly / custom — check if any occurrence lands in the month
-    const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
-    const cursor = new Date(dueDate)
-    let occurrenceIndex = 0
-    if (cursor < monthStart) {
-      const gap = Math.floor((monthStart.getTime() - cursor.getTime()) / (86400000 * intervalDays)) * intervalDays
-      cursor.setDate(cursor.getDate() + gap)
-      occurrenceIndex = Math.round(gap / intervalDays)
-    }
-    while (cursor <= monthEnd) {
-      if (cursor >= monthStart && cursor >= dueDate && isBillOccurrenceActive(b, cursor, occurrenceIndex)) return true
-      cursor.setDate(cursor.getDate() + intervalDays)
-      occurrenceIndex++
-    }
-    return false
-  }
-
-  // Calculate unpaid total — subtracts any partial payments made in this billing cycle
-  const unpaidTotal = bills
-    .filter(b => isBillVisibleInCycle(b, calMonth, calYear) && getBillEffectiveStatus(b, calMonth, calYear) === 'upcoming')
-    .reduce((sum, b) => {
-      const rec = b.recurrence || 'one-time'
-      const cycleAllocs = (rec !== 'one-time' && b.alloc.length > 0)
-        ? b.alloc.filter(a => { const ad = new Date(a.date + 'T00:00:00'); return ad.getMonth() === calMonth && ad.getFullYear() === calYear })
-        : b.alloc
-      const partialPaid = cycleAllocs.filter(a => a.paid).reduce((s, a) => s + a.amount, 0)
-      return sum + Math.max(0, b.amount - partialPaid)
-    }, 0)
+  // Still owed this month (shared with the home page via lib/billStatus)
+  const unpaidTotal = billsOwedInMonth(bills, calMonth, calYear)
 
   // Calculate paid total — uses effective status for the currently viewed month
   const paidTotal = bills
     .filter(b => isBillVisibleInCycle(b, calMonth, calYear) && getBillEffectiveStatus(b, calMonth, calYear) === 'paid')
     .reduce((sum, b) => sum + b.amount, 0)
 
-
-  // Full ordered list of upcoming bill instances used by the hero carousel.
-  // Monthly recurring bills show their NEXT unpaid occurrence (current or future months).
-  // This allows future-month bills to appear and be paid in advance.
-  const upcomingBillsForHero = useMemo(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const candidates: { name: string; due: string; amount: number; isSplit: boolean; billId: string }[] = []
-
-    bills.forEach(b => {
-      // Only treat allocs as a split-schedule when there are UNPAID future alloc entries.
-      // If all allocs are already paid (partial payment records from past cycles), fall
-      // through to the normal recurrence logic so the bill keeps appearing in future months.
-      const hasUnpaidFutureAlloc = b.alloc.some(
-        (a: any) => !a.paid && new Date(a.date + 'T00:00:00') >= today
-      )
-      if (hasUnpaidFutureAlloc) {
-        b.alloc.forEach((a: any) => {
-          if (!a.paid) candidates.push({ name: b.name, due: a.date, amount: a.amount, isSplit: true, billId: b.id })
-        })
-        return
-      }
-
-      const recurrence = b.recurrence || 'one-time'
-      const dueDate = new Date(b.due + 'T00:00:00')
-
-      if (recurrence === 'monthly') {
-        // Walk forward up to 6 months to find the next unpaid occurrence
-        for (let offset = 0; offset < 6; offset++) {
-          const tMon = (today.getMonth() + offset) % 12
-          const tYear = today.getFullYear() + Math.floor((today.getMonth() + offset) / 12)
-          const daysInMon = new Date(tYear, tMon + 1, 0).getDate()
-          const targetDay = Math.min(dueDate.getDate(), daysInMon)
-          const targetDate = new Date(tYear, tMon, targetDay)
-          if (targetDate < dueDate) continue // hasn't started yet
-          if (!isBillOccurrenceActive(b, targetDate, monthlyOccurrenceIndex(dueDate, tYear, tMon))) break // past end date/count
-          const targetStr = targetDate.toISOString().split('T')[0]
-          const isPaid = getBillEffectiveStatus(b, tMon, tYear) === 'paid'
-          if (!isPaid) {
-            candidates.push({ name: b.name, due: targetStr, amount: b.amount, isSplit: false, billId: b.id })
-            break // Only the single next unpaid occurrence per monthly bill
-          }
-        }
-      } else if (recurrence === 'yearly') {
-        // Use getBillEffectiveStatus scoped to the bill's own due month/year so that
-        // yearly bills reappear correctly in future years after being paid once.
-        const dueDate2 = new Date(b.due + 'T00:00:00')
-        const candidateDate = new Date(today.getFullYear(), dueDate2.getMonth(), dueDate2.getDate())
-        if (isBillOccurrenceActive(b, candidateDate, yearlyOccurrenceIndex(dueDate2, today.getFullYear()))) {
-          const isPaid = getBillEffectiveStatus(b, dueDate2.getMonth(), today.getFullYear()) === 'paid'
-          if (!isPaid) candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
-        }
-      } else if (recurrence === 'one-time') {
-        if (b.status !== 'paid') candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
-      } else {
-        // Weekly / custom — check effective status for current month so paid status resets properly
-        const intervalDays = recurrence === 'weekly' ? 7 : (b.customRecurrenceDays || 30)
-        const occurrenceIndex = Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / (86400000 * intervalDays)))
-        if (isBillOccurrenceActive(b, today, occurrenceIndex)) {
-          const isPaid = getBillEffectiveStatus(b, today.getMonth(), today.getFullYear()) === 'paid'
-          if (!isPaid) candidates.push({ name: b.name, due: b.due, amount: b.amount, isSplit: false, billId: b.id })
-        }
-      }
-    })
-
-    candidates.sort((a, b) => a.due.localeCompare(b.due))
-    return candidates
-  }, [bills])
 
   // Calculate monthly bill total for selected calendar month — expands recurring bills
   const monthlyBillTotal = useMemo(() => {
@@ -1253,17 +1057,8 @@ export default function BillBossPage() {
   // Returns how much is still owed for a bill in a specific billing cycle.
   // For recurring bills only alloc entries whose date falls in that cycle month/year
   // are counted, so past-cycle partial payments never reduce the current balance.
-  const getCycleRemaining = (bill: Bill, cMonth: number, cYear: number): number => {
-    const rec = bill.recurrence || 'one-time'
-    const relevant = (rec !== 'one-time' && bill.alloc.length > 0)
-      ? bill.alloc.filter(a => {
-          const ad = new Date(a.date + 'T00:00:00')
-          return ad.getMonth() === cMonth && ad.getFullYear() === cYear
-        })
-      : bill.alloc
-    const paid = relevant.filter(a => a.paid).reduce((s, a) => s + a.amount, 0)
-    return Math.max(0, bill.amount - paid)
-  }
+  const getCycleRemaining = cycleRemaining
+
 
   // Returns the bill's effective due date within the currently viewed calendar month/year.
   // For monthly bills this is the same day-of-month clamped to the viewed month's length.
@@ -1271,21 +1066,8 @@ export default function BillBossPage() {
   // All other recurrence types return the original due date unchanged.
   // This date is passed to handlePayFull so that paidDate is stamped to the correct
   // billing cycle even when paying from the list/compact view of a future or past month.
-  const getEffectiveBillDate = (bill: Bill): string => {
-    const dueDate = new Date(bill.due + 'T00:00:00')
-    const recurrence = bill.recurrence || 'one-time'
-    if (recurrence === 'monthly') {
-      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
-      const day = Math.min(dueDate.getDate(), daysInMonth)
-      return new Date(calYear, calMonth, day).toISOString().split('T')[0]
-    }
-    if (recurrence === 'yearly') {
-      const daysInMonth = new Date(calYear, dueDate.getMonth() + 1, 0).getDate()
-      const day = Math.min(dueDate.getDate(), daysInMonth)
-      return new Date(calYear, dueDate.getMonth(), day).toISOString().split('T')[0]
-    }
-    return bill.due
-  }
+  const getEffectiveBillDate = (bill: Bill): string => cycleDueDate(bill, calMonth, calYear)
+
 
   // Handler: open the payment bottom-sheet for a bill.
   // `targetDueDate` pins the payment to the correct billing cycle (past, current, or future).
@@ -1294,7 +1076,7 @@ export default function BillBossPage() {
   const handlePayFull = (billId: string, targetDueDate?: string) => {
     const bill = bills.find(b => b.id === billId)
     if (!bill) return
-    const today = new Date().toISOString().split('T')[0]
+    const today = localDate()
     // Use the provided cycle date; fall back to today only when no date is given.
     const tDate = targetDueDate || today
     const cd = new Date(tDate + 'T00:00:00')
@@ -1319,7 +1101,7 @@ export default function BillBossPage() {
     const bill = bills.find(b => b.id === partialPayId)
     if (!bill) return
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = localDate()
     // Use the target cycle date when provided (past, current, or future month) so that
     // paidDate is stamped with a date that getBillEffectiveStatus can match correctly.
     // Fall back to today only when no target date was specified (e.g. hero-card pay-now).
@@ -1343,23 +1125,9 @@ export default function BillBossPage() {
       return
     }
 
-    const rec = bill.recurrence || 'one-time'
-
     if (effectiveAmount >= remaining) {
-      // Full (or completing) payment for this cycle.
-      // For recurring bills keep alloc entries from OTHER cycles intact —
-      // only remove the entries that belong to this billing cycle.
-      const allocAfterPay = rec !== 'one-time'
-        ? bill.alloc.filter(a => {
-            const ad = new Date(a.date + 'T00:00:00')
-            return !(ad.getMonth() === cycleMonth && ad.getFullYear() === cycleYear)
-          })
-        : []
-      persistBills(bills.map(b =>
-        b.id === partialPayId
-          ? { ...b, status: 'paid' as const, paidDate: effectiveDate, alloc: allocAfterPay }
-          : b
-      ))
+      // Full (or completing) payment for this cycle. Allocs from other cycles stay.
+      persistBills(bills.map(b => (b.id === partialPayId ? markBillPaid(b, effectiveDate) : b)))
     } else {
       // Genuine partial payment — record as alloc entry, keep status upcoming.
       // Future recurring cycles are completely unaffected because alloc records
@@ -1543,9 +1311,14 @@ export default function BillBossPage() {
     return extra ? `${base}, ${extra}` : base
   }
 
-  // Hero: next bill due, browsable.
-  const safeIdx = Math.min(nextDueIndex, Math.max(0, upcomingBillsForHero.length - 1))
-  const heroBill = upcomingBillsForHero[safeIdx]
+  // Pay all: every bill still owed in the viewed month, each paid for its own cycle.
+  const payAllBills = unpaidBillsInMonth(bills, calMonth, calYear).filter(b => cycleRemaining(b, calMonth, calYear) > 0)
+  const handlePayAll = () => {
+    const ids = new Set(payAllBills.map(b => b.id))
+    if (!ids.size) return
+    persistBills(bills.map(b => (ids.has(b.id) ? markBillPaid(b, getEffectiveBillDate(b)) : b)))
+    setShowPayAll(false)
+  }
 
   const cardsWithPayments = creditCards.flatMap(c => c.payments.filter(p => !p.paid).map(p => ({ id: `cc-${c.id}-${p.date}`, name: `${c.name} Payment`, amount: p.amount, cat: 'Debt', due: p.date, freq: '', recurrence: 'one-time' as const, alloc: [], status: 'unpaid' })))
   const totalCardDebt = creditCards.reduce((s, c) => {
@@ -1605,20 +1378,12 @@ export default function BillBossPage() {
                 </div>
               ))}
             </div>
-            {heroBill && (
-              <div className="flex items-center gap-2 px-3 sm:px-4 py-3" style={{ borderTop: `1px solid ${theme.border}` }}>
-                <IconButton onClick={() => setNextDueIndex(i => Math.max(0, i - 1))} label="Previous upcoming bill"><ChevronLeft size={16} /></IconButton>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11.5px]" style={{ color: theme.subtext }}>
-                    Next due{upcomingBillsForHero.length > 1 ? ` · ${safeIdx + 1} of ${upcomingBillsForHero.length}` : ''}
-                    {heroBill.due > todayISO ? '' : heroBill.due === todayISO ? ' · today' : ' · overdue'}
-                  </p>
-                  <p className="text-[14px] font-medium truncate" style={{ color: theme.text }}>
-                    {heroBill.name}{heroBill.isSplit ? ' (split)' : ''} <span className="tnum font-normal" style={{ color: theme.subtext }}>· {fmtD(heroBill.due)} · {fmt(heroBill.amount)}</span>
-                  </p>
-                </div>
-                <IconButton onClick={() => setNextDueIndex(i => Math.min(upcomingBillsForHero.length - 1, i + 1))} label="Next upcoming bill"><ChevronRight size={16} /></IconButton>
-                <Button variant="primary" size="sm" onClick={() => handlePayFull(heroBill.billId, heroBill.due)}>Pay</Button>
+            {payAllBills.length > 0 && (
+              <div className="flex items-center gap-3 px-3 sm:px-5 py-3" style={{ borderTop: `1px solid ${theme.border}` }}>
+                <p className="flex-1 min-w-0 text-[12.5px] truncate" style={{ color: theme.subtext }}>
+                  {payAllBills.length} bill{payAllBills.length === 1 ? '' : 's'} left to pay in {monthName}
+                </p>
+                <Button variant="primary" size="sm" onClick={() => setShowPayAll(true)}><Check size={14} /> Pay all</Button>
               </div>
             )}
           </Panel>
@@ -2155,7 +1920,7 @@ export default function BillBossPage() {
         const close = () => { setPartialPayId(null); setPaymentTargetDate(null) }
         if (!bill) return <Sheet open={false} onClose={close} title="">{null}</Sheet>
         // What is still owed in the cycle this payment applies to.
-        const tDate = paymentTargetDate || new Date().toISOString().split('T')[0]
+        const tDate = paymentTargetDate || localDate()
         const mcd = new Date(tDate + 'T00:00:00')
         const billTotal = getCycleRemaining(bill, mcd.getMonth(), mcd.getFullYear()) || bill.amount
         const enteredAmount = parseFloat(partialPayAmount) || 0
@@ -2167,7 +1932,7 @@ export default function BillBossPage() {
         if (paymentTargetDate) {
           const now = new Date()
           if (mcd.getMonth() !== now.getMonth() || mcd.getFullYear() !== now.getFullYear()) {
-            cycleNote = `${paymentTargetDate > now.toISOString().split('T')[0] ? 'Advance payment' : 'Back-dated payment'} for the ${mcd.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} cycle`
+            cycleNote = `${paymentTargetDate > localDate(now) ? 'Advance payment' : 'Back-dated payment'} for the ${mcd.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} cycle`
           }
         }
         return (
@@ -2220,6 +1985,30 @@ export default function BillBossPage() {
           </Sheet>
         )
       })()}
+
+      {/* Pay all bills still owed this month */}
+      <Sheet
+        open={showPayAll}
+        onClose={() => setShowPayAll(false)}
+        title={`Pay all bills in ${monthName}`}
+        sub={<>Marks {payAllBills.length} bill{payAllBills.length === 1 ? '' : 's'} paid in full: <span className="tnum font-medium" style={{ color: theme.text }}>{fmt(unpaidTotal)}</span></>}
+        footer={<>
+          <Button className="flex-1" onClick={() => setShowPayAll(false)}>Cancel</Button>
+          <Button className="flex-1" variant="primary" disabled={!payAllBills.length} onClick={handlePayAll}>Pay all · {fmt(unpaidTotal)}</Button>
+        </>}
+      >
+        <ul className="rounded-xl px-3" style={{ border: `1px solid ${theme.border}` }}>
+          {payAllBills.map((b, i) => (
+            <li key={b.id} className="flex items-center justify-between gap-3 py-2.5" style={{ borderTop: i ? `1px solid ${theme.border}` : undefined }}>
+              <div className="min-w-0">
+                <p className="text-[13.5px] truncate" style={{ color: theme.text }}>{b.name}</p>
+                <p className="text-[11.5px]" style={{ color: theme.subtext }}>Due {fmtD(getEffectiveBillDate(b))}</p>
+              </div>
+              <span className="text-[13.5px] font-medium tnum shrink-0" style={{ color: theme.text }}>{fmt(cycleRemaining(b, calMonth, calYear))}</span>
+            </li>
+          ))}
+        </ul>
+      </Sheet>
 
       {/* Split a bill */}
       <Sheet

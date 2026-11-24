@@ -172,6 +172,7 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
           recurrence: b.recurrence || 'monthly',
           status: b.status,
           alloc: b.alloc || [],
+          paidDate: b.paid_date || b.paidDate || undefined,
         })),
         expenses: (expensesData || []).map((e: any) => ({
           id: e.id,
@@ -237,11 +238,15 @@ export function OrcaDataProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {}
 
-      // Merge in locally saved bills
+      // Bill Boss saves bills to 'orca-bills' (synced across devices). That copy
+      // holds payment dates and recurrence details the old bills table never
+      // stored, so it wins whenever it exists. Otherwise a bill paid in Bill Boss
+      // could still show as owed on the home page.
       try {
         const savedBills = localStorage.getItem('orca-bills')
-        if (savedBills && (!orcaData.bills || orcaData.bills.length === 0)) {
-          orcaData.bills = JSON.parse(savedBills)
+        const parsed = savedBills ? JSON.parse(savedBills) : null
+        if (Array.isArray(parsed)) {
+          orcaData.bills = parsed.map((b: any) => ({ ...b, alloc: Array.isArray(b.alloc) ? b.alloc : [] }))
         }
       } catch {}
 
