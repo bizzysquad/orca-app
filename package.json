@@ -9,7 +9,7 @@
     "lint": "next lint",
     "db:push": "npx supabase db push",
     "db:reset": "npx supabase db reset",
-    "test:spades": "node --experimental-strip-types --no-warnings --test tests/spades/scoring.test.ts tests/spades/flow.test.ts tests/spades/v3.test.ts tests/spades/quickgame.test.ts tests/spades/signup.test.ts"
+    "test:spades": "node --experimental-strip-types --no-warnings --test tests/spades/scoring.test.ts tests/spades/flow.test.ts tests/spades/v3.test.ts tests/spades/quickgame.test.ts tests/spades/signup.test.ts tests/spades/cardgame.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
