@@ -85,7 +85,7 @@ export default function Home() {
 
         <nav className="grid gap-3" aria-label="More">
           <Link href="/spades/start" className="sp-btn sp-btn-wine sp-btn-block" style={{ minHeight: 64, fontSize: 19 }}>Keep score for a game</Link>
-          <Link href="/spades/practice" className="sp-btn sp-btn-gold sp-btn-block" style={{ minHeight: 60, fontSize: 18 }}>Practice against the computer</Link>
+          <Link href="/spades/game" className="sp-btn sp-btn-gold sp-btn-block" style={{ minHeight: 60, fontSize: 18 }}>Play a game</Link>
           <Link href="/spades/bracket" className="sp-btn sp-btn-block" style={{ minHeight: 56 }}>View scores</Link>
           <Link href="/spades/winners" className="sp-btn sp-btn-ghost sp-btn-block">Winners and records</Link>
         </nav>

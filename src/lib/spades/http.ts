@@ -13,7 +13,13 @@ export const SESSION_COOKIE = 'sp-session'
 export function store(): Store {
   if (process.env.SPADES_MEMORY_STORE === 'local') {
     const g = globalThis as any
-    return (g.__spadesMemoryStore ||= new MemoryStore())
+    if (!g.__spadesMemoryStore) {
+      // Real time, so computer seats at online tables take their turns.
+      const m = new MemoryStore()
+      m.now = () => new Date()
+      g.__spadesMemoryStore = m
+    }
+    return g.__spadesMemoryStore
   }
   return getSpadesStore()
 }

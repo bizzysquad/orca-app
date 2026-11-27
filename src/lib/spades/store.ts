@@ -69,6 +69,7 @@ export const UNIQUES: Record<string, UniqueRule[]> = {
   sp_disputes: [{ cols: ['hand_id', 'kind'], where: r => r.status === 'open' && r.kind === 'report_mismatch' }],
   sp_invitations: [{ cols: ['token_hash'] }],
   sp_sessions: [{ cols: ['token_hash'] }],
+  sp_live_tables: [{ cols: ['code'] }],
 }
 
 const APPEND_ONLY = new Set(['sp_audit'])
